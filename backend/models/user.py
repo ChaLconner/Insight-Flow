@@ -1,5 +1,5 @@
 """
-User model for the Insight-Flow application.
+User model for Insight-Flow application.
 """
 from sqlalchemy import Column, String, Boolean
 from sqlalchemy.orm import relationship

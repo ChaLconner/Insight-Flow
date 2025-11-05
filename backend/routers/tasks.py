@@ -58,7 +58,22 @@ def read_tasks(
             status=status_enum
         )
     
-    return tasks
+    # Convert tasks to response format
+    task_responses = []
+    for task in tasks:
+        task_responses.append(TaskResponse(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            status=task.status.value if hasattr(task.status, 'value') else str(task.status),
+            project_id=task.project_id,
+            assignee_id=task.assignee_id,
+            created_by=task.created_by,
+            due_date=task.due_date,
+            created_at=task.created_at,
+            updated_at=task.updated_at
+        ))
+    return task_responses
 
 @router.post("/", response_model=TaskResponse)
 def create_task(
@@ -217,7 +232,7 @@ def delete_task(
 @router.put("/{task_id}/status", response_model=TaskResponse)
 def update_task_status(
     task_id: str,
-    status_update: TaskStatusUpdate,
+    status_data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -227,6 +242,17 @@ def update_task_status(
     import uuid
     task_service = TaskService(db)
     project_service = ProjectService(db)
+    
+    # Extract status from request body
+    status = status_data.get("status")
+    if not status:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status is required"
+        )
+    
+    # Create TaskStatusUpdate object
+    status_update = TaskStatusUpdate(status=status)
     
     # Check if user is a member of the project
     try:
@@ -260,7 +286,7 @@ def update_task_status(
 @router.put("/{task_id}/assign", response_model=TaskResponse)
 def assign_task(
     task_id: str,
-    assign_data: TaskAssign,
+    assign_data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -271,6 +297,25 @@ def assign_task(
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
+    # Extract assignee_id from request body
+    assignee_id = assign_data.get("assignee_id")
+    if not assignee_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee ID is required"
+        )
+    
+    # Create TaskAssign object
+    try:
+        assignee_uuid = uuid.UUID(assignee_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid assignee ID format"
+        )
+    
+    task_assign = TaskAssign(assignee_id=assignee_uuid)
+    
     # Check if user is a member of the project
     task = task_service.get_task_by_id(uuid.UUID(task_id))
     if task and not project_service.is_project_member(task.project_id, current_user.id):
@@ -280,7 +325,7 @@ def assign_task(
         )
     
     try:
-        updated_task = task_service.assign_task(uuid.UUID(task_id), assign_data, current_user.id)
+        updated_task = task_service.assign_task(uuid.UUID(task_id), task_assign, current_user.id)
         return updated_task
     except ValueError as e:
         raise HTTPException(
@@ -319,7 +364,23 @@ def get_project_tasks(
         )
     
     tasks = task_service.get_project_tasks(project_uuid, skip=skip, limit=limit)
-    return tasks
+    
+    # Convert tasks to response format
+    task_responses = []
+    for task in tasks:
+        task_responses.append(TaskResponse(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            status=task.status.value if hasattr(task.status, 'value') else str(task.status),
+            project_id=task.project_id,
+            assignee_id=task.assignee_id,
+            created_by=task.created_by,
+            due_date=task.due_date,
+            created_at=task.created_at,
+            updated_at=task.updated_at
+        ))
+    return task_responses
 
 @router.get("/my/tasks", response_model=List[TaskResponse])
 def get_my_tasks(
@@ -333,4 +394,20 @@ def get_my_tasks(
     """
     task_service = TaskService(db)
     tasks = task_service.get_user_tasks(current_user.id, skip=skip, limit=limit)
-    return tasks
+    
+    # Convert tasks to response format
+    task_responses = []
+    for task in tasks:
+        task_responses.append(TaskResponse(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            status=task.status.value if hasattr(task.status, 'value') else str(task.status),
+            project_id=task.project_id,
+            assignee_id=task.assignee_id,
+            created_by=task.created_by,
+            due_date=task.due_date,
+            created_at=task.created_at,
+            updated_at=task.updated_at
+        ))
+    return task_responses

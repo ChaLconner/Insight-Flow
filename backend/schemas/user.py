@@ -44,5 +44,6 @@ class GoogleAuth(BaseModel):
 class Token(BaseModel):
     """Schema for access token response."""
     access_token: str
+    refresh_token: str
     token_type: str
     expires_in: int

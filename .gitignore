@@ -150,6 +150,13 @@ QUICK_START_GUIDE.md
 .roo/
 *_MCP_GUIDE.md
 
+# Additional temporary files to ignore
+DASHBOARD_ANALYTICS_IMPLEMENTATION.md
+PROJECT_ACCESS_FIX.md
+backend/create_test_user.py
+backend/utils/project_fix.py
+frontend/examples/
+
 # Temporary folders
 tmp/
 temp/
@@ -188,3 +195,11 @@ public
 # Storybook build outputs
 .out
 .storybook-out
+
+# Markdown files
+*.md
+
+# Specific markdown files to ensure they are ignored
+API_SPECIFICATION.md
+DASHBOARD_ANALYTICS_IMPLEMENTATION.md
+ARCHITECTURE.md

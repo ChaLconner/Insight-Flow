@@ -14,13 +14,25 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a new project."""
-    pass
+    members: Optional[List['ProjectMemberCreate']] = []
 
 class ProjectUpdate(BaseModel):
     """Schema for updating project information."""
     name: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+
+class ProjectMemberSummary(BaseModel):
+    """Schema for project member summary in project list."""
+    id: uuid.UUID
+    user_id: uuid.UUID
+    name: str
+    email: str
+    avatar_url: Optional[str] = None
+    role: str
+    
+    class Config:
+        from_attributes = True
 
 class ProjectResponse(ProjectBase):
     """Schema for project response data."""
@@ -29,6 +41,10 @@ class ProjectResponse(ProjectBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    task_count: Optional[int] = 0
+    completed_tasks: Optional[int] = 0
+    member_count: Optional[int] = 0
+    member_summaries: Optional[List[ProjectMemberSummary]] = []
     
     class Config:
         from_attributes = True

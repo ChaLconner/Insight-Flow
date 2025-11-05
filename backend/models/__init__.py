@@ -6,6 +6,7 @@ from .user import User
 from .project import Project, ProjectMember, MemberRole
 from .task import Task, TaskStatus
 from .notification import Notification, NotificationType
+from .task_history import TaskHistory, ActivityType
 
 __all__ = [
     "Base",
@@ -18,4 +19,6 @@ __all__ = [
     "TaskStatus",
     "Notification",
     "NotificationType",
+    "TaskHistory",
+    "ActivityType",
 ]

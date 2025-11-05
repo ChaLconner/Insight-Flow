@@ -3,11 +3,12 @@ User service layer for authentication and user management.
 """
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from models.user import User
 from schemas.user import UserCreate, UserLogin, UserUpdate
 from utils.auth import get_password_hash, authenticate_user
 import uuid
+import time
 
 class UserService:
     """Service class for user operations."""
@@ -16,8 +17,22 @@ class UserService:
         self.db = db
     
     def get_user_by_email(self, email: str) -> Optional[User]:
-        """Get user by email."""
-        return self.db.query(User).filter(User.email == email).first()
+        """Get user by email with retry logic for connection errors."""
+        print(f"UserService: get_user_by_email called with email: {email}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"UserService: Attempt {attempt + 1} to query user by email")
+                user = self.db.query(User).filter(User.email == email).first()
+                print(f"UserService: Query completed, user found: {user is not None}")
+                return user
+            except OperationalError as e:
+                print(f"UserService: OperationalError on attempt {attempt + 1}: {e}")
+                if "SSL connection has been closed unexpectedly" in str(e) and attempt < max_retries - 1:
+                    # Wait before retrying
+                    time.sleep(0.5 * (attempt + 1))
+                    continue
+                raise e
     
     def get_user_by_id(self, user_id: uuid.UUID) -> Optional[User]:
         """Get user by ID."""

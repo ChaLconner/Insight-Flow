@@ -1,10 +1,11 @@
 """
 Project models for Insight-Flow application.
 """
-from sqlalchemy import Column, String, Boolean, UUID, ForeignKey
+from sqlalchemy import Column, String, Boolean, UUID, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 import enum
+from datetime import datetime
 
 class Project(BaseModel):
     """
@@ -37,6 +38,7 @@ class ProjectMember(BaseModel):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String(20), nullable=False, default=MemberRole.MEMBER.value)
+    joined_at = Column(DateTime, nullable=False, default=datetime)
     
     # Relationships
     project = relationship("Project", back_populates="members")

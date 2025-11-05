@@ -28,5 +28,5 @@ class Task(BaseModel):
     
     # Relationships
     project = relationship("Project", back_populates="tasks")
-    assignee = relationship("User", foreign_keys=[Task.assignee_id], back_populates="assigned_tasks")
-    creator = relationship("User", foreign_keys=[Task.created_by], back_populates="created_tasks")
+    assignee = relationship("User", foreign_keys=[assignee_id], back_populates="assigned_tasks")
+    creator = relationship("User", foreign_keys=[created_by], back_populates="created_tasks")

@@ -38,7 +38,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": int(expire.timestamp())})
@@ -49,16 +49,26 @@ def verify_token(token: str) -> dict:
     """
     Verify and decode a JWT token.
     """
+    
     try:
+        print(f"verify_token: Attempting to decode token: {token[:20]}...")
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print(f"verify_token: Successfully decoded payload: {payload}")
         return payload
-    except JWTError:
+    except JWTError as e:
+        print(f"verify_token: JWTError occurred: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
+    except Exception as e:
+        print(f"verify_token: Unexpected error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 def authenticate_user(user, password: str) -> bool:
     """
     Authenticate a user by verifying their password.

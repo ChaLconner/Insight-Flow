@@ -10,25 +10,40 @@ from models import Base
 # Load environment variables from .env file
 load_dotenv()
 
-# Database URL - read from environment variables for security
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
-if not SQLALCHEMY_DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set")
+# Use Neon PostgreSQL database with improved connection settings
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://neondb_owner:npg_8iH7feIFulOq@ep-divine-tree-a129b65i-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require")
 
-# Create database engine
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Create engine with improved connection settings for better reliability
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,  # Validate connections before use
+    pool_recycle=300,     # Recycle connections every 5 minutes
+    pool_size=5,          # Maximum number of connections to keep
+    max_overflow=10,       # Allow up to 10 additional connections beyond pool_size
+    connect_args={
+        "connect_timeout": 10,  # Connection timeout in seconds
+        "application_name": "insight-flow-app"  # Identify application in connection logs
+    }
+)
 
-# Create session factory
-SessionLocal = sessionmaker(bind=engine)
+# Create session factory with better isolation
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False
+)
 
 # Dependency to get DB session
 def get_db():
     """
-    Dependency to get database session.
+    Dependency to get database session with error handling.
     """
     db = SessionLocal()
     try:
         yield db
+    except Exception as e:
+        db.rollback()
+        raise e
     finally:
         db.close()
 

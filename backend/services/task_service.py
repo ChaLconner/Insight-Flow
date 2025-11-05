@@ -1,13 +1,14 @@
 """
 Task service layer for task management.
 """
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from models.task import Task, TaskStatus
 from models.project import Project
 from models.user import User
 from schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskAssign
+from .task_history_service import TaskHistoryService
 import uuid
 
 class TaskService:
@@ -15,15 +16,22 @@ class TaskService:
     
     def __init__(self, db: Session):
         self.db = db
+        self.task_history_service = TaskHistoryService(db)
     
     def get_task_by_id(self, task_id: uuid.UUID) -> Optional[Task]:
         """Get task by ID."""
         return self.db.query(Task).filter(Task.id == task_id).first()
     
-    def get_tasks(self, skip: int = 0, limit: int = 100, project_id: Optional[uuid.UUID] = None, 
+    def get_tasks(self, skip: int = 0, limit: int = 100, project_id: Optional[uuid.UUID] = None,
                 assignee_id: Optional[uuid.UUID] = None, status: Optional[TaskStatus] = None) -> List[Task]:
         """Get tasks with pagination and optional filters."""
-        query = self.db.query(Task)
+        from sqlalchemy.orm import joinedload
+        
+        query = self.db.query(Task).options(
+            joinedload(Task.assignee),
+            joinedload(Task.creator),
+            joinedload(Task.project)
+        )
         
         if project_id:
             query = query.filter(Task.project_id == project_id)
@@ -60,6 +68,14 @@ class TaskService:
             self.db.add(db_task)
             self.db.commit()
             self.db.refresh(db_task)
+            
+            # Log task creation activity
+            self.task_history_service.log_task_created(db_task, created_by)
+            
+            # Log task assignment if assignee is provided
+            if task_data.assignee_id:
+                self.task_history_service.log_task_assigned(db_task, task_data.assignee_id, created_by)
+            
             return db_task
             
         except IntegrityError as e:
@@ -82,24 +98,60 @@ class TaskService:
             if not assignee:
                 raise ValueError("Assignee not found")
         
-        # Update fields if provided
-        if task_data.title is not None:
+        # Store old values for activity logging
+        old_values: Dict[str, Any] = {}
+        new_values: Dict[str, Any] = {}
+        
+        # Update fields if provided and track changes
+        if task_data.title is not None and task_data.title != task.title:
+            old_values["title"] = task.title
+            new_values["title"] = task_data.title
             task.title = task_data.title
-        if task_data.description is not None:
+            
+        if task_data.description is not None and task_data.description != task.description:
+            old_values["description"] = task.description
+            new_values["description"] = task_data.description
             task.description = task_data.description
+            
         if task_data.status is not None:
             try:
-                task.status = TaskStatus(task_data.status)
+                new_status = TaskStatus(task_data.status)
+                if new_status != task.status:
+                    old_values["status"] = task.status.value
+                    new_values["status"] = task_data.status
+                    task.status = new_status
             except ValueError:
                 raise ValueError("Invalid task status")
-        if task_data.assignee_id is not None:
+                
+        if task_data.assignee_id is not None and task_data.assignee_id != task.assignee_id:
+            old_assignee_id = task.assignee_id
             task.assignee_id = task_data.assignee_id
-        if task_data.due_date is not None:
+            if old_assignee_id:
+                old_values["assignee_id"] = str(old_assignee_id)
+                self.task_history_service.log_task_unassigned(task, user_id)
+            new_values["assignee_id"] = str(task_data.assignee_id)
+            
+        if task_data.due_date is not None and task_data.due_date != task.due_date:
+            old_values["due_date"] = task.due_date.isoformat() if task.due_date else None
+            new_values["due_date"] = task_data.due_date.isoformat() if task_data.due_date else None
             task.due_date = task_data.due_date
         
         try:
             self.db.commit()
             self.db.refresh(task)
+            
+            # Log update activity if there were changes
+            if old_values or new_values:
+                self.task_history_service.log_task_updated(task, user_id, old_values, new_values)
+            
+            # Log task assignment if assignee changed
+            if task_data.assignee_id and task_data.assignee_id != old_assignee_id:
+                self.task_history_service.log_task_assigned(task, task_data.assignee_id, user_id)
+            
+            # Log task completion if status changed to done
+            if task_data.status and task_data.status == 'done' and task.status == TaskStatus.DONE:
+                self.task_history_service.log_task_completed(task, user_id)
+            
             return task
         except IntegrityError as e:
             self.db.rollback()
@@ -177,6 +229,12 @@ class TaskService:
     
     def get_project_tasks(self, project_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[Task]:
         """Get tasks for a specific project."""
-        return self.db.query(Task).filter(
+        from sqlalchemy.orm import joinedload
+        
+        return self.db.query(Task).options(
+            joinedload(Task.assignee),
+            joinedload(Task.creator),
+            joinedload(Task.project)
+        ).filter(
             Task.project_id == project_id
         ).offset(skip).limit(limit).all()
