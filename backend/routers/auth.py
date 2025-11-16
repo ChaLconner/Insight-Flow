@@ -12,7 +12,10 @@ from models.user import User
 from services.user_service import UserService
 from utils.auth import create_access_token, verify_token
 from database import get_db
+from utils.logger import setup_logger
 import uuid
+
+logger = setup_logger("auth_router")
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -26,22 +29,28 @@ def get_current_user(
 ) -> User:
     """Get current authenticated user from token."""
     # The token is automatically extracted by OAuth2PasswordBearer
-    print(f"Received access token: {token[:20]}...")  # Log first 20 chars for debugging
+    logger.debug(f"Received access token: {token[:20]}...")  # Log first 20 chars for debugging
+    logger.debug(f"Request URL: {request.url}")
+    logger.debug(f"Request method: {request.method}")
+    logger.debug(f"Request headers: {dict(request.headers)}")
     
     try:
-        print("Starting token verification...")
+        logger.debug("Starting token verification...")
         payload = verify_token(token)
-        print(f"Token verification successful, payload: {payload}")
+        logger.debug(f"Token verification successful, payload: {payload}")
         user_id: str = payload.get("sub")
         if user_id is None:
-            print("No user ID found in token")
+            logger.warning("No user ID found in token")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
             )
-        print(f"Found user ID: {user_id}")
+        logger.debug(f"Found user ID: {user_id}")
     except Exception as e:
-        print(f"Token verification error in get_current_user: {e}")
+        logger.error(f"Token verification error in get_current_user: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -54,15 +63,19 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
+    logger.info(f"Successfully authenticated user: {user.email} (ID: {user.id})")
     return user
 
 def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """Get current active user."""
+    logger.debug(f"Called for user: {current_user.email} (ID: {current_user.id})")
     if not current_user.is_active:
+        logger.warning(f"User {current_user.email} is not active")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
         )
+    logger.debug(f"User {current_user.email} is active")
     return current_user
 
 @router.post("/register", response_model=UserResponse)
@@ -101,39 +114,53 @@ def login(login_data: UserLogin, db: Session = Depends(get_db)) -> Any:
     """
     Authenticate user and return access token.
     """
-    user_service = UserService(db)
-    user = user_service.authenticate_user(login_data)
+    logger.debug(f"Login attempt for email: {login_data.email}")
     
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        user_service = UserService(db)
+        user = user_service.authenticate_user(login_data)
+        
+        if not user:
+            logger.warning(f"Authentication failed for email: {login_data.email}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        if not user.is_active:
+            logger.warning(f"User {login_data.email} is not active")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user"
+            )
+        
+        logger.info(f"User {login_data.email} authenticated successfully, user_id: {user.id}")
+        
+        access_token_expires = timedelta(minutes=30)
+        access_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=access_token_expires
         )
-    
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
+        
+        # Create refresh token with longer expiration
+        refresh_token_expires = timedelta(days=7)
+        refresh_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=refresh_token_expires
         )
-    
-    access_token_expires = timedelta(minutes=30)
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
-    )
-    
-    # Create refresh token with longer expiration
-    refresh_token_expires = timedelta(days=7)
-    refresh_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=refresh_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer",
-        "expires_in": 1800  # 30 minutes in seconds
-    }
+        
+        logger.info(f"Tokens created successfully for user {login_data.email}")
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": 1800  # 30 minutes in seconds
+        }
+    except Exception as e:
+        logger.error(f"Login error for email {login_data.email}: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise
 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_active_user)) -> Any:
@@ -194,8 +221,8 @@ def google_login(google_data: GoogleAuth, db: Session = Depends(get_db)) -> Any:
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f"Error in Google login: {e}")
-        print(f"Full traceback: {error_details}")
+        logger.error(f"Error in Google login: {e}")
+        logger.error(f"Full traceback: {error_details}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error during Google authentication: {str(e)}"
@@ -221,24 +248,46 @@ def refresh_token(
     """
     # Extract token from Authorization header
     auth_header = request.headers.get("authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
+    logger.debug(f"Refresh token request - Authorization header: {auth_header}")
+    
+    if not auth_header:
+        logger.warning("No authorization header found in refresh request")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
+            detail="Missing authorization header",
+        )
+    
+    if not auth_header.startswith("Bearer "):
+        logger.warning(f"Invalid authorization header format: {auth_header[:20]}...")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format",
         )
     
     refresh_token = auth_header.split(" ")[1]
+    logger.debug(f"Refresh token extracted: {refresh_token[:20] if refresh_token != 'null' else 'null'}...")
+    logger.debug(f"Refresh token length: {len(refresh_token) if refresh_token != 'null' else 0}")
+    
+    if refresh_token == "null" or not refresh_token:
+        logger.error("Refresh token is null or empty")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token is null or empty",
+        )
+    
     try:
         # Verify refresh token
         payload = verify_token(refresh_token)
         user_id: str = payload.get("sub")
         if user_id is None:
+            logger.error("No user ID found in refresh token payload")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token",
             )
+        logger.debug(f"Refresh token verified successfully for user_id: {user_id}")
     except Exception as e:
-        print(f"Token verification error: {e}")
+        logger.error(f"Token verification error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
@@ -248,12 +297,14 @@ def refresh_token(
     user_service = UserService(db)
     user = user_service.get_user_by_id(uuid.UUID(user_id))
     if user is None:
+        logger.error(f"User not found for ID: {user_id}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
         )
     
     if not user.is_active:
+        logger.warning(f"User {user_id} is not active")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Inactive user"
@@ -270,6 +321,8 @@ def refresh_token(
     new_refresh_token = create_access_token(
         data={"sub": str(user.id)}, expires_delta=refresh_token_expires
     )
+    
+    logger.info(f"Tokens refreshed successfully for user: {user.email}")
     
     return {
         "access_token": access_token,

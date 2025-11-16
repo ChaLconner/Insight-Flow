@@ -1,5 +1,19 @@
 {
   "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "env": {
+        "DEFAULT_MINIMUM_TOKENS": "10000"
+      },
+      "alwaysAllow": [
+        "resolve-library-id",
+        "get-library-docs"
+      ]
+    },
     "neon": {
       "command": "npx",
       "args": [
@@ -8,15 +22,21 @@
         "https://mcp.neon.tech/sse"
       ]
     },
-    "context7": {
+    "sequentialthinking": {
       "command": "npx",
       "args": [
         "-y",
-        "@upstash/context7-mcp"
+        "@modelcontextprotocol/server-sequential-thinking"
       ],
-      "env": {
-        "DEFAULT_MINIMUM_TOKENS": "6000"
-      }
+      "alwaysAllow": []
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql+psycopg2://neondb_owner:npg_8iH7feIFulOq@ep-divine-tree-a129b65i-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+      ]
     }
   }
 }

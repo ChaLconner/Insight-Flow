@@ -6,6 +6,7 @@ from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
 import uuid
 from .user import UserResponse
+from models.project import MemberRole
 
 class ProjectBase(BaseModel):
     """Base project schema."""
@@ -14,7 +15,13 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     """Schema for creating a new project."""
-    members: Optional[List['ProjectMemberCreate']] = []
+    members: Optional[List['ProjectMemberCreate']] = None
+    
+    def __init__(self, **data):
+        # Handle None or empty members
+        if 'members' not in data or data['members'] is None:
+            data['members'] = []
+        super().__init__(**data)
 
 class ProjectUpdate(BaseModel):
     """Schema for updating project information."""
@@ -55,7 +62,16 @@ class ProjectMemberBase(BaseModel):
 
 class ProjectMemberCreate(ProjectMemberBase):
     """Schema for creating a project member."""
-    user_id: uuid.UUID
+    user_id: str  # Accept string UUID from frontend
+    role: str = "member"  # Default role is member
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Validate role only if role is provided
+        if self.role:
+            valid_roles = [MemberRole.OWNER.value, MemberRole.ADMIN.value, MemberRole.MEMBER.value]
+            if self.role not in valid_roles:
+                raise ValueError(f"Invalid role. Must be one of: {valid_roles}")
 
 class ProjectMemberResponse(ProjectMemberBase):
     """Schema for project member response data."""

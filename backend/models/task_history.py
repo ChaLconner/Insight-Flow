@@ -8,12 +8,17 @@ import enum
 
 class ActivityType(enum.Enum):
     """Enum for activity types."""
-    TASK_CREATED = "task_created"
-    TASK_UPDATED = "task_updated"
-    TASK_COMPLETED = "task_completed"
-    TASK_ASSIGNED = "task_assigned"
-    TASK_UNASSIGNED = "task_unassigned"
-    TASK_DELETED = "task_deleted"
+    TASK_CREATED = "TASK_CREATED"
+    TASK_UPDATED = "TASK_UPDATED"
+    TASK_COMPLETED = "TASK_COMPLETED"
+    TASK_ASSIGNED = "TASK_ASSIGNED"
+    TASK_UNASSIGNED = "TASK_UNASSIGNED"
+    TASK_DELETED = "TASK_DELETED"
+    PROJECT_MEMBER_ADDED = "PROJECT_MEMBER_ADDED"
+    PROJECT_MEMBER_REMOVED = "PROJECT_MEMBER_REMOVED"
+    PROJECT_MEMBER_ROLE_CHANGED = "PROJECT_MEMBER_ROLE_CHANGED"
+    PROJECT_UPDATED = "PROJECT_UPDATED"
+    PROJECT_CREATED = "PROJECT_CREATED"
 
 class TaskHistory(BaseModel):
     """

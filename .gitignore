@@ -203,3 +203,6 @@ public
 API_SPECIFICATION.md
 DASHBOARD_ANALYTICS_IMPLEMENTATION.md
 ARCHITECTURE.md
+
+# Kilo Code configuration
+.kilocode/

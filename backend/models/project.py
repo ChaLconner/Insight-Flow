@@ -22,6 +22,10 @@ class Project(BaseModel):
     owner = relationship("User", back_populates="owned_projects")
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+    analytics = relationship("ProjectAnalytics", back_populates="project", cascade="all, delete-orphan")
+    user_productivity = relationship("UserProductivity", back_populates="project", cascade="all, delete-orphan")
+    milestones = relationship("ProjectMilestone", back_populates="project", cascade="all, delete-orphan")
+    tag_associations = relationship("ProjectTagAssociation", back_populates="project", cascade="all, delete-orphan")
 
 class MemberRole(enum.Enum):
     """Enum for project member roles."""
@@ -38,7 +42,7 @@ class ProjectMember(BaseModel):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String(20), nullable=False, default=MemberRole.MEMBER.value)
-    joined_at = Column(DateTime, nullable=False, default=datetime)
+    joined_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
     project = relationship("Project", back_populates="members")

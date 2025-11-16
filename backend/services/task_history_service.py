@@ -7,8 +7,11 @@ from models.task_history import TaskHistory, ActivityType
 from models.task import Task
 from models.user import User
 from models.project import Project
+from utils.logger import setup_logger
 import json
 import uuid
+
+logger = setup_logger("task_history_service")
 
 class TaskHistoryService:
     """Service for task history operations."""
@@ -30,6 +33,8 @@ class TaskHistoryService:
         """
         Create a new activity record.
         """
+        logger.debug(f"Creating activity: {activity_type}, project_id: {project_id}, user_id: {user_id}")
+        
         activity = TaskHistory(
             activity_type=activity_type,
             project_id=project_id,
@@ -42,9 +47,21 @@ class TaskHistoryService:
         )
         
         self.db.add(activity)
-        self.db.commit()
-        self.db.refresh(activity)
-        return activity
+        logger.debug("Activity added to database session")
+        
+        try:
+            self.db.commit()
+            logger.debug("Activity committed to database")
+            
+            self.db.refresh(activity)
+            logger.debug(f"Activity refreshed with ID: {activity.id}")
+            return activity
+        except Exception as e:
+            logger.error(f"Error during activity creation: {e}")
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error details: {str(e)}")
+            self.db.rollback()
+            raise ValueError(f"Failed to create activity: {str(e)}")
     
     def get_recent_activities(
         self,
@@ -100,7 +117,7 @@ class TaskHistoryService:
             new_values={
                 "title": task.title,
                 "description": task.description,
-                "status": task.status.value if task.status else None,
+                "status": task.status if task.status else None,
                 "assignee_id": str(task.assignee_id) if task.assignee_id else None,
                 "due_date": task.due_date.isoformat() if task.due_date else None
             }
@@ -138,7 +155,7 @@ class TaskHistoryService:
             task_id=task.id,
             task_title=task.title,
             description=f"Completed task: {task.title}",
-            new_values={"status": "done"}
+            new_values={"status": task.status if task.status else None}
         )
     
     def log_task_assigned(self, task: Task, assignee_id: uuid.UUID, assigned_by: uuid.UUID) -> TaskHistory:
@@ -187,6 +204,65 @@ class TaskHistoryService:
             old_values={
                 "title": task.title,
                 "description": task.description,
-                "status": task.status.value if task.status else None
+                "status": task.status if task.status else None
             }
+        )
+    def log_project_member_added(self, project_id: uuid.UUID, member_name: str, added_by: uuid.UUID) -> TaskHistory:
+        """
+        Log project member addition activity.
+        """
+        return self.create_activity(
+            activity_type=ActivityType.PROJECT_MEMBER_ADDED,
+            project_id=project_id,
+            user_id=added_by,
+            description=f"Added {member_name} to project",
+            new_values={"member_name": member_name}
+        )
+    
+    def log_project_member_removed(self, project_id: uuid.UUID, member_name: str, removed_by: uuid.UUID) -> TaskHistory:
+        """
+        Log project member removal activity.
+        """
+        return self.create_activity(
+            activity_type=ActivityType.PROJECT_MEMBER_REMOVED,
+            project_id=project_id,
+            user_id=removed_by,
+            description=f"Removed {member_name} from project",
+            old_values={"member_name": member_name}
+        )
+    
+    def log_project_member_role_changed(self, project_id: uuid.UUID, member_name: str, new_role: str, changed_by: uuid.UUID) -> TaskHistory:
+        """
+        Log project member role change activity.
+        """
+        return self.create_activity(
+            activity_type=ActivityType.PROJECT_MEMBER_ROLE_CHANGED,
+            project_id=project_id,
+            user_id=changed_by,
+            description=f"Changed {member_name}'s role to {new_role}",
+            new_values={"member_name": member_name, "new_role": new_role}
+        )
+    
+    def log_project_updated(self, project_id: uuid.UUID, updated_by: uuid.UUID, changes: Dict[str, Any]) -> TaskHistory:
+        """
+        Log project update activity.
+        """
+        return self.create_activity(
+            activity_type=ActivityType.PROJECT_UPDATED,
+            project_id=project_id,
+            user_id=updated_by,
+            description="Updated project information",
+            new_values=changes
+        )
+    
+    def log_project_created(self, project_id: uuid.UUID, project_name: str, created_by: uuid.UUID) -> TaskHistory:
+        """
+        Log project creation activity.
+        """
+        return self.create_activity(
+            activity_type=ActivityType.PROJECT_CREATED,
+            project_id=project_id,
+            user_id=created_by,
+            description=f"Created project: {project_name}",
+            new_values={"project_name": project_name, "action": "created"}
         )

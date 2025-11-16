@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from models.user import User
 from schemas.user import UserCreate, UserLogin, UserUpdate
 from utils.auth import get_password_hash, authenticate_user
+from utils.logger import logger
 import uuid
 import time
 
@@ -18,16 +19,16 @@ class UserService:
     
     def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email with retry logic for connection errors."""
-        print(f"UserService: get_user_by_email called with email: {email}")
+        logger.debug(f"get_user_by_email called with email: {email}")
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                print(f"UserService: Attempt {attempt + 1} to query user by email")
+                logger.debug(f"Attempt {attempt + 1} to query user by email")
                 user = self.db.query(User).filter(User.email == email).first()
-                print(f"UserService: Query completed, user found: {user is not None}")
+                logger.debug(f"Query completed, User found: {user is not None}")
                 return user
             except OperationalError as e:
-                print(f"UserService: OperationalError on attempt {attempt + 1}: {e}")
+                logger.error(f"OperationalError on attempt {attempt + 1}: {e}")
                 if "SSL connection has been closed unexpectedly" in str(e) and attempt < max_retries - 1:
                     # Wait before retrying
                     time.sleep(0.5 * (attempt + 1))
@@ -76,11 +77,25 @@ class UserService:
     
     def authenticate_user(self, login_data: UserLogin) -> Optional[User]:
         """Authenticate user with email and password."""
+        logger.debug(f"authenticate_user called for email: {login_data.email}")
+        logger.debug(f"Password length provided: {len(login_data.password) if login_data.password else 0}")
+        
         user = self.get_user_by_email(login_data.email)
         if not user:
+            logger.warning(f"User not found for email: {login_data.email}")
             return None
+            
+        logger.debug(f"User found for email: {login_data.email}, user_id: {user.id}")
+        logger.debug(f"User has hashed_password: {'YES' if user.hashed_password else 'NO'}")
+        logger.debug(f"User is_active: {user.is_active}")
+        logger.debug(f"Hashed password length: {len(user.hashed_password) if user.hashed_password else 0}")
+        logger.debug(f"Hashed password starts with: {user.hashed_password[:10] if user.hashed_password else 'None'}...")
+        
         if not authenticate_user(user, login_data.password):
+            logger.warning(f"Password authentication failed for email: {login_data.email}")
             return None
+            
+        logger.info(f"Authentication successful for email: {login_data.email}")
         return user
     
     def update_user(self, user_id: uuid.UUID, user_data: UserUpdate) -> User:
@@ -116,6 +131,15 @@ class UserService:
         except IntegrityError as e:
             self.db.rollback()
             raise ValueError("Cannot delete user - user has associated data")
+    def search_users(self, query: str) -> List[User]:
+        """Search users by email or name."""
+        if not query or len(query.strip()) < 2:
+            return []
+        
+        query = query.strip()
+        return self.db.query(User).filter(
+            (User.email.ilike(f"%{query}%")) | (User.name.ilike(f"%{query}%"))
+        ).limit(10).all()
     
     def create_or_update_google_user(self, google_id: str, email: str, name: str, avatar_url: Optional[str] = None) -> User:
         """Create or update user from Google authentication."""

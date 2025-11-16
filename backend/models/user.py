@@ -24,3 +24,7 @@ class User(BaseModel):
     assigned_tasks = relationship("Task", foreign_keys="Task.assignee_id", back_populates="assignee")
     created_tasks = relationship("Task", foreign_keys="Task.created_by", back_populates="creator")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    productivity = relationship("UserProductivity", back_populates="user", cascade="all, delete-orphan")
+    time_tracking = relationship("TaskTimeTracking", back_populates="user", cascade="all, delete-orphan")
+    task_comments = relationship("TaskComment", back_populates="user", cascade="all, delete-orphan")
+    uploaded_attachments = relationship("TaskAttachment", back_populates="uploaded_by_user", cascade="all, delete-orphan")
