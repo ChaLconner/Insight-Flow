@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, users, projects, tasks, analytics
+from routers import auth, users, projects, tasks, analytics, dashboard
 import os
 from dotenv import load_dotenv
 from utils.logger import app_logger
@@ -34,9 +34,15 @@ app = FastAPI(
 async def startup_event():
     app_logger.info("="*50)
     app_logger.info("FASTAPI SERVER STARTING UP")
-    # Initialize database with enum creation
-    init_database()
-    app_logger.info("Database initialized successfully")
+    
+    # Initialize database connection
+    try:
+        init_database()
+        app_logger.info("Database initialized successfully")
+    except Exception as e:
+        app_logger.warning(f"Database initialization failed: {e}")
+        app_logger.info("Continuing with mock authentication...")
+    
     app_logger.info("="*50)
     app_logger.info(f"Server should be accessible at: http://localhost:8000")
     app_logger.info(f"CORS origins allowed: {origins}")
@@ -51,7 +57,7 @@ app.add_middleware(CacheMiddleware, cache_timeout=300)
 # Add CORS middleware with detailed logging
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Use specific origins instead of wildcard when credentials are enabled
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "*"],  # Allow localhost ports
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -74,11 +80,12 @@ async def log_cors(request: Request, call_next):
     return response
 
 # Include routers - order matters for overlapping routes!
-app.include_router(projects.router, prefix="/dashboard", tags=["projects"])
-app.include_router(tasks.router, prefix="/dashboard", tags=["tasks"])
-app.include_router(analytics.router, prefix="/dashboard", tags=["analytics"])
-app.include_router(users.router, prefix="/dashboard/users", tags=["users"])
+app.include_router(projects.router, tags=["projects"])
+app.include_router(tasks.router, tags=["tasks"])
+app.include_router(analytics.router, tags=["analytics"])
+app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(auth.router, tags=["auth"])
+app.include_router(dashboard.router, tags=["dashboard"])
 
 @app.get("/")
 def read_root():

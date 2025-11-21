@@ -23,8 +23,15 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Log environment information using proper logger
-logger.debug(f"SECRET_KEY loaded: {'YES' if SECRET_KEY and SECRET_KEY != 'your-secret-key-here-change-in-production' else 'NO'}")
-logger.debug(f"SECRET_KEY length: {len(SECRET_KEY) if SECRET_KEY else 0}")
+logger.info("="*60)
+logger.info("JWT CONFIGURATION DEBUGGING")
+logger.info(f"SECRET_KEY environment variable exists: {'YES' if os.getenv('SECRET_KEY') else 'NO'}")
+logger.info(f"SECRET_KEY loaded: {'YES' if SECRET_KEY and SECRET_KEY != 'your-secret-key-here-change-in-production' else 'NO (using default)'}")
+logger.info(f"SECRET_KEY length: {len(SECRET_KEY) if SECRET_KEY else 0}")
+logger.info(f"SECRET_KEY first 10 chars: {SECRET_KEY[:10] if SECRET_KEY else 'None'}...")
+logger.info(f"ALGORITHM: {ALGORITHM}")
+logger.info(f"ACCESS_TOKEN_EXPIRE_MINUTES: {ACCESS_TOKEN_EXPIRE_MINUTES}")
+logger.info("="*60)
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -60,10 +67,15 @@ def verify_token(token: str) -> dict:
     """
     
     try:
-        logger.debug(f"Attempting to decode token: {token[:20]}...")
+        if not token:
+            logger.warning("Empty or None token provided to verify_token")
+            raise ValueError("Token is empty or None")
+        
+        logger.debug(f"Attempting to decode token: {token[:20] if token else 'NO_TOKEN'}...")
         logger.debug(f"Using SECRET_KEY: {SECRET_KEY[:10]}... (length: {len(SECRET_KEY)})")
         logger.debug(f"Using ALGORITHM: {ALGORITHM}")
-        logger.debug(f"Token structure check - has 3 parts: {token.count('.') == 3}")
+        # A JWT has two dots (three parts). Use a correct check for debugging.
+        logger.debug(f"Token structure check - has 3 parts: {token.count('.') == 2 if token else False}")
         
         # Check token structure
         token_parts = token.split('.')
@@ -102,14 +114,24 @@ def verify_token(token: str) -> dict:
     except JWTError as e:
         logger.error(f"JWTError occurred: {e}")
         logger.error(f"SECRET_KEY being used: {SECRET_KEY[:10]}... (length: {len(SECRET_KEY)})")
+        logger.error(f"Token being verified: {token[:20] if token else 'NO_TOKEN'}...")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except ValueError as e:
+        logger.error(f"ValueError in verify_token: {e}")
+        logger.error(f"Token being verified: {token[:20] if token else 'NO_TOKEN'}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error in verify_token: {e}")
         logger.error(f"SECRET_KEY being used: {SECRET_KEY[:10]}... (length: {len(SECRET_KEY)})")
+        logger.error(f"Token being verified: {token[:20] if token else 'NO_TOKEN'}...")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
@@ -121,8 +143,9 @@ def authenticate_user(user, password: str) -> bool:
     """
     Authenticate a user by verifying their password.
     """
-    logger.debug(f"authenticate_user called for user_id: {user.id if user else 'None'}")
-    logger.debug(f"Password provided: {'YES' if password else 'NO'}")
+    logger.info(f"authenticate_user called for user_id: {user.id if user else 'None'}")
+    logger.info(f"Password provided: {'YES' if password else 'NO'}")
+    logger.info(f"Password length: {len(password) if password else 0}")
     
     if not user:
         logger.warning("User object is None in authenticate_user")
@@ -132,20 +155,16 @@ def authenticate_user(user, password: str) -> bool:
         logger.warning(f"User {user.id} has no hashed_password")
         return False
     
-    logger.debug(f"Attempting to verify password for user {user.id}")
+    logger.info(f"Attempting to verify password for user {user.id}")
+    logger.info(f"User hashed password length: {len(user.hashed_password) if user.hashed_password else 0}")
+    logger.info(f"User hashed password starts with: {user.hashed_password[:10] if user.hashed_password else 'None'}...")
+    
     try:
         result = verify_password(password, user.hashed_password)
-        logger.debug(f"Password verification result for user {user.id}: {result}")
+        logger.info(f"Password verification result for user {user.id}: {result}")
         return result
     except Exception as e:
         logger.error(f"Error during password verification for user {user.id}: {e}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
         return False
-def authenticate_user(user, password: str) -> bool:
-    """
-    Authenticate a user by verifying their password.
-    """
-    if not user or not user.hashed_password:
-        return False
-    return verify_password(password, user.hashed_password)

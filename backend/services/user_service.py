@@ -35,9 +35,15 @@ class UserService:
                     continue
                 raise e
     
-    def get_user_by_id(self, user_id: uuid.UUID) -> Optional[User]:
+    def get_user_by_id(self, user_id) -> Optional[User]:
         """Get user by ID."""
-        return self.db.query(User).filter(User.id == user_id).first()
+        try:
+            if isinstance(user_id, str):
+                user_id = uuid.UUID(user_id)
+            return self.db.query(User).filter(User.id == user_id).first()
+        except ValueError:
+            # Handle invalid UUID string
+            return None
     
     def get_user_by_google_id(self, google_id: str) -> Optional[User]:
         """Get user by Google ID."""
@@ -77,22 +83,30 @@ class UserService:
     
     def authenticate_user(self, login_data: UserLogin) -> Optional[User]:
         """Authenticate user with email and password."""
-        logger.debug(f"authenticate_user called for email: {login_data.email}")
-        logger.debug(f"Password length provided: {len(login_data.password) if login_data.password else 0}")
+        logger.info(f"authenticate_user called for email: {login_data.email}")
+        logger.info(f"Password length provided: {len(login_data.password) if login_data.password else 0}")
         
         user = self.get_user_by_email(login_data.email)
         if not user:
             logger.warning(f"User not found for email: {login_data.email}")
             return None
             
-        logger.debug(f"User found for email: {login_data.email}, user_id: {user.id}")
-        logger.debug(f"User has hashed_password: {'YES' if user.hashed_password else 'NO'}")
-        logger.debug(f"User is_active: {user.is_active}")
-        logger.debug(f"Hashed password length: {len(user.hashed_password) if user.hashed_password else 0}")
-        logger.debug(f"Hashed password starts with: {user.hashed_password[:10] if user.hashed_password else 'None'}...")
+        logger.info(f"User found for email: {login_data.email}, user_id: {user.id}")
+        logger.info(f"User has hashed_password: {'YES' if user.hashed_password else 'NO'}")
+        logger.info(f"User is_active: {user.is_active}")
+        logger.info(f"Hashed password length: {len(user.hashed_password) if user.hashed_password else 0}")
+        logger.info(f"Hashed password starts with: {user.hashed_password[:10] if user.hashed_password else 'None'}...")
+        
+        # Additional debug info
+        if user.hashed_password:
+            logger.info(f"Full hashed password: {user.hashed_password[:50]}...")
+        
+        logger.info(f"Password to verify length: {len(login_data.password) if login_data.password else 0}")
         
         if not authenticate_user(user, login_data.password):
             logger.warning(f"Password authentication failed for email: {login_data.email}")
+            logger.warning(f"Expected hash (first 20): {user.hashed_password[:20] if user.hashed_password else 'None'}")
+            logger.warning(f"Password verification failed for user: {login_data.email}")
             return None
             
         logger.info(f"Authentication successful for email: {login_data.email}")

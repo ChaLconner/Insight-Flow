@@ -9,8 +9,9 @@ from models.user import User
 from services.user_service import UserService
 from database import get_db
 from routers.auth import get_current_active_user
+import uuid
 
-router = APIRouter(tags=["user management"])
+router = APIRouter(prefix="/users", tags=["user management"])
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_profile(
@@ -20,6 +21,30 @@ def get_current_user_profile(
     Get current user profile.
     """
     return current_user
+
+@router.put("/me", response_model=UserResponse)
+def update_current_user_profile(
+    user_data: UserUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> UserResponse:
+    """
+    Update current user profile.
+    """
+    try:
+        user_service = UserService(db)
+        updated_user = user_service.update_user(current_user.id, user_data)
+        return updated_user
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 @router.get("/search/{email}", response_model=UserResponse)
 def search_user_by_email(

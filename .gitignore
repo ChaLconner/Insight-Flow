@@ -206,3 +206,17 @@ ARCHITECTURE.md
 
 # Kilo Code configuration
 .kilocode/
+
+# Test and debug files
+*test_*.py
+*debug_*.py
+test_*.html
+debug_*.html
+errors.txt
+
+# Backup files
+*.backup
+
+# Migration and utility scripts
+migrate_*.py
+reset_*.py

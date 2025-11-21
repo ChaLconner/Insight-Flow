@@ -17,6 +17,9 @@ class User(BaseModel):
     avatar_url = Column(String(500))
     google_id = Column(String(255), unique=True, index=True)
     is_active = Column(Boolean, default=True)
+    # role field is optional to support existing databases without the field
+    # will be set to default value "user" if not present
+    role = Column(String(50), nullable=True)
     
     # Relationships
     owned_projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")

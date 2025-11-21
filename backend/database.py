@@ -11,7 +11,12 @@ from models import Base
 load_dotenv()
 
 # Use Neon PostgreSQL database with improved connection settings
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://neondb_owner:npg_8iH7feIFulOq@ep-divine-tree-a129b65i-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require")
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_ZdRtunGDb53y@ep-patient-hat-af29lf0z-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require")
+
+# Convert to psycopg2 format if needed
+if SQLALCHEMY_DATABASE_URL and not SQLALCHEMY_DATABASE_URL.startswith("postgresql+psycopg2://"):
+    if SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 # Log database connection details for debugging
 import logging

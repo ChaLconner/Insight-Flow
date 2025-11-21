@@ -18,7 +18,7 @@ import uuid
 # The logger sends the logs to the root logger
 logger = setup_logger("tasks_router")
 
-router = APIRouter(tags=["task management"])
+router = APIRouter(prefix="/tasks", tags=["task management"])
 
 @router.post("/", response_model=TaskResponse)
 def create_task(
@@ -883,4 +883,52 @@ def get_my_tasks(
             creator=task.creator,
             project=task.project
         ))
+    return task_responses
+
+
+@router.get("/", response_model=List[TaskWithDetails])
+def get_all_tasks(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get all tasks the user has access to (across all projects they're a member of).
+    """
+    task_service = TaskService(db)
+    tasks = task_service.get_user_tasks(current_user.id, skip=skip, limit=limit)
+    
+    # Convert tasks to response format with full details
+    task_responses = []
+    for task in tasks:
+        # Fixed: Properly handle TaskStatus enum conversion and ensure lowercase
+        status_value = ""
+        if hasattr(task.status, 'value'):
+            status_value = task.status.value
+        elif isinstance(task.status, TaskStatus):
+            status_value = task.status.value
+        else:
+            status_value = str(task.status)
+        
+        # Ensure status is returned as lowercase to match frontend expectations
+        status_value = status_value.lower() if status_value else 'todo'
+            
+        task_response = TaskWithDetails(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            status=status_value,
+            project_id=task.project_id,
+            assignee_id=task.assignee_id,
+            created_by=task.created_by,
+            due_date=task.due_date,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            assignee=task.assignee,
+            creator=task.creator,
+            project=task.project
+        )
+        task_responses.append(task_response)
+    
     return task_responses

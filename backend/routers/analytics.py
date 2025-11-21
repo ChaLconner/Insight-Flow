@@ -14,7 +14,7 @@ import uuid
 
 logger = setup_logger("analytics_router")
 
-router = APIRouter(tags=["analytics"])
+router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/projects/{project_id}/dashboard")
 def get_dashboard_metrics(

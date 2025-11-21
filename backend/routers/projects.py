@@ -19,7 +19,7 @@ import uuid
 
 logger = setup_logger("projects_router")
 
-router = APIRouter(tags=["project management"])
+router = APIRouter(prefix="", tags=["project management"])
 
 # IMPORTANT: POST route must come BEFORE GET routes to avoid conflicts
 @router.post("/projects", response_model=ProjectResponse)
