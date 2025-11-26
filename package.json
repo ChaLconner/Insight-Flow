@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
-    "start": "cd backend && python start.py",
-    "install": "npm install && cd frontend && npm install"
+    "start": "cd backend && python start.py"
   },
   "dependencies": {
     "react": "^18.3.1",

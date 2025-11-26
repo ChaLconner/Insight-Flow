@@ -8,6 +8,10 @@ import { authActions } from '@/stores/auth-actions';
 // Removed: import { useAuth as useAuthQuery } from '@/hooks/use-api';
 import { User } from '@/types';
 
+// Module-level redirect timeout used by useRequireAuth to avoid attaching
+// properties to the hook function (keeps TypeScript happy).
+let _useRequireAuthRedirectTimeout: NodeJS.Timeout | null = null;
+
 // Hook for auth state management with React Query integration
 export const useAuthState = () => {
   // Zustand store state
@@ -267,7 +271,7 @@ export const useRequireAuth = () => {
     });
 
     // Add minimal debouncing to prevent rapid redirects (optimized for speed)
-    if (!useRequireAuth._redirectTimeout) {
+    if (!_useRequireAuthRedirectTimeout) {
       const timeoutId = setTimeout(() => {
         // Fast path: if authenticated and has user, no need to check further
         if (isAuthenticated && user) {
@@ -292,10 +296,10 @@ export const useRequireAuth = () => {
           }
         }
         
-        useRequireAuth._redirectTimeout = null;
+        _useRequireAuthRedirectTimeout = null;
       }, 200); // Reduced to 200ms for faster response
       
-      useRequireAuth._redirectTimeout = timeoutId;
+      _useRequireAuthRedirectTimeout = timeoutId;
     }
   }, [isAuthenticated, isLoading, user]); // Include user in deps with debouncing
 

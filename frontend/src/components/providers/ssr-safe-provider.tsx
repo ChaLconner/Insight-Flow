@@ -4,7 +4,6 @@
 // SSR-Safe Provider Components
 // ===========================================
 
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ReactNode, useState, useEffect } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -52,16 +51,9 @@ export function DevtoolsWrapper({ children }: DevtoolsWrapperProps) {
     );
   }, []);
 
-  if (!isClient || !isDevelopment) {
-    return <>{children}</>;
-  }
-
-  return (
-    <>
-      {children}
-      <ReactQueryDevtools initialIsOpen={false} />
-    </>
-  );
+  // If not running in development on the client, just render children.
+  // We removed the React Query Devtools dependency to simplify the build.
+  return <>{children}</>;
 }
 
 // ===========================================
