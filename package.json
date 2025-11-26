@@ -7,23 +7,5 @@
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
     "start": "cd backend && python start.py"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "@types/lodash": "^4.17.20",
-    "autoprefixer": "^10.4.21",
-    "axios": "^1.13.1",
-    "chart.js": "^4.5.1",
-    "framer-motion": "^12.23.24",
-    "lodash": "^4.17.21",
-    "lucide-react": "^0.548.0",
-    "postcss": "^8.5.6",
-    "shadcn-ui": "^0.9.5",
-    "tailwindcss": "^4.1.16",
-    "zustand": "^5.0.8"
-  },
-  "workspaces": [
-    "frontend"
-  ]
+  }
 }

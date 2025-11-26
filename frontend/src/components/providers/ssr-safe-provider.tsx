@@ -4,7 +4,8 @@
 // SSR-Safe Provider Components
 // ===========================================
 
-import { ReactNode, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 
 // ===========================================

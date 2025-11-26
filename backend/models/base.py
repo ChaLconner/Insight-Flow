@@ -1,7 +1,7 @@
 """
 Base model with common fields for all database models.
 """
-from sqlalchemy import Column, DateTime, UUID
+from sqlalchemy import Column, DateTime, String
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 import uuid
@@ -14,6 +14,6 @@ class BaseModel(Base):
     """
     __abstract__ = True
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.uuid_generate_v4())
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -46,7 +46,9 @@ export const useTheme = () => {
   
   // Listen to system theme changes when using system preference
   useEffect(() => {
-    if (!isSystemMode || typeof window === 'undefined') return;
+    if (!isSystemMode || typeof window === 'undefined') {
+      return;
+    }
     
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     
@@ -64,7 +66,9 @@ export const useTheme = () => {
   // Apply theme to document (client-side only)
   useEffect(() => {
     // Skip in SSR
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') {
+      return;
+    }
 
     const root = document.documentElement;
     
@@ -154,7 +158,9 @@ export const useTheme = () => {
   const getThemeFromStorage = useCallback(() => {
     try {
       const stored = localStorage.getItem('insight-flow-theme');
-      if (!stored) return null;
+      if (!stored) {
+        return null;
+      }
       
       const parsed = JSON.parse(stored);
       return {
@@ -171,7 +177,9 @@ export const useTheme = () => {
   
   const syncWithStorage = useCallback(() => {
     const stored = getThemeFromStorage();
-    if (!stored) return;
+    if (!stored) {
+      return;
+    }
     
     if (stored.systemMode) {
       enableAutoTheme();
@@ -186,14 +194,18 @@ export const useTheme = () => {
   
   // Accessibility helpers
   const prefersReducedMotion = useMemo(() => {
-    if (typeof window === 'undefined') return false;
+    if (typeof window === 'undefined') {
+      return false;
+    }
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
   
   const getContrastText = useCallback((backgroundColor: string) => {
     // Simple contrast calculation (0-255 for each RGB component)
     const rgb = backgroundColor.match(/\d+/g);
-    if (!rgb) return 'text-white';
+    if (!rgb) {
+      return 'text-white';
+    }
     
     const [r, g, b] = rgb.map(Number);
     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
@@ -361,7 +373,9 @@ export const useThemeColors = () => {
   
   const getContrastColor = useCallback((backgroundColor: string) => {
     const rgb = backgroundColor.match(/\d+/g);
-    if (!rgb) return '#ffffff';
+    if (!rgb) {
+      return '#ffffff';
+    }
     
     const [r, g, b] = rgb.map(Number);
     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
@@ -371,7 +385,9 @@ export const useThemeColors = () => {
   
   const rgba = useCallback((color: string, alpha: number) => {
     const rgb = color.match(/\d+/g);
-    if (!rgb) return `rgba(0, 0, 0, ${alpha})`;
+    if (!rgb) {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
     
     return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
   }, []);
@@ -404,12 +420,16 @@ export const useThemeAnimation = () => {
   }, [prefersReducedMotion]);
   
   const getTransitionClasses = useCallback(() => {
-    if (prefersReducedMotion) return '';
+    if (prefersReducedMotion) {
+      return '';
+    }
     return 'transition-colors duration-300 ease-in-out';
   }, [prefersReducedMotion]);
   
   const createSlideAnimation = useCallback((direction: 'left' | 'right' | 'up' | 'down') => {
-    if (prefersReducedMotion) return '';
+    if (prefersReducedMotion) {
+      return '';
+    }
     
     const animations = {
       left: 'transform translate-x-full opacity-0',

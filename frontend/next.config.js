@@ -3,11 +3,6 @@ const nextConfig = {
     // Production optimizations
     reactStrictMode: true,
 
-    // Removed turbopack configuration to use default settings
-    // turbopack: {
-    //     root: './', // Explicitly set relative root to current directory
-    // },
-
     // Image optimization - updated for Next.js 16
     images: {
         remotePatterns: [

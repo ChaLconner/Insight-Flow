@@ -4,7 +4,7 @@
 
 'use client';
 
-import { ReactNode, useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 import { useIsHydrated } from '@/hooks/use-hydration';
 

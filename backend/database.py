@@ -10,25 +10,28 @@ from models import Base
 # Load environment variables from .env file
 load_dotenv()
 
-# Use Neon PostgreSQL database with improved connection settings
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_ZdRtunGDb53y@ep-patient-hat-af29lf0z-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require")
+# Use Neon PostgreSQL database from environment variable
+database_url = os.getenv("DATABASE_URL")
+
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable is not set. Please configure your database connection.")
 
 # Convert to psycopg2 format if needed
-if SQLALCHEMY_DATABASE_URL and not SQLALCHEMY_DATABASE_URL.startswith("postgresql+psycopg2://"):
-    if SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
-        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+if database_url and not database_url.startswith("postgresql+psycopg2://"):
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 # Log database connection details for debugging
 import logging
 db_logger = logging.getLogger("database")
 db_logger.info("="*50)
 db_logger.info("DATABASE CONFIGURATION")
-db_logger.info(f"DATABASE_URL: {SQLALCHEMY_DATABASE_URL}")
+db_logger.info(f"DATABASE_URL: {database_url}")
 db_logger.info("="*50)
 
 # Create engine with improved connection settings for better reliability
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
+    database_url,
     pool_pre_ping=True,  # Validate connections before use
     pool_recycle=300,     # Recycle connections every 5 minutes
     pool_size=5,          # Maximum number of connections to keep
@@ -128,11 +131,11 @@ def drop_tables():
     Base.metadata.drop_all(bind=engine)
 
 # Function to execute raw SQL
-def execute_sql(sql_statement):
+def execute_sql(sql_statement: str):
     """
     Execute raw SQL statement.
     """
     with engine.connect() as connection:
-        result = connection.execute(sql_statement)
+        result = connection.execute(text(sql_statement))
         connection.commit()
         return result

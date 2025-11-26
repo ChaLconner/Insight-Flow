@@ -106,7 +106,9 @@ export const useAuthState = () => {
 
     return () => {
       mounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       (useAuthState as any)._isInitializing = false;
     };
   }, []); // Empty deps - run only once on mount
@@ -319,8 +321,9 @@ export const useRoleGuard = (requiredRole: string | string[]) => {
   const { user, isAuthenticated } = useAuthState();
 
   const hasRequiredRole = () => {
-    if (!user || !isAuthenticated) return false;
-
+    if (!user || !isAuthenticated) {
+      return false;
+    }
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     return roles.includes(user.role);
   };
