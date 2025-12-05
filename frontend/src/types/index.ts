@@ -29,12 +29,27 @@ export interface User {
   id: string;
   email: string;
   username: string;
+  name?: string;
   firstName?: string;
   lastName?: string;
   avatar?: string;
   role: UserRole;
   isActive: boolean;
   emailVerified: boolean;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  website?: string;
+  timezone?: string;
+  language?: string;
+  theme?: 'light' | 'dark' | 'auto';
+  notifications?: {
+    email: boolean;
+    push: boolean;
+    project: boolean;
+    task: boolean;
+    mention: boolean;
+  };
   lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -50,6 +65,7 @@ export enum UserRole {
 export interface CreateUserRequest {
   email: string;
   username: string;
+  name?: string;
   firstName?: string;
   lastName?: string;
   password: string;
@@ -59,11 +75,26 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   email?: string;
   username?: string;
+  name?: string;
   firstName?: string;
   lastName?: string;
   avatar?: string;
   role?: UserRole;
   isActive?: boolean;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  website?: string;
+  timezone?: string;
+  language?: string;
+  theme?: 'light' | 'dark' | 'auto';
+  notifications?: {
+    email: boolean;
+    push: boolean;
+    project: boolean;
+    task: boolean;
+    mention: boolean;
+  };
 }
 
 export interface UserProfile {
@@ -98,10 +129,10 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   username: string;
-  firstName?: string;
-  lastName?: string;
-  password: string;
-  confirmPassword: string;
+  inProgressTasks: number;
+  overdueTasks: number;
+  teamMembers: number;
+  recentActivity: number;
 }
 
 export interface AuthResponse {
@@ -136,6 +167,11 @@ export interface Project {
   settings: ProjectSettings;
   createdAt: string;
   updatedAt: string;
+  taskCount?: number;
+  completedTasks?: number;
+  memberCount?: number;
+  memberSummaries?: any[];
+  progress?: number;
 }
 
 export enum ProjectStatus {
@@ -308,6 +344,7 @@ export interface UpdateTaskRequest {
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  type?: TaskType;
   assigneeId?: string;
   dueDate?: string;
   estimatedHours?: number;
@@ -316,10 +353,6 @@ export interface UpdateTaskRequest {
   tags?: string[];
   customFields?: Record<string, any>;
 }
-
-// ===========================================
-// Analytics Types
-// ===========================================
 
 export interface ProjectAnalytics {
   projectId: string;

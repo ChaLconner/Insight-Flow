@@ -1,7 +1,10 @@
 """
 Analytics router for project metrics and productivity data.
 """
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from services.project_service import ProjectService
@@ -11,17 +14,359 @@ from models.user import User
 from dependencies import get_project_member
 from utils.logger import setup_logger
 import uuid
+import json
 
-logger = setup_logger("analytics_router")
+# Simple in-memory cache
+from datetime import datetime, timedelta
+_analytics_cache: Dict[str, Any] = {}
+CACHE_TTL_SECONDS = 300  # 5 minutes
 
-router = APIRouter(prefix="/analytics", tags=["analytics"])
+@router.get("/overview")
+def get_analytics_overview(
+    period: str = Query("30d", description="Time period: 7d, 30d, 90d, 1y"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Dict[str, Any]:
+    """
+    Get global analytics overview for the current user across all projects.
+    Includes caching for performance (TTL: 5 minutes).
+    """
+    # Check cache
+    cache_key = f"{current_user.id}:{period}"
+    now = datetime.now()
+    
+    if cache_key in _analytics_cache:
+        cached_ts, cached_data = _analytics_cache[cache_key]
+        if (now - cached_ts).total_seconds() < CACHE_TTL_SECONDS:
+            logger.info(f"Serving analytics from cache for user {current_user.id}")
+            return cached_data
+            
+    from models.project import ProjectMember
+    from models.task import Task, TaskStatus
+    from models.task_history import TaskHistory, ActivityType
+    from sqlalchemy import func, case, distinct, and_, cast, String, text
+    
+    project_service = ProjectService(db)
+    user_projects = project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
+    project_ids = [p.id for p in user_projects]
+
+    if not project_ids:
+        return {
+            "overview": {
+                "totalProjects": 0,
+                "activeProjects": 0,
+                "totalTasks": 0,
+                "completedTasks": 0,
+                "inProgressTasks": 0,
+                "overdueTasks": 0,
+                "teamMembers": 0,
+                "completionRate": 0,
+                "averageCompletionTime": 0,
+                "teamVelocity": 0,
+            },
+            "trends": [],
+            "projects": [],
+            "team": [],
+            "weeklyBurndown": []
+        }
+
+    # Calculate metrics using efficient aggregation queries
+    total_projects = len(user_projects)
+    active_projects = len([p for p in user_projects if p.is_active])  # type: ignore
+
+    # Task stats across all projects
+    task_stats = db.query(
+        func.count(Task.id).label('total'),
+        func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed'),
+        func.sum(case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)).label('in_progress'),
+        func.sum(case((and_(Task.due_date < datetime.now(), cast(Task.status, String) != TaskStatus.DONE.value), 1), else_=0)).label('overdue')
+    ).filter(Task.project_id.in_(project_ids)).first()
+
+    total_tasks = task_stats.total if task_stats else 0
+    completed_tasks = task_stats.completed if task_stats else 0
+    in_progress_tasks = task_stats.in_progress if task_stats else 0
+    overdue_tasks = task_stats.overdue if task_stats else 0
+
+    # Team members (unique users across all projects)
+    member_ids = db.query(ProjectMember.user_id).filter(ProjectMember.project_id.in_(project_ids)).distinct().count()
+
+    completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+
+    # Average completion time - Accurate using TaskHistory
+    # 1. Get creation times for done tasks
+    done_tasks_created = db.query(Task.id, Task.created_at).filter(
+        Task.project_id.in_(project_ids),
+        cast(Task.status, String) == TaskStatus.DONE.value
+    ).all()
+    
+    done_task_map = {t_id: t_created for t_id, t_created in done_tasks_created}
+    done_task_ids = list(done_task_map.keys())
+    
+    # 2. Get first completion timestamp from history
+    if done_task_ids:
+        completion_times = db.query(
+            TaskHistory.task_id, 
+            func.min(TaskHistory.timestamp)
+        ).filter(
+            TaskHistory.task_id.in_(done_task_ids),
+            TaskHistory.activity_type == ActivityType.TASK_COMPLETED
+        ).group_by(TaskHistory.task_id).all()
+        
+        total_seconds = 0
+        count = 0
+        
+        for t_id, t_completed in completion_times:
+            t_created = done_task_map.get(t_id)
+            if t_created and t_completed and t_completed > t_created:
+                total_seconds += (t_completed - t_created).total_seconds()
+                count += 1
+                
+        average_completion_time = (total_seconds / 86400 / count) if count > 0 else 0
+    else:
+        average_completion_time = 0
+
+    # Project performance - Aggregated
+    project_task_stats = db.query(
+        Task.project_id,
+        func.count(Task.id).label('total'),
+        func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed')
+    ).filter(Task.project_id.in_(project_ids)).group_by(Task.project_id).all()
+    
+    project_stats_map = {stat.project_id: stat for stat in project_task_stats}
+    
+    projects_data = []
+    for p in user_projects:
+        stats = project_stats_map.get(p.id)
+        p_tasks = stats.total if stats else 0
+        p_completed = stats.completed if stats else 0
+        p_progress = (p_completed / p_tasks * 100) if p_tasks > 0 else 0
+        
+        # Velocity calculation based on progress
+        velocity = "medium"
+        if p_progress > 75:
+            velocity = "high"
+        elif p_progress < 25:
+            velocity = "low"
+            
+        projects_data.append({  # type: ignore
+            "name": p.name,
+            "tasks": p_tasks,
+            "completed": p_completed,
+            "progress": round(p_progress, 1),
+            "velocity": velocity
+        })
+
+    # Team performance - Aggregated
+    # Get top 5 contributors
+    team_stats = db.query(
+        Task.assignee_id,
+        func.count(Task.id).label('total'),
+        func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed')
+    ).filter(
+        Task.project_id.in_(project_ids),
+        Task.assignee_id.isnot(None)
+    ).group_by(Task.assignee_id).all()
+    
+    # Get user details for these contributors
+    contributor_ids = [stat.assignee_id for stat in team_stats]
+    users = db.query(User).filter(User.id.in_(contributor_ids)).all()
+    user_map = {u.id: u for u in users}
+    
+    team_data = []
+    for stat in team_stats:
+        user = user_map.get(stat.assignee_id)
+        if not user:
+            continue
+            
+        m_tasks = stat.total
+        m_completed = stat.completed
+        m_efficiency = (m_completed / m_tasks * 100) if m_tasks > 0 else 0
+        
+        team_data.append({  # type: ignore
+            "name": user.name,
+            "avatar": user.avatar_url,
+            "tasks": m_tasks,
+            "completed": m_completed,
+            "efficiency": round(m_efficiency, 1)
+        })
+    
+    # Sort by efficiency and take top 5
+    team_data.sort(key=lambda x: x['efficiency'], reverse=True)  # type: ignore
+    team_data = team_data[:5]  # type: ignore
+
+    # Weekly Burndown - Optimized Logic
+    # 1. Period definition
+    today = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+    seven_days_ago = (today - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # 2. Daily Created counts in range
+    # CAST(created_at AS DATE) works in PG. For SQLite it might differ, but we assume PG/standard SQL support via func.date or similar
+    # Using simple date truncation in python might be safer if DB agnostic, but let's try SQL Group By for perf
+    
+    # Initial counts (cumulative up to start of period)
+    initial_planned = db.query(func.count(Task.id)).filter(
+        Task.project_id.in_(project_ids),
+        Task.created_at < seven_days_ago
+    ).scalar() or 0
+    
+    initial_actual = db.query(func.count(distinct(TaskHistory.task_id))).filter(
+        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+        TaskHistory.timestamp < seven_days_ago
+    ).scalar() or 0
+    
+    # Daily counts within period
+    # We fetch all dates in range and process in python to avoid complex recursive CTEs
+    created_in_range = db.query(Task.created_at).filter(
+        Task.project_id.in_(project_ids),
+        Task.created_at >= seven_days_ago,
+        Task.created_at <= today
+    ).all()
+    
+    completed_in_range = db.query(TaskHistory.timestamp).filter(
+        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+        TaskHistory.timestamp >= seven_days_ago,
+        TaskHistory.timestamp <= today
+    ).all()
+    
+    # Process into daily buckets
+    weekly_burndown = []
+    
+    # Create simple map for O(1) lookups: date_str -> count
+    created_map = {}
+    for (t_created,) in created_in_range:
+        if t_created:
+            d_str = t_created.strftime("%Y-%m-%d")
+            created_map[d_str] = created_map.get(d_str, 0) + 1
+            
+    completed_map = {}
+    for (t_completed,) in completed_in_range:
+        if t_completed:
+            d_str = t_completed.strftime("%Y-%m-%d")
+            completed_map[d_str] = completed_map.get(d_str, 0) + 1
+            
+    # Build chart data
+    current_planned = initial_planned
+    current_actual = initial_actual
+    
+    for i in range(7):
+        d = seven_days_ago + timedelta(days=i)
+        d_str = d.strftime("%Y-%m-%d")
+        day_label = d.strftime("%a")
+        
+        # Add daily values to cumulative
+        current_planned += created_map.get(d_str, 0)
+        current_actual += completed_map.get(d_str, 0)
+        
+        weekly_burndown.append({
+            "day": day_label,
+            "planned": current_planned,
+            "actual": current_actual
+        })
+    
+    # Trends - Real Data
+    # Calculate trends based on selected period (default 30d)
+    days_map = {
+        "7d": 7, "week": 7, 
+        "30d": 30, "month": 30, 
+        "90d": 90, "quarter": 90, 
+        "1y": 365, "year": 365
+    }
+    days = days_map.get(period, 30)
+    
+    current_start = datetime.now() - timedelta(days=days)
+    previous_start = current_start - timedelta(days=days)
+    
+    # 1. Tasks Completed Trend
+    current_completed_count = db.query(func.count(distinct(TaskHistory.task_id))).filter(
+        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+        TaskHistory.timestamp >= current_start
+    ).scalar() or 0
+    
+    previous_completed_count = db.query(func.count(distinct(TaskHistory.task_id))).filter(
+        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+        TaskHistory.timestamp >= previous_start,
+        TaskHistory.timestamp < current_start
+    ).scalar() or 0
+    
+    completed_change = current_completed_count - previous_completed_count
+    div_base = previous_completed_count if previous_completed_count > 0 else 1
+    completed_change_pct = (completed_change / div_base * 100)
+    
+    # 2. Project Velocity (Tasks/Day)
+    current_velocity = current_completed_count / days
+    previous_velocity = previous_completed_count / days
+    velocity_change = current_velocity - previous_velocity
+    div_base_vel = previous_velocity if previous_velocity > 0 else 1
+    velocity_change_pct = (velocity_change / div_base_vel * 100)
+    
+    # 3. Team Productivity (Tasks/Member)
+    active_members_count = member_ids or 1
+    current_productivity = current_completed_count / active_members_count
+    previous_productivity = previous_completed_count / active_members_count
+    productivity_change = current_productivity - previous_productivity
+    div_base_prod = previous_productivity if previous_productivity > 0 else 1
+    productivity_change_pct = (productivity_change / div_base_prod * 100)
+    
+    trends = [  # type: ignore
+        {
+            "metric": "Tasks Completed", 
+            "current": current_completed_count, 
+            "previous": previous_completed_count, 
+            "change": round(completed_change_pct, 1), 
+            "trend": "up" if completed_change >= 0 else "down"
+        },
+        {
+            "metric": "Project Velocity", 
+            "current": round(current_velocity * 7, 1), # Weekly velocity
+            "previous": round(previous_velocity * 7, 1), 
+            "change": round(velocity_change_pct, 1), 
+            "trend": "up" if velocity_change >= 0 else "down"
+        },
+        {
+            "metric": "Team Productivity", 
+            "current": round(current_productivity, 1), 
+            "previous": round(previous_productivity, 1), 
+            "change": round(productivity_change_pct, 1), 
+            "trend": "up" if productivity_change >= 0 else "down"
+        },
+    ]
+
+    result = {
+        "overview": {
+            "totalProjects": total_projects,
+            "activeProjects": active_projects,
+            "totalTasks": total_tasks,
+            "completedTasks": completed_tasks,
+            "inProgressTasks": in_progress_tasks,
+            "overdueTasks": overdue_tasks,
+            "teamMembers": member_ids,
+            "completionRate": round(completion_rate, 1),
+            "averageCompletionTime": round(average_completion_time, 1),
+            "teamVelocity": round(current_velocity * 7, 1), # Weekly velocity
+        },
+        "trends": trends,
+        "projects": projects_data,
+        "team": team_data,
+        "weeklyBurndown": weekly_burndown
+    }
+    
+    # Update cache
+    _analytics_cache[cache_key] = (now, result)
+    
+    return result
+
+
 
 @router.get("/projects/{project_id}/dashboard")
 def get_dashboard_metrics(
     project_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    project_uuid: uuid.UUID = Depends(get_project_member)
+    project_uuid: uuid.UUID = Depends(lambda: get_project_member(project_id, db, current_user))
 ) -> Dict[str, Any]:
     """
     Get dashboard metrics for a project.
@@ -29,22 +374,22 @@ def get_dashboard_metrics(
     
     
     # Get actual project metrics
-    from models.task import Task
+    from models.task import Task, TaskStatus
     from models.project import ProjectMember
     
     # Task statistics
     total_tasks = db.query(Task).filter(Task.project_id == project_uuid).count()
     completed_tasks = db.query(Task).filter(
         Task.project_id == project_uuid,
-        Task.status == 'done'
+        cast(Task.status, String) == TaskStatus.DONE.value
     ).count()
     todo_tasks = db.query(Task).filter(
         Task.project_id == project_uuid,
-        Task.status == 'todo'
+        cast(Task.status, String) == TaskStatus.TODO.value
     ).count()
     in_progress_tasks = db.query(Task).filter(
         Task.project_id == project_uuid,
-        Task.status == 'in_progress'
+        cast(Task.status, String) == TaskStatus.IN_PROGRESS.value
     ).count()
     
     # Member statistics
@@ -64,26 +409,25 @@ def get_dashboard_metrics(
         user = db.query(User).filter(User.id == activity.user_id).first()
         user_name = user.name if user else f"User {activity.user_id}"
         
-        formatted_activity = {
+        formatted_activity = {  # type: ignore
             "id": str(activity.id),
             "type": activity.activity_type.value,
             "user_name": user_name,
             "task_title": activity.task_title,
-            "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,
+            "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,  # type: ignore
             "description": activity.description
         }
         
         # Add additional context for specific activity types
-        if activity.new_values:
+        if activity.new_values:  # type: ignore
             try:
-                import json
-                new_values = json.loads(activity.new_values)
+                new_values = json.loads(activity.new_values)  # type: ignore
                 if "assignee_name" in new_values:
                     formatted_activity["assignee_name"] = new_values["assignee_name"]
             except (json.JSONDecodeError, TypeError):
                 pass
         
-        recent_activity.append(formatted_activity)
+        recent_activity.append(formatted_activity)  # type: ignore
     
     return {
         "task_stats": {
@@ -111,7 +455,7 @@ def get_productivity_data(
     group_by: str = Query("week", description="Group by: day, week, month"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
-    project_uuid: uuid.UUID = Depends(get_project_member)
+    project_uuid: uuid.UUID = Depends(lambda: get_project_member(project_id, db, current_user))
 ) -> Dict[str, Any]:
     """
     Get productivity data for a project.
@@ -125,9 +469,9 @@ def get_productivity_data(
     logger.info(f"[DEBUG] - current_user: {current_user.id}")
     
     try:
-        from models.task import Task
+        from models.task import Task, TaskStatus
         from datetime import datetime, timedelta, timezone
-        import random
+        # import random  # Not used
         
         # Calculate date range based on period - use timezone-aware datetimes
         end_date = datetime.now(timezone.utc)
@@ -162,27 +506,27 @@ def get_productivity_data(
             current_date = start_date + timedelta(days=i)
             next_date = current_date + timedelta(days=1)
             
-            day_tasks = [t for t in tasks if t.created_at and current_date <= t.created_at < next_date]
+            day_tasks = [t for t in tasks if t.created_at and current_date <= t.created_at < next_date]  # type: ignore
             
             created_count = len(day_tasks)
-            completed_count = len([t for t in day_tasks if t.status == 'done'])
+            completed_count = len([t for t in day_tasks if cast(t.status, String) == TaskStatus.DONE.value])  # type: ignore
             
-            productivity_data.append({
+            productivity_data.append({  # type: ignore
                 "date": current_date.isoformat(),
                 "created_tasks": created_count,
                 "completed_tasks": completed_count
             })
         
-        logger.info(f"[DEBUG] Generated {len(productivity_data)} data points")
+        logger.info(f"[DEBUG] Generated {len(productivity_data)} data points")  # type: ignore
         
-        result = {
+        result = {  # type: ignore
             "period": period,
             "group_by": group_by,
             "data": productivity_data
         }
         
-        logger.info(f"[DEBUG] Returning result with {len(productivity_data)} data points")
-        return result
+        logger.info(f"[DEBUG] Returning result with {len(productivity_data)} data points")  # type: ignore
+        return result  # type: ignore
         
     except Exception as e:
         logger.error(f"[DEBUG] Unexpected error in get_productivity_data: {e}")
@@ -195,7 +539,8 @@ def get_productivity_data(
 def get_contributions(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    project_uuid: uuid.UUID = Depends(lambda: get_project_member(project_id, db, current_user))
 ) -> Dict[str, Any]:
     """
     Get team contributions for a project.
@@ -207,15 +552,6 @@ def get_contributions(
     from models.project import ProjectMember
     from sqlalchemy import func, distinct
     from sqlalchemy.orm import aliased
-    
-    # Convert project_id to UUID
-    try:
-        project_uuid = uuid.UUID(project_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
     
     # Alias for tasks created by a member
     CreatedTask = aliased(Task)
@@ -237,7 +573,7 @@ def get_contributions(
         (CreatedTask.project_id == project_uuid) & (CreatedTask.created_by == User.id)
     ).outerjoin(
         CompletedTask,
-        (CompletedTask.project_id == project_uuid) & (CompletedTask.assignee_id == User.id) & (CompletedTask.status == 'done')
+        (CompletedTask.project_id == project_uuid) & (CompletedTask.assignee_id == User.id) & (cast(CompletedTask.status, String) == TaskStatus.DONE.value)
     ).outerjoin(
         AssignedTask,
         (AssignedTask.project_id == project_uuid) & (AssignedTask.assignee_id == User.id)
@@ -250,7 +586,7 @@ def get_contributions(
     contributions = []
     for user_id, user_name, tasks_created, tasks_completed, total_assigned in contributions_query:
         completion_rate = tasks_completed / max(total_assigned, 1) if total_assigned > 0 else 0.0
-        contributions.append({
+        contributions.append({  # type: ignore
             "user_id": str(user_id),
             "name": user_name,
             "avatar_url": None,  # Could be added later
@@ -269,7 +605,8 @@ def get_recent_activity(
     project_id: str,
     limit: int = Query(10, description="Number of activities to return"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    project_uuid: uuid.UUID = Depends(lambda: get_project_member(project_id, db, current_user))
 ) -> Dict[str, Any]:
     """
     Get recent activity for a project.
@@ -286,47 +623,13 @@ def get_recent_activity(
     project_service = ProjectService(db)
     task_history_service = TaskHistoryService(db)
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-        logger.info(f"[DEBUG] Successfully parsed UUID: {project_uuid}")
-    except ValueError as e:
-        logger.error(f"[DEBUG] Invalid UUID format: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
-    
-    # Check if user is owner or member of project
-    project = project_service.get_project_by_id(project_uuid)
-    if not project:
-        logger.error(f"[DEBUG] Project not found: {project_uuid}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    logger.info(f"[DEBUG] Found project: {project.name}, owner: {project.owner_id}")
-    logger.info(f"[DEBUG] Current user is owner: {project.owner_id == current_user.id}")
-    
-    # Allow access if user is owner or member
-    is_member = project_service.is_project_member(project_uuid, current_user.id)
-    logger.info(f"[DEBUG] User membership check result: {is_member}")
-    
-    if project.owner_id != current_user.id and not is_member:
-        logger.error(f"[DEBUG] User {current_user.id} is not a member of project {project_uuid}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
-    
-    logger.info(f"[DEBUG] User {current_user.id} has access to project {project_uuid}")
-    
     # Get actual activity from database
     logger.info(f"[DEBUG] Calling task_history_service.get_recent_activities...")
     activities = task_history_service.get_recent_activities(project_uuid, limit)
     logger.info(f"[DEBUG] Retrieved {len(activities)} activities from database")
     
     # Get project information
+    project = project_service.get_project_by_id(project_uuid)
     project_name = project.name if project else "Unknown Project"
     
     # Format activities for frontend
@@ -336,35 +639,34 @@ def get_recent_activity(
         user = db.query(User).filter(User.id == activity.user_id).first()
         user_name = user.name if user else f"User {activity.user_id}"
         
-        formatted_activity = {
+        formatted_activity = {  # type: ignore
             "id": str(activity.id),
             "type": activity.activity_type.value,
             "user_name": user_name,
             "task_title": activity.task_title,
-            "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,
+            "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,  # type: ignore
             "description": activity.description,
             "project_name": project_name,
             "project_id": str(project_id)
         }
         
         # Add additional context for specific activity types
-        if activity.new_values:
-            import json
+        if activity.new_values:  # type: ignore
             try:
-                new_values = json.loads(activity.new_values)
+                new_values = json.loads(activity.new_values)  # type: ignore
                 if "assignee_name" in new_values:
                     formatted_activity["assignee_name"] = new_values["assignee_name"]
             except (json.JSONDecodeError, TypeError):
                 pass
         
-        formatted_activities.append(formatted_activity)
+        formatted_activities.append(formatted_activity)  # type: ignore
         logger.debug(f"[DEBUG] Formatted activity: {formatted_activity}")
     
-    logger.info(f"[DEBUG] Returning {len(formatted_activities)} formatted activities")
+    logger.info(f"[DEBUG] Returning {len(formatted_activities)} formatted activities")  # type: ignore
     
     return {
         "activities": formatted_activities,
-        "total_count": len(formatted_activities)
+        "total_count": len(formatted_activities)  # type: ignore
     }
 
 @router.get("/activity")
@@ -378,7 +680,7 @@ def get_all_recent_activity(
     """
     from services.task_history_service import TaskHistoryService
     from models.user import User
-    from models.project import Project
+    # from models.project import Project  # Not used
     
     logger.info(f"[DEBUG] get_all_recent_activity called:")
     logger.info(f"[DEBUG] - limit: {limit}")
@@ -388,7 +690,7 @@ def get_all_recent_activity(
     task_history_service = TaskHistoryService(db)
     
     # Get all projects the user has access to (owner or member)
-    user_projects = project_service.get_projects(user_id=current_user.id)
+    user_projects = project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))  # type: ignore
     project_ids = [p.id for p in user_projects]
     
     if not project_ids:
@@ -403,9 +705,9 @@ def get_all_recent_activity(
     all_activities = []
     for project_id in project_ids:
         try:
-            activities = task_history_service.get_recent_activities(project_id, limit // len(project_ids) + 1)
+            activities = task_history_service.get_recent_activities(project_id, limit // len(project_ids) + 1)  # type: ignore
             # Add project info to each activity
-            project = next((p for p in user_projects if p.id == project_id), None)
+            project = next((p for p in user_projects if p.id == project_id), None)  # type: ignore
             project_name = project.name if project else "Unknown Project"
             
             for activity in activities:
@@ -413,41 +715,40 @@ def get_all_recent_activity(
                 user = db.query(User).filter(User.id == activity.user_id).first()
                 user_name = user.name if user else f"User {activity.user_id}"
                 
-                formatted_activity = {
+                formatted_activity = {  # type: ignore
                     "id": str(activity.id),
                     "type": activity.activity_type.value,
                     "user_name": user_name,
                     "task_title": activity.task_title,
-                    "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,
+                    "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,  # type: ignore
                     "description": activity.description,
                     "project_name": project_name,
                     "project_id": str(project_id)
                 }
                 
                 # Add additional context for specific activity types
-                if activity.new_values:
-                    import json
+                if activity.new_values:  # type: ignore
                     try:
-                        new_values = json.loads(activity.new_values)
+                        new_values = json.loads(activity.new_values)  # type: ignore
                         if "assignee_name" in new_values:
                             formatted_activity["assignee_name"] = new_values["assignee_name"]
                     except (json.JSONDecodeError, TypeError):
                         pass
                 
-                all_activities.append(formatted_activity)
+                all_activities.append(formatted_activity)  # type: ignore
         except Exception as e:
             logger.error(f"[DEBUG] Error getting activities for project {project_id}: {e}")
             continue
     
     # Sort by timestamp (most recent first) and limit
-    all_activities.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
-    limited_activities = all_activities[:limit]
+    all_activities.sort(key=lambda x: x.get("timestamp", ""), reverse=True)  # type: ignore
+    limited_activities = all_activities[:limit]  # type: ignore
     
-    logger.info(f"[DEBUG] Returning {len(limited_activities)} activities across all projects")
+    logger.info(f"[DEBUG] Returning {len(limited_activities)} activities across all projects")  # type: ignore
     
     return {
         "activities": limited_activities,
-        "total_count": len(limited_activities)
+        "total_count": len(limited_activities)  # type: ignore
     }
 
 @router.post("/activity/batch")
@@ -461,7 +762,7 @@ def get_batch_recent_activity(
     """
     from services.task_history_service import TaskHistoryService
     from models.user import User
-    from models.project import Project
+    # from models.project import Project  # Not used
     
     project_ids = request.get("project_ids", [])
     limit = request.get("limit", 10)
@@ -477,14 +778,14 @@ def get_batch_recent_activity(
     project_service = ProjectService(db)
     task_history_service = TaskHistoryService(db)
     
-    results = []
+    results: List[Dict[str, Any]] = []
     
     for project_id_str in project_ids:
         try:
             project_uuid = uuid.UUID(project_id_str)
         except ValueError:
             logger.error(f"[DEBUG] Invalid project ID format: {project_id_str}")
-            results.append({
+            results.append({  # type: ignore
                 "projectId": project_id_str,
                 "error": "Invalid project ID format"
             })
@@ -495,18 +796,18 @@ def get_batch_recent_activity(
             project = project_service.get_project_by_id(project_uuid)
             if not project:
                 logger.error(f"[DEBUG] Project not found: {project_uuid}")
-                results.append({
+                results.append({  # type: ignore
                     "projectId": project_id_str,
                     "error": "Project not found"
                 })
                 continue
             
-            is_owner = project.owner_id == current_user.id
-            is_member = project_service.is_project_member(project_uuid, current_user.id)
+            is_owner = project.owner_id == uuid.UUID(str(current_user.id))
+            is_member = project_service.is_project_member(project_uuid, uuid.UUID(str(current_user.id)))  # type: ignore
             
-            if not is_owner and not is_member:
+            if not is_owner and not is_member:  # type: ignore
                 logger.error(f"[DEBUG] User {current_user.id} has no access to project {project_uuid}")
-                results.append({
+                results.append({  # type: ignore
                     "projectId": project_id_str,
                     "error": "Not a member of this project"
                 })
@@ -522,39 +823,39 @@ def get_batch_recent_activity(
                 user = db.query(User).filter(User.id == activity.user_id).first()
                 user_name = user.name if user else f"User {activity.user_id}"
                 
-                formatted_activity = {
+                formatted_activity = {  # type: ignore
                     "id": str(activity.id),
                     "type": activity.activity_type.value,
                     "user_name": user_name,
                     "task_title": activity.task_title,
-                    "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,
+                    "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,  # type: ignore
                     "description": activity.description
                 }
                 
                 # Add additional context for specific activity types
-                if activity.new_values:
-                    import json
+                if activity.new_values:  # type: ignore
+                    # import json  # Already imported at top level
                     try:
-                        new_values = json.loads(activity.new_values)
+                        new_values = json.loads(activity.new_values)  # type: ignore
                         if "assignee_name" in new_values:
                             formatted_activity["assignee_name"] = new_values["assignee_name"]
                     except (json.JSONDecodeError, TypeError):
                         pass
                 
-                formatted_activities.append(formatted_activity)
+                formatted_activities.append(formatted_activity)  # type: ignore
             
-            results.append({
+            results.append({  # type: ignore
                 "projectId": project_id_str,
                 "activities": formatted_activities
             })
             
         except Exception as e:
             logger.error(f"[DEBUG] Error processing project {project_id_str}: {e}")
-            results.append({
+            results.append({  # type: ignore
                 "projectId": project_id_str,
                 "error": str(e)
             })
     
-    logger.info(f"[DEBUG] Batch activity request completed for {len(results)} projects")
+    logger.info(f"[DEBUG] Batch activity request completed for {len(results)} projects")  # type: ignore
     
     return results

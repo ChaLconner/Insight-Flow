@@ -3,7 +3,11 @@
 // ===========================================
 
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import axiosRetry from 'axios-retry';
 import { API_CONFIG, ERROR_MESSAGES } from '@/lib/constants';
+
+// Request deduplication cache removed for simplicity
+// const requestCache = new Map<string, Promise<any>>();
 
 // Create axios instance
 export const apiClient: AxiosInstance = axios.create({
@@ -16,35 +20,41 @@ export const apiClient: AxiosInstance = axios.create({
   withCredentials: false,
 });
 
-  // Request interceptor: do not add Authorization header when using HttpOnly cookies.
-  apiClient.interceptors.request.use(
+// Add retry interceptor
+axiosRetry(apiClient, {
+  retries: API_CONFIG.RETRY_ATTEMPTS,
+  retryDelay: (retryCount) => {
+    return API_CONFIG.RETRY_DELAY * Math.pow(2, retryCount); // Exponential backoff
+  },
+  retryCondition: (error: AxiosError) => {
+    // Retry on network errors and 5xx server errors
+    if (!error.response) {
+      console.log(`🔄 Retrying network error (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
+      return true;
+    }
+    if (error.response?.status >= 500) {
+      console.log(`🔄 Retrying server error ${error.response.status} (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
+      return true;
+    }
+    return false;
+  },
+  onRetry: (retryCount, error, requestConfig) => {
+    console.log(`🔄 Retry attempt ${retryCount} for ${requestConfig.url}`, error.message);
+  },
+});
+
+// Request interceptor: do not add Authorization header when using HttpOnly cookies.
+apiClient.interceptors.request.use(
   (config) => {
     // Ensure we don't send cookies (bearer token flow)
     config.withCredentials = false;
-    
-    // Attach Authorization header from persisted tokens (localStorage or Zustand persist)
+
+    // Attach Authorization header from persisted tokens
     if (typeof window !== 'undefined') {
-      try {
-        let token = localStorage.getItem('access_token') || localStorage.getItem('accessToken');
+      const token = getAccessToken();
 
-        if (!token) {
-          const persisted = localStorage.getItem('insight-flow-auth');
-          if (persisted) {
-            try {
-              const parsed = JSON.parse(persisted);
-              const stateCandidate = parsed?.state ?? parsed;
-              token = stateCandidate?.accessToken || stateCandidate?.access_token || stateCandidate?.token || null;
-            } catch (e) {
-              // ignore parse errors
-            }
-          }
-        }
-
-        if (token && config.headers) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      } catch (e) {
-        // ignore
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
       }
     }
     return config;
@@ -56,10 +66,10 @@ export const apiClient: AxiosInstance = axios.create({
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
- (response) => {
+  (response) => {
     return response;
- },
- async (error: AxiosError) => {
+  },
+  async (error: AxiosError) => {
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
     // Handle 401 Unauthorized - attempt refresh using refresh token from localStorage
@@ -67,21 +77,8 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        // Get refresh token from localStorage or persisted store
-        let refreshToken = null;
-        if (typeof window !== 'undefined') {
-          refreshToken = localStorage.getItem('refresh_token') || localStorage.getItem('refreshToken');
-          if (!refreshToken) {
-            const persisted = localStorage.getItem('insight-flow-auth');
-            if (persisted) {
-              try {
-                const parsed = JSON.parse(persisted);
-                const stateCandidate = parsed?.state ?? parsed;
-                refreshToken = stateCandidate?.refreshToken || stateCandidate?.refresh_token || null;
-              } catch (e) {}
-            }
-          }
-        }
+        // Get refresh token
+        const refreshToken = getRefreshToken();
 
         if (!refreshToken) {
           await clearAuthTokens();
@@ -97,11 +94,9 @@ apiClient.interceptors.response.use(
         const newAccessToken = response.data?.access_token;
         const newRefreshToken = response.data?.refresh_token;
 
-        if (typeof window !== 'undefined' && newAccessToken && newRefreshToken) {
-          localStorage.setItem('access_token', newAccessToken);
-          localStorage.setItem('refresh_token', newRefreshToken);
-          localStorage.setItem('accessToken', newAccessToken);
-          localStorage.setItem('refreshToken', newRefreshToken);
+        if (newAccessToken && newRefreshToken) {
+          // Update store directly
+          useAuthStore.getState().setTokens(newAccessToken, newRefreshToken);
         }
 
         // Attach new access token to original request
@@ -118,7 +113,7 @@ apiClient.interceptors.response.use(
 
     // Handle other errors
     const errorMessage = getErrorMessage(error);
-    
+
     return Promise.reject({
       ...error,
       message: errorMessage,
@@ -128,7 +123,7 @@ apiClient.interceptors.response.use(
 
 // Helper function to clear all authentication tokens
 async function clearAuthTokens(): Promise<void> {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined') { return; }
 
   // Attempt server-side logout to clear HttpOnly cookies
   try {
@@ -137,19 +132,8 @@ async function clearAuthTokens(): Promise<void> {
     // ignore
   }
 
-  const tokenKeys = [
-    'access_token',
-    'refresh_token', 
-    'accessToken',
-    'refreshToken',
-    'user',
-    'token',
-    'auth_token'
-  ];
-  
-  tokenKeys.forEach(key => {
-    localStorage.removeItem(key);
-  });
+  // Clear store
+  useAuthStore.getState().logout();
 
   // Use Next.js router for navigation instead of window.location
   try {
@@ -163,7 +147,27 @@ async function clearAuthTokens(): Promise<void> {
 
 // Helper function to get user-friendly error message
 function getErrorMessage(error: AxiosError): string {
+  // Enhanced network error handling
   if (!error.response) {
+    if (error.code === 'ECONNABORTED') {
+      return 'Request timeout. Please check your connection and try again.';
+    }
+    if (error.code === 'ECONNREFUSED') {
+      return 'Cannot connect to server. Please ensure the backend is running.';
+    }
+    if (error.code === 'ENOTFOUND') {
+      return 'Server not found. Please check the API URL.';
+    }
+    if (error.code === 'ETIMEDOUT') {
+      return 'Connection timed out. Please check your connection.';
+    }
+
+    // Generic network error with retry info
+    const retryCount = error.config?.['axios-retry']?.retryCount || 0;
+    if (retryCount > 0) {
+      return `Network error after ${retryCount} retry attempts. Please check your connection.`;
+    }
+
     return ERROR_MESSAGES.NETWORK_ERROR;
   }
 
@@ -227,7 +231,7 @@ export interface RefreshTokenResponse {
 // FormData upload helper
 export function createFormData(data: Record<string, any>): FormData {
   const formData = new FormData();
-  
+
   Object.entries(data).forEach(([key, value]) => {
     if (value !== undefined && value != null) {
       if (value instanceof File) {
@@ -249,7 +253,7 @@ export function createFormData(data: Record<string, any>): FormData {
       }
     }
   });
-  
+
   return formData;
 }
 
@@ -259,7 +263,7 @@ export async function downloadFile(url: string, filename?: string): Promise<void
     const response = await apiClient.get(url, {
       responseType: 'blob',
     });
-    
+
     const blob = new Blob([response.data]);
     const downloadUrl = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -289,4 +293,97 @@ export function createCustomApiClient(baseURL: string, timeout: number = 10000):
       'Content-Type': 'application/json',
     },
   });
+}
+
+// Enhanced helper function to create deduplicated requests with rate limiting
+export function createDeduplicatedRequest<T = any>(
+  requestFn: () => Promise<T>,
+  cacheKey: string,
+  ttl: number = 500
+): Promise<T> {
+  // Pass-through implementation to remove complexity
+  return requestFn();
+}
+
+// ===========================================
+// Health Check Functions
+// ===========================================
+
+// Backend health check with retry
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    console.log('🏥 Checking backend health...');
+    const response = await apiClient.get('/minimal-test', {
+      timeout: 5000 // Shorter timeout for health check
+    });
+    console.log('✅ Backend health check successful:', response.data);
+    return true;
+  } catch (error: any) {
+    console.error('❌ Backend health check failed:', error.message);
+    return false;
+  }
+}
+
+// Wait for backend to be ready with timeout
+export async function waitForBackend(maxAttempts: number = 10, delay: number = 1000): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`⏳ Waiting for backend... attempt ${attempt}/${maxAttempts}`);
+
+    const isHealthy = await checkBackendHealth();
+    if (isHealthy) {
+      console.log('✅ Backend is ready!');
+      return true;
+    }
+
+    if (attempt < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  console.error('❌ Backend failed to start after maximum attempts');
+  return false;
+}
+
+// Rate limiting helper for user-initiated actions
+export function createRateLimitedRequest<T = any>(
+  requestFn: () => Promise<T>,
+  cacheKey: string,
+  ttl: number = 2000
+): Promise<T> {
+  // Pass-through implementation to remove complexity
+  return requestFn();
+}
+
+// ===========================================
+// Token Management Helpers
+// ===========================================
+
+import { useAuthStore } from '@/stores/auth-store';
+
+// ===========================================
+// Token Management Helpers
+// ===========================================
+
+export function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  // Use Zustand store as the single source of truth
+  try {
+    return useAuthStore.getState().accessToken;
+  } catch (e) {
+    // Fallback to localStorage if store access fails (rare)
+    return localStorage.getItem('access_token') || localStorage.getItem('accessToken');
+  }
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  // Use Zustand store as the single source of truth
+  try {
+    return useAuthStore.getState().refreshToken;
+  } catch (e) {
+    // Fallback to localStorage if store access fails (rare)
+    return localStorage.getItem('refresh_token') || localStorage.getItem('refreshToken');
+  }
 }

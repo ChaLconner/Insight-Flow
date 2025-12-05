@@ -26,7 +26,7 @@ export function formatDate(date: string | Date, formatStr: string = 'MMM d, yyyy
   if (!isValid(dateObj)) {
     return 'Invalid date';
   }
- return format(dateObj, formatStr);
+  return format(dateObj, formatStr);
 }
 
 /**
@@ -34,7 +34,7 @@ export function formatDate(date: string | Date, formatStr: string = 'MMM d, yyyy
  */
 export function getRelativeTime(date: string | Date): string {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
- if (!isValid(dateObj)) {
+  if (!isValid(dateObj)) {
     return 'Invalid date';
   }
   return formatDistanceToNow(dateObj, { addSuffix: true });
@@ -45,7 +45,7 @@ export function getRelativeTime(date: string | Date): string {
  */
 export function isOverdue(date: string | Date): boolean {
   const dateObj = typeof date === 'string' ? parseISO(date) : date;
- if (!isValid(dateObj)) {
+  if (!isValid(dateObj)) {
     return false;
   }
   return new Date() > dateObj;
@@ -73,7 +73,7 @@ export function capitalize(str: string): string {
   if (!str) {
     return '';
   }
- return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
 /**
@@ -117,7 +117,7 @@ export function getInitials(name: string): string {
   if (!name) {
     return '';
   }
- return name
+  return name
     .split(' ')
     .map(word => word.charAt(0).toUpperCase())
     .slice(0, 2)
@@ -216,7 +216,7 @@ export function sortBy<T>(array: T[], key: keyof T, direction: 'asc' | 'desc' = 
   return [...array].sort((a, b) => {
     const aVal = a[key];
     const bVal = b[key];
-    
+
     if (aVal < bVal) { return direction === 'asc' ? -1 : 1; }
     if (aVal > bVal) { return direction === 'asc' ? 1 : -1; }
     return 0;
@@ -261,7 +261,7 @@ export function deepClone<T>(obj: T): T {
 export function isEmpty(obj: unknown): boolean {
   if (obj == null) { return true; }
   if (Array.isArray(obj) || typeof obj === 'string') { return obj.length === 0; }
- if (typeof obj === 'object') { return Object.keys(obj).length === 0; }
+  if (typeof obj === 'object') { return Object.keys(obj).length === 0; }
   return false;
 }
 
@@ -285,7 +285,7 @@ export function pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
     if (obj && typeof obj === 'object' && key in obj) {
       result[key] = obj[key];
     }
- });
+  });
   return result;
 }
 
@@ -320,27 +320,27 @@ export function isValidEmail(email: string): boolean {
  */
 export function validatePassword(password: string): { isValid: boolean; errors: string[] } {
   const errors: string[] = [];
-  
+
   if (password.length < 8) {
     errors.push('Password must be at least 8 characters long');
   }
-  
+
   if (!/[A-Z]/.test(password)) {
     errors.push('Password must contain at least one uppercase letter');
   }
-  
+
   if (!/[a-z]/.test(password)) {
     errors.push('Password must contain at least one lowercase letter');
   }
-  
+
   if (!/\d/.test(password)) {
     errors.push('Password must contain at least one number');
   }
-  
+
   if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>.?/]/.test(password)) { // eslint-disable-line no-useless-escape
     errors.push('Password must contain at least one special character');
   }
-  
+
   return {
     isValid: errors.length === 0,
     errors,
@@ -356,7 +356,7 @@ export function isValidUrl(url: string): boolean {
     return true;
   } catch {
     return false;
- }
+  }
 }
 
 // ===========================================
@@ -368,14 +368,14 @@ export function isValidUrl(url: string): boolean {
  */
 export function getFromStorage<T>(key: string, defaultValue: T | null = null): T | null {
   if (typeof window === 'undefined') { return defaultValue; }
-  
+
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : defaultValue;
- } catch (error) {
+  } catch (error) {
     console.error(`Error reading from localStorage key "${key}":`, error);
     return defaultValue;
- }
+  }
 }
 
 /**
@@ -383,14 +383,14 @@ export function getFromStorage<T>(key: string, defaultValue: T | null = null): T
  */
 export function setToStorage(key: string, value: unknown): boolean {
   if (typeof window === 'undefined') { return false; }
-  
+
   try {
     localStorage.setItem(key, JSON.stringify(value));
     return true;
   } catch (error) {
     console.error(`Error writing to localStorage key "${key}":`, error);
     return false;
- }
+  }
 }
 
 /**
@@ -398,14 +398,14 @@ export function setToStorage(key: string, value: unknown): boolean {
  */
 export function removeFromStorage(key: string): boolean {
   if (typeof window === 'undefined') { return false; }
-  
+
   try {
     localStorage.removeItem(key);
     return true;
   } catch (error) {
     console.error(`Error removing localStorage key "${key}":`, error);
     return false;
- }
+  }
 }
 
 // ===========================================
@@ -442,11 +442,11 @@ export function getContrastColor(hex: string): string {
  */
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) { return '0 Bytes'; }
-  
+
   const k = 1024;
   const sizes = ['Bytes', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
@@ -521,4 +521,31 @@ export function memoize<T extends (...args: Parameters<T>) => ReturnType<T>>(
     cache.set(key, result);
     return result;
   };
+}
+
+// ===========================================
+// Avatar/Profile Image Utilities
+// ===========================================
+
+/**
+ * จัดการ URL ของรูปโปรไฟล์ให้สอดคล้องกันทั้งระบบ
+ * @param avatarUrl URL ของรูปโปรไฟล์ (อาจเป็น relative path หรือ full URL)
+ * @returns Full URL ที่พร้อมใช้งาน
+ */
+export function getAvatarUrl(avatarUrl?: string): string {
+  if (!avatarUrl) return '';
+
+  // ถ้าเป็น full URL อยู่แล้ว ให้ใช้เลย
+  if (avatarUrl.startsWith('http') || avatarUrl.startsWith('blob:')) {
+    return avatarUrl;
+  }
+
+  // ถ้าเป็น relative path ให้ต่อกับ BASE_URL
+  const { API_CONFIG } = require('@/lib/constants');
+  const baseUrl = API_CONFIG.BASE_URL || 'http://localhost:8000';
+
+  // ตรวจสอบว่า path ขึ้นต้นด้วย / หรือไม่
+  const normalizedPath = avatarUrl.startsWith('/') ? avatarUrl : `/${avatarUrl}`;
+
+  return `${baseUrl}${normalizedPath}`;
 }

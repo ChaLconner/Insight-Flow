@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { type Project, ProjectStatus, type CreateProjectRequest, type UpdateProjectRequest, type User } from "@/types";
 import { apiClient } from "@/lib/api-client";
+import { getAvatarUrl } from "@/lib/utils";
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -128,7 +129,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
     // Validation
     const newErrors: Record<string, string> = {};
     if (!formData.name.trim()) { newErrors.name = "Project name is required"; }
-    
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       setIsSubmitting(false);
@@ -187,7 +188,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-2xl">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
@@ -203,7 +204,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
             <X className="h-4 w-4" />
           </Button>
         </CardHeader>
-        
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Basic Information */}
@@ -215,9 +216,8 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   placeholder="Enter project name"
-                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                    errors.name ? "border-red-500" : ""
-                  }`}
+                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.name ? "border-red-500" : ""
+                    }`}
                   disabled={isSubmitting}
                 />
                 {errors.name && (
@@ -247,11 +247,10 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                       key={color}
                       type="button"
                       onClick={() => handleInputChange("color", color)}
-                      className={`h-8 w-8 rounded-lg border-2 transition-all ${
-                        formData.color === color
+                      className={`h-8 w-8 rounded-lg border-2 transition-all ${formData.color === color
                           ? "border-white scale-110"
                           : "border-white/20 hover:border-white/40"
-                      }`}
+                        }`}
                       style={{ backgroundColor: color }}
                       disabled={isSubmitting}
                     />
@@ -284,6 +283,24 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                         className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-indigo-500"
                         disabled={isSubmitting}
                       />
+                      {/* Avatar */}
+                      <div className="h-8 w-8 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                        {user.avatar ? (
+                          <img
+                            src={getAvatarUrl(user.avatar)}
+                            alt={`${user.firstName} ${user.lastName}`}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.parentElement?.querySelector('span')?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <span className={`text-xs font-medium text-zinc-300 ${user.avatar ? 'hidden' : ''}`}>
+                          {(user.firstName && typeof user.firstName === 'string' ? user.firstName[0] : '')}
+                          {(user.lastName && typeof user.lastName === 'string' ? user.lastName[0] : '')}
+                        </span>
+                      </div>
                       <div className="flex-1">
                         <p className="text-white text-sm font-medium">{user.firstName} {user.lastName}</p>
                         <p className="text-zinc-400 text-xs">{user.email}</p>
@@ -300,7 +317,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                 <Settings className="h-4 w-4" />
                 Project Settings
               </Label>
-              
+
               <div className="space-y-3 pl-4 border-l border-white/10">
                 <div className="flex items-center justify-between">
                   <div>

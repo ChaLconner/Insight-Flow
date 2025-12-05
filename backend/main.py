@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth, users, projects, tasks, analytics, dashboard
+from fastapi.staticfiles import StaticFiles
+from routers import auth, users, projects, tasks, analytics, dashboard, notifications, files
 import os
 from dotenv import load_dotenv
 from utils.logger import app_logger
@@ -20,6 +22,12 @@ app = FastAPI(
     version="1.0.0",
     redirect_slashes=True  # Enable automatic redirect to handle trailing slashes
 )
+
+# Mount static files
+# Ensure static directory exists
+if not os.path.exists("static"):
+    os.makedirs("static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Add startup event to log server binding information
 @app.on_event("startup")
@@ -50,8 +58,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:8000",  # Add for direct backend access
+        "http://127.0.0.1:8000",  # Add for direct backend access
         "http://localhost:3001",
         "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -59,29 +71,34 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Add custom middleware for CORS debugging
-@app.middleware("http")
-async def log_cors(request: Request, call_next):
-    origin = request.headers.get("origin")
-    method = request.method
-    app_logger.info(f"[CORS] {method} {request.url} - Origin: {origin}")
-    
-    response = await call_next(request)
-    
-    app_logger.info(f"[CORS] Response status: {response.status_code}")
-    app_logger.info(f"[CORS] Response headers: {dict(response.headers)}")
-    
-    return response
+# Custom middleware for CORS debugging removed for performance
 
-app.add_middleware(CacheMiddleware, cache_timeout=300)
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+
+    error_id = os.urandom(4).hex()
+    app_logger.error(f"Unhandled exception {error_id}: {exc}", exc_info=True)
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal Server Error",
+            "error_id": error_id
+        }
+    )
+
+app.add_middleware(CacheMiddleware, cache_timeout=60)
 
 # Include routers - order matters for overlapping routes!
 app.include_router(projects.router, tags=["projects"])
-app.include_router(tasks.router, tags=["tasks"])
+app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
 app.include_router(analytics.router, tags=["analytics"])
-app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(users.router, tags=["users"])
 app.include_router(auth.router, tags=["auth"])
 app.include_router(dashboard.router, tags=["dashboard"])
+app.include_router(notifications.router)
+app.include_router(files.router)
 
 @app.get("/")
 def read_root():

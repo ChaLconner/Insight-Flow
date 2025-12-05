@@ -18,7 +18,8 @@ import {
   Paperclip,
   MessageCircle
 } from "lucide-react";
-import { Task, TaskStatus, TaskPriority, TaskType, CreateTaskRequest } from "@/types";
+import type { Task, CreateTaskRequest } from "@/types";
+import { TaskStatus, TaskPriority, TaskType } from "@/types";
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -81,8 +82,8 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!formData.title.trim()) newErrors.title = "Task title is required";
-    if (!formData.projectId) newErrors.projectId = "Project is required";
+    if (!formData.title.trim()) {newErrors.title = "Task title is required";}
+    if (!formData.projectId) {newErrors.projectId = "Project is required";}
     
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -121,7 +122,7 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
 
   const selectedProject = mockProjects.find(p => p.id === formData.projectId);
 
-  if (!isOpen) return null;
+  if (!isOpen) {return null;}
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

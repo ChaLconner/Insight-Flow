@@ -1,5 +1,6 @@
 "use client";
 
+import { useGoogleLogin } from "@react-oauth/google";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -39,9 +40,9 @@ export default function LoginPage() {
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!formData.email) {newErrors.email = "Email is required";}
-    if (!formData.password) {newErrors.password = "Password is required";}
-    
+    if (!formData.email) { newErrors.email = "Email is required"; }
+    if (!formData.password) { newErrors.password = "Password is required"; }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       setIsLoading(false);
@@ -50,13 +51,13 @@ export default function LoginPage() {
 
     try {
       console.log('🔄 Starting login process...');
-      
+
       // Call backend API
       console.log('📡 Calling login API...');
       console.log('📧 Email:', formData.email);
       console.log('🔑 Password length:', formData.password.length);
       console.log('🌐 API Base URL:', API_CONFIG.BASE_URL);
-      
+
       const response = await fetch(`${API_CONFIG.BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -70,7 +71,7 @@ export default function LoginPage() {
 
       console.log('📨 Login response status:', response.status);
       console.log('📨 Login response headers:', Array.from(response.headers.entries()));
-      
+
       if (!response.ok) {
         let errorData;
         try {
@@ -94,20 +95,20 @@ export default function LoginPage() {
         dataKeys: Object.keys(data),
         expectedUserKeys: ['id', 'email', 'name', 'role']
       });
-      
+
       // Use authActions to properly handle login
       await authActions.loginWithResponse(data);
-      
+
       // Get the user data from the store after login
       const user = data.user;
-      
+
       console.log('🚀 Redirecting to appropriate page based on user role...');
       console.log('👤 User object after login:', user);
       console.log('🔑 User role:', user?.role);
-      
+
       // Determine redirect URL based on user role with better fallbacks
       let redirectUrl = "/dashboard"; // Default redirect to dashboard
-      
+
       if (user?.role) {
         switch (user.role) {
           case 'admin':
@@ -118,7 +119,7 @@ export default function LoginPage() {
             break;
           case 'member':
           case 'user':
-            redirectUrl = "/tasks"; // Regular users go to tasks page
+            redirectUrl = "/projects?tab=tasks"; // Regular users go to tasks page
             break;
           case 'viewer':
             redirectUrl = "/projects"; // Viewers go to projects page
@@ -130,16 +131,16 @@ export default function LoginPage() {
         console.log('⚠️ No user role found, defaulting to dashboard');
         redirectUrl = "/dashboard"; // Default for users without role
       }
-      
+
       // Redirect to appropriate page based on user role
       // Add small delay to allow state to settle and prevent routing conflicts
       setTimeout(() => {
         if (typeof window !== 'undefined') {
           // Use router.push for client-side navigation with delay
-          router.push(redirectUrl);
+          window.location.href = redirectUrl;
         }
       }, 100);
-      
+
     } catch (error) {
       console.error('❌ Login error:', error);
       console.error('❌ Login error details:', {
@@ -147,11 +148,68 @@ export default function LoginPage() {
         stack: error instanceof Error ? error.stack : 'No stack trace',
         name: error instanceof Error ? error.name : 'Unknown'
       });
-      setErrors({ submit: error instanceof Error ? error.message : 'Login failed' });
+      setErrors({ password: "Invalid email or password" });
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        setIsLoading(true);
+        console.log('🔄 Starting Google login process...');
+
+        // Call backend API with Google token
+        const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            access_token: tokenResponse.access_token,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Google login failed');
+        }
+
+        const data = await response.json();
+        console.log('✅ Google login successful');
+
+        await authActions.loginWithResponse(data);
+
+        const user = data.user;
+        let redirectUrl = "/dashboard";
+
+        if (user?.role) {
+          switch (user.role) {
+            case 'admin': redirectUrl = "/dashboard"; break;
+            case 'manager': redirectUrl = "/projects"; break;
+            case 'member':
+            case 'user': redirectUrl = "/projects?tab=tasks"; break;
+            case 'viewer': redirectUrl = "/projects"; break;
+            default: redirectUrl = "/dashboard";
+          }
+        }
+
+        // Use window.location.href for consistency
+        window.location.href = redirectUrl;
+      } catch (error) {
+        console.error('❌ Google login error:', error);
+        setErrors({ submit: 'Google login failed. Please try again.' });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      console.error('❌ Google login failed');
+      setErrors({ submit: 'Google login failed. Please try again.' });
+      setIsLoading(false);
+    },
+    flow: 'implicit',
+  });
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -165,7 +223,7 @@ export default function LoginPage() {
       {/* Animated Background Components */}
       <AnimatedBackground />
       <FloatingShapes />
-      
+
       <div className="w-full max-w-md relative z-20">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -186,7 +244,9 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => {/* Handle Google login */}}
+                onClick={() => handleGoogleLogin()}
+                disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+                title={!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? "Google Client ID is missing" : "Sign in with Google"}
               >
                 <Chrome className="h-4 w-4 mr-3" />
                 Continue with Google
@@ -194,7 +254,7 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => {/* Handle GitHub login */}}
+                onClick={() => {/* Handle GitHub login */ }}
               >
                 <Github className="h-4 w-4 mr-3" />
                 Continue with GitHub
@@ -223,9 +283,8 @@ export default function LoginPage() {
                     placeholder="Enter your email"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.email ? "border-red-500" : ""
-                    }`}
+                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.email ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                 </div>
@@ -244,9 +303,8 @@ export default function LoginPage() {
                     placeholder="Enter your password"
                     value={formData.password}
                     onChange={(e) => handleInputChange("password", e.target.value)}
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.password ? "border-red-500" : ""
-                    }`}
+                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.password ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                   <button

@@ -34,7 +34,28 @@ export default typescript.config(
       }],
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-non-null-assertion": "warn",
-      "@typescript-eslint/prefer-nullish-coalescing": "warn",
+      
+      // Enhanced prefer-nullish-coalescing configuration following TypeScript ESLint guidelines
+      "@typescript-eslint/prefer-nullish-coalescing": [
+        "error",
+        {
+          // Allow ignoring mixed logical expressions to prevent precedence issues
+          "ignoreMixedLogicalExpressions": false,
+          // Enforce nullish coalescing in conditional tests (if, while, etc.)
+          "ignoreConditionalTests": false,
+          // Enforce nullish coalescing in ternary expressions
+          "ignoreTernaryTests": false,
+          // Enforce nullish coalescing in if statements for lazy initialization
+          "ignoreIfStatements": false,
+          // Process all types including primitives for stricter null checks
+          "ignorePrimitives": {
+            "string": false,
+            "number": false,
+            "bigint": false,
+            "boolean": false
+          }
+        }
+      ],
       "@typescript-eslint/prefer-optional-chain": "warn",
       "@typescript-eslint/strict-boolean-expressions": "off", // Too strict for real-world usage
       
@@ -63,7 +84,17 @@ export default typescript.config(
       "@typescript-eslint/strict-boolean-expressions": "off", // Allow loose checks in stores
       "@typescript-eslint/explicit-function-return-type": "off", // Don't require return types for store actions
       "@typescript-eslint/explicit-module-boundary-types": "off", // Don't require explicit types for exports
-      "@typescript-eslint/prefer-nullish-coalescing": "off", // Allow || operator in stores
+      // Keep prefer-nullish-coalescing enabled but with relaxed settings for stores
+      "@typescript-eslint/prefer-nullish-coalescing": [
+        "warn",
+        {
+          "ignoreMixedLogicalExpressions": true, // More relaxed for stores
+          "ignoreConditionalTests": true, // More relaxed for stores
+          "ignoreTernaryTests": true, // More relaxed for stores
+          "ignoreIfStatements": true, // More relaxed for stores
+          "ignorePrimitives": true // More relaxed for stores
+        }
+      ],
       "@typescript-eslint/no-non-null-assertion": "off", // Allow ! operator in stores
       "@typescript-eslint/consistent-type-imports": "off", // Relaxed for stores
     },
@@ -78,6 +109,8 @@ export default typescript.config(
       "@typescript-eslint/no-unsafe-assignment": "off", // Allow assignments in type definitions
       "@typescript-eslint/no-explicit-any": "off", // Allow any in type definitions when needed
       "@typescript-eslint/consistent-type-imports": "off", // Relaxed for type files
+      // Relaxed prefer-nullish-coalescing for type definitions
+      "@typescript-eslint/prefer-nullish-coalescing": "off",
     },
   },
   {

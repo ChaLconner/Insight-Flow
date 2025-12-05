@@ -1,5 +1,6 @@
 "use client";
 
+import { useGoogleLogin } from "@react-oauth/google";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -7,6 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { apiClient } from "@/lib/api-client";
+import { API_CONFIG } from "@/lib/constants";
+import { authActions } from "@/stores/auth-actions";
 import {
   Mail,
   Lock,
@@ -36,30 +40,32 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [apiError, setApiError] = useState<string>("");
 
   const passwordRequirements = [
     { label: "At least 8 characters", test: (pwd: string) => pwd.length >= 8 },
     { label: "Contains uppercase letter", test: (pwd: string) => /[A-Z]/.test(pwd) },
     { label: "Contains lowercase letter", test: (pwd: string) => /[a-z]/.test(pwd) },
     { label: "Contains number", test: (pwd: string) => /\d/.test(pwd) },
+    { label: "Contains special character", test: (pwd: string) => /[!@#$%^&*(),.?":{}|<>]/.test(pwd) },
   ];
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
-    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Invalid email format";
-    if (!formData.username.trim()) newErrors.username = "Username is required";
-    if (formData.username.length < 3) newErrors.username = "Username must be at least 3 characters";
-    if (!formData.password) newErrors.password = "Password is required";
+    if (!formData.firstName.trim()) {newErrors.firstName = "First name is required";}
+    if (!formData.lastName.trim()) {newErrors.lastName = "Last name is required";}
+    if (!formData.email.trim()) {newErrors.email = "Email is required";}
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {newErrors.email = "Invalid email format";}
+    if (!formData.username.trim()) {newErrors.username = "Username is required";}
+    if (formData.username.length < 3) {newErrors.username = "Username must be at least 3 characters";}
+    if (!formData.password) {newErrors.password = "Password is required";}
     if (!passwordRequirements.every(req => req.test(formData.password))) {
       newErrors.password = "Password doesn't meet requirements";
     }
-    if (!formData.confirmPassword) newErrors.confirmPassword = "Please confirm your password";
-    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = "Passwords don't match";
-    if (!acceptTerms) newErrors.terms = "You must accept the terms and conditions";
+    if (!formData.confirmPassword) {newErrors.confirmPassword = "Please confirm your password";}
+    if (formData.password !== formData.confirmPassword) {newErrors.confirmPassword = "Passwords don't match";}
+    if (!acceptTerms) {newErrors.terms = "You must accept terms and conditions";}
 
     return newErrors;
   };
@@ -68,6 +74,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     setErrors({});
+    setApiError("");
 
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
@@ -76,18 +83,105 @@ export default function RegisterPage() {
       return;
     }
 
-    // Mock API call
-    setTimeout(() => {
-      setIsLoading(false);
-      // Mock successful registration - redirect to login
+    try {
+      // Prepare data for backend API
+      // Backend UserCreate schema expects: email, name, password (optional), google_id (optional)
+      const name = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
+
+      // Transform frontend data to match backend UserCreate schema
+      const backendUserData = {
+        email: formData.email.trim(),
+        name: name,
+        password: formData.password
+      };
+
+      const { data } = await apiClient.post('/auth/register', backendUserData);
+
+      // Registration successful - redirect to login
       router.push("/auth/login?message=Registration successful. Please sign in.");
-    }, 2000);
+    } catch (error: any) {
+      console.error("Registration error:", error);
+
+      // Handle API errors
+      if (error.response?.data?.detail) {
+        setApiError(error.response.data.detail);
+      } else if (error.response?.data?.message) {
+        setApiError(error.response.data.message);
+      } else if (error.message) {
+        setApiError(error.message);
+      } else {
+        setApiError("Registration failed. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      try {
+        setIsLoading(true);
+        setApiError("");
+        console.log('🔄 Starting Google login/register process...');
+
+        // Call backend API with Google token
+        const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            access_token: tokenResponse.access_token,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Google login failed');
+        }
+
+        const data = await response.json();
+        console.log('✅ Google login/register successful');
+
+        await authActions.loginWithResponse(data);
+
+        const user = data.user;
+        let redirectUrl = "/dashboard";
+
+        if (user?.role) {
+          switch (user.role) {
+            case 'admin': redirectUrl = "/dashboard"; break;
+            case 'manager': redirectUrl = "/projects"; break;
+            case 'member':
+            case 'user': redirectUrl = "/projects?tab=tasks"; break;
+            case 'viewer': redirectUrl = "/projects"; break;
+            default: redirectUrl = "/dashboard";
+          }
+        }
+
+        router.push(redirectUrl);
+      } catch (error) {
+        console.error('❌ Google login error:', error);
+        setApiError('Google login failed. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      console.error('❌ Google login failed');
+      setApiError('Google login failed. Please try again.');
+      setIsLoading(false);
+    },
+    flow: 'implicit',
+  });
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
+    }
+    // Clear API error when user makes changes
+    if (apiError) {
+      setApiError("");
     }
   };
 
@@ -111,12 +205,21 @@ export default function RegisterPage() {
             <CardTitle className="text-xl text-white text-center">Sign up</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* API Error Display */}
+            {apiError && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3">
+                <p className="text-sm text-red-400">{apiError}</p>
+              </div>
+            )}
+
             {/* Social Login */}
             <div className="space-y-3">
               <Button
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => {/* Handle Google signup */}}
+                onClick={() => handleGoogleLogin()}
+                disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+                title={!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? "Google Client ID is missing" : "Sign up with Google"}
               >
                 <Chrome className="h-4 w-4 mr-3" />
                 Continue with Google
@@ -124,7 +227,7 @@ export default function RegisterPage() {
               <Button
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => {/* Handle GitHub signup */}}
+                onClick={() => {/* Handle GitHub signup */ }}
               >
                 <Github className="h-4 w-4 mr-3" />
                 Continue with GitHub
@@ -152,9 +255,8 @@ export default function RegisterPage() {
                     placeholder="John"
                     value={formData.firstName}
                     onChange={(e) => handleInputChange("firstName", e.target.value)}
-                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.firstName ? "border-red-500" : ""
-                    }`}
+                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.firstName ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                   {errors.firstName && (
@@ -168,9 +270,8 @@ export default function RegisterPage() {
                     placeholder="Doe"
                     value={formData.lastName}
                     onChange={(e) => handleInputChange("lastName", e.target.value)}
-                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.lastName ? "border-red-500" : ""
-                    }`}
+                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.lastName ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                   {errors.lastName && (
@@ -190,9 +291,8 @@ export default function RegisterPage() {
                     placeholder="john@example.com"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.email ? "border-red-500" : ""
-                    }`}
+                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.email ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                 </div>
@@ -211,9 +311,8 @@ export default function RegisterPage() {
                     placeholder="johndoe"
                     value={formData.username}
                     onChange={(e) => handleInputChange("username", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.username ? "border-red-500" : ""
-                    }`}
+                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.username ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                 </div>
@@ -233,9 +332,8 @@ export default function RegisterPage() {
                     placeholder="Create a strong password"
                     value={formData.password}
                     onChange={(e) => handleInputChange("password", e.target.value)}
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.password ? "border-red-500" : ""
-                    }`}
+                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.password ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                   <button
@@ -247,7 +345,7 @@ export default function RegisterPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
-                
+
                 {/* Password Requirements */}
                 {formData.password && (
                   <div className="mt-2 space-y-1">
@@ -265,7 +363,7 @@ export default function RegisterPage() {
                     ))}
                   </div>
                 )}
-                
+
                 {errors.password && (
                   <p className="text-xs text-red-400">{errors.password}</p>
                 )}
@@ -282,9 +380,8 @@ export default function RegisterPage() {
                     placeholder="Confirm your password"
                     value={formData.confirmPassword}
                     onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.confirmPassword ? "border-red-500" : ""
-                    }`}
+                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.confirmPassword ? "border-red-500" : ""
+                      }`}
                     disabled={isLoading}
                   />
                   <button
@@ -312,7 +409,7 @@ export default function RegisterPage() {
                     disabled={isLoading}
                   />
                   <span className="text-sm text-zinc-400">
-                    I agree to the{" "}
+                    I agree to{" "}
                     <Link href="/terms" className="text-indigo-400 hover:text-indigo-300">
                       Terms of Service
                     </Link>{" "}

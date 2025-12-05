@@ -25,14 +25,14 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 221.2 83.2% 53.3%;
   --radius: 0.75rem;
-  
+
   /* Glass morphism colors */
   --glass-light: 0 0% 100% / 5%;
   --glass-medium: 0 0% 100% / 10%;
   --glass-dark: 0 0% 0% / 5%;
   --glass-border: 0 0% 100% / 20%;
   --glass-border-light: 0 0% 100% / 10%;
-  
+
   /* Insight Flow specific colors */
   --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
@@ -61,7 +61,7 @@
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 224.3 76.3% 94.1%;
-  
+
   /* Dark mode glass colors */
   --glass-light: 0 0% 100% / 2%;
   --glass-medium: 0 0% 100% / 5%;
@@ -99,23 +99,36 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Custom scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Global Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.5);
-  border-radius: 3px;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.8);
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Firefox support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* Utility class for specific containers if needed */
+.custom-scrollbar {
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Smooth transitions */
@@ -172,7 +185,7 @@ body {
 
 /* Card hover animations */
 .card-hover {
-  @apply transition-all duration-300 hover:scale-105 hover:shadow-elegant;
+  @apply transition-all duration-300 hover:scale-105 hover:shadow-card;
 }
 
 .card-glass {
@@ -184,6 +197,7 @@ body {
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
@@ -201,12 +215,10 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.2),
-    transparent
-  );
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent);
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
@@ -236,7 +248,7 @@ body {
 
 /* Form styles */
 .form-input {
-  @apply glass rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-foreground placeholder:text-muted-foreground backdrop-blur-sm transition-all duration-200 focus:bg-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50;
+  @apply glass rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-foreground placeholder:text-muted-foreground backdrop-blur-sm focus:bg-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50;
 }
 
 /* Button variants */
@@ -300,6 +312,7 @@ body {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -311,6 +324,7 @@ body {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -322,6 +336,7 @@ body {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -329,7 +344,12 @@ body {
 }
 
 /* Typography */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.025em;
@@ -351,7 +371,7 @@ h1, h2, h3, h4, h5, h6 {
   .glass-card {
     @apply p-4;
   }
-  
+
   .glass-nav {
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);

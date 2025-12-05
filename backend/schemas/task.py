@@ -1,28 +1,57 @@
 """
 Task schemas for Insight-Flow application.
 """
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, TYPE_CHECKING
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import Optional, Any
 from datetime import datetime
 import uuid
 from .user import UserResponse
 from .project import ProjectResponse
+from utils.schema_utils import to_camel
+from models.task import TaskPriority, TaskType
 
 class TaskBase(BaseModel):
     """Base task schema."""
     title: str
     description: Optional[str] = None
     due_date: Optional[datetime] = None
+    priority: Optional[str] = "medium"
+    type: Optional[str] = "feature"
+    
+    @field_validator('priority')
+    @classmethod
+    def validate_priority(cls, v: Optional[str]) -> str:
+        if v:
+            try:
+                return TaskPriority(v.lower()).value
+            except ValueError:
+                return TaskPriority.MEDIUM.value
+        return TaskPriority.MEDIUM.value
+
+    @field_validator('type')
+    @classmethod
+    def validate_type(cls, v: Optional[str]) -> str:
+        if v:
+            try:
+                return TaskType(v.lower()).value
+            except ValueError:
+                return TaskType.FEATURE.value
+        return TaskType.FEATURE.value
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
 
 class TaskCreate(TaskBase):
     """Schema for creating a new task."""
     project_id: uuid.UUID
     assignee_id: Optional[uuid.UUID] = None
-    status: Optional[str] = "todo"  # Add status field with default value (lowercase to match database)
+    status: Optional[str] = "todo"
     
     @field_validator('status')
     @classmethod
-    def validate_status(cls, v):
+    def validate_status(cls, v: Optional[str]) -> str:
         """Validate status value."""
         if v is not None:
             # Accept both lowercase and uppercase, but normalize to lowercase
@@ -31,9 +60,12 @@ class TaskCreate(TaskBase):
                 raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
         return v.lower() if v else "todo"  # Normalize to lowercase
     
-    class Config:
+    model_config = ConfigDict(
         # Exclude id from creation schema - backend will generate it
-        extra = "forbid"
+        extra="forbid",
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
 
 class TaskUpdate(BaseModel):
     """Schema for updating task information."""
@@ -42,10 +74,12 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     assignee_id: Optional[uuid.UUID] = None
     due_date: Optional[datetime] = None
+    priority: Optional[str] = None
+    type: Optional[str] = None
     
     @field_validator('status')
     @classmethod
-    def validate_status(cls, v):
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
         """Validate status value."""
         if v is not None:
             # Accept both lowercase and uppercase, but normalize to lowercase
@@ -54,13 +88,38 @@ class TaskUpdate(BaseModel):
                 raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
         return v.lower() if v else None  # Normalize to lowercase
 
+    @field_validator('priority')
+    @classmethod
+    def validate_priority(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            try:
+                return TaskPriority(v.lower()).value
+            except ValueError:
+                return None
+        return None
+
+    @field_validator('type')
+    @classmethod
+    def validate_type(cls, v: Optional[str]) -> Optional[str]:
+        if v:
+            try:
+                return TaskType(v.lower()).value
+            except ValueError:
+                return None
+        return None
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+
 class TaskStatusUpdate(BaseModel):
     """Schema for updating task status."""
     status: str
     
     @field_validator('status')
     @classmethod
-    def validate_status(cls, v):
+    def validate_status(cls, v: str) -> str:
         """Validate status value."""
         if v is not None:
             # Accept both lowercase and uppercase, but normalize to lowercase
@@ -69,9 +128,19 @@ class TaskStatusUpdate(BaseModel):
                 raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
         return v.lower()  # Normalize to lowercase
 
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+
 class TaskAssign(BaseModel):
     """Schema for assigning task to user."""
     assignee_id: uuid.UUID
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
 
 class TaskResponse(TaskBase):
     """Schema for task response data."""
@@ -83,8 +152,11 @@ class TaskResponse(TaskBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
 
 class TaskWithDetails(TaskResponse):
     """Schema for task with related data included."""
@@ -92,4 +164,8 @@ class TaskWithDetails(TaskResponse):
     creator: UserResponse
     project: ProjectResponse
     
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(
+        from_attributes=True,
+        alias_generator=to_camel,
+        populate_by_name=True
+    )

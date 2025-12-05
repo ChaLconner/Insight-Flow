@@ -66,18 +66,18 @@ export const STATUS_COLORS = {
   IN_REVIEW: '#f59e0b',
   DONE: '#22c55e',
   CANCELLED: '#ef4444',
-  
+
   // Priority
   PRIORITY_LOW: '#22c55e',
   PRIORITY_MEDIUM: '#f59e0b',
   PRIORITY_HIGH: '#f97316',
   PRIORITY_URGENT: '#ef4444',
-  
+
   // Project Status
   ACTIVE: '#22c55e',
   ARCHIVED: '#64748b',
   SUSPENDED: '#ef4444',
-  
+
   // Notification Priority
   NOTIFICATION_LOW: '#94a3b8',
   NOTIFICATION_MEDIUM: '#f59e0b',

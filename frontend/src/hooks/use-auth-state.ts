@@ -2,116 +2,70 @@
 // useAuthState Hook
 // ===========================================
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuthStore, authSelectors } from '@/stores/auth-store';
 import { authActions } from '@/stores/auth-actions';
-// Removed: import { useAuth as useAuthQuery } from '@/hooks/use-api';
+
 import { User } from '@/types';
 
-// Module-level redirect timeout used by useRequireAuth to avoid attaching
-// properties to the hook function (keeps TypeScript happy).
-let _useRequireAuthRedirectTimeout: NodeJS.Timeout | null = null;
+
 
 // Hook for auth state management with React Query integration
 export const useAuthState = () => {
   // Zustand store state
   const store = useAuthStore();
+  const initializationRef = useRef(false);
 
-  // DON'T use React Query for initial auth check - it causes loops
-  // React Query will be used only after successful login
-  // const { data: user, isLoading: queryLoading, error: queryError } = useAuthQuery();
-
-  // Initialize auth on mount - OPTIMIZED for faster response
+  // Initialize auth on mount - Simplified to rely on store singleton
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout;
 
-    const initAuth = async () => {
-      // 🚫 Prevent rapid successive calls with enhanced debouncing
-      const now = Date.now();
-      if ((useAuthState as any)._lastInitCall && (now - (useAuthState as any)._lastInitCall) < 1500) {
-        console.log(`⏱️ useAuthState: Debouncing rapid calls, last call was`, now - (useAuthState as any)._lastInitCall, 'ms ago');
-        return;
-      }
-      (useAuthState as any)._lastInitCall = now;
+    const init = async () => {
+      // Prevent multiple initializations
+      if (initializationRef.current) { return; }
+      initializationRef.current = true;
 
-      const callId = `hook_init_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      // Enhanced check for already initialized state with user validation
-      if (store.isInitialized && store.isAuthenticated && store.user) {
-        console.log(`✅ useAuthState: Already fully initialized [${callId}], skipping`);
-        return;
-      }
+      // Check if we have a token in storage
+      const hasToken = typeof window !== 'undefined' && !!useAuthStore.getState().accessToken;
 
-      // Prevent multiple simultaneous initializations with better flag management
-      if ((useAuthState as any)._isInitializing) {
-        console.log(`⏭️ useAuthState: Already initializing [${callId}], skipping`);
-        return;
-      }
-
-      (useAuthState as any)._isInitializing = true;
-      console.log(`🚀 useAuthState: Starting init [${callId}] at`, new Date().toISOString());
-
-      // Reduced delay for faster response
-      timeoutId = setTimeout(async () => {
-        if (!mounted) {
-          (useAuthState as any)._isInitializing = false;
-          console.log(`⚠️ useAuthState: Component unmounted [${callId}], aborting`);
-          return;
-        }
-
-        // Enhanced token detection with combined checks
-        const hasToken = typeof window !== 'undefined' && (() => {
-          const token = localStorage.getItem('access_token') || 
-                       localStorage.getItem('accessToken') ||
-                       localStorage.getItem('insight-flow-auth');
-          
-          if (token && token.includes('access')) {
-            try {
-              const parsed = JSON.parse(token);
-              return !!(parsed?.state?.accessToken || parsed?.state?.access_token || 
-                       parsed?.accessToken || parsed?.access_token);
-            } catch (e) {
-              return true; // Assume valid if can't parse
-            }
-          }
-          return false;
-        })();
-
-        console.log(`🔍 useAuthState: Initialize auth check [${callId}]`, {
-          hasToken,
-          isInitialized: store.isInitialized,
-          isAuthenticated: store.isAuthenticated,
-          hasUser: !!store.user,
-          timestamp: new Date().toISOString(),
-          isMounted: mounted
-        });
-
-        if (hasToken && mounted) {
-          console.log(`📞 useAuthState: Calling authActions.initializeAuth [${callId}]`);
+      if (hasToken) {
+        // Initialize auth directly without waiting for backend health check
+        // This prevents infinite loading states
+        try {
+          console.log('🔄 Initializing auth directly...');
           await authActions.initializeAuth();
-          console.log(`✅ useAuthState: authActions.initializeAuth completed [${callId}]`);
-        } else if (mounted) {
-          console.log(`❌ useAuthState: No token found [${callId}], setting loading to false`);
+        } catch (error) {
+          console.error('❌ Failed to initialize auth:', error);
+          if (mounted && store.isLoading) {
+            store.setLoading(false);
+          }
+        }
+      } else {
+        // No token, ensure loading is false
+        if (mounted && store.isLoading) {
           store.setLoading(false);
         }
-
-        (useAuthState as any)._isInitializing = false;
-        console.log(`🔚 useAuthState: End [${callId}]`);
-      }, 100); // Reduced to 100ms for much faster response
-
+      }
     };
 
-    initAuth();
+    init();
 
     return () => {
       mounted = false;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      (useAuthState as any)._isInitializing = false;
     };
   }, []); // Empty deps - run only once on mount
+
+  // Safety timeout to prevent infinite loading state
+  useEffect(() => {
+    if (store.isLoading) {
+      const safetyTimeout = setTimeout(() => {
+        console.warn('⚠️ Auth check timed out, forcing loading to false');
+        store.setLoading(false);
+      }, 7000);
+
+      return () => clearTimeout(safetyTimeout);
+    }
+  }, [store.isLoading, store.setLoading]);
 
   // Determine overall loading state
   const overallIsLoading = store.isLoading;
@@ -179,21 +133,6 @@ export const useAuthState = () => {
     })()
     : false;
 
-  // Log state changes - Only log meaningful changes and reduce frequency
-  useEffect(() => {
-    const now = Date.now();
-    // Throttle logging to prevent console spam
-    if (!(useAuthState as any)._lastLogTime || (now - (useAuthState as any)._lastLogTime) > 2000) {
-      console.log('🔐 Auth State Updated:', {
-        isAuthenticated,
-        isLoading,
-        hasUser: !!currentUser,
-        timestamp: new Date().toISOString()
-      });
-      (useAuthState as any)._lastLogTime = now;
-    }
-  }, [isAuthenticated, isLoading]); // Only track meaningful changes
-
   // Actions
   const login = authActions.loginWithResponse;
   const logout = authActions.logoutAndRedirect;
@@ -205,6 +144,7 @@ export const useAuthState = () => {
     user: currentUser,
     isAuthenticated,
     isLoading: isLoading,
+    accessToken: store.accessToken, // Return access token
     error: null,
 
     // Computed values
@@ -239,6 +179,7 @@ export const useAuth = () => {
     userInitials,
     isAdmin,
     isManagerOrHigher,
+    accessToken,
   } = useAuthState();
 
   return {
@@ -248,6 +189,7 @@ export const useAuth = () => {
     userInitials,
     isAdmin,
     isManagerOrHigher,
+    accessToken,
   };
 };
 
@@ -261,48 +203,50 @@ export const useRequireAuth = () => {
     isAuthenticated,
     isLoading,
     logout,
+    accessToken,
   } = useAuthState();
 
-  useEffect(() => {
-    const now = new Date().toISOString();
-    console.log('🔐 useRequireAuth: checking auth', {
-      isAuthenticated,
-      isLoading,
-      hasUser: !!user,
-      timestamp: now
-    });
+  // Use ref for timeout to avoid sharing state between hook instances
+  const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  useEffect(() => {
     // Add minimal debouncing to prevent rapid redirects (optimized for speed)
-    if (!_useRequireAuthRedirectTimeout) {
+    if (!redirectTimeoutRef.current) {
       const timeoutId = setTimeout(() => {
-        // Fast path: if authenticated and has user, no need to check further
-        if (isAuthenticated && user) {
+        // Fast path: if authenticated and has user AND token, no need to check further
+        if (isAuthenticated && user && accessToken) {
           return;
         }
-        
-        // If not authenticated and not loading, redirect to login immediately
-        if (!isAuthenticated && !user && !isLoading && typeof window !== 'undefined') {
+
+        // If not authenticated (or no token) and not loading, redirect to login immediately
+        if ((!isAuthenticated || !user || !accessToken) && !isLoading && typeof window !== 'undefined') {
           // Check if we are already on the login page to prevent loops
           const path = window.location.pathname;
           if (path.startsWith('/auth/login') || path.startsWith('/auth/register')) {
             return;
           }
 
-          console.log('🔐 useRequireAuth: Redirecting to login - not authenticated');
-
           // Prevent infinite redirect loops
           const isAuthPage = path.startsWith('/auth/login') || path.startsWith('/auth/register');
           if (!isAuthPage) {
             // Use replace to avoid history stack issues
+            console.warn('🔒 useRequireAuth: Redirecting to login (missing auth/token)');
             window.location.replace('/auth/login');
           }
         }
-        
-        _useRequireAuthRedirectTimeout = null;
+
+        redirectTimeoutRef.current = null;
       }, 200); // Reduced to 200ms for faster response
-      
-      _useRequireAuthRedirectTimeout = timeoutId;
+
+      redirectTimeoutRef.current = timeoutId;
     }
+
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+        redirectTimeoutRef.current = null;
+      }
+    };
   }, [isAuthenticated, isLoading, user]); // Include user in deps with debouncing
 
   // Return auth state for use in components

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,59 +12,194 @@ import {
   Bell,
   Shield,
   Palette,
-  Globe,
   Key,
   Database,
-  Download,
-  Upload,
   Save,
   Camera,
   Eye,
   EyeOff,
   Mail,
-  Lock,
-  Clock,
-  Smartphone,
-  Monitor,
   Moon,
   Sun,
-  Settings as SettingsIcon
+  Monitor
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuthStore } from "@/stores/auth-store";
+import { usersApi, authApi, fileApi } from "@/lib/api-endpoints";
+import type { UserProfile } from "@/types";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { API_CONFIG } from "@/lib/constants";
+import { getAvatarUrl } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile");
   const [showPassword, setShowPassword] = useState(false);
   const [theme, setTheme] = useState("dark");
-  const [language, setLanguage] = useState("en");
-  const [timezone, setTimezone] = useState("UTC");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Use auth store actions
+  const {
+    accessToken,
+    isAuthenticated,
+    isLoading,
+    user,
+    fetchUserProfile
+  } = useAuthStore();
+
+  // Use a local loading for the initial data fetch if needed, 
+  // but mostly we rely on the store's state or a small local spinner
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // Password state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordStrength, setPasswordStrength] = useState(0);
+
+  const calculateStrength = (password: string) => {
+    let strength = 0;
+    if (password.length > 6) strength += 25;
+    if (password.match(/[A-Z]/)) strength += 25;
+    if (password.match(/[0-9]/)) strength += 25;
+    if (password.match(/[^A-Za-z0-9]/)) strength += 25;
+    return strength;
+  };
+
+  useEffect(() => {
+    setPasswordStrength(calculateStrength(newPassword));
+  }, [newPassword]);
+
+  // Initialize data
+  useEffect(() => {
+    if (!isAuthenticated && !isLoading) {
+      // Not authenticated, just stop loading
+      setIsInitializing(false);
+      return;
+    }
+
+    if (isAuthenticated && accessToken && user) {
+      // We have user data, we can populate the form
+      const rawProfile = user as any;
+      const firstName = rawProfile.firstName ?? rawProfile.first_name ?? "";
+      const lastName = rawProfile.lastName ?? rawProfile.last_name ?? "";
+      const name = rawProfile.name ?? "";
+
+      let finalFirst = firstName;
+      let finalLast = lastName;
+
+      if (!finalFirst && name) {
+        const parts = name.split(" ");
+        finalFirst = parts[0];
+        finalLast = parts.slice(1).join(" ");
+      }
+
+      setProfileData({
+        firstName: finalFirst,
+        lastName: finalLast,
+        email: rawProfile.email ?? "",
+        username: rawProfile.username ?? "",
+        phone: rawProfile.phone ?? "",
+        bio: rawProfile.bio ?? "",
+        avatar: rawProfile.avatar ?? rawProfile.avatar_url ?? rawProfile.avatarUrl ?? ""
+      });
+
+      // Load settings if not already in store (assuming we might add settings to auth store later, for now we keep local fetch for settings)
+      loadSettings();
+
+      setIsInitializing(false);
+    } else if (isAuthenticated && accessToken && !user) {
+      // We need to fetch the user
+      fetchUserProfile().then(() => {
+        // The useEffect will re-run when user is updated
+      }).catch(() => {
+        setIsInitializing(false);
+      });
+    }
+  }, [isAuthenticated, accessToken, user, isLoading]);
+
+  const loadSettings = async () => {
+    try {
+      const userSettings = await usersApi.getSettings().catch(() => null);
+      if (userSettings) {
+        setTheme(userSettings.theme ?? "dark");
+        if (userSettings.notificationPreferences) {
+          setNotifications(prev => ({
+            email: {
+              tasks: userSettings.notificationPreferences.email?.tasks ?? prev.email.tasks,
+              projects: userSettings.notificationPreferences.email?.projects ?? prev.email.projects,
+              mentions: userSettings.notificationPreferences.email?.mentions ?? prev.email.mentions
+            },
+            inApp: { ...prev.inApp, ...(userSettings.notificationPreferences.inApp || {}) }
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load user settings');
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    console.log("Starting password update process");
+
+    if (newPassword !== confirmPassword) {
+      console.error("Password validation failed: passwords do not match");
+      setError("Passwords do not match");
+      return;
+    }
+    if (passwordStrength < 50) {
+      console.error("Password validation failed: password too weak");
+      setError("Password is too weak");
+      return;
+    }
+
+    try {
+      console.log("Attempting to change password");
+      setSaving(true);
+      const response = await authApi.changePassword(currentPassword, newPassword);
+      console.log("Password change response:", response);
+      toast.success("Password updated successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setError(null);
+    } catch (err: any) {
+      console.error("Password change error:", err);
+      console.error("Error details:", {
+        message: err.message,
+        status: err.status,
+        response: err.response
+      });
+      setError(err.response?.data?.detail || err.message || "Failed to update password. Please check your current password.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Mock user profile data
   const [profileData, setProfileData] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@company.com",
-    username: "johndoe",
-    phone: "+1 (555) 123-4567",
-    bio: "Senior Project Manager with 8+ years of experience in web development and team leadership.",
-    location: "San Francisco, CA",
-    website: "https://johndoe.dev"
+    firstName: "",
+    lastName: "",
+    email: "",
+    username: "",
+    phone: "",
+    bio: "",
+    avatar: ""
   });
+
 
   // Notification settings
   const [notifications, setNotifications] = useState({
     email: {
       tasks: true,
       projects: true,
-      mentions: true,
-      updates: false,
-      marketing: false
-    },
-    push: {
-      tasks: true,
-      projects: true,
-      mentions: true,
-      updates: true,
-      security: true
+      mentions: true
     },
     inApp: {
       tasks: true,
@@ -76,65 +210,195 @@ export default function SettingsPage() {
     }
   });
 
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    Promise.all([
+      fetchUserProfile(),
+      loadSettings()
+    ]).then(() => {
+      toast.success("Refreshed successfully");
+    }).finally(() => {
+      setRefreshing(false);
+    });
+  };
+
+  const handleSaveSettings = async () => {
+    if (!accessToken || !user) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      try {
+        const updateData = {
+          ...profileData,
+          first_name: profileData.firstName,
+          last_name: profileData.lastName,
+          name: `${profileData.firstName} ${profileData.lastName}`.trim()
+        };
+
+        const settingsData = {
+          theme,
+          notificationPreferences: notifications
+        };
+
+        // Use store action for user profile update
+        const { updateUserProfile } = useAuthStore.getState();
+
+        await Promise.all([
+          updateUserProfile(updateData),
+          usersApi.updateSettings(settingsData)
+        ]);
+
+      } catch (apiError) {
+        console.log('API not available, settings saved locally only');
+      }
+
+      toast.success('Settings saved successfully!');
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setError('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const tabs = [
     { id: "profile", label: "Profile", icon: User },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "security", label: "Security", icon: Shield },
     { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "preferences", label: "Preferences", icon: Globe },
     { id: "billing", label: "Billing", icon: Database },
   ];
 
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    // Validation
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setError("Invalid file type. Please upload PNG, JPG, or GIF.");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) { // 2MB
+      setError("File size too large. Maximum size is 2MB.");
+      return;
+    }
+
+    // Create optimistic preview
+    const previewUrl = URL.createObjectURL(file);
+    const previousAvatar = profileData.avatar;
+
+    try {
+      setUploading(true);
+      setError(null);
+
+      // Show preview immediately
+      setProfileData(prev => ({ ...prev, avatar: previewUrl }));
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const updatedUser = await usersApi.uploadAvatar(formData);
+
+      if (updatedUser) {
+        // Update with real URL from server
+        const { updateUserAvatar } = useAuthStore.getState();
+        const avatarUrl = updatedUser.avatar || "";
+        updateUserAvatar(avatarUrl); // Update global store
+        setProfileData(prev => ({ ...prev, avatar: avatarUrl }));
+      }
+    } catch (err) {
+      console.error('Failed to upload avatar:', err);
+      setError("Failed to upload avatar. Please try again.");
+      // Revert to previous avatar on error
+      setProfileData(prev => ({ ...prev, avatar: previousAvatar }));
+    } finally {
+      setUploading(false);
+      // Construct a new FileList or reset the input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const renderProfileTab = () => (
     <div className="space-y-6">
-      {/* Avatar Section */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">Profile Picture</CardTitle>
+          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Personal Information
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-6">
-            <div className="relative">
-              <div className="h-24 w-24 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center">
-                <span className="text-2xl font-medium text-zinc-300">
-                  {(profileData.firstName && typeof profileData.firstName === 'string' ? profileData.firstName[0] : '')}
-                  {(profileData.lastName && typeof profileData.lastName === 'string' ? profileData.lastName[0] : '')}
-                </span>
+        <CardContent className="space-y-6">
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div
+              className="relative group cursor-pointer"
+              onClick={handleAvatarClick}
+            >
+              <div className="h-24 w-24 rounded-full overflow-hidden ring-2 ring-white/10 group-hover:ring-indigo-500/50 transition-all duration-300 bg-zinc-800 flex items-center justify-center">
+                {profileData.avatar ? (
+                  <img
+                    src={getAvatarUrl(profileData.avatar)}
+                    alt="Profile"
+                    className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.parentElement?.classList.add('fallback-active');
+                    }}
+                  />
+                ) : (
+                  <User className="h-10 w-10 text-zinc-400" />
+                )}
               </div>
-              <Button 
-                size="sm" 
-                className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full p-0 bg-indigo-600 hover:bg-indigo-500"
-              >
-                <Camera className="h-4 w-4" />
-              </Button>
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full">
+                <Camera className="h-8 w-8 text-white" />
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleFileChange}
+              />
             </div>
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">
-                {profileData.firstName} {profileData.lastName}
-              </h3>
-              <p className="text-zinc-400 text-sm mb-3">{profileData.email}</p>
-              <Button variant="outline" size="sm" className="border-white/10 text-white hover:bg-white/5">
-                Change Avatar
+            <div className="space-y-2 text-center sm:text-left">
+              <h3 className="text-lg font-medium text-white">Profile Picture</h3>
+              <p className="text-sm text-zinc-400">
+                PNG, JPG or GIF no bigger than 2MB
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="border border-white/10 text-white bg-transparent hover:bg-white/10 transition-all hover:scale-105 active:scale-95"
+                onClick={handleAvatarClick}
+                disabled={uploading}
+              >
+                {uploading ? 'Uploading...' : 'Change Avatar'}
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Personal Information */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">Personal Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="firstName" className="text-zinc-300">First Name</Label>
               <Input
                 id="firstName"
                 value={profileData.firstName}
-                onChange={(e) => setProfileData({...profileData, firstName: e.target.value})}
-                className="bg-white/5 border-white/10 text-white"
+                onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium placeholder:text-zinc-500"
               />
             </div>
             <div className="space-y-2">
@@ -142,21 +406,18 @@ export default function SettingsPage() {
               <Input
                 id="lastName"
                 value={profileData.lastName}
-                onChange={(e) => setProfileData({...profileData, lastName: e.target.value})}
-                className="bg-white/5 border-white/10 text-white"
+                onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium placeholder:text-zinc-500"
               />
             </div>
-          </div>
-          
-          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-zinc-300">Email Address</Label>
+              <Label htmlFor="email" className="text-zinc-300">Email</Label>
               <Input
                 id="email"
                 type="email"
                 value={profileData.email}
-                onChange={(e) => setProfileData({...profileData, email: e.target.value})}
-                className="bg-white/5 border-white/10 text-white"
+                onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium placeholder:text-zinc-500"
               />
             </div>
             <div className="space-y-2">
@@ -164,52 +425,30 @@ export default function SettingsPage() {
               <Input
                 id="username"
                 value={profileData.username}
-                onChange={(e) => setProfileData({...profileData, username: e.target.value})}
-                className="bg-white/5 border-white/10 text-white"
+                onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium placeholder:text-zinc-500"
               />
             </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-zinc-300">Phone Number</Label>
+              <Label htmlFor="phone" className="text-zinc-300">Phone</Label>
               <Input
                 id="phone"
+                type="tel"
                 value={profileData.phone}
-                onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
-                className="bg-white/5 border-white/10 text-white"
+                onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium placeholder:text-zinc-500"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="location" className="text-zinc-300">Location</Label>
-              <Input
-                id="location"
-                value={profileData.location}
-                onChange={(e) => setProfileData({...profileData, location: e.target.value})}
-                className="bg-white/5 border-white/10 text-white"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="website" className="text-zinc-300">Website</Label>
-            <Input
-              id="website"
-              value={profileData.website}
-              onChange={(e) => setProfileData({...profileData, website: e.target.value})}
-              className="bg-white/5 border-white/10 text-white"
-            />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="bio" className="text-zinc-300">Bio</Label>
             <textarea
               id="bio"
-              rows={3}
               value={profileData.bio}
-              onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
-              className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder:text-zinc-400"
-              placeholder="Tell us about yourself..."
+              onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
+              className="flex min-h-[100px] w-full rounded-md border border-white/10 bg-zinc-900/50 px-3 py-2 text-sm !text-zinc-100 placeholder:text-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Tell us a little about yourself"
             />
           </div>
         </CardContent>
@@ -219,8 +458,7 @@ export default function SettingsPage() {
 
   const renderNotificationsTab = () => (
     <div className="space-y-6">
-      {/* Email Notifications */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
             <Mail className="h-5 w-5" />
@@ -230,62 +468,37 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           {Object.entries(notifications.email).map(([key, value]) => (
             <div key={key} className="flex items-center justify-between">
-              <div>
-                <p className="text-white font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}</p>
-                <p className="text-zinc-400 text-sm">
-                  {key === 'tasks' && "Receive emails about task assignments and updates"}
-                  {key === 'projects' && "Get notified about project changes and milestones"}
-                  {key === 'mentions' && "When someone mentions you in comments"}
-                  {key === 'updates' && "Product updates and feature announcements"}
-                  {key === 'marketing' && "Newsletters and promotional content"}
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(e) => setNotifications({
-                    ...notifications,
-                    email: { ...notifications.email, [key]: e.target.checked }
-                  })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-white/10 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
+              <Label className="text-zinc-300 capitalize">{key}</Label>
+              <Switch
+                checked={value}
+                onCheckedChange={(checked) => setNotifications(prev => ({
+                  ...prev,
+                  email: { ...prev.email, [key]: checked }
+                }))}
+              />
             </div>
           ))}
         </CardContent>
       </Card>
 
-      {/* Push Notifications */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Smartphone className="h-5 w-5" />
-            Push Notifications
+            <Bell className="h-5 w-5" />
+            In-App Notifications
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {Object.entries(notifications.push).map(([key, value]) => (
+          {Object.entries(notifications.inApp).map(([key, value]) => (
             <div key={key} className="flex items-center justify-between">
-              <div>
-                <p className="text-white font-medium capitalize">{key.replace(/([A-Z])/g, ' $1')}</p>
-                <p className="text-zinc-400 text-sm">
-                  Browser and mobile push notifications
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(e) => setNotifications({
-                    ...notifications,
-                    push: { ...notifications.push, [key]: e.target.checked }
-                  })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-white/10 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-              </label>
+              <Label className="text-zinc-300 capitalize">{key}</Label>
+              <Switch
+                checked={value}
+                onCheckedChange={(checked) => setNotifications(prev => ({
+                  ...prev,
+                  inApp: { ...prev.inApp, [key]: checked }
+                }))}
+              />
             </div>
           ))}
         </CardContent>
@@ -295,107 +508,119 @@ export default function SettingsPage() {
 
   const renderSecurityTab = () => (
     <div className="space-y-6">
-      {/* Password Change */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Lock className="h-5 w-5" />
+            <Key className="h-5 w-5" />
             Change Password
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="currentPassword" className="text-zinc-300">Current Password</Label>
+            <Label className="text-zinc-300">Current Password</Label>
             <div className="relative">
               <Input
-                id="currentPassword"
                 type={showPassword ? "text" : "password"}
-                className="bg-white/5 border-white/10 text-white pr-10"
+                value={currentPassword}
+                autoComplete="new-password"
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium pr-10 placeholder:text-zinc-500"
               />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-zinc-400 hover:text-white"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-400 hover:text-white"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+              </Button>
             </div>
           </div>
-          
           <div className="space-y-2">
-            <Label htmlFor="newPassword" className="text-zinc-300">New Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              className="bg-white/5 border-white/10 text-white"
-            />
+            <Label className="text-zinc-300">New Password</Label>
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={newPassword}
+                autoComplete="new-password"
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium pr-10 placeholder:text-zinc-500"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-zinc-400 hover:text-white"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            {/* Password Strength Indicator */}
+            {newPassword && (
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs text-zinc-400">
+                  <span>Strength</span>
+                  <span>{passwordStrength < 30 ? 'Weak' : passwordStrength < 70 ? 'Medium' : 'Strong'}</span>
+                </div>
+                <div className="h-1.5 w-full bg-zinc-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-300 ${passwordStrength < 30 ? 'bg-red-500' :
+                      passwordStrength < 70 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                    style={{ width: `${passwordStrength}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
-          
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="text-zinc-300">Confirm New Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              className="bg-white/5 border-white/10 text-white"
-            />
+            <Label className="text-zinc-300">Confirm Password</Label>
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={confirmPassword}
+                autoComplete="new-password"
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="form-input !text-zinc-100 bg-zinc-900/50 border-white/10 focus:bg-zinc-900/80 focus:border-indigo-500/50 font-medium pr-10 placeholder:text-zinc-500"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent text-zinc-400 hover:text-white"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
-
-          <Button className="bg-indigo-600 hover:bg-indigo-500 text-white">
+          <Button
+            onClick={handleUpdatePassword}
+            disabled={saving || !currentPassword || !newPassword || !confirmPassword}
+            className="w-full sm:w-auto"
+          >
             Update Password
           </Button>
         </CardContent>
       </Card>
 
-      {/* Two-Factor Authentication */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Key className="h-5 w-5" />
+            <Shield className="h-5 w-5" />
             Two-Factor Authentication
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-white font-medium">Enable 2FA</p>
-              <p className="text-zinc-400 text-sm">
-                Add an extra layer of security to your account
-              </p>
+              <p className="text-white font-medium">Secure your account</p>
+              <p className="text-zinc-400 text-sm">Add an extra layer of security to your account.</p>
             </div>
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
+            <Button variant="ghost" className="border border-white/10 text-white bg-transparent hover:bg-white/10" onClick={() => toast.info("2FA setup is coming soon!")}>
               Setup 2FA
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Active Sessions */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">Active Sessions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-            <div className="flex items-center gap-3">
-              <Monitor className="h-5 w-5 text-emerald-400" />
-              <div>
-                <p className="text-white font-medium">Current Session</p>
-                <p className="text-zinc-400 text-sm">Chrome on macOS • San Francisco, CA</p>
-              </div>
-            </div>
-            <Badge className="bg-emerald-500/20 text-emerald-400">Current</Badge>
-          </div>
-          
-          <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-            <div className="flex items-center gap-3">
-              <Smartphone className="h-5 w-5 text-blue-400" />
-              <div>
-                <p className="text-white font-medium">Mobile App</p>
-                <p className="text-zinc-400 text-sm">iPhone • Last active 2 hours ago</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white">
-              Revoke
             </Button>
           </div>
         </CardContent>
@@ -405,162 +630,53 @@ export default function SettingsPage() {
 
   const renderAppearanceTab = () => (
     <div className="space-y-6">
-      {/* Theme Selection */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
             <Palette className="h-5 w-5" />
             Theme
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
             {[
-              { id: "light", label: "Light", icon: Sun },
-              { id: "dark", label: "Dark", icon: Moon },
-              { id: "auto", label: "Auto", icon: Monitor }
+              { id: 'light', label: 'Light', icon: Sun, color: 'bg-zinc-100' },
+              { id: 'dark', label: 'Dark', icon: Moon, color: 'bg-zinc-900' },
+              { id: 'system', label: 'Auto', icon: Monitor, color: 'bg-gradient-to-br from-zinc-100 to-zinc-900' },
             ].map((option) => (
               <div
                 key={option.id}
                 onClick={() => setTheme(option.id)}
-                className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
-                  theme === option.id
-                    ? "border-indigo-500 bg-indigo-500/10"
-                    : "border-white/10 bg-white/5 hover:bg-white/10"
-                }`}
+                className={`group relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${theme === option.id
+                  ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10'
+                  : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                  }`}
               >
-                <div className="flex items-center gap-3">
-                  <option.icon className={`h-5 w-5 ${theme === option.id ? 'text-indigo-400' : 'text-zinc-400'}`} />
-                  <span className={`font-medium ${theme === option.id ? 'text-white' : 'text-zinc-300'}`}>
-                    {option.label}
-                  </span>
+                <div className={`h-16 w-full rounded-lg mb-3 ${option.color} opacity-80 group-hover:opacity-100 transition-opacity`} />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <option.icon className={`h-4 w-4 ${theme === option.id ? 'text-indigo-400' : 'text-zinc-400 group-hover:text-white'}`} />
+                    <span className={`font-medium ${theme === option.id ? 'text-white' : 'text-zinc-400 group-hover:text-white'}`}>
+                      {option.label}
+                    </span>
+                  </div>
+                  {theme === option.id && (
+                    <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </CardContent>
       </Card>
-
-      {/* Language & Region */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Globe className="h-5 w-5" />
-            Language & Region
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="language" className="text-zinc-300">Language</Label>
-              <select
-                id="language"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white"
-              >
-                <option value="en">English</option>
-                <option value="es">Español</option>
-                <option value="fr">Français</option>
-                <option value="de">Deutsch</option>
-                <option value="ja">日本語</option>
-                <option value="zh">中文</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="timezone" className="text-zinc-300">Timezone</Label>
-              <select
-                id="timezone"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white"
-              >
-                <option value="UTC">UTC</option>
-                <option value="America/New_York">Eastern Time</option>
-                <option value="America/Chicago">Central Time</option>
-                <option value="America/Denver">Mountain Time</option>
-                <option value="America/Los_Angeles">Pacific Time</option>
-                <option value="Europe/London">London</option>
-                <option value="Europe/Paris">Paris</option>
-                <option value="Asia/Tokyo">Tokyo</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 
-  const renderPreferencesTab = () => (
-    <div className="space-y-6">
-      {/* Working Hours */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Working Hours
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="startTime" className="text-zinc-300">Start Time</Label>
-              <Input
-                id="startTime"
-                type="time"
-                defaultValue="09:00"
-                className="bg-white/5 border-white/10 text-white"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endTime" className="text-zinc-300">End Time</Label>
-              <Input
-                id="endTime"
-                type="time"
-                defaultValue="17:00"
-                className="bg-white/5 border-white/10 text-white"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Data & Privacy */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">Data & Privacy</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-medium">Analytics</p>
-              <p className="text-zinc-400 text-sm">Help us improve by sharing usage data</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" defaultChecked className="sr-only peer" />
-              <div className="w-11 h-6 bg-white/10 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-medium">Marketing Communications</p>
-              <p className="text-zinc-400 text-sm">Receive product updates and newsletters</p>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" />
-              <div className="w-11 h-6 bg-white/10 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
 
   const renderBillingTab = () => (
     <div className="space-y-6">
       {/* Current Plan */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white">Current Plan</CardTitle>
         </CardHeader>
@@ -573,12 +689,12 @@ export default function SettingsPage() {
             </div>
             <Badge className="bg-emerald-500/20 text-emerald-400">Active</Badge>
           </div>
-          
+
           <div className="flex gap-3">
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
+            <Button variant="glass">
               Change Plan
             </Button>
-            <Button variant="outline" className="border-white/10 text-white hover:bg-white/5">
+            <Button variant="glass">
               Cancel Subscription
             </Button>
           </div>
@@ -586,7 +702,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Usage */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white">Usage This Month</CardTitle>
         </CardHeader>
@@ -600,7 +716,7 @@ export default function SettingsPage() {
               <div className="h-full rounded-full bg-indigo-500 w-[30%]" />
             </div>
           </div>
-          
+
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-zinc-400">Storage</span>
@@ -610,7 +726,7 @@ export default function SettingsPage() {
               <div className="h-full rounded-full bg-blue-500 w-[24%]" />
             </div>
           </div>
-          
+
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-zinc-400">Team Members</span>
@@ -624,7 +740,7 @@ export default function SettingsPage() {
       </Card>
 
       {/* Payment Method */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="glass-card">
         <CardHeader>
           <CardTitle className="text-lg font-semibold text-white">Payment Method</CardTitle>
         </CardHeader>
@@ -639,7 +755,7 @@ export default function SettingsPage() {
                 <p className="text-zinc-400 text-sm">Expires 12/26</p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="border-white/10 text-white hover:bg-white/5">
+            <Button variant="ghost" size="sm" className="border border-white/10 text-white bg-transparent hover:bg-white/10">
               Update
             </Button>
           </div>
@@ -654,7 +770,6 @@ export default function SettingsPage() {
       case "notifications": return renderNotificationsTab();
       case "security": return renderSecurityTab();
       case "appearance": return renderAppearanceTab();
-      case "preferences": return renderPreferencesTab();
       case "billing": return renderBillingTab();
       default: return renderProfileTab();
     }
@@ -663,38 +778,45 @@ export default function SettingsPage() {
   return (
     <ProtectedLayout>
       <div className="space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight text-white">Settings</h2>
-            <p className="mt-1 text-zinc-400">
-              Manage your account settings and preferences.
-            </p>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Settings</h1>
+            <p className="text-zinc-400 mt-1">Manage your account settings and preferences</p>
           </div>
-          <Button className="bg-indigo-600 hover:bg-indigo-500 text-white">
-            <Save className="h-4 w-4 mr-2" />
-            Save Changes
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+              onClick={handleSaveSettings}
+              disabled={saving}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar */}
-          <div className="lg:w-64">
-            <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-              <CardContent className="p-0">
-                <nav className="space-y-1">
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg">
+            {error}
+          </div>
+        )}
+
+        <div className="flex flex-col lg:grid lg:gap-8 lg:grid-cols-4">
+          <div className="lg:col-span-1">
+            <Card className="glass-card lg:sticky lg:top-8">
+              <CardContent className="p-2">
+                <nav className="flex flex-row lg:flex-col gap-2 lg:gap-0 lg:space-y-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
                   {tabs.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                        activeTab === tab.id
-                          ? "bg-indigo-500/20 text-indigo-400 border-r-2 border-indigo-500"
-                          : "text-zinc-400 hover:text-white hover:bg-white/5"
-                      }`}
+                      className={`flex-shrink-0 lg:flex-shrink lg:w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === tab.id
+                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+                        : "text-zinc-400 hover:text-white hover:bg-white/5"
+                        }`}
                     >
                       <tab.icon className="h-4 w-4" />
-                      <span className="font-medium">{tab.label}</span>
+                      {tab.label}
                     </button>
                   ))}
                 </nav>
@@ -702,12 +824,13 @@ export default function SettingsPage() {
             </Card>
           </div>
 
-          {/* Content */}
-          <div className="flex-1">
-            {renderTabContent()}
+          <div className="lg:col-span-3">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {renderTabContent()}
+            </div>
           </div>
         </div>
       </div>
     </ProtectedLayout>
- );
+  );
 }

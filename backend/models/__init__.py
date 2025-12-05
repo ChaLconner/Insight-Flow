@@ -13,6 +13,9 @@ from .analytics import (
     TaskAttachment, ProjectTag, ProjectTagAssociation,
     AnalyticsPeriod
 )
+from .token_blacklist import TokenBlacklist
+from .password_reset import PasswordReset
+from .user_settings import UserSettings
 
 __all__ = [
     "Base",
@@ -37,4 +40,7 @@ __all__ = [
     "ProjectTag",
     "ProjectTagAssociation",
     "AnalyticsPeriod",
+    "TokenBlacklist",
+    "PasswordReset",
+    "UserSettings",
 ]

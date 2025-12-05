@@ -2,8 +2,12 @@
 // Auth Actions (Separated to avoid circular dependency)
 // ===========================================
 
-import { useAuthStore } from './auth-store';
+import { useAuthStore, resetGlobalAuthInitialization } from './auth-store';
 import { AuthResponse } from '@/types';
+
+// Track initialization state to prevent duplicate calls
+// Track initialization state to prevent duplicate calls
+// (Moved to auth-store.ts)
 
 // Auth actions that depend on the store but don't create circular imports
 export const authActions = {
@@ -17,18 +21,8 @@ export const authActions = {
     const refreshToken = (response as any).refresh_token || (response as any).refreshToken || null;
 
     if (typeof window !== 'undefined') {
-      if (user) {
-        try { localStorage.setItem('user', JSON.stringify(user)); } catch (e) { console.warn('Failed to persist user to localStorage', e); }
-      }
-      // Fallback: persist tokens to localStorage in development if backend provides them
-      if (accessToken) {
-        localStorage.setItem('access_token', accessToken);
-        localStorage.setItem('accessToken', accessToken);
-      }
-      if (refreshToken) {
-        localStorage.setItem('refresh_token', refreshToken);
-        localStorage.setItem('refreshToken', refreshToken);
-      }
+      // Note: We rely on Zustand persist middleware to handle storage.
+      // Manual storage is removed to prevent inconsistencies.
     }
 
     // Dispatch auth event to notify other parts of the app
@@ -53,7 +47,7 @@ export const authActions = {
   logout: () => {
     const { logout } = useAuthStore.getState();
     logout();
-    
+
     // Attempt server-side logout to clear HttpOnly cookies, then dispatch event and redirect
     if (typeof window !== 'undefined') {
       (async () => {
@@ -77,22 +71,14 @@ export const authActions = {
     }
   },
 
-  // Initialize auth function - uses direct store method with enhanced debouncing
+  // Initialize auth function - uses direct store method
   initializeAuth: async () => {
-    // 🚫 Prevent rapid successive calls with debounce
-    const now = Date.now();
-    if ((authActions as any)._lastInitCall && (now - (authActions as any)._lastInitCall) < 1000) {
-      console.log(`⏱️ authActions: Debouncing rapid calls, last call was`, now - (authActions as any)._lastInitCall, 'ms ago');
-      return;
+    try {
+      const { initializeAuth } = useAuthStore.getState();
+      await initializeAuth();
+    } catch (error) {
+      console.error('Auth initialization failed:', error);
     }
-    (authActions as any)._lastInitCall = now;
-
-    const callId = `actions_init_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    console.log(`🔥 authActions: initializeAuth called [${callId}] at`, new Date().toISOString());
-    const { initializeAuth } = useAuthStore.getState();
-    console.log(`🔥 authActions: calling store.initializeAuth [${callId}], call stack:`);
-    console.trace();
-    return initializeAuth();
   },
 };
 

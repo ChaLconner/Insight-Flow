@@ -18,6 +18,7 @@ interface AuthState {
 
   // Actions
   setUser: (user: User) => void;
+  updateUserAvatar: (avatar: string) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   setLoading: (loading: boolean) => void;
   login: (user: User, accessToken: string, refreshToken: string) => void;
@@ -26,6 +27,8 @@ interface AuthState {
   checkAuthStatus: () => boolean;
   refreshAuthToken: (newToken: string, newRefreshToken: string) => void;
   initializeAuth: () => Promise<void>;
+  fetchUserProfile: () => Promise<User>;
+  updateUserProfile: (data: Partial<User>) => Promise<User>;
 }
 
 interface PersistedAuthState {
@@ -35,6 +38,14 @@ interface PersistedAuthState {
   refreshToken: string | null;
   lastActivity: number;
 }
+
+// Global flag removed to prevent race conditions
+// let initializationPromise: Promise<void> | null = null;
+
+// Export function to reset global initialization flag (for auth-actions)
+export const resetGlobalAuthInitialization = () => {
+  // No-op as global flag is removed
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -50,7 +61,6 @@ export const useAuthStore = create<AuthState>()(
 
       // Actions
       setUser: (user) => {
-        console.log('🏪 AuthStore: Setting user:', user);
         set((state) => ({
           user,
           isAuthenticated: !!user,
@@ -59,8 +69,24 @@ export const useAuthStore = create<AuthState>()(
         }));
       },
 
+      updateUserAvatar: (avatar) => {
+        set((state) => {
+          if (!state.user) return state;
+
+          const updatedUser = {
+            ...state.user,
+            avatar
+          };
+
+          return {
+            ...state,
+            user: updatedUser,
+            lastActivity: Date.now(),
+          };
+        });
+      },
+
       setTokens: (accessToken, refreshToken) => {
-        console.log('🏪 AuthStore: Setting tokens');
         set((state) => ({
           accessToken,
           refreshToken,
@@ -74,11 +100,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: (user, accessToken, refreshToken) => {
-        console.log('🏪 AuthStore: Login called with:', {
-          user: user?.email,
-          hasAccessToken: !!accessToken,
-          hasRefreshToken: !!refreshToken
-        });
         set({
           user,
           accessToken,
@@ -88,7 +109,6 @@ export const useAuthStore = create<AuthState>()(
           lastActivity: Date.now(),
           isInitialized: true,
         });
-        console.log('🏪 AuthStore: Login completed');
       },
 
       logout: () => {
@@ -114,6 +134,9 @@ export const useAuthStore = create<AuthState>()(
           lastActivity: 0,
           isInitialized: false,
         });
+
+        // Reset global initialization flag to allow re-initialization
+        resetGlobalAuthInitialization();
       },
 
       updateActivity: () => {
@@ -124,7 +147,9 @@ export const useAuthStore = create<AuthState>()(
         const { lastActivity, isAuthenticated } = get();
 
         // If user is not marked authenticated, return false
-        if (!isAuthenticated) return false;
+        if (!isAuthenticated) {
+          return false;
+        }
 
         // Check inactivity timeout (30 minutes)
         const now = Date.now();
@@ -150,125 +175,98 @@ export const useAuthStore = create<AuthState>()(
       },
 
       initializeAuth: async () => {
-        const { setLoading, setUser, logout } = get();
+        const { setLoading, setUser, logout, isInitialized } = get();
         const state = get();
-        
-        // 🆔 Add unique call ID for tracking
-        const callId = `auth_init_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const startTime = Date.now();
 
-        console.log(`🔍 AuthStore: initializeAuth called [${callId}] at`, new Date().toISOString(), {
-          isInitialized: state.isInitialized,
-          isAuthenticated: state.isAuthenticated,
-          isLoading: state.isLoading,
-          hasUser: !!state.user,
-          stackTrace: new Error().stack?.split('\n').slice(1, 4).join('\n')
-        });
-
-        // Enhanced check for multiple initialization with better performance
-        if ((globalThis as any).__auth_initializing) {
-          console.log(`❌ AuthStore: Initialization already in progress [${callId}], skipping`);
+        // 1. If already initialized, ensure loading is false and return
+        if (isInitialized) {
+          if (state.isLoading) { setLoading(false); }
           return;
         }
 
-        // Fast check for already initialized state
-        if (state.isInitialized && state.isAuthenticated && state.user) {
-          console.log(`✅ AuthStore: Already initialized [${callId}], skipping`);
-          return;
-        }
-
-        (globalThis as any).__auth_initializing = true;
-        console.log(`🏁 AuthStore: Starting initialization [${callId}] at`, new Date().toISOString());
-
+        // 2. Start initialization
         try {
-          // Only set loading to true if we are not already authenticated
-          // This prevents the "flicker" (Content -> Loading -> Content) when we have a persisted session
+          // Only set loading if not already authenticated (optimistic UI)
+          // But if we are starting fresh, we probably want to show loading to verify token
           if (!state.isAuthenticated) {
             setLoading(true);
           }
 
-          // Check if we're in browser environment
+          // Check environment
           if (typeof window === 'undefined') {
-            setLoading(false);
-            (globalThis as any).__auth_initializing = false;
             return;
           }
 
           const apiUrl = (await import('@/lib/constants')).API_CONFIG.BASE_URL;
+          let token = state.accessToken;
 
-          // Bearer token flow: read access token from localStorage or persisted store
-          let token = localStorage.getItem('access_token') || localStorage.getItem('accessToken');
           if (!token) {
-            const persisted = localStorage.getItem('insight-flow-auth');
-            if (persisted) {
-              try {
-                const parsed = JSON.parse(persisted);
-                const stateCandidate = parsed?.state ?? parsed;
-                token = stateCandidate?.accessToken || stateCandidate?.access_token || null;
-              } catch (e) {
-                // ignore
-              }
-            }
+            setLoading(false);
+            set({ isInitialized: true });
+            return;
           }
 
-          if (!token) {
-            console.log('🏪 AuthStore: No token found, setting loading to false');
-            setLoading(false);
-            (globalThis as any).__auth_initializing = false;
-            return;
-          } else {
-            console.log('🏪 AuthStore: Found token, calling /auth/me');
-            try {
-              const resp = await fetch(`${apiUrl}/auth/me`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${token}` },
-              });
+          // Verify token
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-              if (resp.ok) {
-                const userData = await resp.json();
-                console.log('🏪 AuthStore: /auth/me response received:', userData.email);
-                setUser(userData);
-              } else {
-                console.log('🏪 AuthStore: /auth/me failed with status:', resp.status);
+            const resp = await fetch(`${apiUrl}/auth/me`, {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${token}` },
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
 
-                // If unauthorized, clear everything to prevent loops
-                if (resp.status === 401 || resp.status === 403) {
-                  console.log('🏪 AuthStore: Invalid token, clearing auth state');
-
-                  // Only clear if we actually have tokens to clear to prevent loops
-                  const currentToken = localStorage.getItem('access_token') || localStorage.getItem('accessToken');
-                  if (currentToken) {
-                    try {
-                      localStorage.removeItem('insight-flow-auth');
-                    } catch (e) {
-                      console.warn('Failed to remove persisted auth', e);
-                    }
-                    logout();
-                  } else {
-                    // Just ensure state is clean without triggering full logout flow
-                    setLoading(false);
-                  }
-                } else {
-                  try { localStorage.removeItem('user'); } catch { }
-                }
+            if (resp.ok) {
+              const userData = await resp.json();
+              setUser(userData);
+            } else {
+              if (resp.status === 401 || resp.status === 403) {
+                logout();
               }
-            } catch (fetchError) {
-              console.error('🏪 AuthStore: Network error during /auth/me fetch:', fetchError);
-              // Don't clear auth on network error, just stop loading
+            }
+          } catch (fetchError: any) {
+            if (fetchError.name !== 'AbortError') {
+              console.error('Auth check failed:', fetchError);
             }
           }
         } catch (error) {
           console.error('🏪 AuthStore: Error initializing auth:', error);
         } finally {
-          const endTime = Date.now();
-          const duration = endTime - startTime;
-          console.log(`🎯 AuthStore: Completed initialization [${callId}] in ${duration}ms, setting loading to false`);
           setLoading(false);
           set({ isInitialized: true });
-          (globalThis as any).__auth_initializing = false;
-          console.log(`🔚 AuthStore: End [${callId}]`);
         }
       },
+
+      fetchUserProfile: async () => {
+        const { setUser } = get();
+        try {
+          // Dynamic import to avoid circular dependencies if any
+          const { usersApi } = await import('@/lib/api-endpoints');
+          const user = await usersApi.getCurrentUser();
+          setUser(user);
+          return user;
+        } catch (error) {
+          console.error('Failed to fetch user profile:', error);
+          throw error;
+        }
+      },
+
+      updateUserProfile: async (data: Partial<User>) => {
+        const { setUser, user } = get();
+        try {
+          const { usersApi } = await import('@/lib/api-endpoints');
+          // Assuming the API takes the update object directly
+          const updatedUser = await usersApi.updateCurrentUser(data as any);
+          setUser({ ...user, ...updatedUser });
+          return updatedUser;
+        } catch (error) {
+          console.error('Failed to update user profile:', error);
+          throw error;
+        }
+      },
+
     }),
     {
       name: 'insight-flow-auth',
@@ -283,8 +281,8 @@ export const useAuthStore = create<AuthState>()(
             email: typeof state.user.email === 'string' ? state.user.email : (state.user.email || ''),
             username: typeof state.user.username === 'string' ? state.user.username : (state.user.username || ''),
             // Optional fields can remain as they are or be undefined
-            firstName: typeof state.user.firstName === 'string' ? state.user.firstName : undefined,
-            lastName: typeof state.user.lastName === 'string' ? state.user.lastName : undefined,
+            firstName: typeof state.user.firstName === 'string' ? state.user.firstName : (state.user.firstName || undefined),
+            lastName: typeof state.user.lastName === 'string' ? state.user.lastName : (state.user.lastName || undefined),
           };
         }
 
@@ -335,7 +333,7 @@ export const authSelectors = {
   getUserInitials: (state: AuthState): string => {
     try {
       // Safety check for undefined/null state
-      if (!state || !state.user) {
+      if (!state?.user) {
         return 'U';
       }
 
@@ -429,4 +427,3 @@ export const authSelectors = {
   isUserActive: (state: AuthState): boolean =>
     state.user?.isActive ?? false,
 } as const;
-

@@ -6,23 +6,47 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from models import Base
+import ssl
+import logging
+from contextlib import contextmanager
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Use Neon PostgreSQL database from environment variable
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("DATABASE_URL", "").strip()
 
-if not database_url:
-    raise ValueError("DATABASE_URL environment variable is not set. Please configure your database connection.")
+# Check for empty or placeholder URL
+if not database_url or "user:password@localhost" in database_url:
+    raise ValueError(
+        "DATABASE_URL environment variable is not set or is using a placeholder. "
+        "Please configure your database connection in the .env file."
+    )
 
-# Convert to psycopg2 format if needed
-if database_url and not database_url.startswith("postgresql+psycopg2://"):
+# Convert to pg8000 format if needed (since pg8000 is installed)
+# We force pg8000 to ensure consistency and avoid driver issues
+if not database_url.startswith("postgresql+pg8000://"):
     if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
+    elif database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql+pg8000://", 1)
+
+# Prepare connection arguments
+connect_args = {
+    "application_name": "insight-flow-app"  # Identify application in connection logs
+}
+
+# Handle SSL for pg8000
+if "pg8000" in database_url:
+    # Remove query parameters that cause issues with pg8000 (like sslmode)
+    if "?" in database_url:
+        database_url = database_url.split("?")[0]
+    
+    # Create SSL context for Neon
+    ssl_context = ssl.create_default_context()
+    connect_args["ssl_context"] = ssl_context
 
 # Log database connection details for debugging
-import logging
 db_logger = logging.getLogger("database")
 db_logger.info("="*50)
 db_logger.info("DATABASE CONFIGURATION")
@@ -32,22 +56,37 @@ db_logger.info("="*50)
 # Create engine with improved connection settings for better reliability
 engine = create_engine(
     database_url,
-    pool_pre_ping=True,  # Validate connections before use
-    pool_recycle=300,     # Recycle connections every 5 minutes
-    pool_size=5,          # Maximum number of connections to keep
-    max_overflow=10,       # Allow up to 10 additional connections beyond pool_size
-    connect_args={
-        "connect_timeout": 10,  # Connection timeout in seconds
-        "application_name": "insight-flow-app"  # Identify application in connection logs
-    }
+    pool_pre_ping=True,       # Validate connections before use
+    pool_recycle=300,         # Recycle connections every 5 minutes
+    pool_size=10,             # Increased from 5 to 10
+    max_overflow=20,          # Increased from 10 to 20
+    pool_timeout=30,          # Timeout after 30 seconds waiting for connection
+    connect_args=connect_args
 )
 
 # Create session factory with better isolation
 SessionLocal = sessionmaker(
     bind=engine,
     autocommit=False,
-    autoflush=False
+    autoflush=False,
+    expire_on_commit=False # Prevent detaching objects after commit
 )
+
+@contextmanager
+def get_db_context():
+    """
+    Context manager for database sessions.
+    Useful for internal services or scripts ensuring session is closed.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 # Function to initialize database with enum creation
 def init_database():
@@ -70,7 +109,8 @@ def init_database():
             
             if not enum_exists:
                 # Create the enum type without IF NOT EXISTS
-                create_enum_sql = "CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'done')"
+                # Create enum type with all values from TaskStatus model
+                create_enum_sql = "CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'in_review', 'done', 'cancelled')"
                 conn.execute(text(create_enum_sql))
                 db_logger.info("task_status enum created successfully")
             else:
@@ -84,7 +124,7 @@ def init_database():
             # Try alternative approach if the first one fails
             try:
                 # Try to create enum without checking (will fail if exists, but that's ok)
-                conn.execute(text("CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'done')"))
+                conn.execute(text("CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'in_review', 'done', 'cancelled')"))
                 conn.commit()
                 db_logger.info("task_status enum created successfully (alternative approach)")
             except Exception as alt_e:
@@ -101,9 +141,7 @@ def get_db():
     db_logger.debug("Creating new database session")
     db = SessionLocal()
     try:
-        # Test connection
-        db.execute(text("SELECT 1"))
-        db_logger.debug("Database connection test successful")
+        # Connection is already validated by pool_pre_ping=True
         yield db
     except Exception as e:
         db_logger.error(f"Database connection error: {e}")
@@ -116,12 +154,17 @@ def get_db():
 # Function to create all tables
 def create_tables():
     """
-    Create all database tables.
+    Create all database tables including TokenBlacklist.
     """
-    # First initialize enums
-    init_database()
-    # Then create tables
-    Base.metadata.create_all(bind=engine)
+    try:
+        # First initialize enums
+        init_database()
+        # Then create tables (this will include TokenBlacklist since it's imported in models/__init__.py)
+        Base.metadata.create_all(bind=engine)
+        db_logger.info("All database tables created successfully")
+    except Exception as e:
+        db_logger.error(f"Error creating tables: {e}")
+        raise e
 
 # Function to drop all tables (for testing)
 def drop_tables():

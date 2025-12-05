@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-// import { useUsers } from "@/hooks/use-api"; // Removed React Query
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,64 +26,150 @@ import {
   Users as UsersIcon,
   Activity,
   Crown,
-  User
+  User,
+  RefreshCw
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { User as UserType } from "@/types";
 import { UserRole } from "@/types";
+import { useAuthStore } from "@/stores/auth-store";
+import { usersApi } from "@/lib/api-endpoints";
+import { CustomSelect } from "@/components/ui/custom-select";
+import { getAvatarUrl } from "@/lib/utils";
 
 export default function UsersPage() {
-  // const { data: usersResponse, isLoading, error } = useUsers(); // Removed React Query
-  // const users = usersResponse?.data || [];
-  const users: UserType[] = []; // Empty array for now
-  const isLoading = false;
-  const error = null;
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
+  const { accessToken, isAuthenticated, isLoading } = useAuthStore();
+  const [dataFetched, setDataFetched] = useState(false);
+
+  // Refs to prevent duplicate API calls
+  const isLoadingRef = useRef(false);
+  const lastLoadTime = useRef<number>(0);
+
+  const loadUsers = useCallback(async (forceRefresh = false) => {
+    if (!accessToken) { return; }
+
+    // Rate limiting: prevent calls within 2 seconds of each other
+    const now = Date.now();
+    if (!forceRefresh && now - lastLoadTime.current < 2000 && dataFetched) {
+      console.log('Rate limiting: skipping loadUsers call');
+      return;
+    }
+
+    // Prevent duplicate concurrent calls
+    if (isLoadingRef.current) {
+      console.log('Already loading users, skipping duplicate call');
+      return;
+    }
+
+    try {
+      isLoadingRef.current = true;
+      lastLoadTime.current = now;
+
+      if (forceRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      // Try to fetch users from API
+      try {
+        const response = await usersApi.searchUsers("");
+        const userList = Array.isArray(response) ? response : (response as any).data || [];
+        setUsers(userList);
+      } catch (apiError) {
+        console.log('API not available, using empty array');
+        // Keep empty array if API is not available
+        setUsers([]);
+      }
+
+      setDataFetched(true);
+    } catch (err) {
+      console.error('Error loading users:', err);
+      setError('Failed to load users');
+    } finally {
+      isLoadingRef.current = false;
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [accessToken, dataFetched]);
+
+  useEffect(() => {
+    // Fast path: Skip if we're still loading or already have data
+    if (isLoading || dataFetched) { return; }
+
+    if (isAuthenticated && accessToken) {
+      loadUsers();
+    } else if (!isAuthenticated) {
+      setLoading(false);
+    }
+  }, [isAuthenticated, accessToken, isLoading, dataFetched, loadUsers]);
+
+  const handleRefresh = () => {
+    loadUsers(true);
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchQuery.toLowerCase());
-    
+      user.lastName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.username.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesRole = roleFilter === "all" || user.role === roleFilter;
-    const matchesStatus = statusFilter === "all" || 
-                         (statusFilter === "active" && user.isActive) ||
-                         (statusFilter === "inactive" && !user.isActive);
-    
+    const matchesStatus = statusFilter === "all" ||
+      (statusFilter === "active" && user.isActive) ||
+      (statusFilter === "inactive" && !user.isActive);
+
     return matchesSearch && matchesRole && matchesStatus;
   });
 
   const getRoleBadge = (role: UserRole) => {
     const roleConfig = {
-      [UserRole.ADMIN]: { 
-        label: "Admin", 
+      [UserRole.ADMIN]: {
+        label: "Admin",
         color: "bg-purple-500/20 text-purple-400",
         icon: <Crown className="h-3 w-3 mr-1" />
       },
-      [UserRole.MANAGER]: { 
-        label: "Manager", 
+      [UserRole.MANAGER]: {
+        label: "Manager",
         color: "bg-blue-500/20 text-blue-400",
         icon: <Shield className="h-3 w-3 mr-1" />
       },
-      [UserRole.MEMBER]: { 
-        label: "Member", 
+      [UserRole.MEMBER]: {
+        label: "Member",
         color: "bg-emerald-500/20 text-emerald-400",
         icon: <User className="h-3 w-3 mr-1" />
       },
-      [UserRole.VIEWER]: { 
-        label: "Viewer", 
+      [UserRole.VIEWER]: {
+        label: "Viewer",
         color: "bg-zinc-500/20 text-zinc-400",
         icon: <User className="h-3 w-3 mr-1" />
       }
     };
-    
+
     const config = roleConfig[role];
+
+    if (!config) {
+      return (
+        <Badge className="bg-zinc-500/20 text-zinc-400">
+          <User className="h-3 w-3 mr-1" />
+          {role || "Unknown"}
+        </Badge>
+      );
+    }
+
     return (
-      <Badge className={config.color}>
-        {config.icon}
-        {config.label}
+      <Badge className={config?.color || "bg-zinc-500/20 text-zinc-400"}>
+        {config?.icon}
+        {config?.label || role}
       </Badge>
     );
   };
@@ -97,7 +183,7 @@ export default function UsersPage() {
         </Badge>
       );
     }
-    
+
     if (!user.emailVerified) {
       return (
         <Badge className="bg-amber-500/20 text-amber-400">
@@ -130,18 +216,18 @@ export default function UsersPage() {
     if (!dateString) {
       return "Never logged in";
     }
-    
+
     const date = new Date(dateString);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+
     if (diffInHours < 1) {
       return "Just now";
     }
     if (diffInHours < 24) {
       return `${diffInHours}h ago`;
     }
-    
+
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays === 1) {
       return "Yesterday";
@@ -149,7 +235,7 @@ export default function UsersPage() {
     if (diffInDays < 7) {
       return `${diffInDays}d ago`;
     }
-    
+
     return formatDate(dateString);
   };
 
@@ -164,21 +250,130 @@ export default function UsersPage() {
     viewers: users.filter(u => u.role === UserRole.VIEWER).length,
   };
 
+  if (loading) {
+    return (
+      <ProtectedLayout>
+        <div className="space-y-8">
+          {/* Header Skeleton */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Skeleton className="h-10 w-24" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+          </div>
+
+          {/* Stats Grid Skeleton */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i} className="border-white/10 bg-white/5 backdrop-blur-sm">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-16 mb-2" />
+                  <Skeleton className="h-3 w-32" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Search and Filter Skeleton */}
+          <div className="flex flex-col lg:flex-row gap-4">
+            <Skeleton className="h-10 flex-1" />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-20" />
+            </div>
+          </div>
+
+          {/* Users List Skeleton */}
+          <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+            <CardContent className="p-0">
+              <div className="divide-y divide-white/10">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <Skeleton className="h-12 w-12 rounded-full" />
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="h-5 w-32" />
+                            <Skeleton className="h-5 w-20 rounded-full" />
+                            <Skeleton className="h-5 w-20 rounded-full" />
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Skeleton className="h-4 w-48" />
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-4 w-32" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-8 w-16" />
+                        <Skeleton className="h-8 w-24" />
+                        <Skeleton className="h-8 w-8" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </ProtectedLayout>
+    );
+  }
+
+  if (error && !dataFetched) {
+    return (
+      <ProtectedLayout>
+        <div className="flex flex-col items-center justify-center h-64 space-y-4">
+          <div className="text-red-400 text-center">
+            <p className="text-lg font-medium">{error}</p>
+            <button
+              onClick={() => loadUsers()}
+              className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </ProtectedLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-3xl font-bold tracking-tight text-white">Users</h2>
             <p className="mt-1 text-zinc-400">
               Manage team members and their permissions.
             </p>
           </div>
-          <Button className="bg-indigo-600 hover:bg-indigo-500 text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            Invite User
-          </Button>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex-1 sm:flex-none glass border-white/10 text-white hover:bg-white/10"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white">
+              <Plus className="h-4 w-4 mr-2" />
+              Invite User
+            </Button>
+          </div>
         </div>
 
         {/* Stats Grid */}
@@ -255,28 +450,30 @@ export default function UsersPage() {
               className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400"
             />
           </div>
-          <div className="flex gap-2">
-            <select
+          <div className="flex flex-col sm:flex-row gap-2">
+            <CustomSelect
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value as UserRole | "all")}
-              className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm"
-            >
-              <option value="all">All Roles</option>
-              <option value={UserRole.ADMIN}>Admin</option>
-              <option value={UserRole.MANAGER}>Manager</option>
-              <option value={UserRole.MEMBER}>Member</option>
-              <option value={UserRole.VIEWER}>Viewer</option>
-            </select>
-            <select
+              onChange={(value) => setRoleFilter(value as UserRole | "all")}
+              options={[
+                { value: "all", label: "All Roles" },
+                { value: UserRole.ADMIN, label: "Admin" },
+                { value: UserRole.MANAGER, label: "Manager" },
+                { value: UserRole.MEMBER, label: "Member" },
+                { value: UserRole.VIEWER, label: "Viewer" },
+              ]}
+              className="w-full sm:w-[140px]"
+            />
+            <CustomSelect
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
-              className="rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            <Button variant="outline" size="sm" className="border-white/10 text-white hover:bg-white/5">
+              onChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
+              options={[
+                { value: "all", label: "All Status" },
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
+              ]}
+              className="w-full sm:w-[140px]"
+            />
+            <Button variant="outline" className="glass border-white/10 text-white hover:bg-white/5">
               <Filter className="h-4 w-4 mr-2" />
               More
             </Button>
@@ -289,11 +486,32 @@ export default function UsersPage() {
             <div className="divide-y divide-white/10">
               {filteredUsers.map((user) => (
                 <div key={user.id} className="p-6 hover:bg-white/5 transition-colors">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                       {/* Avatar */}
-                      <div className="h-12 w-12 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center">
-                        <span className="text-lg font-medium text-zinc-300">
+                      <div className="h-12 w-12 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden relative group">
+                        {user.avatar ? (
+                          <img
+                            src={getAvatarUrl(user.avatar)}
+                            alt={`${user.firstName} ${user.lastName}`}
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              // Determine initials from parent scope or fallback
+                              const parent = target.parentElement;
+                              if (parent) {
+                                // We can't easily re-render React here, but we can show the fallback by hiding the image
+                                // The fallback initials span is separate, so maybe we structure this differently:
+                                // Image ON TOP of initials? Or switch ref?
+                                // Simpler approach: toggle a state? No, list is mapped.
+                                // Best approach: Use CSS to hide image if broken, and have initials underneath?
+                                // OR: Just let the initials be behind it.
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <span className={`text-lg font-medium text-zinc-300 absolute ${user.avatar ? '-z-10' : ''}`}>
                           {(user.firstName && typeof user.firstName === 'string' ? user.firstName[0] : '')}
                           {(user.lastName && typeof user.lastName === 'string' ? user.lastName[0] : '')}
                         </span>
@@ -301,18 +519,18 @@ export default function UsersPage() {
 
                       {/* User Info */}
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-3 mb-1">
+                        <div className="flex flex-wrap items-center gap-3 mb-1">
                           <h3 className="text-lg font-semibold text-white truncate">
                             {user.firstName} {user.lastName}
                           </h3>
                           {getStatusBadge(user)}
                           {getRoleBadge(user.role)}
                         </div>
-                        
-                        <div className="flex items-center gap-4 text-sm text-zinc-400">
+
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
                           <div className="flex items-center gap-1">
                             <Mail className="h-3 w-3" />
-                            <span>{user.email}</span>
+                            <span className="truncate">{user.email}</span>
                           </div>
                           <div className="flex items-center gap-1">
                             <User className="h-3 w-3" />
@@ -327,7 +545,7 @@ export default function UsersPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
                       <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white">
                         <Edit className="h-4 w-4 mr-1" />
                         Edit

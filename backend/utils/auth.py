@@ -2,15 +2,19 @@
 Authentication utilities for JWT token handling and password management.
 """
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 import os
 import json
 import time
+import uuid
 from dotenv import load_dotenv
 from utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = setup_logger("auth_utils")
 
@@ -18,20 +22,15 @@ logger = setup_logger("auth_utils")
 load_dotenv()
 
 # JWT Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# JWT Configuration
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required for security. Please set it in your .env file.")
 
-# Log environment information using proper logger
-logger.info("="*60)
-logger.info("JWT CONFIGURATION DEBUGGING")
-logger.info(f"SECRET_KEY environment variable exists: {'YES' if os.getenv('SECRET_KEY') else 'NO'}")
-logger.info(f"SECRET_KEY loaded: {'YES' if SECRET_KEY and SECRET_KEY != 'your-secret-key-here-change-in-production' else 'NO (using default)'}")
-logger.info(f"SECRET_KEY length: {len(SECRET_KEY) if SECRET_KEY else 0}")
-logger.info(f"SECRET_KEY first 10 chars: {SECRET_KEY[:10] if SECRET_KEY else 'None'}...")
-logger.info(f"ALGORITHM: {ALGORITHM}")
-logger.info(f"ACCESS_TOKEN_EXPIRE_MINUTES: {ACCESS_TOKEN_EXPIRE_MINUTES}")
-logger.info("="*60)
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
+
+
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -48,123 +47,136 @@ def get_password_hash(password: str) -> str:
     """
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """
-    Create a JWT access token.
+    Create a JWT access token with JWT ID (jti) for blacklist functionality.
     """
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"exp": int(expire.timestamp())})
+    
+    # Add JWT ID (jti) for blacklist functionality
+    jti = str(uuid.uuid4())
+    to_encode.update({
+        "exp": int(expire.timestamp()),
+        "jti": jti,
+        "iat": int(datetime.now(timezone.utc).timestamp())
+    })
+    
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str) -> dict:
+def verify_token(token: str) -> Dict[str, Any]:
     """
     Verify and decode a JWT token.
     """
     
     try:
         if not token:
-            logger.warning("Empty or None token provided to verify_token")
             raise ValueError("Token is empty or None")
-        
-        logger.debug(f"Attempting to decode token: {token[:20] if token else 'NO_TOKEN'}...")
-        logger.debug(f"Using SECRET_KEY: {SECRET_KEY[:10]}... (length: {len(SECRET_KEY)})")
-        logger.debug(f"Using ALGORITHM: {ALGORITHM}")
-        # A JWT has two dots (three parts). Use a correct check for debugging.
-        logger.debug(f"Token structure check - has 3 parts: {token.count('.') == 2 if token else False}")
         
         # Check token structure
         token_parts = token.split('.')
         if len(token_parts) != 3:
-            logger.warning(f"Invalid token structure - expected 3 parts, got {len(token_parts)}")
             raise ValueError("Invalid token structure")
             
-        # Try to decode payload for additional debugging
-        try:
-            import base64
-            # Add padding if needed
-            payload_b64 = token_parts[1]
-            # Calculate required padding
-            padding_needed = 4 - (len(payload_b64) % 4)
-            if padding_needed and padding_needed != 4:
-                payload_b64 += '=' * padding_needed
-            payload_json = base64.b64decode(payload_b64)
-            payload_data = json.loads(payload_json)
-            logger.debug(f"Token payload preview: {payload_data}")
-            
-            # Check expiration with timezone awareness
-            import time
-            current_time = int(time.time())
-            exp_time = payload_data.get('exp')
-            if exp_time:
-                logger.debug(f"Token expiration - current: {current_time}, exp: {exp_time}, time_until_expiry: {exp_time - current_time}")
-                if exp_time < current_time:
-                    logger.warning(f"Token has expired! Current time: {datetime.fromtimestamp(current_time, tz=timezone.utc)}, Exp: {datetime.fromtimestamp(exp_time, tz=timezone.utc)}")
-                    raise ValueError("Token has expired")
-        except Exception as payload_error:
-            logger.warning(f"Could not decode token payload for debugging: {payload_error}")
-        
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        logger.debug(f"Successfully decoded payload: {payload}")
         return payload
     except JWTError as e:
-        logger.error(f"JWTError occurred: {e}")
-        logger.error(f"SECRET_KEY being used: {SECRET_KEY[:10]}... (length: {len(SECRET_KEY)})")
-        logger.error(f"Token being verified: {token[:20] if token else 'NO_TOKEN'}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except ValueError as e:
-        logger.error(f"ValueError in verify_token: {e}")
-        logger.error(f"Token being verified: {token[:20] if token else 'NO_TOKEN'}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        logger.error(f"Unexpected error in verify_token: {e}")
-        logger.error(f"SECRET_KEY being used: {SECRET_KEY[:10]}... (length: {len(SECRET_KEY)})")
-        logger.error(f"Token being verified: {token[:20] if token else 'NO_TOKEN'}...")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-def authenticate_user(user, password: str) -> bool:
+
+def verify_token_with_blacklist(token: str, db_session: "Session") -> Dict[str, Any]:
+    """
+    Verify and decode a JWT token, checking if it's blacklisted.
+    
+    Args:
+        token: JWT token to verify
+        db_session: Database session for blacklist checking
+        
+    Returns:
+        dict: Decoded token payload
+        
+    Raises:
+        HTTPException: If token is invalid, expired, or blacklisted
+    """
+    # First verify the token normally
+    payload = verify_token(token)
+    
+    # Check if token is blacklisted
+    from models.token_blacklist import TokenBlacklist
+    token_jti = payload.get('jti')
+    
+    if token_jti and TokenBlacklist.is_token_blacklisted(db_session, token_jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return payload
+
+def get_token_expiration(token: str) -> Optional[datetime]:
+    """
+    Extract expiration time from a JWT token.
+    
+    Args:
+        token: JWT token
+        
+    Returns:
+        datetime: Expiration time of the token, or None if cannot be extracted
+    """
+    try:
+        token_parts = token.split('.')
+        if len(token_parts) != 3:
+            return None
+            
+        # Decode payload
+        import base64
+        payload_b64 = token_parts[1]
+        padding_needed = 4 - (len(payload_b64) % 4)
+        if padding_needed and padding_needed != 4:
+            payload_b64 += '=' * padding_needed
+        payload_json = base64.b64decode(payload_b64)
+        payload_data = json.loads(payload_json)
+        
+        exp_timestamp = payload_data.get('exp')
+        if exp_timestamp:
+            return datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+            
+    except Exception as e:
+        pass
+    return None
+
+def authenticate_user(user: Any, password: str) -> bool:
     """
     Authenticate a user by verifying their password.
     """
-    logger.info(f"authenticate_user called for user_id: {user.id if user else 'None'}")
-    logger.info(f"Password provided: {'YES' if password else 'NO'}")
-    logger.info(f"Password length: {len(password) if password else 0}")
-    
     if not user:
-        logger.warning("User object is None in authenticate_user")
         return False
         
     if not user.hashed_password:
-        logger.warning(f"User {user.id} has no hashed_password")
         return False
-    
-    logger.info(f"Attempting to verify password for user {user.id}")
-    logger.info(f"User hashed password length: {len(user.hashed_password) if user.hashed_password else 0}")
-    logger.info(f"User hashed password starts with: {user.hashed_password[:10] if user.hashed_password else 'None'}...")
     
     try:
         result = verify_password(password, user.hashed_password)
-        logger.info(f"Password verification result for user {user.id}: {result}")
         return result
     except Exception as e:
-        logger.error(f"Error during password verification for user {user.id}: {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
         return False
