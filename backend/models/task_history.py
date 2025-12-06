@@ -28,7 +28,7 @@ class TaskHistory(BaseModel):
     
     activity_type = Column(Enum(ActivityType), nullable=False, index=True)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
-    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=True, index=True)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     task_title = Column(String(255))
     description = Column(Text)

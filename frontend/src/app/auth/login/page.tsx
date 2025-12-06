@@ -1,8 +1,8 @@
 "use client";
 
 import { useGoogleLogin } from "@react-oauth/google";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,12 @@ import {
   ArrowRight,
   Loader2
 } from "lucide-react";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     email: "",
     password: ""
@@ -32,6 +35,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const message = searchParams.get("message");
+    if (message) {
+      toast.info(message);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +158,9 @@ export default function LoginPage() {
         stack: error instanceof Error ? error.stack : 'No stack trace',
         name: error instanceof Error ? error.name : 'Unknown'
       });
+      console.error('❌ Login error:', error);
+      const errorMessage = getErrorMessage(error);
+      toast.error("Login failed", { description: errorMessage });
       setErrors({ password: "Invalid email or password" });
     } finally {
       setIsLoading(false);
@@ -198,6 +211,7 @@ export default function LoginPage() {
         window.location.href = redirectUrl;
       } catch (error) {
         console.error('❌ Google login error:', error);
+        toast.error("Google login failed", { description: getErrorMessage(error) });
         setErrors({ submit: 'Google login failed. Please try again.' });
       } finally {
         setIsLoading(false);

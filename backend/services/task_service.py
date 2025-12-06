@@ -10,6 +10,7 @@ from models.project import Project, ProjectMember, MemberRole
 from models.user import User
 from schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskAssign
 from .task_history_service import TaskHistoryService
+from services.project_service import ProjectService
 from utils.logger import logger
 import uuid
 
@@ -19,6 +20,7 @@ class TaskService:
     def __init__(self, db: Session):
         self.db = db
         self.task_history_service = TaskHistoryService(db)
+        self.project_service = ProjectService(db)
     
     def get_task_by_id(self, task_id: uuid.UUID) -> Optional[Task]:
         """Get task by ID."""
@@ -131,14 +133,12 @@ class TaskService:
         if task.created_by == user_id or task.assignee_id == user_id:
             is_authorized = True
         else:
-            member = self.db.query(ProjectMember).filter(
-                ProjectMember.project_id == task.project_id,
-                ProjectMember.user_id == user_id
-            ).first()
-            if member and member.role in [MemberRole.OWNER.value, MemberRole.ADMIN.value]:
+            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
+            if self.project_service.is_project_admin(task.project_id, user_id):
                 is_authorized = True
         
         if not is_authorized:
+            logger.warning(f"User {user_id} unauthorized to update task {task_id}")
             raise ValueError("Not authorized to update this task")
         
         # Check if assignee exists (if provided)
@@ -239,14 +239,12 @@ class TaskService:
         if task.created_by == user_id:
             is_authorized = True
         else:
-            member = self.db.query(ProjectMember).filter(
-                ProjectMember.project_id == task.project_id,
-                ProjectMember.user_id == user_id
-            ).first()
-            if member and member.role in [MemberRole.OWNER.value, MemberRole.ADMIN.value]:
+            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
+            if self.project_service.is_project_admin(task.project_id, user_id):
                 is_authorized = True
         
         if not is_authorized:
+            logger.warning(f"User {user_id} unauthorized to delete task {task_id}")
             raise ValueError("Not authorized to delete this task")
         
         self.task_history_service.log_task_deleted(task, user_id)
@@ -270,14 +268,12 @@ class TaskService:
         if task.created_by == user_id or task.assignee_id == user_id:
             is_authorized = True
         else:
-            member = self.db.query(ProjectMember).filter(
-                ProjectMember.project_id == task.project_id,
-                ProjectMember.user_id == user_id
-            ).first()
-            if member and member.role in [MemberRole.OWNER.value, MemberRole.ADMIN.value]:
+            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
+            if self.project_service.is_project_admin(task.project_id, user_id):
                 is_authorized = True
         
         if not is_authorized:
+            logger.warning(f"User {user_id} unauthorized to update task status {task_id}")
             raise ValueError("Not authorized to update task status")
         
         old_status = task.status
@@ -318,14 +314,12 @@ class TaskService:
         if task.created_by == user_id:
             is_authorized = True
         else:
-            member = self.db.query(ProjectMember).filter(
-                ProjectMember.project_id == task.project_id,
-                ProjectMember.user_id == user_id
-            ).first()
-            if member and member.role in [MemberRole.OWNER.value, MemberRole.ADMIN.value]:
+            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
+            if self.project_service.is_project_admin(task.project_id, user_id):
                 is_authorized = True
         
         if not is_authorized:
+            logger.warning(f"User {user_id} unauthorized to assign task {task_id}")
             raise ValueError("Not authorized to assign task")
         
         assignee = self.db.query(User).filter(User.id == assign_data.assignee_id).first()

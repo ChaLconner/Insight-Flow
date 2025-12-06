@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function ResetPasswordPage() {
   const [token, setToken] = useState("");
@@ -22,7 +24,7 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get("token");
-    console.log("Reset password page loaded, token from URL:", tokenFromUrl);
+
 
     if (!tokenFromUrl) {
       console.error("No token found in URL");
@@ -36,9 +38,9 @@ export default function ResetPasswordPage() {
 
   const validateToken = async (token: string) => {
     try {
-      console.log("Validating reset token...");
+
+
       const response = await apiClient.post("/auth/validate-reset-token", { token });
-      console.log("Token validation response:", response.data);
 
       if (!response.data.valid) {
         setTokenError(response.data.message || "Invalid or expired reset token.");
@@ -78,7 +80,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    console.log("Reset password form submitted");
+
     setIsLoading(true);
     setError("");
 
@@ -88,21 +90,20 @@ export default function ResetPasswordPage() {
         new_password: newPassword
       });
 
-      console.log("Reset password response:", response.data);
+
 
       if (response.data.success) {
         setIsSuccess(true);
+        toast.success("Password reset successful", { description: "You can now login with your new password" });
       } else {
         setError("Failed to reset password. Please try again.");
+        toast.error("Failed to reset password");
       }
     } catch (err: any) {
       console.error("Reset password error:", err);
-      console.error("Error details:", {
-        message: err.message,
-        status: err.status,
-        response: err.response
-      });
-      setError(err.response?.data?.detail || err.message || "An error occurred. Please try again.");
+      const errorMsg = getErrorMessage(err);
+      setError(errorMsg);
+      toast.error("Failed to reset password", { description: errorMsg });
     } finally {
       setIsLoading(false);
     }

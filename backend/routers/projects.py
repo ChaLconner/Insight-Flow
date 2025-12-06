@@ -134,7 +134,9 @@ def read_projects_list(
     logger.debug(f"Called by user {current_user.id} with params: skip={skip}, limit={limit}, user_projects_only={user_projects_only}")
     
     project_service = ProjectService(db)
-    user_id = current_user.id if user_projects_only else None
+    
+    # Always filter by user_id to ensure users only see projects they have access to
+    user_id = current_user.id
     
     # Use optimized service method
     projects_with_stats = project_service.get_projects_with_stats(skip=skip, limit=limit, user_id=user_id)

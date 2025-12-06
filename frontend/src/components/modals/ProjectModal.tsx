@@ -13,6 +13,8 @@ import {
 import { type Project, ProjectStatus, type CreateProjectRequest, type UpdateProjectRequest, type User } from "@/types";
 import { apiClient } from "@/lib/api-client";
 import { getAvatarUrl } from "@/lib/utils";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -155,9 +157,18 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
         };
 
       await onSubmit(submitData);
+
+      const action = mode === "create" ? "created" : "updated";
+      toast.success(`Project ${action} successfully`, {
+        description: `Project "${formData.name}" has been ${action}.`
+      });
+
       onClose();
     } catch (error) {
       console.error("Error submitting project:", error);
+      toast.error(mode === "create" ? "Failed to create project" : "Failed to update project", {
+        description: getErrorMessage(error)
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -248,8 +259,8 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                       type="button"
                       onClick={() => handleInputChange("color", color)}
                       className={`h-8 w-8 rounded-lg border-2 transition-all ${formData.color === color
-                          ? "border-white scale-110"
-                          : "border-white/20 hover:border-white/40"
+                        ? "border-white scale-110"
+                        : "border-white/20 hover:border-white/40"
                         }`}
                       style={{ backgroundColor: color }}
                       disabled={isSubmitting}

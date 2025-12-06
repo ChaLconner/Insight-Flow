@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiClient } from "@/lib/api-client";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -18,27 +20,25 @@ export default function ForgotPasswordPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Forgot password form submitted for email:", email);
+
     setIsLoading(true);
     setError("");
 
     try {
       const response = await apiClient.post("/auth/forgot-password", { email });
-      console.log("Forgot password response:", response.data);
+
 
       if (response.data.success) {
         setIsSubmitted(true);
+        toast.success("Reset link sent", { description: "Check your email for instructions" });
       } else {
         setError("Failed to send reset email. Please try again.");
       }
     } catch (err: any) {
       console.error("Forgot password error:", err);
-      console.error("Error details:", {
-        message: err.message,
-        status: err.status,
-        response: err.response
-      });
-      setError(err.response?.data?.detail || err.message || "An error occurred. Please try again.");
+      const errorMsg = getErrorMessage(err);
+      setError(errorMsg);
+      toast.error("Failed to send reset link", { description: errorMsg });
     } finally {
       setIsLoading(false);
     }

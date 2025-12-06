@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { projectsApi } from "@/lib/api-endpoints";
 import type { Project } from "@/types";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 import { ArrowLeft, Calendar, Users, BarChart2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TaskList } from "@/components/tasks/TaskList";
@@ -19,22 +21,25 @@ export default function ProjectDetailsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchProject = async () => {
-            try {
-                setLoading(true);
-                const data = await projectsApi.getProject(projectId);
-                setProject(data);
-            } catch (err) {
-                console.error("Failed to fetch project:", err);
-                setError("Failed to load project details");
-            } finally {
-                setLoading(false);
+    const fetchProject = async (showLoading = true) => {
+        try {
+            if (showLoading) setLoading(true);
+            const data = await projectsApi.getProject(projectId);
+            setProject(data);
+        } catch (err) {
+            console.error("Failed to fetch project:", err);
+            setError("Failed to load project details");
+            if (!showLoading) { // Only show toast if not initial load to avoid double error UI
+                toast.error("Failed to load project details", { description: getErrorMessage(err) });
             }
-        };
+        } finally {
+            if (showLoading) setLoading(false);
+        }
+    };
 
+    useEffect(() => {
         if (projectId) {
-            fetchProject();
+            fetchProject(true);
         }
     }, [projectId]);
 
@@ -96,7 +101,7 @@ export default function ProjectDetailsPage() {
                     </div>
                     <div className="flex gap-2">
                         <Button
-                            variant="outline"
+                            variant="glass"
                             className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white hover:border-white/30 transition-all"
                             onClick={() => router.push(`/projects/${projectId}/settings`)}
                         >
@@ -148,6 +153,7 @@ export default function ProjectDetailsPage() {
                         title="Project Tasks"
                         description="Manage tasks for this project."
                         showProjectName={false}
+                        onTaskChange={() => fetchProject(false)}
                     />
                 </div>
             </div>

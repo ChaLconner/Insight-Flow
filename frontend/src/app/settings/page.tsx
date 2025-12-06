@@ -32,6 +32,7 @@ import { API_CONFIG } from "@/lib/constants";
 import { getAvatarUrl } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile");
@@ -145,7 +146,7 @@ export default function SettingsPage() {
   };
 
   const handleUpdatePassword = async () => {
-    console.log("Starting password update process");
+
 
     if (newPassword !== confirmPassword) {
       console.error("Password validation failed: passwords do not match");
@@ -159,10 +160,8 @@ export default function SettingsPage() {
     }
 
     try {
-      console.log("Attempting to change password");
       setSaving(true);
       const response = await authApi.changePassword(currentPassword, newPassword);
-      console.log("Password change response:", response);
       toast.success("Password updated successfully");
       setCurrentPassword("");
       setNewPassword("");
@@ -170,12 +169,11 @@ export default function SettingsPage() {
       setError(null);
     } catch (err: any) {
       console.error("Password change error:", err);
-      console.error("Error details:", {
-        message: err.message,
-        status: err.status,
-        response: err.response
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      toast.error("Failed to update password", {
+        description: errorMessage
       });
-      setError(err.response?.data?.detail || err.message || "Failed to update password. Please check your current password.");
     } finally {
       setSaving(false);
     }
@@ -259,7 +257,11 @@ export default function SettingsPage() {
       toast.success('Settings saved successfully!');
     } catch (err) {
       console.error('Error saving settings:', err);
-      setError('Failed to save settings');
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      toast.error("Failed to save settings", {
+        description: errorMessage
+      });
     } finally {
       setSaving(false);
     }
@@ -320,7 +322,9 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error('Failed to upload avatar:', err);
-      setError("Failed to upload avatar. Please try again.");
+      const errorMessage = getErrorMessage(err);
+      setError(errorMessage);
+      toast.error("Failed to upload avatar", { description: errorMessage });
       // Revert to previous avatar on error
       setProfileData(prev => ({ ...prev, avatar: previousAvatar }));
     } finally {

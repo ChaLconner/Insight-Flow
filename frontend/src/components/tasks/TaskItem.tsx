@@ -7,7 +7,8 @@ import {
     Calendar,
     User as UserIcon,
     Edit,
-    Trash2
+    Trash2,
+    Flag
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,8 +57,16 @@ export const TaskItem = memo(({
                             <div className="flex items-center gap-4 mt-1 text-xs text-zinc-400">
                                 {showProjectName && task.project && (
                                     <span className="flex items-center gap-1">
-                                        <span className="w-2 h-2 rounded-full bg-indigo-500/50" />
+                                        <span className="w-2 h-2 rounded-full bg-primary/50" />
                                         {task.project.name}
+                                    </span>
+                                )}
+                                {task.priority && (
+                                    <span className={`flex items-center gap-1 ${task.priority === 'high' || task.priority === 'urgent' ? 'text-red-400' :
+                                        task.priority === 'medium' ? 'text-yellow-400' : 'text-blue-400'
+                                        }`}>
+                                        <Flag className="h-3 w-3" />
+                                        <span className="capitalize">{task.priority}</span>
                                     </span>
                                 )}
                                 {task.dueDate && (
@@ -103,7 +112,7 @@ export const TaskItem = memo(({
                             </Button>
 
                             {isOpen && (
-                                <div className="absolute right-0 top-full mt-2 w-48 rounded-md border border-white/10 bg-[#18181b] shadow-xl z-50 py-1 ring-1 ring-black ring-opacity-5 focus:outline-none">
+                                <div className="absolute right-0 top-full mt-2 w-48 rounded-md border border-white/10 bg-[#18181b] shadow-xl z-50 py-1 ring-1 ring-black ring-opacity-5 focus:outline-none task-menu-dropdown">
                                     <button
                                         onClick={(e) => {
                                             e.preventDefault();

@@ -2,13 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, AlertCircle } from "lucide-react";
+import {
+    X,
+    AlertCircle,
+    Calendar,
+    Flag,
+    Tag,
+    Briefcase,
+    Layout
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { tasksApi, projectsApi } from "@/lib/api-endpoints";
 import type { Project, Task } from "@/types";
 import { TaskPriority, TaskType } from "@/types";
-import { useAuthStore } from "@/stores/auth-store";
+import { format } from "date-fns";
 
 interface NewTaskModalProps {
     isOpen: boolean;
@@ -22,14 +32,12 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [projectId, setProjectId] = useState(defaultProjectId || "");
-    const [priority, setPriority] = useState<TaskPriority>(TaskPriority.MEDIUM);
-    const [type, setType] = useState<TaskType>(TaskType.FEATURE);
+    const [priority, setPriority] = useState<string>(TaskPriority.MEDIUM);
+    const [type, setType] = useState<string>(TaskType.FEATURE);
     const [dueDate, setDueDate] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
-
-
 
     useEffect(() => {
         if (isOpen) {
@@ -87,24 +95,22 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
         setError(null);
 
         try {
+            const taskData: any = {
+                title,
+                description,
+                priority: priority as TaskPriority,
+                type: type as TaskType,
+                dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+            };
+
             if (task) {
                 // Update existing task
-                await tasksApi.updateTask(task.id, {
-                    title,
-                    description,
-                    priority,
-                    type,
-                    dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
-                });
+                await tasksApi.updateTask(task.id, taskData);
             } else {
                 // Create new task
                 await tasksApi.createTask(projectId, {
-                    title,
-                    description,
-                    projectId,
-                    priority,
-                    type,
-                    dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+                    ...taskData,
+                    projectId
                 });
             }
             onTaskCreated();
@@ -126,137 +132,162 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
         }
     };
 
+    // Helper options for selects
+    const projectOptions = projects.map(p => ({ value: p.id, label: p.name }));
+    const priorityOptions = Object.values(TaskPriority).map(p => ({
+        value: p,
+        label: p.charAt(0).toUpperCase() + p.slice(1).replace('_', ' ')
+    }));
+    const typeOptions = Object.values(TaskType).map(t => ({
+        value: t,
+        label: t.charAt(0).toUpperCase() + t.slice(1).replace('_', ' ')
+    }));
+
     return (
         <AnimatePresence>
             {isOpen && (
-                <>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                     />
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+                        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#18181b]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
                     >
-                        <div className="p-6 space-y-6">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-semibold text-white">{task ? "Edit Task" : "New Task"}</h2>
-                                <Button variant="ghost" size="icon" onClick={onClose} className="text-zinc-400 hover:text-white">
-                                    <X className="h-5 w-5" />
-                                </Button>
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/5">
+                            <div className="flex items-center gap-2">
+                                <Layout className="h-5 w-5 text-indigo-400" />
+                                <h2 className="text-lg font-semibold text-white">
+                                    {task ? "Edit Task" : "Create New Task"}
+                                </h2>
                             </div>
+                            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-zinc-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+                                <X className="h-4 w-4" />
+                            </Button>
+                        </div>
 
+                        <div className="p-6">
                             {error && (
-                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2 text-red-400 text-sm">
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mb-4 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center gap-2 text-red-400 text-sm"
+                                >
                                     <AlertCircle className="h-4 w-4" />
                                     {error}
-                                </div>
+                                </motion.div>
                             )}
 
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-zinc-400">Title</label>
-                                    <Input
-                                        value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
-                                        placeholder="What needs to be done?"
-                                        className="bg-white/5 border-white/10 text-white placeholder:text-zinc-500"
-                                        autoFocus
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-zinc-400">Description</label>
-                                    <textarea
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        placeholder="Add more details..."
-                                        className="w-full min-h-[100px] rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    {!defaultProjectId && !task && (
-                                        <div className="space-y-2 col-span-2">
-                                            <label className="text-sm font-medium text-zinc-400">Project</label>
-                                            <select
-                                                value={projectId}
-                                                onChange={(e) => setProjectId(e.target.value)}
-                                                className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                                            >
-                                                <option value="" disabled>Select a project</option>
-                                                {projects.map((p) => (
-                                                    <option key={p.id} value={p.id} className="bg-zinc-900">
-                                                        {p.name}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-zinc-400">Priority</label>
-                                        <select
-                                            value={priority}
-                                            onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                                            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                                        >
-                                            {Object.values(TaskPriority).map((p) => (
-                                                <option key={p} value={p} className="bg-zinc-900">
-                                                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-zinc-400">Type</label>
-                                        <select
-                                            value={type}
-                                            onChange={(e) => setType(e.target.value as TaskType)}
-                                            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                                        >
-                                            {Object.values(TaskType).map((t) => (
-                                                <option key={t} value={t} className="bg-zinc-900">
-                                                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-zinc-400">Due Date</label>
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                {/* Main Fields */}
+                                <div className="space-y-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">Title</label>
                                         <Input
-                                            type="date"
-                                            value={dueDate}
-                                            onChange={(e) => setDueDate(e.target.value)}
-                                            className="bg-white/5 border-white/10 text-white"
+                                            value={title}
+                                            onChange={(e) => setTitle(e.target.value)}
+                                            placeholder="What needs to be done?"
+                                            className="bg-black/20 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-indigo-500/50 text-lg py-6"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">Description</label>
+                                        <Textarea
+                                            value={description}
+                                            onChange={(e) => setDescription(e.target.value)}
+                                            placeholder="Add details, context, and acceptance criteria..."
+                                            className="min-h-[120px] bg-black/20 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-indigo-500/50 resize-none"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-4">
-                                    <Button type="button" variant="ghost" onClick={onClose} className="text-zinc-400 hover:text-white">
+                                {/* Meta Fields Grid */}
+                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                    {!defaultProjectId && !task && (
+                                        <div className="space-y-1.5 col-span-2">
+                                            <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
+                                                <Briefcase className="h-3 w-3" />
+                                                Project
+                                            </div>
+                                            <CustomSelect
+                                                value={projectId}
+                                                onChange={setProjectId}
+                                                options={projectOptions}
+                                                className="w-full bg-black/20 border-white/10"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
+                                            <Flag className="h-3 w-3" />
+                                            Priority
+                                        </div>
+                                        <CustomSelect
+                                            value={priority}
+                                            onChange={setPriority}
+                                            options={priorityOptions}
+                                            className="w-full bg-black/20 border-white/10"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
+                                            <Tag className="h-3 w-3" />
+                                            Type
+                                        </div>
+                                        <CustomSelect
+                                            value={type}
+                                            onChange={setType}
+                                            options={typeOptions}
+                                            className="w-full bg-black/20 border-white/10"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5 col-span-2">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
+                                            <Calendar className="h-3 w-3" />
+                                            Due Date
+                                        </div>
+                                        <div className="relative">
+                                            <Input
+                                                type="date"
+                                                value={dueDate}
+                                                onChange={(e) => setDueDate(e.target.value)}
+                                                className="bg-black/20 border-white/10 text-white w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="flex items-center justify-end gap-3 pt-6 border-t border-white/5">
+                                    <Button type="button" variant="ghost" onClick={onClose} className="text-zinc-400 hover:text-white hover:bg-white/5">
                                         Cancel
                                     </Button>
                                     <Button
                                         type="submit"
                                         disabled={loading}
-                                        className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
                                     >
-                                        {loading ? (task ? "Saving..." : "Creating...") : (task ? "Save Changes" : "Create Task")}
+                                        {loading ? (task ? "Saving Changes..." : "Creating Task...") : (task ? "Save Changes" : "Create Task")}
                                     </Button>
                                 </div>
                             </form>
                         </div>
                     </motion.div>
-                </>
+                </div>
             )}
         </AnimatePresence>
     );
 }
+

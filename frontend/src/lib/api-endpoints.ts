@@ -203,10 +203,13 @@ export const tasksApi = {
   },
 
   // Get user's tasks
-  getMyTasks: async (skip = 0, limit = 100): Promise<Task[]> => {
-    const cacheKey = `tasks-getMyTasks-${skip}-${limit}`;
+  getMyTasks: async (skip = 0, limit = 100, search?: string, status?: string): Promise<Task[]> => {
+    const cacheKey = `tasks-getMyTasks-${skip}-${limit}-${search}-${status}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/tasks/my/tasks', { params: { skip, limit } });
+      const params: any = { skip, limit };
+      if (search) params.search = search;
+      if (status && status !== 'all') params.status = status;
+      const { data } = await apiClient.get('/tasks/my/tasks', { params });
       return data;
     }, cacheKey);
   },

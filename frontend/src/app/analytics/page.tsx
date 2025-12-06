@@ -30,6 +30,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { analyticsApi } from "@/lib/api-endpoints";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { getAvatarUrl } from "@/lib/utils";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 // Define types for analytics data
 interface AnalyticsOverview {
@@ -133,6 +135,7 @@ export default function AnalyticsPage() {
     } catch (err) {
       console.error('Error loading analytics data:', err);
       setError('Failed to load analytics data');
+      toast.error('Failed to load analytics data', { description: getErrorMessage(err) });
     } finally {
       isLoadingRef.current = false;
       setLoading(false);

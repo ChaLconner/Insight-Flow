@@ -42,8 +42,9 @@ import { useAuthStore } from "@/stores/auth-store";
 import { projectsApi } from "@/lib/api-endpoints";
 import type { TaskListRef } from "@/components/tasks/TaskList";
 import { TaskList } from "@/components/tasks/TaskList";
-import { NewTaskModal } from "@/components/tasks/NewTaskModal";
 import { getAvatarUrl } from "@/lib/utils";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 
 // Colors for projects
@@ -58,7 +59,6 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") ?? "");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all");
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
 
@@ -410,16 +410,21 @@ export default function ProjectsPage() {
         // Refresh projects to get updated data
         loadProjects(true);
       }
+
       setIsProjectModalOpen(false);
       setEditingProject(null);
       setError(null); // Clear any previous errors on success
+
+      toast.success(modalMode === "create" ? "Project created" : "Project updated", {
+        description: `Project "${apiData.name}" has been ${modalMode === "create" ? "created" : "updated"} successfully.`
+      });
     } catch (error) {
       console.error("Error saving project:", error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to save project. Please try again.";
+      const errorMessage = getErrorMessage(error);
       setError(errorMessage);
+      toast.error(modalMode === "create" ? "Failed to create project" : "Failed to update project", {
+        description: errorMessage
+      });
     }
   };
 
@@ -446,17 +451,24 @@ export default function ProjectsPage() {
       // API call - assuming the backend accepts is_active or status update
       // We cast to any here because we're sending a partial update that might not perfectly match the strict type yet
       await projectsApi.updateProject(project.id, { is_active: false } as any);
+
+      toast.success("Project archived", {
+        description: `Project "${project.name}" has been moved to archive.`
+      });
     } catch (error) {
       console.error("Failed to archive project:", error);
       // Revert on error
       loadProjects(true);
+      toast.error("Failed to archive project", {
+        description: getErrorMessage(error)
+      });
     }
   };
 
   // Enhanced token validation checks removed as we use cookies
 
 
-  if (loading && !refreshing) {
+  if (loading && !refreshing && activeTab === "projects") {
     return (
       <ProtectedLayout>
         <div className="space-y-8">
@@ -579,21 +591,13 @@ export default function ProjectsPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            {activeTab === "projects" ? (
+            {activeTab === "projects" && (
               <Button
                 onClick={handleCreateProject}
                 className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 New Project
-              </Button>
-            ) : (
-              <Button
-                className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white"
-                onClick={() => setIsNewTaskModalOpen(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New Task
               </Button>
             )}
           </div>
@@ -949,7 +953,7 @@ export default function ProjectsPage() {
             )}
           </>
         ) : (
-          <div className="w-full">
+          <div className="w-full min-h-[500px]">
             <TaskList
               ref={taskListRef}
               hideHeader={true}
@@ -967,15 +971,6 @@ export default function ProjectsPage() {
           onSubmit={handleProjectSubmit}
         />
 
-        {/* New Task Modal */}
-        <NewTaskModal
-          isOpen={isNewTaskModalOpen}
-          onClose={() => setIsNewTaskModalOpen(false)}
-          onTaskCreated={() => {
-            taskListRef.current?.refresh();
-            setIsNewTaskModalOpen(false);
-          }}
-        />
       </div>
     </ProtectedLayout >
   );

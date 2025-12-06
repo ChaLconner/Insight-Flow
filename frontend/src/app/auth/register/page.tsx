@@ -24,6 +24,8 @@ import {
   Check,
   X
 } from "lucide-react";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -53,19 +55,19 @@ export default function RegisterPage() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.firstName.trim()) {newErrors.firstName = "First name is required";}
-    if (!formData.lastName.trim()) {newErrors.lastName = "Last name is required";}
-    if (!formData.email.trim()) {newErrors.email = "Email is required";}
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {newErrors.email = "Invalid email format";}
-    if (!formData.username.trim()) {newErrors.username = "Username is required";}
-    if (formData.username.length < 3) {newErrors.username = "Username must be at least 3 characters";}
-    if (!formData.password) {newErrors.password = "Password is required";}
+    if (!formData.firstName.trim()) { newErrors.firstName = "First name is required"; }
+    if (!formData.lastName.trim()) { newErrors.lastName = "Last name is required"; }
+    if (!formData.email.trim()) { newErrors.email = "Email is required"; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { newErrors.email = "Invalid email format"; }
+    if (!formData.username.trim()) { newErrors.username = "Username is required"; }
+    if (formData.username.length < 3) { newErrors.username = "Username must be at least 3 characters"; }
+    if (!formData.password) { newErrors.password = "Password is required"; }
     if (!passwordRequirements.every(req => req.test(formData.password))) {
       newErrors.password = "Password doesn't meet requirements";
     }
-    if (!formData.confirmPassword) {newErrors.confirmPassword = "Please confirm your password";}
-    if (formData.password !== formData.confirmPassword) {newErrors.confirmPassword = "Passwords don't match";}
-    if (!acceptTerms) {newErrors.terms = "You must accept terms and conditions";}
+    if (!formData.confirmPassword) { newErrors.confirmPassword = "Please confirm your password"; }
+    if (formData.password !== formData.confirmPassword) { newErrors.confirmPassword = "Passwords don't match"; }
+    if (!acceptTerms) { newErrors.terms = "You must accept terms and conditions"; }
 
     return newErrors;
   };
@@ -98,20 +100,26 @@ export default function RegisterPage() {
       const { data } = await apiClient.post('/auth/register', backendUserData);
 
       // Registration successful - redirect to login
-      router.push("/auth/login?message=Registration successful. Please sign in.");
+      toast.success("Account created successfully", {
+        description: "Please sign in with your new account.",
+      });
+      router.push("/auth/login");
     } catch (error: any) {
       console.error("Registration error:", error);
 
       // Handle API errors
+      let errorMessage = "";
       if (error.response?.data?.detail) {
-        setApiError(error.response.data.detail);
+        errorMessage = error.response.data.detail;
       } else if (error.response?.data?.message) {
-        setApiError(error.response.data.message);
+        errorMessage = error.response.data.message;
       } else if (error.message) {
-        setApiError(error.message);
+        errorMessage = error.message;
       } else {
-        setApiError("Registration failed. Please try again.");
+        errorMessage = "Registration failed. Please try again.";
       }
+      setApiError(errorMessage);
+      toast.error("Registration failed", { description: errorMessage });
     } finally {
       setIsLoading(false);
     }
@@ -142,6 +150,10 @@ export default function RegisterPage() {
         const data = await response.json();
         console.log('✅ Google login/register successful');
 
+        toast.success(`Welcome ${data.user.firstName || 'User'}!`, {
+          description: "Successfully signed in with Google.",
+        });
+
         await authActions.loginWithResponse(data);
 
         const user = data.user;
@@ -162,6 +174,7 @@ export default function RegisterPage() {
       } catch (error) {
         console.error('❌ Google login error:', error);
         setApiError('Google login failed. Please try again.');
+        toast.error("Google login failed", { description: getErrorMessage(error) });
       } finally {
         setIsLoading(false);
       }
@@ -170,6 +183,7 @@ export default function RegisterPage() {
       console.error('❌ Google login failed');
       setApiError('Google login failed. Please try again.');
       setIsLoading(false);
+      toast.error("Google login failed");
     },
     flow: 'implicit',
   });

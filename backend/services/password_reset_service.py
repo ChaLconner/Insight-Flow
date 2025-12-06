@@ -131,14 +131,58 @@ class PasswordResetService:
             True if successful, False otherwise
         """
         try:
-            # In development, just log the reset link
+            # Check for SMTP configuration in environment
+            smtp_host = os.getenv("SMTP_HOST")
+            smtp_port = os.getenv("SMTP_PORT")
+            smtp_user = os.getenv("SMTP_USER")
+            smtp_password = os.getenv("SMTP_PASSWORD")
+            sender_email = os.getenv("SENDER_EMAIL", smtp_user)
+
+            reset_link = f"http://localhost:3000/auth/reset-password?token={token}"
+            
+            # If SMTP config is present, try to send real email
+            if smtp_host and smtp_port and smtp_user and smtp_password:
+                import smtplib
+                from email.mime.text import MIMEText
+                from email.mime.multipart import MIMEMultipart
+
+                msg = MIMEMultipart()
+                msg['From'] = sender_email
+                msg['To'] = email
+                msg['Subject'] = "Insight-Flow Password Reset Request"
+
+                body = f"""
+                <p>Hello,</p>
+                <p>You have requested to reset your password for Insight-Flow.</p>
+                <p>Please click the link below to verify your email and reset your password:</p>
+                <p><a href="{reset_link}">{reset_link}</a></p>
+                <p>If you did not request this, please ignore this email.</p>
+                <p>This link will expire in 30 minutes.</p>
+                <br>
+                <p>Best regards,</p>
+                <p>The Insight-Flow Team</p>
+                """
+                
+                msg.attach(MIMEText(body, 'html'))
+
+                try:
+                    server = smtplib.SMTP(smtp_host, int(smtp_port))
+                    server.starttls()
+                    server.login(smtp_user, smtp_password)
+                    text = msg.as_string()
+                    server.sendmail(sender_email, email, text)
+                    server.quit()
+                    logger.info(f"Password reset email sent successfully to {email}")
+                    return True
+                except Exception as smtp_error:
+                    logger.error(f"Failed to send email via SMTP: {smtp_error}. Falling back to mock logger.")
+                    # Fallback to logger if SMTP fails
+            
+            # Default/Fallback: Log the reset link (Dev mode)
             if os.getenv("ENVIRONMENT", "development") == "development":
-                reset_link = f"http://localhost:3000/auth/reset-password?token={token}"
                 logger.info(f"MOCK EMAIL: Password reset link for {email}: {reset_link}")
                 return True
             
-            # In production, implement actual email sending
-            # TODO: Implement real email service
             logger.warning(f"Email service not configured. Password reset token for {email}: {token}")
             return True
             

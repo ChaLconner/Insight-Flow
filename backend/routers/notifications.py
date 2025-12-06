@@ -31,7 +31,21 @@ async def get_notifications(
         .offset(skip)\
         .limit(limit)\
         .all()
-    return notifications
+    
+    # Convert to response format to handle schema properly
+    result = []
+    for notif in notifications:
+        result.append(NotificationResponse(
+            id=notif.id,
+            user_id=notif.user_id,
+            type=notif.type,
+            title=notif.title,
+            message=notif.message,
+            data=notif.data,
+            is_read=notif.is_read,
+            created_at=notif.created_at
+        ))
+    return result
 
 @router.get("/unread-count", response_model=int)
 async def get_unread_count(
@@ -70,7 +84,18 @@ async def mark_notification_read(
     notification.is_read = True
     db.commit()
     db.refresh(notification)
-    return notification
+    
+    # Convert to response format to handle schema properly
+    return NotificationResponse(
+        id=notification.id,
+        user_id=notification.user_id,
+        type=notification.type,
+        title=notification.title,
+        message=notification.message,
+        data=notification.data,
+        is_read=notification.is_read,
+        created_at=notification.created_at
+    )
 
 @router.put("/read-all", response_model=List[NotificationResponse])
 async def mark_all_read(
@@ -90,11 +115,26 @@ async def mark_all_read(
     db.commit()
     
     # Return updated list (recent 50)
-    return db.query(Notification)\
+    updated_notifications = db.query(Notification)\
         .filter(Notification.user_id == current_user.id)\
         .order_by(Notification.created_at.desc())\
         .limit(50)\
         .all()
+    
+    # Convert to response format to handle schema properly
+    result = []
+    for notif in updated_notifications:
+        result.append(NotificationResponse(
+            id=notif.id,
+            user_id=notif.user_id,
+            type=notif.type,
+            title=notif.title,
+            message=notif.message,
+            data=notif.data,
+            is_read=notif.is_read,
+            created_at=notif.created_at
+        ))
+    return result
 
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_notification(

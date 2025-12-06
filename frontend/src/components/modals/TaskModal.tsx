@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,14 @@ import {
   Flag,
   Clock,
   Tag,
-  FileText,
-  Save,
-  Loader2,
   Paperclip,
-  MessageCircle
+  MessageCircle,
+  Save,
+  Loader2
 } from "lucide-react";
 import type { Task, CreateTaskRequest } from "@/types";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 import { TaskStatus, TaskPriority, TaskType } from "@/types";
 
 interface TaskModalProps {
@@ -28,19 +29,6 @@ interface TaskModalProps {
   mode: "create" | "edit";
   onSubmit: (data: CreateTaskRequest) => Promise<void>;
 }
-
-const mockProjects = [
-  { id: "1", name: "Website Redesign", color: "#6366f1" },
-  { id: "2", name: "Mobile App Development", color: "#10b981" },
-  { id: "3", name: "Marketing Campaign Q1", color: "#f59e0b" },
-];
-
-const mockUsers = [
-  { id: "1", name: "John Doe", email: "john@company.com" },
-  { id: "2", name: "Sarah Chen", email: "sarah@company.com" },
-  { id: "3", name: "Mike Ross", email: "mike@company.com" },
-  { id: "4", name: "Alex Morgan", email: "alex@company.com" },
-];
 
 const priorityConfig = {
   [TaskPriority.LOW]: { label: "Low", color: "bg-zinc-500/20 text-zinc-400", icon: Flag },
@@ -75,6 +63,59 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const [projects, setProjects] = useState<any[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<any[]>([]);
+  const [isLoadingResources, setIsLoadingResources] = useState(false);
+
+  // Fetch projects on mount
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const { projectsApi } = await import('@/lib/api-endpoints');
+        const data = await projectsApi.getProjects(0, 100);
+        setProjects(data);
+
+        // If we're in edit mode and have a project ID, fetch its members
+        if (task?.projectId) {
+          const members: any = await projectsApi.getProjectMembers(task.projectId);
+          if (Array.isArray(members)) {
+            setAssignableUsers(members.map((m: any) => m.user));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch projects:", error);
+      }
+    };
+    fetchProjects();
+  }, [task?.projectId]);
+
+  // Fetch members when project changes
+  useEffect(() => {
+    const fetchMembers = async () => {
+      if (!formData.projectId) {
+        setAssignableUsers([]);
+        return;
+      }
+
+      try {
+        const { projectsApi } = await import('@/lib/api-endpoints');
+        const members: any = await projectsApi.getProjectMembers(formData.projectId);
+        if (Array.isArray(members)) {
+          setAssignableUsers(members.map((m: any) => m.user));
+        }
+      } catch (error) {
+        console.error("Failed to fetch project members:", error);
+        setAssignableUsers([]);
+      }
+    };
+
+    // Only fetch if it's different from the initial task project (already handled)
+    // or if we just selected a new one
+    if (formData.projectId && formData.projectId !== task?.projectId) {
+      fetchMembers();
+    }
+  }, [formData.projectId, task?.projectId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -82,9 +123,9 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!formData.title.trim()) {newErrors.title = "Task title is required";}
-    if (!formData.projectId) {newErrors.projectId = "Project is required";}
-    
+    if (!formData.title.trim()) { newErrors.title = "Task title is required"; }
+    if (!formData.projectId) { newErrors.projectId = "Project is required"; }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       setIsSubmitting(false);
@@ -105,9 +146,21 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
       };
 
       await onSubmit(submitData);
+
+      const successMessage = mode === "create"
+        ? `Task "${formData.title}" created successfully`
+        : `Task "${formData.title}" updated successfully`;
+
+      toast.success(successMessage, {
+        description: "Your changes have been saved.",
+      });
+
       onClose();
     } catch (error) {
       console.error("Error submitting task:", error);
+      toast.error(mode === "create" ? "Failed to create task" : "Failed to update task", {
+        description: getErrorMessage(error)
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -120,18 +173,18 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
     }
   };
 
-  const selectedProject = mockProjects.find(p => p.id === formData.projectId);
+  const selectedProject = projects.find(p => p.id === formData.projectId);
 
-  if (!isOpen) {return null;}
+  if (!isOpen) { return null; }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <Card className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-2xl">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
@@ -147,7 +200,7 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
             <X className="h-4 w-4" />
           </Button>
         </CardHeader>
-        
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Basic Information */}
@@ -159,9 +212,8 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
                   value={formData.title}
                   onChange={(e) => handleInputChange("title", e.target.value)}
                   placeholder="Enter task title"
-                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                    errors.title ? "border-red-500" : ""
-                  }`}
+                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.title ? "border-red-500" : ""
+                    }`}
                   disabled={isSubmitting}
                 />
                 {errors.title && (
@@ -191,13 +243,12 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
                   id="projectId"
                   value={formData.projectId}
                   onChange={(e) => handleInputChange("projectId", e.target.value)}
-                  className={`w-full rounded-lg bg-white/5 border px-3 py-2 text-white text-sm ${
-                    errors.projectId ? "border-red-500" : "border-white/10"
-                  }`}
+                  className={`w-full rounded-lg bg-white/5 border px-3 py-2 text-white text-sm ${errors.projectId ? "border-red-500" : "border-white/10"
+                    }`}
                   disabled={isSubmitting}
                 >
                   <option value="">Select a project</option>
-                  {mockProjects.map((project) => (
+                  {projects.map((project) => (
                     <option key={project.id} value={project.id}>
                       {project.name}
                     </option>
@@ -285,9 +336,9 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
                   disabled={isSubmitting}
                 >
                   <option value="">Unassigned</option>
-                  {mockUsers.map((user) => (
+                  {assignableUsers.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.name}
+                      {user.name || user.email || user.username}
                     </option>
                   ))}
                 </select>

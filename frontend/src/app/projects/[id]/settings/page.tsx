@@ -12,6 +12,8 @@ import {
 } from "@/components/ui";
 import { projectsApi } from "@/lib/api-endpoints";
 import type { Project } from "@/types";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 
 export default function ProjectSettingsPage() {
@@ -49,7 +51,7 @@ export default function ProjectSettingsPage() {
     }, [projectId]);
 
     const handleSave = async () => {
-        if (!project) {return;}
+        if (!project) { return; }
 
         try {
             setSaving(true);
@@ -58,25 +60,29 @@ export default function ProjectSettingsPage() {
                 description,
             });
             router.push(`/projects/${project.id}`);
+            toast.success("Project updated successfully");
         } catch (err) {
             console.error("Failed to update project:", err);
             setError("Failed to update project");
+            toast.error("Failed to update project", { description: getErrorMessage(err) });
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async () => {
-        if (!project) {return;}
-        if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {return;}
+        if (!project) { return; }
+        if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) { return; }
 
         try {
             setSaving(true);
             await projectsApi.deleteProject(project.id);
+            toast.success("Project deleted successfully");
             router.push("/projects");
         } catch (err) {
             console.error("Failed to delete project:", err);
             setError("Failed to delete project");
+            toast.error("Failed to delete project", { description: getErrorMessage(err) });
             setSaving(false);
         }
     };

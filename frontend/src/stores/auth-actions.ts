@@ -4,6 +4,7 @@
 
 import { useAuthStore, resetGlobalAuthInitialization } from './auth-store';
 import { AuthResponse } from '@/types';
+import { toast } from 'sonner';
 
 // Track initialization state to prevent duplicate calls
 // Track initialization state to prevent duplicate calls
@@ -34,6 +35,10 @@ export const authActions = {
     // Update store (store tokens as well for compatibility)
     login(user);
 
+    toast.success(`Welcome back, ${user?.firstName || user?.username || 'User'}!`, {
+      description: 'You have successfully logged in.',
+    });
+
     console.log('✅ Login successful for user:', user?.email ?? 'unknown');
   },
 
@@ -57,6 +62,7 @@ export const authActions = {
           // ignore
         }
         window.dispatchEvent(new CustomEvent('auth:logout'));
+        toast.info('Logged out', { description: 'You have been safely logged out.' });
         window.location.href = '/auth/login';
       })();
     }

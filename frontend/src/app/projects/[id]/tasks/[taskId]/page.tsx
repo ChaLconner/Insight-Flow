@@ -11,6 +11,8 @@ import type { Task } from "@/types";
 import { ArrowLeft, Calendar, User as UserIcon, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function TaskDetailsPage() {
     const params = useParams();
@@ -31,6 +33,7 @@ export default function TaskDetailsPage() {
             } catch (err) {
                 console.error("Failed to fetch task:", err);
                 setError("Failed to load task details");
+                toast.error("Failed to load task details", { description: getErrorMessage(err) });
             } finally {
                 setLoading(false);
             }
@@ -150,8 +153,8 @@ export default function TaskDetailsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
-                                        <UserIcon className="h-4 w-4 text-indigo-400" />
+                                    <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                        <UserIcon className="h-4 w-4 text-primary" />
                                     </div>
                                     <div>
                                         <p className="text-xs text-zinc-500">Assignee</p>

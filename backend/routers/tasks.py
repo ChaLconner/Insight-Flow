@@ -15,9 +15,56 @@ from routers.auth import get_current_active_user
 from utils.logger import setup_logger
 import uuid
 
+def map_task_to_response(task: Task) -> TaskWithDetails:
+    """Helper to map Task model to TaskWithDetails schema with normalized status."""
+    # Properly handle TaskStatus enum conversion and ensure lowercase
+    status_value = str(task.status.value if hasattr(task.status, 'value') else task.status).lower()
+    status_value = status_value if status_value else 'todo'
+        
+    return TaskWithDetails(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        status=status_value,
+        project_id=task.project_id,
+        assignee_id=task.assignee_id,
+        created_by=task.created_by,
+        due_date=task.due_date,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
+        assignee=task.assignee,
+        creator=task.creator,
+        project=task.project
+    )
+
 # The logger sends the logs to the root logger
 logger = setup_logger("tasks_router")
 router = APIRouter()
+
+# IMPORTANT: This route must be defined BEFORE /{task_id} to prevent "my" being captured as task_id
+@router.get("/my/tasks", response_model=List[TaskWithDetails])
+def get_my_tasks(
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get tasks assigned to or created by current user.
+    """
+    task_service = TaskService(db)
+    tasks = task_service.get_user_tasks(
+        current_user.id,
+        skip=skip,
+        limit=limit,
+        search=search,
+        status=status
+    )
+    
+    # Convert tasks to response format with full details
+    return [map_task_to_response(task) for task in tasks]
 
 @router.get("/", response_model=List[TaskWithDetails])
 def get_all_tasks(
@@ -41,38 +88,7 @@ def get_all_tasks(
     )
     
     # Convert tasks to response format with full details
-    task_responses = []
-    for task in tasks:
-        # Fixed: Properly handle TaskStatus enum conversion and ensure lowercase
-        status_value = ""
-        if hasattr(task.status, 'value'):
-            status_value = task.status.value
-        elif isinstance(task.status, TaskStatus):
-            status_value = task.status.value
-        else:
-            status_value = str(task.status)
-        
-        # Ensure status is returned as lowercase to match frontend expectations
-        status_value = status_value.lower() if status_value else 'todo'
-            
-        task_response = TaskWithDetails(
-            id=task.id,
-            title=task.title,
-            description=task.description,
-            status=status_value,
-            project_id=task.project_id,
-            assignee_id=task.assignee_id,
-            created_by=task.created_by,
-            due_date=task.due_date,
-            created_at=task.created_at,
-            updated_at=task.updated_at,
-            assignee=task.assignee,
-            creator=task.creator,
-            project=task.project
-        )
-        task_responses.append(task_response)
-    
-    return task_responses
+    return [map_task_to_response(task) for task in tasks]
 
 @router.get("/{task_id}", response_model=TaskWithDetails)
 def read_task(
@@ -83,7 +99,6 @@ def read_task(
     """
     Get task by ID with full details.
     """
-    import uuid
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
@@ -107,28 +122,8 @@ def read_task(
             detail="Not a member of this project"
         )
     
-    # Ensure status is returned as lowercase to match frontend expectations
-    status_value = task.status.value if hasattr(task.status, 'value') else str(task.status)
-    status_value = status_value.lower() if status_value else 'todo'
-    
     # Create response with full details
-    task_response = TaskWithDetails(
-        id=task.id,
-        title=task.title,
-        description=task.description,
-        status=status_value,
-        project_id=task.project_id,
-        assignee_id=task.assignee_id,
-        created_by=task.created_by,
-        due_date=task.due_date,
-        created_at=task.created_at,
-        updated_at=task.updated_at,
-        assignee=task.assignee,
-        creator=task.creator,
-        project=task.project
-    )
-    
-    return task_response
+    return map_task_to_response(task)
 
 
 
@@ -142,7 +137,6 @@ def update_task(
     """
     Update task information.
     """
-    import uuid
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
@@ -179,7 +173,6 @@ def delete_task(
     """
     Delete a task.
     """
-    import uuid
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
@@ -217,7 +210,6 @@ def update_task_status(
     """
     Update task status.
     """
-    import uuid
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
@@ -266,7 +258,6 @@ def assign_task(
     """
     Assign task to a user.
     """
-    import uuid
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
@@ -312,47 +303,3 @@ def assign_task(
 
 
 
-@router.get("/my/tasks", response_model=List[TaskWithDetails])
-def get_my_tasks(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """
-    Get tasks assigned to or created by current user.
-    """
-    task_service = TaskService(db)
-    tasks = task_service.get_user_tasks(current_user.id, skip=skip, limit=limit)
-    
-    # Convert tasks to response format with full details
-    task_responses = []
-    for task in tasks:
-        # Fixed: Properly handle TaskStatus enum conversion and ensure lowercase
-        status_value = ""
-        if hasattr(task.status, 'value'):
-            status_value = task.status.value
-        elif isinstance(task.status, TaskStatus):
-            status_value = task.status.value
-        else:
-            status_value = str(task.status)
-        
-        # Ensure status is returned as lowercase to match frontend expectations
-        status_value = status_value.lower() if status_value else 'todo'
-            
-        task_responses.append(TaskWithDetails(
-            id=task.id,
-            title=task.title,
-            description=task.description,
-            status=status_value,
-            project_id=task.project_id,
-            assignee_id=task.assignee_id,
-            created_by=task.created_by,
-            due_date=task.due_date,
-            created_at=task.created_at,
-            updated_at=task.updated_at,
-            assignee=task.assignee,
-            creator=task.creator,
-            project=task.project
-        ))
-    return task_responses

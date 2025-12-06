@@ -6,6 +6,7 @@ import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } f
 import axiosRetry from 'axios-retry';
 import { API_CONFIG, ERROR_MESSAGES } from '@/lib/constants';
 import { useAuthStore } from '@/stores/auth-store';
+import { toast } from "sonner";
 
 // Request deduplication cache removed for simplicity
 // const requestCache = new Map<string, Promise<any>>();
@@ -97,6 +98,7 @@ async function clearAuthTokens(): Promise<void> {
 
   // Attempt server-side logout to clear HttpOnly cookies
   try {
+    toast.error("Session expired", { description: "Please log in again." });
     await axios.post(`${API_CONFIG.BASE_URL}/auth/logout`, {}, { withCredentials: true });
   } catch (e) {
     // ignore

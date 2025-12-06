@@ -36,6 +36,8 @@ import { useAuthStore } from "@/stores/auth-store";
 import { usersApi } from "@/lib/api-endpoints";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { getAvatarUrl } from "@/lib/utils";
+import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/error-utils";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserType[]>([]);
@@ -95,6 +97,7 @@ export default function UsersPage() {
     } catch (err) {
       console.error('Error loading users:', err);
       setError('Failed to load users');
+      toast.error('Failed to load users', { description: getErrorMessage(err) });
     } finally {
       isLoadingRef.current = false;
       setLoading(false);
@@ -369,7 +372,7 @@ export default function UsersPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
-            <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white">
+            <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white" onClick={() => toast.info("Invite user feature coming soon")}>
               <Plus className="h-4 w-4 mr-2" />
               Invite User
             </Button>
@@ -546,17 +549,17 @@ export default function UsersPage() {
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 self-end sm:self-auto">
-                      <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white">
+                      <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white" onClick={() => toast.info("Edit user feature coming soon")}>
                         <Edit className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
                       {user.isActive ? (
-                        <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-red-400">
+                        <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-red-400" onClick={() => toast.info("Deactivate user feature coming soon")}>
                           <UserX className="h-4 w-4 mr-1" />
                           Deactivate
                         </Button>
                       ) : (
-                        <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-emerald-400">
+                        <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-emerald-400" onClick={() => toast.info("Activate user feature coming soon")}>
                           <UserCheck className="h-4 w-4 mr-1" />
                           Activate
                         </Button>
