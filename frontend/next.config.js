@@ -91,6 +91,16 @@ const nextConfig = {
         ];
     },
 
+    // API Proxy Rewrites
+    async rewrites() {
+        return [
+            {
+                source: '/api/:path*',
+                destination: 'http://localhost:8000/:path*',
+            },
+        ];
+    },
+
     // Removed webpack config for Next.js 16 with Turbopack
     // Turbopack handles optimizations automatically
 };

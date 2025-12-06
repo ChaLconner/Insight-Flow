@@ -3,7 +3,7 @@ Authentication router for login, register, and token management.
 """
 from datetime import timedelta
 from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from schemas.user import UserCreate, UserLogin, UserResponse, Token, GoogleAuth
@@ -20,27 +20,52 @@ from utils.rate_limiter import auth_rate_limiter
 from database import get_db
 from utils.logger import setup_logger
 import uuid
+import os 
 
 logger = setup_logger("auth_router")
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+# Configuration
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_KEY = "access_token"
+REFRESH_TOKEN_KEY = "refresh_token"
+# Set secure=True in production, False in development
+# IMPORTANT: For localhost development (HTTP), this MUST be False.
+COOKIE_SECURE = os.getenv("ENVIRONMENT") == "production"
+if not COOKIE_SECURE:
+    logger.info("⚠️ COOKIE_SECURE is FALSE (Development Mode). Cookies will be accepted over HTTP.")
+else:
+    logger.info("🔒 COOKIE_SECURE is TRUE (Production Mode). HTTPS required for cookies.") 
+
+
 # OAuth2 scheme for token authentication
 # Set auto_error=False so we can fallback to cookie-based tokens when Authorization header is absent
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
+
+
+def get_token_from_cookie_or_header(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme)
+) -> Optional[str]:
+    """Get token from Authorization header or HttpOnly cookie."""
+    if token:
+        return token
+    return request.cookies.get(ACCESS_TOKEN_KEY)
+
 def get_current_user(
     request: Request,
     db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    token: Optional[str] = Depends(get_token_from_cookie_or_header)
 ) -> Any:
-    """Get current authenticated user from token (Authorization: Bearer ...)."""
-    # The token is extracted by OAuth2PasswordBearer from Authorization header
+    """Get current authenticated user from token (Cookie or Header)."""
     try:
         if not token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="No token provided",
+                detail="Not authenticated - No token provided",
             )
 
         # Verify token with blacklist checking
@@ -131,7 +156,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> Any:
             detail=str(e)
         )
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Any)
 def login(
     login_data: UserLogin, 
     response: Response, 
@@ -139,10 +164,9 @@ def login(
     _ = Depends(auth_rate_limiter)
 ) -> Any:
     """
-    Authenticate user and return access token using database authentication.
+    Authenticate user and set access/refresh tokens as HttpOnly cookies.
     """
-    logger.info(f"Login attempt for email: {login_data.email}")
-    # Removed sensitive password logging
+    logger.info(f"Login attempt for email: {login_data.email}")    # Removed sensitive password logging
     
     try:
         # Use real database authentication
@@ -165,34 +189,48 @@ def login(
             )
         
         # Create tokens for authenticated user
-        access_token_expires = timedelta(minutes=30)
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": str(user.id)}, expires_delta=access_token_expires
         )
         
         # Create refresh token with longer expiration
-        refresh_token_expires = timedelta(days=7)
+        refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         refresh_token = create_access_token(
             data={"sub": str(user.id)}, expires_delta=refresh_token_expires
         )
         
-        tokens = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "expires_in": 1800  # 30 minutes in seconds
-        }
+        # Set HttpOnly cookies
+        response.set_cookie(
+            key=ACCESS_TOKEN_KEY,
+            value=access_token,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            path="/"
+        )
+        
+        response.set_cookie(
+            key=REFRESH_TOKEN_KEY,
+            value=refresh_token,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            path="/"
+        )
 
-        logger.info(f"Tokens created successfully for user {login_data.email}")
-        # Removed sensitive token length logging
-
-        # Prepare response data - include user object for frontend compatibility
+        logger.info(f"Tokens set as HttpOnly cookies for user {login_data.email}")
+        logger.info(f"Cookie settings: secure={COOKIE_SECURE}, samesite='lax', httponly=True, path='/'")
+        
+        # Prepare user info
         user_role = getattr(user, 'role', None)
         if not user_role:
-            user_role = 'user'  # Default role for existing users without role field
-        
-        response_data = {
-            **tokens,
+            user_role = 'user'
+
+        # Return user info without tokens in body
+        return {
+            "message": "Login successful",
             "user": {
                 "id": str(user.id),
                 "email": user.email,
@@ -201,9 +239,6 @@ def login(
                 "is_active": user.is_active
             }
         }
-        
-        # Return tokens in body (Bearer token flow)
-        return response_data
         
     except HTTPException as http_err:
         logger.error(f"HTTP error during login: {http_err.detail}")
@@ -220,7 +255,7 @@ def read_users_me(current_user: User = Depends(get_current_active_user)) -> Any:
     return current_user
 
 @router.post("/google")
-def google_login(google_data: GoogleAuth, db: Session = Depends(get_db)) -> Any:
+def google_login(response: Response, google_data: GoogleAuth, db: Session = Depends(get_db)) -> Any:
     """
     Authenticate user with Google OAuth.
     """
@@ -256,9 +291,8 @@ def google_login(google_data: GoogleAuth, db: Session = Depends(get_db)) -> Any:
                 detail="Email is not verified"
             )
         
-        user_service = UserService(db)
-        
         # Create or update user from Google authentication
+        user_service = UserService(db)
         user = user_service.create_or_update_google_user(
             google_id=google_user_info["id"],
             email=google_user_info["email"],
@@ -272,35 +306,58 @@ def google_login(google_data: GoogleAuth, db: Session = Depends(get_db)) -> Any:
                 detail="Inactive user"
             )
         
-        access_token_expires = timedelta(minutes=30)
+        # Create access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": str(user.id)}, expires_delta=access_token_expires
         )
         
         # Create refresh token with longer expiration
-        refresh_token_expires = timedelta(days=7)
+        refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         refresh_token = create_access_token(
             data={"sub": str(user.id)}, expires_delta=refresh_token_expires
         )
         
-        # Prepare response data - include user object for frontend compatibility
-        user_role = getattr(user, 'role', None)
-        if not user_role:
-            user_role = 'user'  # Default role for existing users without role field
+        # Set HttpOnly cookies
+        response.set_cookie(
+            key=ACCESS_TOKEN_KEY,
+            value=access_token,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/"
+        )
         
-        response_data = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "expires_in": 1800,  # 30 minutes in seconds
+        response.set_cookie(
+            key=REFRESH_TOKEN_KEY,
+            value=refresh_token,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            path="/"
+        )
+        
+        return {
+            "message": "Login successful",
             "user": {
                 "id": str(user.id),
                 "email": user.email,
                 "name": user.name,
-                "role": user_role,
+                "role": user.role,
                 "is_active": user.is_active
             }
         }
+        
+    except HTTPException as http_err:
+        logger.error(f"HTTP error during Google login: {http_err.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during Google login: {str(e)}")
+        raise
+        
+        pass # Placeholder to signify I realized I need to change signature.
         
 
         return response_data
@@ -317,17 +374,26 @@ def google_login(google_data: GoogleAuth, db: Session = Depends(get_db)) -> Any:
 @router.post("/logout")
 def logout(
     request: Request,
+    response: Response,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Logout user and blacklist the current access token.
+    Logout user, clear cookies, and blacklist the current access token.
     """
     try:
-        # Extract token from Authorization header
-        auth_header = request.headers.get("authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+        # Clear cookies
+        response.delete_cookie(ACCESS_TOKEN_KEY)
+        response.delete_cookie(REFRESH_TOKEN_KEY)
+        
+        # Get token from cookie or header
+        token = request.cookies.get(ACCESS_TOKEN_KEY)
+        if not token:
+            auth_header = request.headers.get("authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+        
+        if token:
             
             # Get token payload to extract jti and expiration
             from utils.auth import verify_token
@@ -348,20 +414,24 @@ def logout(
         # Still return success even if blacklisting fails
         return {"message": "Successfully logged out"}
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=Any)
 def refresh_token(
     request: Request,
     response: Response,
     db: Session = Depends(get_db)
 ) -> Any:
     """
-    Refresh access token using a refresh token with rotation.
+    Refresh access token using a refresh token from HttpOnly cookie.
     """
-    # Expect refresh token via Authorization header: Bearer <refresh_token>
-    auth_header = request.headers.get("authorization")
-    refresh_token = None
-    if auth_header and auth_header.startswith("Bearer "):
-        refresh_token = auth_header.split(" ")[1]
+    # Get refresh token from cookie
+    refresh_token = request.cookies.get(REFRESH_TOKEN_KEY)
+    
+    # Fallback/Debug: check header
+    if not refresh_token:
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            refresh_token = auth_header.split(" ")[1]
+            
     if not refresh_token:
         logger.error("Refresh token is null or empty")
         raise HTTPException(

@@ -78,6 +78,25 @@ class TaskHistoryService:
             query = query.filter(TaskHistory.activity_type.in_(activity_types))
         
         return query.order_by(TaskHistory.timestamp.desc()).limit(limit).all()
+        
+    def get_recent_activities_for_projects(
+        self,
+        project_ids: List[uuid.UUID],
+        limit: int = 20,
+        activity_types: Optional[List[ActivityType]] = None
+    ) -> List[TaskHistory]:
+        """
+        Get recent activities across multiple projects.
+        """
+        if not project_ids:
+            return []
+            
+        query = self.db.query(TaskHistory).filter(TaskHistory.project_id.in_(project_ids))
+        
+        if activity_types:
+            query = query.filter(TaskHistory.activity_type.in_(activity_types))
+        
+        return query.order_by(TaskHistory.timestamp.desc()).limit(limit).all()
     
     def get_task_activities(self, task_id: uuid.UUID) -> List[TaskHistory]:
         """
@@ -117,7 +136,7 @@ class TaskHistoryService:
             new_values={
                 "title": task.title,
                 "description": task.description,
-                "status": task.status if task.status else None,
+                "status": task.status.value if hasattr(task.status, 'value') else str(task.status) if task.status else None,
                 "assignee_id": str(task.assignee_id) if task.assignee_id else None,
                 "due_date": task.due_date.isoformat() if task.due_date else None
             }
@@ -133,6 +152,17 @@ class TaskHistoryService:
         """
         Log task update activity.
         """
+        # Ensure status in new_values/old_values is serializable if present
+        if new_values and 'status' in new_values:
+            status_val = new_values['status']
+            if hasattr(status_val, 'value'):
+                new_values['status'] = status_val.value
+        
+        if old_values and 'status' in old_values:
+            status_val = old_values['status']
+            if hasattr(status_val, 'value'):
+                old_values['status'] = status_val.value
+
         return self.create_activity(
             activity_type=ActivityType.TASK_UPDATED,
             project_id=task.project_id,
@@ -148,6 +178,7 @@ class TaskHistoryService:
         """
         Log task completion activity.
         """
+        status_val = task.status.value if hasattr(task.status, 'value') else str(task.status)
         return self.create_activity(
             activity_type=ActivityType.TASK_COMPLETED,
             project_id=task.project_id,
@@ -155,7 +186,7 @@ class TaskHistoryService:
             task_id=task.id,
             task_title=task.title,
             description=f"Completed task: {task.title}",
-            new_values={"status": task.status if task.status else None}
+            new_values={"status": status_val if task.status else None}
         )
     
     def log_task_assigned(self, task: Task, assignee_id: uuid.UUID, assigned_by: uuid.UUID) -> TaskHistory:
@@ -194,6 +225,7 @@ class TaskHistoryService:
         """
         Log task deletion activity.
         """
+        status_val = task.status.value if hasattr(task.status, 'value') else str(task.status)
         return self.create_activity(
             activity_type=ActivityType.TASK_DELETED,
             project_id=task.project_id,
@@ -204,7 +236,7 @@ class TaskHistoryService:
             old_values={
                 "title": task.title,
                 "description": task.description,
-                "status": task.status if task.status else None
+                "status": status_val if task.status else None
             }
         )
     def log_project_member_added(self, project_id: uuid.UUID, member_name: str, added_by: uuid.UUID) -> TaskHistory:

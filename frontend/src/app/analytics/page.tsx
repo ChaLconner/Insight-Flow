@@ -90,7 +90,7 @@ export default function AnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
 
-  const { accessToken, isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const [dataFetched, setDataFetched] = useState(false);
 
   // Refs to prevent duplicate API calls
@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
   const lastLoadTime = useRef<number>(0);
 
   const loadAnalyticsData = useCallback(async (forceRefresh = false) => {
-    if (!accessToken) {
+    if (!isAuthenticated) {
       return;
     }
 
@@ -138,18 +138,18 @@ export default function AnalyticsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [accessToken, selectedPeriod, dataFetched]);
+  }, [isAuthenticated, selectedPeriod, dataFetched]);
 
   useEffect(() => {
     // Fast path: Skip if we're still loading or already have data
     if (isLoading || dataFetched) { return; }
 
-    if (isAuthenticated && accessToken) {
+    if (isAuthenticated) {
       loadAnalyticsData();
     } else if (!isAuthenticated) {
       setLoading(false);
     }
-  }, [isAuthenticated, accessToken, isLoading, dataFetched, loadAnalyticsData]);
+  }, [isAuthenticated, isLoading, dataFetched, loadAnalyticsData]);
 
   useEffect(() => {
     if (dataFetched) {

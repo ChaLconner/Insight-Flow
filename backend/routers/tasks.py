@@ -312,7 +312,7 @@ def assign_task(
 
 
 
-@router.get("/my/tasks", response_model=List[TaskResponse])
+@router.get("/my/tasks", response_model=List[TaskWithDetails])
 def get_my_tasks(
     skip: int = 0,
     limit: int = 100,

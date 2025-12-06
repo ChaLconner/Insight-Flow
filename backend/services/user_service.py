@@ -60,9 +60,16 @@ class UserService:
         """Create a new user."""
         try:
             # Create user object
+            # Ensure name consistency
+            name = user_data.name
+            if not name and (user_data.first_name or user_data.last_name):
+                name = f"{user_data.first_name or ''} {user_data.last_name or ''}".strip()
+
             db_user = User(
                 email=user_data.email,
-                name=user_data.name,
+                name=name,
+                first_name=user_data.first_name,
+                last_name=user_data.last_name,
                 avatar_url=user_data.avatar_url,
                 google_id=user_data.google_id,
                 role="user",  # Set default role

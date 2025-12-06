@@ -130,3 +130,17 @@ class ProjectWithMembers(ProjectResponse):
         alias_generator=to_camel,
         populate_by_name=True
     )
+
+class ProjectSummary(ProjectBase):
+    """Schema for project summary in task list."""
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = ConfigDict(
+        from_attributes=True,
+        alias_generator=to_camel,
+        populate_by_name=True
+    )

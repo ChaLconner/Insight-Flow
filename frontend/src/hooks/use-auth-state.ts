@@ -25,23 +25,12 @@ export const useAuthState = () => {
       if (initializationRef.current) { return; }
       initializationRef.current = true;
 
-      // Check if we have a token in storage
-      const hasToken = typeof window !== 'undefined' && !!useAuthStore.getState().accessToken;
-
-      if (hasToken) {
-        // Initialize auth directly without waiting for backend health check
-        // This prevents infinite loading states
-        try {
-          console.log('🔄 Initializing auth directly...');
-          await authActions.initializeAuth();
-        } catch (error) {
-          console.error('❌ Failed to initialize auth:', error);
-          if (mounted && store.isLoading) {
-            store.setLoading(false);
-          }
-        }
-      } else {
-        // No token, ensure loading is false
+      // Initialize auth checks for session via cookie
+      try {
+        console.log('🔄 Initializing auth...');
+        await authActions.initializeAuth();
+      } catch (error) {
+        console.error('❌ Failed to initialize auth:', error);
         if (mounted && store.isLoading) {
           store.setLoading(false);
         }
@@ -144,7 +133,6 @@ export const useAuthState = () => {
     user: currentUser,
     isAuthenticated,
     isLoading: isLoading,
-    accessToken: store.accessToken, // Return access token
     error: null,
 
     // Computed values
@@ -161,9 +149,7 @@ export const useAuthState = () => {
 
     // Store methods for advanced usage
     setUser: store.setUser,
-    setTokens: store.setTokens,
     setLoading: store.setLoading,
-    refreshAuthToken: store.refreshAuthToken,
   };
 };
 
@@ -179,7 +165,6 @@ export const useAuth = () => {
     userInitials,
     isAdmin,
     isManagerOrHigher,
-    accessToken,
   } = useAuthState();
 
   return {
@@ -189,7 +174,6 @@ export const useAuth = () => {
     userInitials,
     isAdmin,
     isManagerOrHigher,
-    accessToken,
   };
 };
 
@@ -203,7 +187,6 @@ export const useRequireAuth = () => {
     isAuthenticated,
     isLoading,
     logout,
-    accessToken,
   } = useAuthState();
 
   // Use ref for timeout to avoid sharing state between hook instances
@@ -213,13 +196,13 @@ export const useRequireAuth = () => {
     // Add minimal debouncing to prevent rapid redirects (optimized for speed)
     if (!redirectTimeoutRef.current) {
       const timeoutId = setTimeout(() => {
-        // Fast path: if authenticated and has user AND token, no need to check further
-        if (isAuthenticated && user && accessToken) {
+        // Fast path: if authenticated and has user, no need to check further
+        if (isAuthenticated && user) {
           return;
         }
 
-        // If not authenticated (or no token) and not loading, redirect to login immediately
-        if ((!isAuthenticated || !user || !accessToken) && !isLoading && typeof window !== 'undefined') {
+        // If not authenticated and not loading, redirect to login immediately
+        if ((!isAuthenticated || !user) && !isLoading && typeof window !== 'undefined') {
           // Check if we are already on the login page to prevent loops
           const path = window.location.pathname;
           if (path.startsWith('/auth/login') || path.startsWith('/auth/register')) {
@@ -230,7 +213,7 @@ export const useRequireAuth = () => {
           const isAuthPage = path.startsWith('/auth/login') || path.startsWith('/auth/register');
           if (!isAuthPage) {
             // Use replace to avoid history stack issues
-            console.warn('🔒 useRequireAuth: Redirecting to login (missing auth/token)');
+            console.warn('🔒 useRequireAuth: Redirecting to login (missing auth)');
             window.location.replace('/auth/login');
           }
         }

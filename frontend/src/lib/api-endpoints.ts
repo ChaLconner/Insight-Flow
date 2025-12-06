@@ -15,7 +15,8 @@ import type {
   UpdateProjectRequest,
   CreateTaskRequest,
   UpdateTaskRequest,
-  Notification
+  Notification,
+  RecentActivity
 } from '@/types';
 
 // ===========================================
@@ -469,15 +470,14 @@ export const dashboardApi = {
       teamVelocityChange?: string;
       teamVelocityTrend?: 'up' | 'down';
     };
-    recentActivities: unknown[];
+    recentProjects: Project[];
+    recentActivities: RecentActivity[];
     upcomingDeadlines: unknown[];
     charts: unknown[];
   }> => {
-    const cacheKey = 'dashboard-getOverview';
-    return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/dashboard/overview');
-      return data;
-    }, cacheKey);
+    const { data } = await apiClient.get('/dashboard/overview');
+    return data;
+
   },
 
   // Get user's tasks for today

@@ -73,6 +73,31 @@ app.add_middleware(
 
 # Custom middleware for CORS debugging removed for performance
 
+# Trusted Host Middleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0"]
+)
+
+from sqlalchemy.exc import IntegrityError
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    app_logger.warning(f"ValueError: {exc}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)}
+    )
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    app_logger.warning(f"IntegrityError: {exc}")
+    return JSONResponse(
+        status_code=409,
+        content={"detail": "Database constraint violation or conflict"}
+    )
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -93,7 +118,7 @@ app.add_middleware(CacheMiddleware, cache_timeout=60)
 # Include routers - order matters for overlapping routes!
 app.include_router(projects.router, tags=["projects"])
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
-app.include_router(analytics.router, tags=["analytics"])
+app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(users.router, tags=["users"])
 app.include_router(auth.router, tags=["auth"])
 app.include_router(dashboard.router, tags=["dashboard"])

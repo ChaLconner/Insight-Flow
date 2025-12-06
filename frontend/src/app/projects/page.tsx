@@ -70,7 +70,6 @@ export default function ProjectsPage() {
   );
   const taskListRef = useRef<TaskListRef>(null);
 
-  const accessToken = useAuthStore(state => state.accessToken);
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
   const isLoading = useAuthStore(state => state.isLoading);
   const user = useAuthStore(state => state.user);
@@ -93,7 +92,7 @@ export default function ProjectsPage() {
 
   // Memoized loadProjects function
   const loadProjects = useCallback(async (forceRefresh = false) => {
-    if (!accessToken) return;
+    if (!isAuthenticated) return;
 
     try {
       if (forceRefresh) {
@@ -239,10 +238,10 @@ export default function ProjectsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [accessToken, dataFetched]);
+  }, [isAuthenticated, dataFetched]);
 
   const createProject = async (projectData: CreateProjectRequest): Promise<Project> => {
-    if (!accessToken) { throw new Error('No access token found'); }
+    if (!isAuthenticated) { throw new Error('User not authenticated'); }
 
     const response = await projectsApi.createProject(projectData) as any;
 
@@ -311,22 +310,15 @@ export default function ProjectsPage() {
 
   // Initial load
   useEffect(() => {
-    if (accessToken && !dataFetched) {
+    if (isAuthenticated && !dataFetched) {
       loadProjects();
     }
-  }, [accessToken, dataFetched, loadProjects]);
+  }, [isAuthenticated, dataFetched, loadProjects]);
 
   // Fallback timeout to prevent infinite loading
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (loading && !dataFetched) {
-        // If authenticated but no token, try to reload to recover state
-        if (isAuthenticated && !accessToken) {
-          console.warn('⚠️ ProjectsPage: Authenticated but missing token, reloading...');
-          window.location.reload();
-          return;
-        }
-
         console.warn('⚠️ ProjectsPage: Loading timeout');
         setError('Loading timed out. Please check your connection and refresh.');
         setLoading(false);
@@ -334,7 +326,7 @@ export default function ProjectsPage() {
     }, 45000); // Increased to 45 second timeout
 
     return () => clearTimeout(timeout);
-  }, [loading, dataFetched, isAuthenticated, accessToken]);
+  }, [loading, dataFetched, isAuthenticated]);
 
   const filteredProjects = projects
     .filter(project => {
@@ -389,7 +381,7 @@ export default function ProjectsPage() {
   const handleProjectSubmit = async (
     data: CreateProjectRequest | UpdateProjectRequest
   ) => {
-    if (!accessToken) { return; }
+    if (!isAuthenticated) { return; }
 
     try {
       // Prepare data for API
@@ -440,7 +432,7 @@ export default function ProjectsPage() {
   };
 
   const handleArchiveProject = async (project: Project) => {
-    if (!accessToken) { return; }
+    if (!isAuthenticated) { return; }
     if (!confirm("Are you sure you want to archive this project?")) { return; }
 
     try {
@@ -461,11 +453,8 @@ export default function ProjectsPage() {
     }
   };
 
-  // Enhanced token validation
-  if (accessToken && accessToken.length < 50) {
-    console.warn('⚠️ ProjectsPage: Access token seems invalid (too short)');
-    // We don't return here, we let the auth store handle logout if needed, or show error below
-  }
+  // Enhanced token validation checks removed as we use cookies
+
 
   if (loading && !refreshing) {
     return (
@@ -544,20 +533,20 @@ export default function ProjectsPage() {
     );
   }
 
-  // Handle missing access token or error state
-  if (!accessToken || error) {
+  // Handle missing authentication or error state
+  if (!isAuthenticated || error) {
     return (
       <ProtectedLayout>
         <div className="flex flex-col items-center justify-center h-64 space-y-4">
           <div className="text-red-400 text-center">
             <p className="text-lg font-medium">
-              {!accessToken ? 'Authentication required. Please log in again.' : error}
+              {!isAuthenticated ? 'Authentication required. Please log in again.' : error}
             </p>
             <button
-              onClick={() => !accessToken ? router.push('/auth/login') : handleRefresh()}
+              onClick={() => !isAuthenticated ? router.push('/auth/login') : handleRefresh()}
               className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
             >
-              {!accessToken ? 'Go to Login' : 'Retry'}
+              {!isAuthenticated ? 'Go to Login' : 'Retry'}
             </button>
           </div>
         </div>
@@ -645,9 +634,10 @@ export default function ProjectsPage() {
             {/* Search and Filter */}
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" aria-hidden="true" />
                 <Input
                   placeholder="Search projects..."
+                  aria-label="Search projects"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400"
@@ -881,46 +871,50 @@ export default function ProjectsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="View Project"
                             className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(`/projects/${project.id}`);
                             }}
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4" aria-hidden="true" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Edit Project"
                             className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEditProject(project);
                             }}
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4" aria-hidden="true" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Project Settings"
                             className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(`/projects/${project.id}/settings`);
                             }}
                           >
-                            <Settings className="h-4 w-4" />
+                            <Settings className="h-4 w-4" aria-hidden="true" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            aria-label="Archive Project"
                             className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleArchiveProject(project);
                             }}
                           >
-                            <Archive className="h-4 w-4" />
+                            <Archive className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         </div>
                       </CardContent>
@@ -955,11 +949,13 @@ export default function ProjectsPage() {
             )}
           </>
         ) : (
-          <TaskList
-            ref={taskListRef}
-            hideHeader={true}
-            showProjectName={true}
-          />
+          <div className="w-full">
+            <TaskList
+              ref={taskListRef}
+              hideHeader={true}
+              showProjectName={true}
+            />
+          </div>
         )}
 
         {/* Project Modal */}
@@ -981,6 +977,6 @@ export default function ProjectsPage() {
           }}
         />
       </div>
-    </ProtectedLayout>
+    </ProtectedLayout >
   );
 }

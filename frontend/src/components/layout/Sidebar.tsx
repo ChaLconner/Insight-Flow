@@ -79,9 +79,10 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             {/* Close button for mobile */}
             <button
               onClick={onClose}
+              aria-label="Close sidebar"
               className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white lg:hidden"
             >
-              <LogOut className="h-5 w-5 rotate-180" />
+              <LogOut className="h-5 w-5 rotate-180" aria-hidden="true" />
             </button>
           </div>
 

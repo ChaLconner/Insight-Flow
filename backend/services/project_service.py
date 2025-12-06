@@ -105,20 +105,54 @@ class ProjectService:
         
         results = projects_query.all()
         
+        # Batch fetch members for all projects to avoid N+1 queries
+        project_ids = [r[0].id for r in results]
+        project_members_map = {}
+        
+        if project_ids:
+            # Fetch members for these projects
+            # We want to limit to 5 per project, but SQL window functions/limit per group is complex in ORM
+            # For now, fetching all members for these page of projects and slicing in python is better than N queries
+            # provided the member count isn't massive (thousands). 
+            # Given pagination of projects (defaults to 100), this is safer.
+            all_members = self.db.query(ProjectMember).options(
+                joinedload(ProjectMember.user)
+            ).filter(ProjectMember.project_id.in_(project_ids)).all()
+            
+            from collections import defaultdict
+            members_by_project = defaultdict(list)
+            for m in all_members:
+                members_by_project[m.project_id].append(m)
+            
+            # Slice to 5 per project
+            for pid, members in members_by_project.items():
+                project_members_map[pid] = members[:5]
+        
         formatted_results = []
         for project, task_count, completed_tasks, overdue_tasks, member_count in results:
-            # Get members for this project (separate query is cleaner/safer for lists than massive joins)
-            # Limit members to 5 for preview
-            members = self.db.query(ProjectMember).options(
-                joinedload(ProjectMember.user)
-            ).filter(ProjectMember.project_id == project.id).limit(5).all()
+            # Get members from map
+            members = project_members_map.get(project.id, [])
             
             # Recent activity count (separate query for simplicity/speed vs complexity of another join)
-            seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-            recent_activity = self.db.query(func.count(TaskHistory.id)).join(Task).filter(
-                Task.project_id == project.id,
-                TaskHistory.created_at >= seven_days_ago
-            ).scalar() or 0
+            # This is still N+1 but much lighter than members. 
+            # Optimizing this would require a grouped aggregation on TaskHistory which might be heavy.
+            # Leaving as is for now unless activity log is huge.
+            # Load recent activity counts map if not loaded
+            if 'recent_activity_map' not in locals():
+                recent_activity_map = {}
+                if project_ids:
+                    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+                    activity_counts = self.db.query(
+                        Task.project_id,
+                        func.count(TaskHistory.id)
+                    ).join(Task).filter(
+                        Task.project_id.in_(project_ids),
+                        TaskHistory.created_at >= seven_days_ago
+                    ).group_by(Task.project_id).all()
+                    
+                    recent_activity_map = {pid: count for pid, count in activity_counts}
+            
+            recent_activity = recent_activity_map.get(project.id, 0)
 
             formatted_results.append({
                 "project": project,
@@ -132,6 +166,76 @@ class ProjectService:
             
         logger.info(f"Retrieved {len(formatted_results)} projects with stats in {time.time() - start_time:.2f}s")
         return formatted_results
+    
+    def get_project_with_details(self, project_id: uuid.UUID) -> Optional[dict]:
+        """Get a single project with aggregated statistics using optimized queries."""
+        import time
+        from sqlalchemy import case, distinct, cast, String, and_
+        from models.task import TaskStatus, Task
+        from models.project import ProjectMember
+        from models.task_history import TaskHistory
+        from datetime import datetime, timedelta, timezone
+
+        start_time = time.time()
+        
+        # Base query for project stats
+        stats_query = self.db.query(
+            Project,
+            func.count(distinct(Task.id)).label("task_count"),
+            func.count(distinct(
+                case(
+                    (cast(Task.status, String) == TaskStatus.DONE.value, Task.id),
+                    else_=None
+                )
+            )).label("completed_tasks"),
+            func.count(distinct(
+                case(
+                    (and_(
+                        cast(Task.status, String) != TaskStatus.DONE.value,
+                        Task.due_date < datetime.now(timezone.utc)
+                    ), Task.id),
+                    else_=None
+                )
+            )).label("overdue_tasks"),
+            func.count(distinct(ProjectMember.id)).label("member_count")
+        ).outerjoin(
+            Task, Task.project_id == Project.id
+        ).outerjoin(
+            ProjectMember, ProjectMember.project_id == Project.id
+        ).filter(
+            Project.id == project_id
+        ).group_by(Project.id)
+        
+        result = stats_query.first()
+        
+        if not result:
+            return None
+            
+        project, task_count, completed_tasks, overdue_tasks, member_count = result
+        
+        # Get members with user data
+        members = self.db.query(ProjectMember).options(
+            joinedload(ProjectMember.user)
+        ).filter(ProjectMember.project_id == project_id).all()
+        
+        # Recent activity count
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        recent_activity = self.db.query(func.count(TaskHistory.id)).join(Task).filter(
+            Task.project_id == project_id,
+            TaskHistory.created_at >= seven_days_ago
+        ).scalar() or 0
+
+        logger.debug(f"Retrieved project details in {time.time() - start_time:.2f}s")
+        
+        return {
+            "project": project,
+            "task_count": task_count,
+            "completed_tasks": completed_tasks,
+            "overdue_tasks": overdue_tasks,
+            "member_count": member_count,
+            "recent_activity": recent_activity,
+            "members": members
+        }
     
     def create_project(self, project_data: ProjectCreate, owner_id: uuid.UUID) -> Project:
         """
@@ -526,55 +630,18 @@ class ProjectService:
     
     def is_project_member(self, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Check if user is a member of project."""
-        logger.info(f"is_project_member: Checking if user {user_id} is member of project {project_id}")
-        
-        # First check if user is owner (owners are always members)
-        project = self.get_project_by_id(project_id)
-        logger.debug(f"Retrieved project: {project}")
-        if project:
-            logger.debug(f"Project owner: {project.owner_id}")
-            logger.debug(f"Current user: {user_id}")
-            logger.debug(f"Is owner: {project.owner_id == user_id}")
-            
-        if project and project.owner_id == user_id:
-            logger.info(f"User {user_id} is owner of project {project_id}, returning True")
-            return True
-            
-        # Then check if user is in project members table
-        member = self.db.query(ProjectMember).filter(
+        # Optimized: Check directly in ProjectMember table. 
+        # This covers both regular members and owners (as owners are added as members)
+        return self.db.query(ProjectMember.id).filter(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user_id
-        ).first()
-        
-        logger.debug(f"Member query result: {member}")
-        result = member is not None
-        logger.info(f"User {user_id} is member of project {project_id}: {result}")
-        return result
+        ).first() is not None
     
     def is_project_admin(self, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Check if user is owner or admin of project."""
-        logger.debug(f"Checking if user {user_id} is admin of project {project_id}")
-        
-        project = self.get_project_by_id(project_id)
-        if not project:
-            logger.warning(f"Project {project_id} not found")
-            return False
-        
-        logger.debug(f"Project {project_id} found, owner: {project.owner_id}")
-        
-        # Owner is always admin
-        if project.owner_id == user_id:
-            logger.debug(f"User {user_id} is owner of project {project_id}")
-            return True
-        
-        # Check if user is admin member
-        member = self.db.query(ProjectMember).filter(
+        # Optimized: Check directly in ProjectMember table for OWNER or ADMIN role
+        return self.db.query(ProjectMember.id).filter(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user_id,
             ProjectMember.role.in_([MemberRole.OWNER.value, MemberRole.ADMIN.value])
-        ).first()
-        
-        logger.debug(f"Member query result: {member}")
-        result = member is not None
-        logger.debug(f"User {user_id} is admin of project {project_id}: {result}")
-        return result
+        ).first() is not None

@@ -11,21 +11,17 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  accessToken: string | null;
-  refreshToken: string | null;
   lastActivity: number;
   isInitialized: boolean;
 
   // Actions
   setUser: (user: User) => void;
   updateUserAvatar: (avatar: string) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
   setLoading: (loading: boolean) => void;
-  login: (user: User, accessToken: string, refreshToken: string) => void;
+  login: (user: User) => void;
   logout: () => void;
   updateActivity: () => void;
   checkAuthStatus: () => boolean;
-  refreshAuthToken: (newToken: string, newRefreshToken: string) => void;
   initializeAuth: () => Promise<void>;
   fetchUserProfile: () => Promise<User>;
   updateUserProfile: (data: Partial<User>) => Promise<User>;
@@ -34,8 +30,6 @@ interface AuthState {
 interface PersistedAuthState {
   user: User | null;
   isAuthenticated: boolean;
-  accessToken: string | null;
-  refreshToken: string | null;
   lastActivity: number;
 }
 
@@ -54,8 +48,6 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       isLoading: true,
-      accessToken: null,
-      refreshToken: null,
       lastActivity: Date.now(),
       isInitialized: false,
 
@@ -86,24 +78,16 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      setTokens: (accessToken, refreshToken) => {
-        set((state) => ({
-          accessToken,
-          refreshToken,
-          // Only update lastActivity if it hasn't been updated recently (prevent frequent updates)
-          lastActivity: state.lastActivity && (Date.now() - state.lastActivity) < 5000 ? state.lastActivity : Date.now(),
-        }));
-      },
+      // setTokens action removed
+
 
       setLoading: (loading) => {
         set({ isLoading: loading });
       },
 
-      login: (user, accessToken, refreshToken) => {
+      login: (user) => {
         set({
           user,
-          accessToken,
-          refreshToken,
           isAuthenticated: true,
           isLoading: false,
           lastActivity: Date.now(),
@@ -112,23 +96,23 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // Clear localStorage tokens
+        // Clear localStorage user data
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
           localStorage.removeItem('user');
           try {
-            localStorage.removeItem('insight-flow-auth');
+            // Only keeping critical non-sensitive preferences if any, but better clear auth store.
+            // We use persistence middleware, so we might want to clear that explicitly or let set() handle it.
+            // The persistence middleware automatically syncs state to localStorage.
+            // But we should try to clear the key to be clean.
+            // We won't manually clear 'insight-flow-auth' here because set() updates it.
           } catch (e) {
-            console.warn('Failed to remove persisted auth', e);
+            console.warn('Failed to clear local storage', e);
           }
         }
 
         // Clear state
         set({
           user: null,
-          accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
           lastActivity: 0,
@@ -166,13 +150,8 @@ export const useAuthStore = create<AuthState>()(
         return true;
       },
 
-      refreshAuthToken: (newToken, newRefreshToken) => {
-        set({
-          accessToken: newToken,
-          refreshToken: newRefreshToken,
-          lastActivity: Date.now(),
-        });
-      },
+      // refreshAuthToken action removed
+
 
       initializeAuth: async () => {
         const { setLoading, setUser, logout, isInitialized } = get();
@@ -186,11 +165,8 @@ export const useAuthStore = create<AuthState>()(
 
         // 2. Start initialization
         try {
-          // Only set loading if not already authenticated (optimistic UI)
-          // But if we are starting fresh, we probably want to show loading to verify token
-          if (!state.isAuthenticated) {
-            setLoading(true);
-          }
+          // If we are starting fresh, show loading
+          setLoading(true);
 
           // Check environment
           if (typeof window === 'undefined') {
@@ -198,22 +174,18 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const apiUrl = (await import('@/lib/constants')).API_CONFIG.BASE_URL;
-          let token = state.accessToken;
 
-          if (!token) {
-            setLoading(false);
-            set({ isInitialized: true });
-            return;
-          }
-
-          // Verify token
+          // Verify session via cookie using /auth/me endpoint
           try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
 
+            // Fetch with credentials (cookies)
             const resp = await fetch(`${apiUrl}/auth/me`, {
               method: 'GET',
-              headers: { 'Authorization': `Bearer ${token}` },
+              // headers: { 'Authorization': ... }, // No header needed, cookies sent automatically? 
+              // Wait, native fetch needs credentials: 'include'
+              credentials: 'include',
               signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -222,17 +194,21 @@ export const useAuthStore = create<AuthState>()(
               const userData = await resp.json();
               setUser(userData);
             } else {
+              // 401 or 403 means cookies invalid or missing
               if (resp.status === 401 || resp.status === 403) {
                 logout();
               }
             }
           } catch (fetchError: any) {
             if (fetchError.name !== 'AbortError') {
-              console.error('Auth check failed:', fetchError);
+              // Network error or other
+              console.log('Auth check network error, assuming not authenticated');
+              logout();
             }
           }
         } catch (error) {
           console.error('🏪 AuthStore: Error initializing auth:', error);
+          logout();
         } finally {
           setLoading(false);
           set({ isInitialized: true });
@@ -288,8 +264,6 @@ export const useAuthStore = create<AuthState>()(
 
         return {
           user: validatedUser,
-          accessToken: state.accessToken,
-          refreshToken: state.refreshToken,
           isAuthenticated: state.isAuthenticated,
           lastActivity: state.lastActivity,
         };
@@ -312,8 +286,6 @@ export const authSelectors = {
   // Get loading state
   isLoading: (state: AuthState) => state.isLoading,
 
-  // Get access token
-  getAccessToken: (state: AuthState) => state.accessToken,
 
   // Check if user has specific role
   hasRole: (role: string) => (state: AuthState) =>

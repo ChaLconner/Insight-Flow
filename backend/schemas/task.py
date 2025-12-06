@@ -6,7 +6,7 @@ from typing import Optional, Any
 from datetime import datetime
 import uuid
 from .user import UserResponse
-from .project import ProjectResponse
+from .project import ProjectResponse, ProjectSummary
 from utils.schema_utils import to_camel
 from models.task import TaskPriority, TaskType
 
@@ -55,7 +55,7 @@ class TaskCreate(TaskBase):
         """Validate status value."""
         if v is not None:
             # Accept both lowercase and uppercase, but normalize to lowercase
-            valid_statuses = ['todo', 'in_progress', 'done']
+            valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
             if v.lower() not in valid_statuses:
                 raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
         return v.lower() if v else "todo"  # Normalize to lowercase
@@ -83,7 +83,7 @@ class TaskUpdate(BaseModel):
         """Validate status value."""
         if v is not None:
             # Accept both lowercase and uppercase, but normalize to lowercase
-            valid_statuses = ['todo', 'in_progress', 'done']
+            valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
             if v.lower() not in valid_statuses:
                 raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
         return v.lower() if v else None  # Normalize to lowercase
@@ -123,7 +123,7 @@ class TaskStatusUpdate(BaseModel):
         """Validate status value."""
         if v is not None:
             # Accept both lowercase and uppercase, but normalize to lowercase
-            valid_statuses = ['todo', 'in_progress', 'done']
+            valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
             if v.lower() not in valid_statuses:
                 raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
         return v.lower()  # Normalize to lowercase
@@ -162,7 +162,7 @@ class TaskWithDetails(TaskResponse):
     """Schema for task with related data included."""
     assignee: Optional[UserResponse] = None
     creator: UserResponse
-    project: ProjectResponse
+    project: ProjectSummary
     
     model_config = ConfigDict(
         from_attributes=True,

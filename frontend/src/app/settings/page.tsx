@@ -46,7 +46,6 @@ export default function SettingsPage() {
 
   // Use auth store actions
   const {
-    accessToken,
     isAuthenticated,
     isLoading,
     user,
@@ -84,7 +83,7 @@ export default function SettingsPage() {
       return;
     }
 
-    if (isAuthenticated && accessToken && user) {
+    if (isAuthenticated && user) {
       // We have user data, we can populate the form
       const rawProfile = user as any;
       const firstName = rawProfile.firstName ?? rawProfile.first_name ?? "";
@@ -114,7 +113,7 @@ export default function SettingsPage() {
       loadSettings();
 
       setIsInitializing(false);
-    } else if (isAuthenticated && accessToken && !user) {
+    } else if (isAuthenticated && !user) {
       // We need to fetch the user
       fetchUserProfile().then(() => {
         // The useEffect will re-run when user is updated
@@ -122,7 +121,7 @@ export default function SettingsPage() {
         setIsInitializing(false);
       });
     }
-  }, [isAuthenticated, accessToken, user, isLoading]);
+  }, [isAuthenticated, user, isLoading]);
 
   const loadSettings = async () => {
     try {
@@ -224,7 +223,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!accessToken || !user) {
+    if (!user) {
       return;
     }
 

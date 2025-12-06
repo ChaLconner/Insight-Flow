@@ -46,7 +46,7 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
 
-  const { accessToken, isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAuthStore();
   const [dataFetched, setDataFetched] = useState(false);
 
   // Refs to prevent duplicate API calls
@@ -54,7 +54,7 @@ export default function UsersPage() {
   const lastLoadTime = useRef<number>(0);
 
   const loadUsers = useCallback(async (forceRefresh = false) => {
-    if (!accessToken) { return; }
+    if (!isAuthenticated) { return; }
 
     // Rate limiting: prevent calls within 2 seconds of each other
     const now = Date.now();
@@ -100,18 +100,18 @@ export default function UsersPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [accessToken, dataFetched]);
+  }, [isAuthenticated, dataFetched]);
 
   useEffect(() => {
     // Fast path: Skip if we're still loading or already have data
     if (isLoading || dataFetched) { return; }
 
-    if (isAuthenticated && accessToken) {
+    if (isAuthenticated) {
       loadUsers();
     } else if (!isAuthenticated) {
       setLoading(false);
     }
-  }, [isAuthenticated, accessToken, isLoading, dataFetched, loadUsers]);
+  }, [isAuthenticated, isLoading, dataFetched, loadUsers]);
 
   const handleRefresh = () => {
     loadUsers(true);

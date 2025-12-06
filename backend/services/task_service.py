@@ -358,7 +358,13 @@ class TaskService:
         """
         from sqlalchemy import or_
         
-        query = self.db.query(Task).filter(
+        # Eager load relationships to prevent N+1 queries
+        from sqlalchemy.orm import joinedload
+        query = self.db.query(Task).options(
+            joinedload(Task.assignee),
+            joinedload(Task.creator),
+            joinedload(Task.project)
+        ).filter(
             or_(Task.assignee_id == user_id, Task.created_by == user_id)
         )
         

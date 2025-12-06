@@ -5,6 +5,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { HydrationWrapper } from "@/components/providers/ssr-safe-provider";
 import { GoogleAuthProvider } from "@/providers/google-auth-provider";
+import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "sonner";
 
 const inter = Inter({
@@ -68,12 +69,14 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <GoogleAuthProvider>
-          <HydrationWrapper>
-            <ThemeProvider>
-              {children}
-              <Toaster />
-            </ThemeProvider>
-          </HydrationWrapper>
+          <QueryProvider>
+            <HydrationWrapper>
+              <ThemeProvider>
+                {children}
+                <Toaster />
+              </ThemeProvider>
+            </HydrationWrapper>
+          </QueryProvider>
         </GoogleAuthProvider>
       </body>
     </html>

@@ -17,8 +17,7 @@ export const authActions = {
 
     // Backend may set HttpOnly cookies, but also returns tokens in body for fallback.
     const user = (response as any).user || (response as any).data || null;
-    const accessToken = (response as any).access_token || (response as any).accessToken || null;
-    const refreshToken = (response as any).refresh_token || (response as any).refreshToken || null;
+
 
     if (typeof window !== 'undefined') {
       // Note: We rely on Zustand persist middleware to handle storage.
@@ -33,7 +32,7 @@ export const authActions = {
     }
 
     // Update store (store tokens as well for compatibility)
-    login(user, accessToken || null, refreshToken || null);
+    login(user);
 
     console.log('✅ Login successful for user:', user?.email ?? 'unknown');
   },

@@ -20,6 +20,7 @@ from schemas.task import TaskResponse, TaskCreate, TaskUpdate, TaskWithDetails, 
 from database import get_db
 from routers.auth import get_current_active_user
 from utils.logger import setup_logger
+from utils.validators import validate_uuid
 
 logger = setup_logger("projects_router")
 
@@ -134,8 +135,6 @@ def read_projects_list(
     
     project_service = ProjectService(db)
     user_id = current_user.id if user_projects_only else None
-    project_service = ProjectService(db)
-    user_id = current_user.id if user_projects_only else None
     
     # Use optimized service method
     projects_with_stats = project_service.get_projects_with_stats(skip=skip, limit=limit, user_id=user_id)
@@ -199,48 +198,26 @@ def read_project(
     
     project_service = ProjectService(db)
     
-    # Check if user is a member of project
-    try:
-        project_uuid = uuid.UUID(project_id)
-        logger.debug(f"Successfully parsed UUID: {project_uuid}")
-    except ValueError as e:
-        logger.warning(f"Invalid UUID format: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
+    # Validate UUID
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     
-    # Check if user is owner or member
-    try:
-        project = project_service.get_project_by_id(project_uuid)
-        logger.debug(f"Retrieved project: {project}")
-        if project:
-            logger.debug(f"Project name: {project.name}")
-            logger.debug(f"Project owner: {project.owner_id}")
-            logger.debug(f"Current user: {current_user.id}")
-            logger.debug(f"Is owner: {project.owner_id == current_user.id}")
-    except Exception as e:
-        logger.error(f"Error getting project: {e}")
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error retrieving project"
-        )
+    # Get project with details (optimized single query)
+    project_details = project_service.get_project_with_details(project_uuid)
     
-    if not project:
+    if not project_details:
         logger.warning(f"Project not found for UUID: {project_uuid}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
-        
+    
+    project = project_details['project']
+    
     if project.owner_id != current_user.id:
         try:
             is_member = project_service.is_project_member(project_uuid, current_user.id)
-            logger.debug(f"User membership check result: {is_member}")
         except Exception as e:
             logger.error(f"Error checking membership: {e}")
-            logger.error(f"Full traceback: {traceback.format_exc()}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Error checking project membership"
@@ -253,40 +230,43 @@ def read_project(
                 detail="Not a member of this project"
             )
     
-    # Add statistics to project
-    # Get task count
-    task_count = db.query(func.count(Task.id)).filter(Task.project_id == project_uuid).scalar()
-    # Get completed tasks count
-    completed_tasks = db.query(func.count(Task.id)).filter(
-        Task.project_id == project_uuid,
-        cast(Task.status, String) == TaskStatus.DONE.value
-    ).scalar()
-    # Get overdue tasks count
-    overdue_tasks = db.query(func.count(Task.id)).filter(
-        Task.project_id == project_uuid,
-        cast(Task.status, String) != TaskStatus.DONE.value,
-        Task.due_date < datetime.now(timezone.utc)
-    ).scalar()
-
-    # Get recent activity count (last 7 days)
-    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    recent_activity = db.query(func.count(TaskHistory.id)).join(Task).filter(
-        Task.project_id == project_uuid,
-        TaskHistory.created_at >= seven_days_ago
-    ).scalar()
-
-    # Get member count
-    member_count = db.query(func.count(ProjectMember.id)).filter(
-        ProjectMember.project_id == project_uuid
-    ).scalar()
-    
-    # Get project members with user data using joinedload for better performance
-    members = db.query(ProjectMember).options(
-        joinedload(ProjectMember.user)
-    ).filter(ProjectMember.project_id == project_uuid).all()
+    members = project_details['members']
     
     try:
-        # Create response with members and statistics - use model_validate for proper conversion
+        # Create detailed member responses
+        member_responses = [
+            ProjectMemberResponse.model_validate({
+                'id': member.id,
+                'project_id': member.project_id,
+                'user_id': member.user_id,
+                'role': member.role,
+                'joined_at': member.joined_at,
+                'user': {
+                    'id': member.user.id,
+                    'email': member.user.email,
+                    'name': member.user.name,
+                    'avatar_url': member.user.avatar_url,
+                    'is_active': member.user.is_active,
+                    'role': member.user.role or "user",
+                    'created_at': member.user.created_at,
+                    'updated_at': member.user.updated_at
+                }
+            }) for member in members
+        ]
+        
+        # Create member summaries (optional but good for consistency)
+        member_summaries = [
+            {
+                'id': member.id,
+                'user_id': member.user_id,
+                'name': member.user.name,
+                'email': member.user.email,
+                'avatar': member.user.avatar_url,
+                'role': member.role
+            } for member in members
+        ]
+
+        # Create response with members and statistics
         project_response = ProjectWithMembers.model_validate({
             'id': project.id,
             'name': project.name,
@@ -295,42 +275,15 @@ def read_project(
             'is_active': project.is_active,
             'created_at': project.created_at,
             'updated_at': project.updated_at,
-            'task_count': task_count or 0,
-            'completed_tasks': completed_tasks or 0,
-            'overdue_tasks': overdue_tasks or 0,
-            'recent_activity': recent_activity or 0,
-            'member_count': member_count or 0,
-            'members': [
-                ProjectMemberResponse.model_validate({
-                    'id': member.id,
-                    'project_id': member.project_id,
-                    'user_id': member.user_id,
-                    'role': member.role,
-                    'joined_at': member.joined_at,
-                    'user': {
-                        'id': member.user.id,
-                        'email': member.user.email,
-                        'name': member.user.name,
-                        'avatar_url': member.user.avatar_url,
-                        'is_active': member.user.is_active,
-                        'role': member.user.role or "user",
-                        'created_at': member.user.created_at,
-                        'updated_at': member.user.updated_at
-                    }
-                }) for member in members
-            ]
+            'task_count': project_details['task_count'],
+            'completed_tasks': project_details['completed_tasks'],
+            'overdue_tasks': project_details['overdue_tasks'],
+            'recent_activity': project_details['recent_activity'],
+            'member_count': project_details['member_count'],
+            'members': member_responses,
+            'member_summaries': member_summaries
         })
         
-        logger.debug(f"Project {project_uuid} debug info:")
-        logger.debug(f"  - Name: {project.name}")
-        logger.debug(f"  - Task count: {task_count}")
-        logger.debug(f"  - Completed tasks: {completed_tasks}")
-        logger.debug(f"  - Member count: {member_count}")
-        logger.debug(f"  - Is active: {project.is_active}")
-        logger.debug(f"  - Created at: {project.created_at}")
-        logger.debug(f"  - Updated at: {project.updated_at}")
-        
-        logger.debug(f"Successfully created response for project {project_uuid}")
         return project_response
         
     except Exception as e:
@@ -355,8 +308,8 @@ def update_project(
     project_service = ProjectService(db)
     
 
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     try:
-        project_uuid = uuid.UUID(project_id)
         updated_project = project_service.update_project(project_uuid, project_data, current_user.id)
         return updated_project
     except ValueError as e:
@@ -378,8 +331,8 @@ def delete_project(
     project_service = ProjectService(db)
     
 
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     try:
-        project_uuid = uuid.UUID(project_id)
         project_service.delete_project(project_uuid, current_user.id)
         return {"message": "Project deleted successfully"}
     except ValueError as e:
@@ -407,13 +360,8 @@ def read_project_members(
     project_service = ProjectService(db)
     
     # Check if user is a member of project
-    try:
-        project_uuid = uuid.UUID(project_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
+    # Validate UUID
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     
     # Get project to check ownership
     project = project_service.get_project_by_id(project_uuid)
@@ -646,14 +594,8 @@ def get_project_tasks(
     logger.info(f"status: {status}")
     logger.info(f"current_user: {current_user.id}")
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-    except ValueError:
-        logger.error(f"Invalid project ID format: {project_id}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
+    # Validate UUID
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     
     # Check if user is a member of project
     if not project_service.is_project_member(project_uuid, current_user.id):
@@ -735,14 +677,8 @@ def create_task_for_project(
     logger.info(f"Task data: {task_data}")
     logger.info(f"Current user: {current_user.id}")
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-    except ValueError:
-        logger.error(f"Invalid project ID format: {project_id}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
+    # Validate UUID
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     
     # Override project_id in task_data to ensure consistency
     task_data.project_id = project_uuid
@@ -805,14 +741,9 @@ def read_project_task(
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-        task_uuid = uuid.UUID(task_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID or task ID format"
-        )
+    # Validate UUIDs
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
+    task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Check if user is a member of project first
     if not project_service.is_project_member(project_uuid, current_user.id):
@@ -879,14 +810,9 @@ def update_project_task(
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-        task_uuid = uuid.UUID(task_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID or task ID format"
-        )
+    # Validate UUIDs
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
+    task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Check if user is a member of project first
     if not project_service.is_project_member(project_uuid, current_user.id):
@@ -938,14 +864,9 @@ def delete_project_task(
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-        task_uuid = uuid.UUID(task_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID or task ID format"
-        )
+    # Validate UUIDs
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
+    task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Check if user is a member of project first
     if not project_service.is_project_member(project_uuid, current_user.id):
@@ -998,14 +919,9 @@ def update_project_task_status(
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-        task_uuid = uuid.UUID(task_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID or task ID format"
-        )
+    # Validate UUIDs
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
+    task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Extract status from request body
     status = status_data.get("status")
@@ -1069,14 +985,9 @@ def assign_project_task(
     task_service = TaskService(db)
     project_service = ProjectService(db)
     
-    try:
-        project_uuid = uuid.UUID(project_id)
-        task_uuid = uuid.UUID(task_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID or task ID format"
-        )
+    # Validate UUIDs
+    project_uuid = validate_uuid(project_id, "Invalid project ID format")
+    task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Extract assignee_id from request body
     assignee_id = assign_data.get("assignee_id")
@@ -1087,13 +998,7 @@ def assign_project_task(
         )
     
     # Create TaskAssign object
-    try:
-        assignee_uuid = uuid.UUID(assignee_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid assignee ID format"
-        )
+    assignee_uuid = validate_uuid(assignee_id, "Invalid assignee ID format")
     
     task_assign = TaskAssign(assignee_id=assignee_uuid)
     

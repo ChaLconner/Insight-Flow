@@ -5,10 +5,12 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import axiosRetry from 'axios-retry';
 import { API_CONFIG, ERROR_MESSAGES } from '@/lib/constants';
+import { useAuthStore } from '@/stores/auth-store';
 
 // Request deduplication cache removed for simplicity
 // const requestCache = new Map<string, Promise<any>>();
 
+// Create axios instance
 // Create axios instance
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_CONFIG.BASE_URL,
@@ -16,8 +18,8 @@ export const apiClient: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // Bearer token flow uses Authorization header; do not rely on cookies
-  withCredentials: false,
+  // Use HttpOnly cookies
+  withCredentials: true,
 });
 
 // Add retry interceptor
@@ -43,20 +45,9 @@ axiosRetry(apiClient, {
   },
 });
 
-// Request interceptor: do not add Authorization header when using HttpOnly cookies.
+// Request interceptor: No longer need to attach tokens manually
 apiClient.interceptors.request.use(
   (config) => {
-    // Ensure we don't send cookies (bearer token flow)
-    config.withCredentials = false;
-
-    // Attach Authorization header from persisted tokens
-    if (typeof window !== 'undefined') {
-      const token = getAccessToken();
-
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
     return config;
   },
   (error) => {
@@ -72,38 +63,17 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
-    // Handle 401 Unauthorized - attempt refresh using refresh token from localStorage
+    // Handle 401 Unauthorized - attempt refresh using cookies
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
-        // Get refresh token
-        const refreshToken = getRefreshToken();
-
-        if (!refreshToken) {
-          await clearAuthTokens();
-          return Promise.reject(error);
-        }
-
-        // Call refresh endpoint with Authorization: Bearer <refreshToken>
-        const response = await axios.post(`${API_CONFIG.BASE_URL}/auth/refresh`, {}, {
-          headers: { Authorization: `Bearer ${refreshToken}` },
-          withCredentials: false,
+        // Call refresh endpoint with cookies
+        await axios.post(`${API_CONFIG.BASE_URL}/auth/refresh`, {}, {
+          withCredentials: true,
         });
 
-        const newAccessToken = response.data?.access_token;
-        const newRefreshToken = response.data?.refresh_token;
-
-        if (newAccessToken && newRefreshToken) {
-          // Update store directly
-          useAuthStore.getState().setTokens(newAccessToken, newRefreshToken);
-        }
-
-        // Attach new access token to original request
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        }
-
+        // Retry original request
         return apiClient(originalRequest);
       } catch (refreshError) {
         await clearAuthTokens();
@@ -358,32 +328,4 @@ export function createRateLimitedRequest<T = any>(
 // Token Management Helpers
 // ===========================================
 
-import { useAuthStore } from '@/stores/auth-store';
-
-// ===========================================
-// Token Management Helpers
-// ===========================================
-
-export function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  // Use Zustand store as the single source of truth
-  try {
-    return useAuthStore.getState().accessToken;
-  } catch (e) {
-    // Fallback to localStorage if store access fails (rare)
-    return localStorage.getItem('access_token') || localStorage.getItem('accessToken');
-  }
-}
-
-export function getRefreshToken(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  // Use Zustand store as the single source of truth
-  try {
-    return useAuthStore.getState().refreshToken;
-  } catch (e) {
-    // Fallback to localStorage if store access fails (rare)
-    return localStorage.getItem('refresh_token') || localStorage.getItem('refreshToken');
-  }
-}
+// Token management helpers removed as we use HttpOnly cookies

@@ -14,10 +14,20 @@ interface ProtectedLayoutProps {
 // Loading component for authentication
 function AuthLoadingLayout() {
     return (
-        <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center">
-            <div className="flex flex-col items-center space-y-4">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                <p className="text-zinc-400">Redirecting to login...</p>
+        <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center relative overflow-hidden">
+            {/* Background Gradients */}
+            <div className="absolute inset-0 z-0 pointer-events-none">
+                <div className="absolute -left-[10%] -top-[10%] h-[500px] w-[500px] rounded-full bg-indigo-500/10 blur-[100px]" />
+                <div className="absolute -right-[10%] top-[20%] h-[500px] w-[500px] rounded-full bg-violet-500/10 blur-[100px]" />
+                <div className="absolute bottom-[10%] left-[20%] h-[500px] w-[500px] rounded-full bg-blue-500/10 blur-[100px]" />
+            </div>
+
+            <div className="flex flex-col items-center space-y-4 z-10">
+                <div className="relative">
+                    <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full" />
+                    <Loader2 className="h-8 w-8 animate-spin text-indigo-500 relative z-10" />
+                </div>
+                <p className="text-zinc-400 font-medium">Redirecting to login...</p>
             </div>
         </div>
     );
@@ -65,7 +75,7 @@ export function ProtectedLayout({ children, requiredRole }: ProtectedLayoutProps
     // Fast role-based redirect with optimized checks
     useEffect(() => {
         // Skip checks if we don't have all required data yet
-        if (!user || !requiredRole || !isAuthenticated) {return;}
+        if (!user || !requiredRole || !isAuthenticated) { return; }
 
         // Quick role check with early return
         if (!hasRequiredAccess) {

@@ -16,6 +16,12 @@ from utils.logger import setup_logger
 import uuid
 import json
 
+# Create router instance
+router = APIRouter()
+
+# Setup logger
+logger = setup_logger(__name__)
+
 # Simple in-memory cache
 from datetime import datetime, timedelta
 _analytics_cache: Dict[str, Any] = {}
@@ -702,53 +708,60 @@ def get_all_recent_activity(
     logger.info(f"[DEBUG] User has access to {len(project_ids)} projects")
     
     # Get activities from all accessible projects
+    try:
+        activities = task_history_service.get_recent_activities_for_projects(project_ids, limit)
+    except Exception as e:
+        logger.error(f"[DEBUG] Error getting activities for projects: {e}")
+        return {
+            "activities": [],
+            "total_count": 0
+        }
+
+    # Batch fetch users to avoids N+1
+    user_ids = {activity.user_id for activity in activities}
+    users = db.query(User).filter(User.id.in_(user_ids)).all()
+    user_map = {u.id: u for u in users}
+    
+    # Project map for quick lookup
+    project_map = {p.id: p for p in user_projects}
+
     all_activities = []
-    for project_id in project_ids:
-        try:
-            activities = task_history_service.get_recent_activities(project_id, limit // len(project_ids) + 1)  # type: ignore
-            # Add project info to each activity
-            project = next((p for p in user_projects if p.id == project_id), None)  # type: ignore
-            project_name = project.name if project else "Unknown Project"
-            
-            for activity in activities:
-                # Get user info
-                user = db.query(User).filter(User.id == activity.user_id).first()
-                user_name = user.name if user else f"User {activity.user_id}"
-                
-                formatted_activity = {  # type: ignore
-                    "id": str(activity.id),
-                    "type": activity.activity_type.value,
-                    "user_name": user_name,
-                    "task_title": activity.task_title,
-                    "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,  # type: ignore
-                    "description": activity.description,
-                    "project_name": project_name,
-                    "project_id": str(project_id)
-                }
-                
-                # Add additional context for specific activity types
-                if activity.new_values:  # type: ignore
-                    try:
-                        new_values = json.loads(activity.new_values)  # type: ignore
-                        if "assignee_name" in new_values:
-                            formatted_activity["assignee_name"] = new_values["assignee_name"]
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                
-                all_activities.append(formatted_activity)  # type: ignore
-        except Exception as e:
-            logger.error(f"[DEBUG] Error getting activities for project {project_id}: {e}")
-            continue
+    for activity in activities:
+        # Get user info from map
+        user = user_map.get(activity.user_id)
+        user_name = user.name if user else f"User {activity.user_id}"
+        
+        # Get project info from map
+        project = project_map.get(activity.project_id)
+        project_name = project.name if project else "Unknown Project"
+        
+        formatted_activity = {
+            "id": str(activity.id),
+            "type": activity.activity_type.value,
+            "user_name": user_name,
+            "task_title": activity.task_title,
+            "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,
+            "description": activity.description,
+            "project_name": project_name,
+            "project_id": str(activity.project_id)
+        }
+        
+        # Add additional context for specific activity types
+        if activity.new_values:
+            try:
+                new_values = json.loads(activity.new_values)
+                if "assignee_name" in new_values:
+                    formatted_activity["assignee_name"] = new_values["assignee_name"]
+            except (json.JSONDecodeError, TypeError):
+                pass
+        
+        all_activities.append(formatted_activity)
     
-    # Sort by timestamp (most recent first) and limit
-    all_activities.sort(key=lambda x: x.get("timestamp", ""), reverse=True)  # type: ignore
-    limited_activities = all_activities[:limit]  # type: ignore
-    
-    logger.info(f"[DEBUG] Returning {len(limited_activities)} activities across all projects")  # type: ignore
+    logger.info(f"[DEBUG] Returning {len(all_activities)} activities across all projects")
     
     return {
-        "activities": limited_activities,
-        "total_count": len(limited_activities)  # type: ignore
+        "activities": all_activities,
+        "total_count": len(all_activities)
     }
 
 @router.post("/activity/batch")

@@ -551,3 +551,17 @@ export interface SearchState {
   filters: Record<string, any>;
   sort?: SortOption;
 }
+
+export interface RecentActivity {
+  id: string;
+  user: {
+    name: string;
+    id: string;
+    avatar?: string;
+  };
+  action: string;
+  target?: string;
+  time?: string;
+  timestamp?: string;
+  project?: string | { name: string; id: string };
+}

@@ -29,7 +29,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
     const [error, setError] = useState<string | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
 
-    const { accessToken } = useAuthStore();
+
 
     useEffect(() => {
         if (isOpen) {
