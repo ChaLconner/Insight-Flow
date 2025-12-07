@@ -58,8 +58,8 @@ engine = create_engine(
     database_url,
     pool_pre_ping=True,       # Validate connections before use
     pool_recycle=300,         # Recycle connections every 5 minutes
-    pool_size=5,              # Reduced from 10 to 5 to prevent connection exhaustion
-    max_overflow=10,          # Reduced from 20 to 10
+    pool_size=20,             # Increased from 5 to 20 for better concurrency
+    max_overflow=20,          # Increased from 10 to 20
     pool_timeout=30,          # Timeout after 30 seconds waiting for connection
     connect_args=connect_args
 )
@@ -107,50 +107,12 @@ def get_db_context():
     finally:
         db.close()
 
-# Function to initialize database with enum creation
 def init_database():
     """
-    Initialize database and create enums if they don't exist.
-    Uses a more robust approach to handle enum creation across PostgreSQL versions.
+    Initialize database.
+    Note: Enum creation is handled by SQLAlchemy model definitions.
     """
-    with engine.connect() as conn:
-        try:
-            # Check if enum type already exists first
-            check_enum_sql = """
-            SELECT EXISTS (
-                SELECT 1 FROM pg_type 
-                WHERE typname = 'task_status' 
-                AND typtype = 'e'
-            );
-            """
-            result = conn.execute(text(check_enum_sql))
-            enum_exists = result.scalar()
-            
-            if not enum_exists:
-                # Create the enum type without IF NOT EXISTS
-                # Create enum type with all values from TaskStatus model
-                create_enum_sql = "CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'in_review', 'done', 'cancelled')"
-                conn.execute(text(create_enum_sql))
-                db_logger.info("task_status enum created successfully")
-            else:
-                db_logger.info("task_status enum already exists, skipping creation")
-                
-            conn.commit()
-            
-        except Exception as e:
-            db_logger.error(f"Error creating task_status enum: {e}")
-            conn.rollback()
-            # Try alternative approach if the first one fails
-            try:
-                # Try to create enum without checking (will fail if exists, but that's ok)
-                conn.execute(text("CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'in_review', 'done', 'cancelled')"))
-                conn.commit()
-                db_logger.info("task_status enum created successfully (alternative approach)")
-            except Exception as alt_e:
-                db_logger.warning(f"Enum creation failed (expected if already exists): {alt_e}")
-                conn.rollback()
-                # If we get here, the enum likely already exists, which is fine
-                db_logger.info("Assuming task_status enum already exists")
+    pass
 
 # Dependency to get DB session
 def get_db():

@@ -38,7 +38,7 @@ class Task(BaseModel):
     status = Column(Enum(TaskStatus, name="task_status", values_callable=lambda obj: [e.value for e in obj]), default=TaskStatus.TODO, index=True)
     priority = Column(Enum(TaskPriority, name="task_priority", values_callable=lambda obj: [e.value for e in obj]), default=TaskPriority.MEDIUM, index=True)
     type = Column(Enum(TaskType, name="task_type", values_callable=lambda obj: [e.value for e in obj]), default=TaskType.FEATURE, index=True)
-    due_date = Column(DateTime(timezone=True), nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True, index=True)
     
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     assignee_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)

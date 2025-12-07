@@ -21,6 +21,7 @@ import { apiClient } from "@/lib/api-client";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TaskItem } from "./TaskItem";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTasks } from "@/hooks/use-tasks";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 import dynamic from 'next/dynamic';
@@ -118,119 +119,22 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
         };
     }, []);
 
-    // Create query key (useQuery handles deep comparison, so direct array is fine)
-    const queryKey = [
-        'tasks',
-        projectId || 'my',
-        page,
-        PAGE_SIZE,
-        searchQuery,
-        statusFilter
-    ];
-
-    // Sync state from URL params when navigating (e.g. back button)
-    useEffect(() => {
-        const query = searchParams.get("search") || "";
-        const status = searchParams.get("status") || "all";
-        const pageParam = searchParams.get("page");
-        const newPage = pageParam ? parseInt(pageParam, 10) : 1;
-
-        if (query !== searchQuery) setSearchQuery(query);
-        if (query !== localSearchQuery) setLocalSearchQuery(query);
-        if (status !== statusFilter) setStatusFilter(status);
-        if (newPage !== page) setPage(newPage);
-    }, [searchParams]); // Only run when URL params change
-
-    // React Query for data fetching with caching
+    // Use custom hook for data fetching and operations
     const {
-        data: tasksData = [],
+        tasks,
         isLoading,
+        isFetching,
         error,
         refetch,
-        isFetching
-    } = useQuery<Task[]>({
-        queryKey,
-        queryFn: async () => {
-            if (!isAuthenticated) return [];
-
-            const skip = (page - 1) * PAGE_SIZE;
-            const limit = PAGE_SIZE;
-
-            console.log('TaskList: Fetching tasks...', { projectId, skip, limit, searchQuery, statusFilter });
-
-            let data;
-            if (projectId) {
-                // Fetch tasks for specific project
-                data = await tasksApi.getProjectTasks(
-                    projectId,
-                    skip,
-                    limit,
-                    undefined, // sortBy
-                    undefined, // sortOrder
-                    searchQuery,
-                    statusFilter
-                );
-            } else {
-                // Fetch all user tasks
-                data = await tasksApi.getMyTasks(skip, limit, searchQuery, statusFilter);
-            }
-
-            // Robust data extraction
-            let taskList: Task[] = [];
-            if (Array.isArray(data)) {
-                taskList = data;
-            } else if ((data as any)?.data && Array.isArray((data as any).data)) {
-                taskList = (data as any).data;
-            } else if ((data as any)?.tasks && Array.isArray((data as any).tasks)) {
-                taskList = (data as any).tasks;
-            }
-
-            console.log('TaskList: Fetched successfully', taskList.length);
-            return taskList;
-        },
-        enabled: isAuthenticated,
-        staleTime: 30 * 1000, // 30 seconds
-        gcTime: 5 * 60 * 1000, // 5 minutes (gcTime replaced cacheTime in v5)
-        retry: 2,
-        refetchOnWindowFocus: false,
-    });
-
-    // Extract tasks from data
-    const tasks = tasksData || [];
-
-    // Delete task mutation
-    const deleteTaskMutation = useMutation({
-        mutationFn: async (task: Task) => {
-            if (task.projectId) {
-                await tasksApi.deleteProjectTask(task.projectId, task.id);
-            } else {
-                await tasksApi.deleteTask(task.id);
-            }
-            return task.id;
-        },
-        onSuccess: () => {
-            // Invalidate and refetch
-            setOpenMenuId(null);
-            const qKey = projectId ? ['tasks', projectId] : ['tasks', 'my'];
-            queryClient.invalidateQueries({ queryKey: qKey });
-            queryClient.invalidateQueries({ queryKey: ['tasks', 'my'] }); // Always invalidate global list too
-
-            // Close modal and reset state
-            setIsDeleteModalOpen(false);
-            setTaskToDelete(null);
-
-            if (onTaskChange) onTaskChange();
-
-            toast.success("Task deleted", {
-                description: "The task has been permanently removed.",
-            });
-        },
-        onError: (err) => {
-            console.error("Failed to delete task", err);
-            toast.error("Failed to delete task", {
-                description: getErrorMessage(err)
-            });
-        }
+        deleteTask,
+        isDeleting
+    } = useTasks({
+        projectId,
+        page,
+        pageSize: PAGE_SIZE,
+        searchQuery,
+        statusFilter,
+        enabled: isAuthenticated
     });
 
     // Handle refresh logic exposed to parent
@@ -261,9 +165,16 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
 
     const confirmDeleteTask = useCallback(() => {
         if (taskToDelete) {
-            deleteTaskMutation.mutate(taskToDelete);
+            deleteTask(taskToDelete, {
+                onSuccess: () => {
+                    setOpenMenuId(null);
+                    setIsDeleteModalOpen(false);
+                    setTaskToDelete(null);
+                    if (onTaskChange) onTaskChange();
+                }
+            });
         }
-    }, [deleteTaskMutation, taskToDelete]);
+    }, [deleteTask, taskToDelete, onTaskChange]);
 
     const toggleMenu = useCallback((e: React.MouseEvent, taskId: string) => {
         e.stopPropagation();
@@ -415,7 +326,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                             task={task}
                             showProjectName={showProjectName}
                             isOpen={openMenuId === task.id}
-                            isDeleting={deleteTaskMutation.isPending && taskToDelete?.id === task.id}
+                            isDeleting={isDeleting && taskToDelete?.id === task.id}
                             onToggleMenu={toggleMenu}
                             onEdit={handleEditTask}
                             onDelete={handleDeleteTask}
@@ -491,7 +402,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                 }}
                 onConfirm={confirmDeleteTask}
                 task={taskToDelete}
-                isDeleting={deleteTaskMutation.isPending}
+                isDeleting={isDeleting}
             />
         </div>
     );

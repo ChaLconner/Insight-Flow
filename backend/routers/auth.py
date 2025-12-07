@@ -505,12 +505,29 @@ def refresh_token(
     )
     
 
+    # Set HttpOnly cookies
+    response.set_cookie(
+        key=ACCESS_TOKEN_KEY,
+        value=access_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        path="/"
+    )
     
+    response.set_cookie(
+        key=REFRESH_TOKEN_KEY,
+        value=new_refresh_token,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        path="/"
+    )
+
     return {
-        "access_token": access_token,
-        "refresh_token": new_refresh_token,
-        "token_type": "bearer",
-        "expires_in": 1800  # 30 minutes in seconds
+        "message": "Token refreshed successfully",
+        "expires_in": 1800
     }
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)

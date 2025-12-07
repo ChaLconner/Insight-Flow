@@ -198,6 +198,7 @@ public
 
 # Markdown files
 *.md
+!QA_REPORT.md
 
 # Specific markdown files to ensure they are ignored
 API_SPECIFICATION.md
@@ -208,7 +209,7 @@ ARCHITECTURE.md
 .kilocode/
 
 # Test and debug files
-*test_*.py
+
 *debug_*.py
 test_*.html
 debug_*.html

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from sqlalchemy.exc import IntegrityError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -79,12 +80,12 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:8000",  # Add for direct backend access
-        "http://127.0.0.1:8000",  # Add for direct backend access
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:3002",
-        "http://127.0.0.1:3002",
+        # "http://localhost:8000",
+        # "http://127.0.0.1:8000",
+        # "http://localhost:3001", 
+        # "http://127.0.0.1:3001",
+        # "http://localhost:3002",
+        # "http://127.0.0.1:3002",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -98,7 +99,7 @@ app.add_middleware(
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0"]
+    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0", "testserver"]
 )
 
 from fastapi.exceptions import RequestValidationError
@@ -145,6 +146,23 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         }
     )
 
+from utils.exceptions import AppError
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    """
+    Handle standardized AppErrors.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "message": exc.message,
+            "code": exc.code,
+            "details": exc.details
+        }
+    )
+
 @app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError):
     app_logger.warning(f"ValueError: {exc}")
@@ -152,7 +170,8 @@ async def value_error_handler(request: Request, exc: ValueError):
         status_code=400,
         content={
             "success": False,
-            "message": str(exc)
+            "message": str(exc),
+            "code": "BAD_REQUEST"
         }
     )
 
@@ -190,6 +209,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
+from middleware.monitoring import PerformanceMiddleware
+
+app.add_middleware(PerformanceMiddleware)
 app.add_middleware(CacheMiddleware, cache_timeout=60)
 
 # Include routers - order matters for overlapping routes!
