@@ -58,11 +58,30 @@ engine = create_engine(
     database_url,
     pool_pre_ping=True,       # Validate connections before use
     pool_recycle=300,         # Recycle connections every 5 minutes
-    pool_size=10,             # Increased from 5 to 10
-    max_overflow=20,          # Increased from 10 to 20
+    pool_size=5,              # Reduced from 10 to 5 to prevent connection exhaustion
+    max_overflow=10,          # Reduced from 20 to 10
     pool_timeout=30,          # Timeout after 30 seconds waiting for connection
     connect_args=connect_args
 )
+
+from sqlalchemy import event
+import time
+
+@event.listens_for(engine, "checkout")
+def receive_checkout(dbapi_connection, connection_record, connection_proxy):
+    """Log when a connection is retrieved from the pool"""
+    connection_record.info['checkout_start'] = time.time()
+    # db_logger.debug("Connection checked out from pool")
+
+@event.listens_for(engine, "checkin")
+def receive_checkin(dbapi_connection, connection_record):
+    """Log when a connection is returned to the pool"""
+    if 'checkout_start' in connection_record.info:
+        duration = time.time() - connection_record.info['checkout_start']
+        # Log only if duration is significant (> 1s) to avoid noise
+        if duration > 1.0:
+            db_logger.warning(f"Long database connection usage: {duration:.2f}s")
+
 
 # Create session factory with better isolation
 SessionLocal = sessionmaker(
@@ -136,15 +155,39 @@ def init_database():
 # Dependency to get DB session
 def get_db():
     """
-    Dependency to get database session with error handling.
+    Dependency to get database session with error handling and retry logic.
     """
     db_logger.debug("Creating new database session")
-    db = SessionLocal()
+    
+    # Simple retry logic for establishing connection
+    max_retries = 3
+    retry_delay = 0.5
+    
+    db = None
+    last_error = None
+    
+    for attempt in range(max_retries):
+        try:
+            db = SessionLocal()
+            # Test connection immediately
+            db.execute(text("SELECT 1"))
+            break
+        except Exception as e:
+            last_error = e
+            db_logger.warning(f"Database connection attempt {attempt + 1} failed: {e}")
+            if db:
+                db.close()
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+    
+    if not db:
+        db_logger.error(f"Failed to establish database connection after {max_retries} attempts")
+        raise last_error
+        
     try:
-        # Connection is already validated by pool_pre_ping=True
         yield db
     except Exception as e:
-        db_logger.error(f"Database connection error: {e}")
+        db_logger.error(f"Database session error: {e}")
         db.rollback()
         raise e
     finally:

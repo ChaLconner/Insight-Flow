@@ -5,7 +5,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, OperationalError
 from models.user import User
-from schemas.user import UserCreate, UserLogin, UserUpdate
+from schemas.user import UserCreate, UserLogin, UserUpdate, UserInvite
 from utils.auth import get_password_hash, authenticate_user, verify_password
 from utils.logger import logger
 import uuid
@@ -244,3 +244,23 @@ class UserService:
         except Exception as e:
             logger.error(f"Error verifying password: {e}")
             return False
+
+    def invite_user(self, user_invite: UserInvite) -> User:
+        """Invite an existing user (update role and activate)."""
+        # Check for existing user
+        db_user = self.get_user_by_email(user_invite.email)
+        if not db_user:
+            raise ValueError("User not found. Please ask them to register first.")
+            
+        # Update user role and status
+        db_user.role = user_invite.role or "user"
+        db_user.is_active = True
+        
+        try:
+            self.db.commit()
+            self.db.refresh(db_user)
+            return db_user
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error inviting user: {e}")
+            raise ValueError("Failed to invite user")

@@ -47,38 +47,50 @@ def get_analytics_overview(
             logger.info(f"Serving analytics from cache for user {current_user.id}")
             return cached_data
             
-    from models.project import ProjectMember
+    from models.project import Project, ProjectMember
     from models.task import Task, TaskStatus
     from models.task_history import TaskHistory, ActivityType
-    from sqlalchemy import func, case, distinct, and_, cast, String, text
+    from sqlalchemy import func, case, distinct, and_, or_, cast, String, text, extract
     
-    project_service = ProjectService(db)
-    user_projects = project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
-    project_ids = [p.id for p in user_projects]
+    # Efficient Subquery for accessible projects
+    accessible_projects_subquery = db.query(Project.id).outerjoin(
+        ProjectMember, Project.id == ProjectMember.project_id
+    ).filter(
+        or_(
+            Project.owner_id == current_user.id,
+            ProjectMember.user_id == current_user.id
+        )
+    )
 
-    if not project_ids:
+    # 1. Project stats
+    total_projects = db.query(func.count(distinct(Project.id))).outerjoin(
+        ProjectMember, Project.id == ProjectMember.project_id
+    ).filter(
+        or_(
+            Project.owner_id == current_user.id,
+            ProjectMember.user_id == current_user.id
+        )
+    ).scalar() or 0
+    
+    if total_projects == 0:
         return {
             "overview": {
-                "totalProjects": 0,
-                "activeProjects": 0,
-                "totalTasks": 0,
-                "completedTasks": 0,
-                "inProgressTasks": 0,
-                "overdueTasks": 0,
-                "teamMembers": 0,
-                "completionRate": 0,
-                "averageCompletionTime": 0,
-                "teamVelocity": 0,
+                "totalProjects": 0, "activeProjects": 0,
+                "totalTasks": 0, "completedTasks": 0, "inProgressTasks": 0, "overdueTasks": 0,
+                "teamMembers": 0, "completionRate": 0, "averageCompletionTime": 0, "teamVelocity": 0,
             },
-            "trends": [],
-            "projects": [],
-            "team": [],
-            "weeklyBurndown": []
+            "trends": [], "projects": [], "team": [], "weeklyBurndown": []
         }
 
-    # Calculate metrics using efficient aggregation queries
-    total_projects = len(user_projects)
-    active_projects = len([p for p in user_projects if p.is_active])  # type: ignore
+    active_projects = db.query(func.count(distinct(Project.id))).outerjoin(
+        ProjectMember, Project.id == ProjectMember.project_id
+    ).filter(
+        or_(
+            Project.owner_id == current_user.id,
+            ProjectMember.user_id == current_user.id
+        ),
+        Project.is_active == True
+    ).scalar() or 0
 
     # Task stats across all projects
     task_stats = db.query(
@@ -86,65 +98,62 @@ def get_analytics_overview(
         func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed'),
         func.sum(case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)).label('in_progress'),
         func.sum(case((and_(Task.due_date < datetime.now(), cast(Task.status, String) != TaskStatus.DONE.value), 1), else_=0)).label('overdue')
-    ).filter(Task.project_id.in_(project_ids)).first()
+    ).filter(Task.project_id.in_(accessible_projects_subquery)).first()
 
     total_tasks = task_stats.total if task_stats else 0
-    completed_tasks = task_stats.completed if task_stats else 0
-    in_progress_tasks = task_stats.in_progress if task_stats else 0
-    overdue_tasks = task_stats.overdue if task_stats else 0
+    completed_tasks = task_stats.completed if task_stats and task_stats.completed else 0
+    in_progress_tasks = task_stats.in_progress if task_stats and task_stats.in_progress else 0
+    overdue_tasks = task_stats.overdue if task_stats and task_stats.overdue else 0
 
-    # Team members (unique users across all projects)
-    member_ids = db.query(ProjectMember.user_id).filter(ProjectMember.project_id.in_(project_ids)).distinct().count()
+    # Team members (unique users across all accessible projects)
+    # We join ProjectMember with our accessible projects subquery
+    member_ids_count = db.query(func.count(distinct(ProjectMember.user_id))).filter(
+        ProjectMember.project_id.in_(accessible_projects_subquery)
+    ).scalar() or 0
 
     completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
 
-    # Average completion time - Accurate using TaskHistory
-    # 1. Get creation times for done tasks
-    done_tasks_created = db.query(Task.id, Task.created_at).filter(
-        Task.project_id.in_(project_ids),
-        cast(Task.status, String) == TaskStatus.DONE.value
-    ).all()
+    # Average completion time - DB Optimized
+    # CTE for first completion time per task
+    min_completion_dates = db.query(
+        TaskHistory.task_id, 
+        func.min(TaskHistory.timestamp).label('completed_at')
+    ).filter(
+        TaskHistory.project_id.in_(accessible_projects_subquery),
+        TaskHistory.activity_type == ActivityType.TASK_COMPLETED
+    ).group_by(TaskHistory.task_id).subquery()
+
+    # Calculate average difference between created_at and completed_at
+    avg_seconds = db.query(
+        func.avg(extract('epoch', min_completion_dates.c.completed_at) - extract('epoch', Task.created_at))
+    ).join(
+        min_completion_dates, Task.id == min_completion_dates.c.task_id
+    ).scalar()
     
-    done_task_map = {t_id: t_created for t_id, t_created in done_tasks_created}
-    done_task_ids = list(done_task_map.keys())
-    
-    # 2. Get first completion timestamp from history
-    if done_task_ids:
-        completion_times = db.query(
-            TaskHistory.task_id, 
-            func.min(TaskHistory.timestamp)
-        ).filter(
-            TaskHistory.task_id.in_(done_task_ids),
-            TaskHistory.activity_type == ActivityType.TASK_COMPLETED
-        ).group_by(TaskHistory.task_id).all()
-        
-        total_seconds = 0
-        count = 0
-        
-        for t_id, t_completed in completion_times:
-            t_created = done_task_map.get(t_id)
-            if t_created and t_completed and t_completed > t_created:
-                total_seconds += (t_completed - t_created).total_seconds()
-                count += 1
-                
-        average_completion_time = (total_seconds / 86400 / count) if count > 0 else 0
-    else:
-        average_completion_time = 0
+    average_completion_time = (avg_seconds / 86400) if avg_seconds else 0
 
     # Project performance - Aggregated
     project_task_stats = db.query(
         Task.project_id,
         func.count(Task.id).label('total'),
         func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed')
-    ).filter(Task.project_id.in_(project_ids)).group_by(Task.project_id).all()
+    ).filter(
+        Task.project_id.in_(accessible_projects_subquery)
+    ).group_by(Task.project_id).subquery()
     
-    project_stats_map = {stat.project_id: stat for stat in project_task_stats}
+    # Get projects joined with stats
+    projects_with_stats = db.query(
+        Project,
+        func.coalesce(project_task_stats.c.total, 0),
+        func.coalesce(project_task_stats.c.completed, 0)
+    ).outerjoin(
+        project_task_stats, Project.id == project_task_stats.c.project_id
+    ).filter(
+        Project.id.in_(accessible_projects_subquery)
+    ).all()
     
     projects_data = []
-    for p in user_projects:
-        stats = project_stats_map.get(p.id)
-        p_tasks = stats.total if stats else 0
-        p_completed = stats.completed if stats else 0
+    for p, p_tasks, p_completed in projects_with_stats:
         p_progress = (p_completed / p_tasks * 100) if p_tasks > 0 else 0
         
         # Velocity calculation based on progress
@@ -169,7 +178,7 @@ def get_analytics_overview(
         func.count(Task.id).label('total'),
         func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed')
     ).filter(
-        Task.project_id.in_(project_ids),
+        Task.project_id.in_(accessible_projects_subquery),
         Task.assignee_id.isnot(None)
     ).group_by(Task.assignee_id).all()
     
@@ -206,31 +215,27 @@ def get_analytics_overview(
     seven_days_ago = (today - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
     
     # 2. Daily Created counts in range
-    # CAST(created_at AS DATE) works in PG. For SQLite it might differ, but we assume PG/standard SQL support via func.date or similar
-    # Using simple date truncation in python might be safer if DB agnostic, but let's try SQL Group By for perf
-    
     # Initial counts (cumulative up to start of period)
     initial_planned = db.query(func.count(Task.id)).filter(
-        Task.project_id.in_(project_ids),
+        Task.project_id.in_(accessible_projects_subquery),
         Task.created_at < seven_days_ago
     ).scalar() or 0
     
     initial_actual = db.query(func.count(distinct(TaskHistory.task_id))).filter(
-        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.project_id.in_(accessible_projects_subquery),
         TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
         TaskHistory.timestamp < seven_days_ago
     ).scalar() or 0
     
     # Daily counts within period
-    # We fetch all dates in range and process in python to avoid complex recursive CTEs
     created_in_range = db.query(Task.created_at).filter(
-        Task.project_id.in_(project_ids),
+        Task.project_id.in_(accessible_projects_subquery),
         Task.created_at >= seven_days_ago,
         Task.created_at <= today
     ).all()
     
     completed_in_range = db.query(TaskHistory.timestamp).filter(
-        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.project_id.in_(accessible_projects_subquery),
         TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
         TaskHistory.timestamp >= seven_days_ago,
         TaskHistory.timestamp <= today
@@ -286,13 +291,13 @@ def get_analytics_overview(
     
     # 1. Tasks Completed Trend
     current_completed_count = db.query(func.count(distinct(TaskHistory.task_id))).filter(
-        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.project_id.in_(accessible_projects_subquery),
         TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
         TaskHistory.timestamp >= current_start
     ).scalar() or 0
     
     previous_completed_count = db.query(func.count(distinct(TaskHistory.task_id))).filter(
-        TaskHistory.project_id.in_(project_ids),
+        TaskHistory.project_id.in_(accessible_projects_subquery),
         TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
         TaskHistory.timestamp >= previous_start,
         TaskHistory.timestamp < current_start
@@ -310,7 +315,7 @@ def get_analytics_overview(
     velocity_change_pct = (velocity_change / div_base_vel * 100)
     
     # 3. Team Productivity (Tasks/Member)
-    active_members_count = member_ids or 1
+    active_members_count = member_ids_count or 1
     current_productivity = current_completed_count / active_members_count
     previous_productivity = previous_completed_count / active_members_count
     productivity_change = current_productivity - previous_productivity
@@ -349,7 +354,7 @@ def get_analytics_overview(
             "completedTasks": completed_tasks,
             "inProgressTasks": in_progress_tasks,
             "overdueTasks": overdue_tasks,
-            "teamMembers": member_ids,
+            "teamMembers": member_ids_count,
             "completionRate": round(completion_rate, 1),
             "averageCompletionTime": round(average_completion_time, 1),
             "teamVelocity": round(current_velocity * 7, 1), # Weekly velocity

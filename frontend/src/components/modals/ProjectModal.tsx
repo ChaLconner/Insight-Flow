@@ -15,6 +15,8 @@ import { apiClient } from "@/lib/api-client";
 import { getAvatarUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
+import { UserSearchSelect } from "@/components/ui/user-search-select";
+import { CustomSelect } from "@/components/ui/custom-select";
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -36,26 +38,11 @@ const projectColors = [
 ];
 
 export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: ProjectModalProps) {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  // No longer fetching all users on mount
 
   // Fetch users when component mounts
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await apiClient.get('/users');
-        setUsers(response.data ?? response.data);
-        setLoadingUsers(false);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        setLoadingUsers(false);
-      }
-    };
-
-    if (isOpen && mode === "create") {
-      fetchUsers();
-    }
-  }, [isOpen, mode]);
+  // No longer fetching all users on mount
+  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
 
   const [formData, setFormData] = useState({
     name: project?.name ?? "",
@@ -100,6 +87,30 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
           }
         }
       });
+
+      // Populate selected users from project members
+      // The member object structure from ProjectsPage seems to have a nested 'user' object or spreads user props
+      // We need to map it back to User type.
+      // Based on ProjectsPage, member has a .user property with full user details.
+      const members = project.members || [];
+      const users: User[] = members.map(m => {
+        const member = m as any;
+        return member.user || {
+          id: member.userId,
+          firstName: member.name?.split(' ')[0] || 'Unknown',
+          lastName: member.name?.split(' ').slice(1).join(' ') || 'User',
+          email: member.email || '',
+          username: 'unknown',
+          role: 'user',
+          avatar: member.avatar,
+          isActive: true,
+          emailVerified: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      });
+      setSelectedUsers(users);
+
     } else if (mode === "create") {
       // Reset form for create mode
       setFormData({
@@ -120,6 +131,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
           }
         }
       });
+      setSelectedUsers([]);
     }
   }, [project, mode]);
 
@@ -276,24 +288,37 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                 <Users className="h-4 w-4" />
                 Team Members
               </Label>
-              {loadingUsers ? (
-                <div className="flex justify-center py-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-32 overflow-y-auto">
-                  {users.map((user) => (
-                    <label
-                      key={user.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.memberIds.includes(user.id)}
-                        onChange={() => handleMemberToggle(user.id)}
-                        className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-indigo-500"
-                        disabled={isSubmitting}
-                      />
+
+              {/* Search User Input */}
+              <div className="relative">
+                <UserSearchSelect
+                  value=""
+                  onChange={() => { }} // Controlled by onUserSelect
+                  onUserSelect={(user) => {
+                    if (!formData.memberIds.includes(user.id)) {
+                      handleMemberToggle(user.id);
+                      // Add to selectedUsers if not present (logic handled in toggle or separate effect, 
+                      // but simpler to just add here locally since we have the full user object)
+                      setSelectedUsers(prev => [...prev, user]);
+                    } else {
+                      toast.info("User already added");
+                    }
+                  }}
+                  placeholder="Search to add team members..."
+                />
+              </div>
+
+              {/* Selected Users List */}
+              <div className="space-y-2 mt-2">
+                {selectedUsers.length === 0 && (
+                  <p className="text-sm text-zinc-500 italic">No members added yet.</p>
+                )}
+                {selectedUsers.map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10"
+                  >
+                    <div className="flex items-center gap-3">
                       {/* Avatar */}
                       <div className="h-8 w-8 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                         {user.avatar ? (
@@ -312,14 +337,26 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                           {(user.lastName && typeof user.lastName === 'string' ? user.lastName[0] : '')}
                         </span>
                       </div>
-                      <div className="flex-1">
+                      <div>
                         <p className="text-white text-sm font-medium">{user.firstName} {user.lastName}</p>
                         <p className="text-zinc-400 text-xs">{user.email}</p>
                       </div>
-                    </label>
-                  ))}
-                </div>
-              )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        handleMemberToggle(user.id);
+                        setSelectedUsers(prev => prev.filter(u => u.id !== user.id));
+                      }}
+                      className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400 hover:bg-red-400/10"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Project Settings */}
@@ -372,19 +409,19 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
 
                 <div className="space-y-2">
                   <Label className="text-zinc-400 text-xs">Default Task Visibility</Label>
-                  <select
+                  <CustomSelect
                     value={formData.settings.defaultTaskVisibility}
-                    onChange={(e) => handleInputChange("settings", {
+                    onChange={(value) => handleInputChange("settings", {
                       ...formData.settings,
-                      defaultTaskVisibility: e.target.value
+                      defaultTaskVisibility: value
                     })}
-                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm"
-                    disabled={isSubmitting}
-                  >
-                    <option value="private">Private</option>
-                    <option value="team">Team</option>
-                    <option value="public">Public</option>
-                  </select>
+                    options={[
+                      { value: "private", label: "Private", description: "Only members can see tasks" },
+                      { value: "team", label: "Team", description: "All team members can see tasks" },
+                      { value: "public", label: "Public", description: "Anyone with link can see tasks" }
+                    ]}
+                    className="w-full"
+                  />
                 </div>
               </div>
             </div>

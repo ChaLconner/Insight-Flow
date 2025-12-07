@@ -72,6 +72,11 @@ export interface CreateUserRequest {
   role: UserRole;
 }
 
+export interface InviteUserRequest {
+  email: string;
+  role: UserRole;
+}
+
 export interface UpdateUserRequest {
   email?: string;
   username?: string;

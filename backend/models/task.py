@@ -1,7 +1,4 @@
-"""
-Task model for Insight-Flow application.
-"""
-from sqlalchemy import Column, String, UUID, ForeignKey, DateTime, Text, Enum
+from sqlalchemy import Column, String, UUID, ForeignKey, DateTime, Text, Enum, Index
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 import enum
@@ -57,6 +54,10 @@ class Task(BaseModel):
     dependents = relationship("TaskDependency", foreign_keys="TaskDependency.depends_on_task_id", back_populates="depends_on_task", cascade="all, delete-orphan")
     time_tracking = relationship("TaskTimeTracking", back_populates="task", cascade="all, delete-orphan")
     
+    __table_args__ = (
+        Index('ix_tasks_project_status', 'project_id', 'status'),
+    )
+
     def __init__(self, **kwargs):
         """Override __init__ to ensure UUID is generated immediately."""
         super().__init__(**kwargs)

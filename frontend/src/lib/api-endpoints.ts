@@ -16,7 +16,8 @@ import type {
   CreateTaskRequest,
   UpdateTaskRequest,
   Notification,
-  RecentActivity
+  RecentActivity,
+  InviteUserRequest
 } from '@/types';
 
 // ===========================================
@@ -444,6 +445,12 @@ export const usersApi = {
   // Update user settings
   updateSettings: async (settingsData: any): Promise<any> => {
     const { data } = await apiClient.patch('/users/me/settings', settingsData);
+    return data;
+  },
+
+  // Invite user
+  inviteUser: async (userData: InviteUserRequest): Promise<User> => {
+    const { data } = await apiClient.post('/users/invite', userData);
     return data;
   },
 };

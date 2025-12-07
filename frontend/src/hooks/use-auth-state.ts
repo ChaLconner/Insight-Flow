@@ -12,11 +12,27 @@ import { User } from '@/types';
 
 // Hook for auth state management with React Query integration
 export const useAuthState = () => {
-  // Zustand store state
-  const store = useAuthStore();
+  // Use granular selectors to avoid unnecessary re-renders
+  // We strictly avoid selecting the entire store or properties like lastActivity that update frequently
+  const user = useAuthStore(authSelectors.getUser);
+  const isAuthenticated = useAuthStore(authSelectors.isAuthenticated);
+  const isLoading = useAuthStore(authSelectors.isLoading);
+
+  // Derived state via selectors
+  const userInitials = useAuthStore(authSelectors.getUserInitials);
+  const isAdmin = useAuthStore(authSelectors.isAdmin);
+  const isManagerOrHigher = useAuthStore(authSelectors.isManagerOrHigher);
+  const isUserActive = useAuthStore(authSelectors.isUserActive);
+
+  // Actions - stable references
+  const checkAuthStatus = useAuthStore(state => state.checkAuthStatus);
+  const updateActivity = useAuthStore(state => state.updateActivity);
+  const setUser = useAuthStore(state => state.setUser);
+  const setLoading = useAuthStore(state => state.setLoading);
+
   const initializationRef = useRef(false);
 
-  // Initialize auth on mount - Simplified to rely on store singleton
+  // Initialize auth on mount
   useEffect(() => {
     let mounted = true;
 
@@ -31,8 +47,8 @@ export const useAuthState = () => {
         await authActions.initializeAuth();
       } catch (error) {
         console.error('❌ Failed to initialize auth:', error);
-        if (mounted && store.isLoading) {
-          store.setLoading(false);
+        if (mounted && isLoading) {
+          setLoading(false);
         }
       }
     };
@@ -46,93 +62,21 @@ export const useAuthState = () => {
 
   // Safety timeout to prevent infinite loading state
   useEffect(() => {
-    if (store.isLoading) {
+    if (isLoading) {
       const safetyTimeout = setTimeout(() => {
         console.warn('⚠️ Auth check timed out, forcing loading to false');
-        store.setLoading(false);
+        setLoading(false);
       }, 7000);
 
       return () => clearTimeout(safetyTimeout);
     }
-  }, [store.isLoading, store.setLoading]);
-
-  // Determine overall loading state
-  const overallIsLoading = store.isLoading;
-
-  // Selectors with safety checks - only compute if not loading/error
-  const isAuthenticated = store && typeof authSelectors.isAuthenticated === 'function'
-    ? (() => {
-      try {
-        return authSelectors.isAuthenticated(store);
-      } catch (error) {
-        console.error('Error in isAuthenticated selector:', error);
-        return false;
-      }
-    })()
-    : false;
-  const isLoading = overallIsLoading;
-  const currentUser = store && typeof authSelectors.getUser === 'function'
-    ? (() => {
-      try {
-        return authSelectors.getUser(store);
-      } catch (error) {
-        console.error('Error in getUser selector:', error);
-        return null;
-      }
-    })()
-    : null;
-  const userInitials = store && typeof authSelectors.getUserInitials === 'function' && store.user
-    ? (() => {
-      try {
-        return authSelectors.getUserInitials(store);
-      } catch (error) {
-        console.error('Error in getUserInitials selector:', error);
-        return 'U';
-      }
-    })()
-    : 'U';
-  const isAdmin = store && typeof authSelectors.isAdmin === 'function'
-    ? (() => {
-      try {
-        return authSelectors.isAdmin(store);
-      } catch (error) {
-        console.error('Error in isAdmin selector:', error);
-        return false;
-      }
-    })()
-    : false;
-  const isManagerOrHigher = store && typeof authSelectors.isManagerOrHigher === 'function'
-    ? (() => {
-      try {
-        return authSelectors.isManagerOrHigher(store);
-      } catch (error) {
-        console.error('Error in isManagerOrHigher selector:', error);
-        return false;
-      }
-    })()
-    : false;
-  const isUserActive = store && typeof authSelectors.isUserActive === 'function'
-    ? (() => {
-      try {
-        return authSelectors.isUserActive(store);
-      } catch (error) {
-        console.error('Error in isUserActive selector:', error);
-        return false;
-      }
-    })()
-    : false;
-
-  // Actions
-  const login = authActions.loginWithResponse;
-  const logout = authActions.logoutAndRedirect;
-  const updateActivity = store.updateActivity;
-  const checkAuthStatus = store.checkAuthStatus;
+  }, [isLoading, setLoading]);
 
   return {
     // State
-    user: currentUser,
+    user,
     isAuthenticated,
-    isLoading: isLoading,
+    isLoading,
     error: null,
 
     // Computed values
@@ -142,14 +86,14 @@ export const useAuthState = () => {
     isUserActive,
 
     // Actions
-    login,
-    logout,
+    login: authActions.loginWithResponse,
+    logout: authActions.logoutAndRedirect,
     updateActivity,
     checkAuthStatus,
 
     // Store methods for advanced usage
-    setUser: store.setUser,
-    setLoading: store.setLoading,
+    setUser,
+    setLoading,
   };
 };
 

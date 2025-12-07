@@ -27,79 +27,97 @@ def get_dashboard_overview(
     Get dashboard overview with statistics and recent activities.
     """
     try:
-        # Get user's projects (owned and member)
-        # Combine into a single set of IDs first
-        owned_project_ids = db.query(Project.id).filter(Project.owner_id == current_user.id).all()
-        member_project_ids = db.query(ProjectMember.project_id).filter(ProjectMember.user_id == current_user.id).all()
+        from sqlalchemy import distinct
         
-        all_project_ids = set([p[0] for p in owned_project_ids] + [p[0] for p in member_project_ids])
-        
+        # Defines the scope of projects: Owned by user OR User is a member
+        # We use a subquery construct that can be used in IN clauses
+        # This prevents fetching thousands of IDs into application memory
+        accessible_projects_subquery = db.query(Project.id).outerjoin(
+            ProjectMember, Project.id == ProjectMember.project_id
+        ).filter(
+            or_(
+                Project.owner_id == current_user.id,
+                ProjectMember.user_id == current_user.id
+            )
+        )
+
         # Get statistics
-        total_projects = len(all_project_ids)
+        # 1. Total Projects
+        total_projects = db.query(func.count(distinct(Project.id))).outerjoin(
+            ProjectMember, Project.id == ProjectMember.project_id
+        ).filter(
+            or_(
+                Project.owner_id == current_user.id,
+                ProjectMember.user_id == current_user.id
+            )
+        ).scalar() or 0
         
-        if not all_project_ids:
-            total_tasks = 0
-            completed_tasks = 0
-            in_progress_tasks = 0
-            pending_review_tasks = 0
-            team_velocity = 0
-        else:
-            # Aggregate task statistics in a single query
-            task_stats = db.query(
-                func.count(Task.id).label('total'),
-                func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed'),
-                func.sum(case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)).label('in_progress'),
-                func.sum(case((and_(
-                    Task.assignee_id == current_user.id, 
-                    cast(Task.status, String) == TaskStatus.IN_PROGRESS.value
-                ), 1), else_=0)).label('pending_review')
-            ).filter(
-                Task.project_id.in_(all_project_ids)
-            ).first()
+        if total_projects == 0:
+            return {
+                "stats": {
+                    "totalProjects": 0, "totalProjectsChange": "+0%", "totalProjectsTrend": "up",
+                    "totalTasks": 0, "completedTasks": 0,
+                    "inProgressTasks": 0, "inProgressTasksChange": "+0%", "inProgressTasksTrend": "up",
+                    "pendingReviewTasks": 0, "pendingReviewTasksChange": "+0%", "pendingReviewTasksTrend": "up",
+                    "teamVelocity": 0, "teamVelocityChange": "+0%", "teamVelocityTrend": "up"
+                },
+                "recentProjects": [],
+                "recentActivities": []
+            }
             
-            total_tasks = task_stats.total if task_stats else 0
-            completed_tasks = task_stats.completed if task_stats and task_stats.completed else 0
-            in_progress_tasks = task_stats.in_progress if task_stats and task_stats.in_progress else 0
-            pending_review_tasks = task_stats.pending_review if task_stats and task_stats.pending_review else 0
-            
-            # Calculate team velocity (percentage of completed tasks)
-            team_velocity = round((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+        # Aggregate task statistics in a single query
+        task_stats = db.query(
+            func.count(Task.id).label('total'),
+            func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed'),
+            func.sum(case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)).label('in_progress'),
+            func.sum(case((and_(
+                Task.assignee_id == current_user.id, 
+                cast(Task.status, String) == TaskStatus.IN_PROGRESS.value
+            ), 1), else_=0)).label('pending_review')
+        ).filter(
+            Task.project_id.in_(accessible_projects_subquery)
+        ).first()
         
-        # Get recent projects (last 5) with stats using subquery
-        if not all_project_ids:
-            recent_projects = []
-        else:
-            # Subquery for project stats
-            project_stats = db.query(
-                Task.project_id,
-                func.count(Task.id).label('total_tasks'),
-                func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed_tasks')
-            ).filter(
-                Task.project_id.in_(all_project_ids)
-            ).group_by(Task.project_id).subquery()
-            
-            # Main query
-            recent_projects_data = db.query(
-                Project, 
-                func.coalesce(project_stats.c.total_tasks, 0).label('total_tasks'),
-                func.coalesce(project_stats.c.completed_tasks, 0).label('completed_tasks')
-            ).outerjoin(
-                project_stats, Project.id == project_stats.c.project_id
-            ).filter(
-                Project.id.in_(all_project_ids)
-            ).order_by(desc(Project.updated_at)).limit(5).all()
-            
-            recent_projects = []
-            for project, p_total, p_completed in recent_projects_data:
-                progress = round((p_completed / p_total * 100)) if p_total > 0 else 0
-                recent_projects.append({
-                    "id": str(project.id),
-                    "name": project.name,
-                    "description": project.description,
-                    "progress": progress,
-                    "color": "#6366f1",  # Default color
-                    "updated_at": project.updated_at.isoformat() if project.updated_at else None
-                })
+        total_tasks = task_stats.total if task_stats else 0
+        completed_tasks = task_stats.completed if task_stats and task_stats.completed else 0
+        in_progress_tasks = task_stats.in_progress if task_stats and task_stats.in_progress else 0
+        pending_review_tasks = task_stats.pending_review if task_stats and task_stats.pending_review else 0
+        
+        # Calculate team velocity (percentage of completed tasks)
+        team_velocity = round((completed_tasks / total_tasks * 100)) if total_tasks > 0 else 0
+        
+        # Get recent projects (last 5) with stats using query
+        # Subquery for project stats within the accessible scope
+        project_stats = db.query(
+            Task.project_id,
+            func.count(Task.id).label('total_tasks'),
+            func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed_tasks')
+        ).filter(
+            Task.project_id.in_(accessible_projects_subquery)
+        ).group_by(Task.project_id).subquery()
+        
+        # Main query for recent projects
+        recent_projects_data = db.query(
+            Project, 
+            func.coalesce(project_stats.c.total_tasks, 0).label('total_tasks'),
+            func.coalesce(project_stats.c.completed_tasks, 0).label('completed_tasks')
+        ).outerjoin(
+            project_stats, Project.id == project_stats.c.project_id
+        ).filter(
+            Project.id.in_(accessible_projects_subquery)
+        ).order_by(desc(Project.updated_at)).limit(5).all()
+        
+        recent_projects = []
+        for project, p_total, p_completed in recent_projects_data:
+            progress = round((p_completed / p_total * 100)) if p_total > 0 else 0
+            recent_projects.append({
+                "id": str(project.id),
+                "name": project.name,
+                "description": project.description,
+                "progress": progress,
+                "color": "#6366f1",  # Default color
+                "updated_at": project.updated_at.isoformat() if project.updated_at else None
+            })
         
         # Get recent activities
         recent_activities_query = db.query(TaskHistory).options(
@@ -107,7 +125,7 @@ def get_dashboard_overview(
             joinedload(TaskHistory.project),
             joinedload(TaskHistory.task)
         ).filter(
-            TaskHistory.project_id.in_(all_project_ids)
+            TaskHistory.project_id.in_(accessible_projects_subquery)
         ).order_by(desc(TaskHistory.timestamp)).limit(10).all()
         
         recent_activities = []
@@ -149,7 +167,7 @@ def get_dashboard_overview(
         
         # 1. Total Projects Change
         projects_created_last_30_days = db.query(Project).filter(
-            Project.id.in_(all_project_ids),
+            Project.id.in_(accessible_projects_subquery),
             Project.created_at >= thirty_days_ago
         ).count()
         
@@ -166,7 +184,7 @@ def get_dashboard_overview(
             func.sum(case((and_(TaskHistory.activity_type == ActivityType.TASK_COMPLETED, TaskHistory.timestamp >= seven_days_ago), 1), else_=0)).label('velocity_7d'),
             func.sum(case((and_(TaskHistory.activity_type == ActivityType.TASK_COMPLETED, TaskHistory.timestamp >= fourteen_days_ago, TaskHistory.timestamp < seven_days_ago), 1), else_=0)).label('velocity_prev_7d')
         ).filter(
-            TaskHistory.project_id.in_(all_project_ids),
+            TaskHistory.project_id.in_(accessible_projects_subquery),
             TaskHistory.timestamp >= thirty_days_ago
         ).first()
         
@@ -180,7 +198,7 @@ def get_dashboard_overview(
             func.sum(case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)).label('new_active'),
             func.sum(case((and_(Task.assignee_id == current_user.id, cast(Task.status, String) == TaskStatus.IN_PROGRESS.value), 1), else_=0)).label('my_new_active')
         ).filter(
-            Task.project_id.in_(all_project_ids),
+            Task.project_id.in_(accessible_projects_subquery),
             Task.created_at >= thirty_days_ago
         ).first()
 
@@ -203,9 +221,7 @@ def get_dashboard_overview(
         else:
             pending_change = 100 if pending_review_tasks > 0 else 0
 
-        # 4. Team Velocity (Tasks completed in last 7 days) - using aggregated values
-        # Note: team_velocity variable name was reused in original code, we use team_velocity_val here
-        
+        # 4. Team Velocity (Tasks completed in last 7 days)
         if prev_velocity_val > 0:
             velocity_change = ((team_velocity_val - prev_velocity_val) / prev_velocity_val) * 100
         else:
@@ -303,14 +319,15 @@ def get_recent_projects(
     Get recent projects for current user.
     """
     try:
-        # Get user's projects (owned and member)
-        owned_project_ids = db.query(Project.id).filter(Project.owner_id == current_user.id).all()
-        member_project_ids = db.query(ProjectMember.project_id).filter(ProjectMember.user_id == current_user.id).all()
-        
-        all_project_ids = set([p[0] for p in owned_project_ids] + [p[0] for p in member_project_ids])
-        
-        if not all_project_ids:
-            return []
+        # Accessible projects subquery
+        accessible_projects_subquery = db.query(Project.id).outerjoin(
+            ProjectMember, Project.id == ProjectMember.project_id
+        ).filter(
+            or_(
+                Project.owner_id == current_user.id,
+                ProjectMember.user_id == current_user.id
+            )
+        )
             
         # Subquery for project stats
         project_stats = db.query(
@@ -318,7 +335,7 @@ def get_recent_projects(
             func.count(Task.id).label('total_tasks'),
             func.sum(case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)).label('completed_tasks')
         ).filter(
-            Task.project_id.in_(all_project_ids)
+            Task.project_id.in_(accessible_projects_subquery)
         ).group_by(Task.project_id).subquery()
         
         # Main query
@@ -329,7 +346,7 @@ def get_recent_projects(
         ).outerjoin(
             project_stats, Project.id == project_stats.c.project_id
         ).filter(
-            Project.id.in_(all_project_ids)
+            Project.id.in_(accessible_projects_subquery)
         ).order_by(desc(Project.updated_at)).limit(5).all()
         
         project_list = []
@@ -363,21 +380,15 @@ def get_team_activity(
     Get recent team activity.
     """
     try:
-        # Get user's projects
-        user_projects = db.query(Project).filter(
-            Project.owner_id == current_user.id
-        ).all()
-        
-        # Get projects where user is a member
-        member_projects = db.query(Project).join(ProjectMember).filter(
-            ProjectMember.user_id == current_user.id
-        ).all()
-        
-        # Combine unique projects
-        all_project_ids = set([p.id for p in user_projects] + [p.id for p in member_projects])
-        
-        if not all_project_ids:
-            return []
+        # Accessible projects subquery
+        accessible_projects_subquery = db.query(Project.id).outerjoin(
+            ProjectMember, Project.id == ProjectMember.project_id
+        ).filter(
+            or_(
+                Project.owner_id == current_user.id,
+                ProjectMember.user_id == current_user.id
+            )
+        )
 
         # Get recent activities
         recent_activities_query = db.query(TaskHistory).options(
@@ -385,7 +396,7 @@ def get_team_activity(
             joinedload(TaskHistory.project),
             joinedload(TaskHistory.task)
         ).filter(
-            TaskHistory.project_id.in_(all_project_ids)
+            TaskHistory.project_id.in_(accessible_projects_subquery)
         ).order_by(desc(TaskHistory.timestamp)).limit(20).all()
         
         recent_activities = []

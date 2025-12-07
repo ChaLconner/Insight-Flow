@@ -194,19 +194,19 @@ export const generateThemeVariants = () => {
         cardForeground: 'hsl(210 40% 98%)',
         popover: 'hsl(222.2 84% 4.9%)',
         popoverForeground: 'hsl(210 40% 98%)',
-        primary: 'hsl(217.2 91.2% 59.8%)',
-        primaryForeground: 'hsl(222.2 84% 4.9%)',
-        secondary: 'hsl(217.2 32.6% 17.5%)',
+        primary: 'hsl(239 84% 67%)', // Indigo 500
+        primaryForeground: 'hsl(210 40% 98%)',
+        secondary: 'hsl(215 28% 17%)', // Slate 900ish
         secondaryForeground: 'hsl(210 40% 98%)',
-        muted: 'hsl(217.2 32.6% 17.5%)',
+        muted: 'hsl(215 28% 17%)',
         mutedForeground: 'hsl(215 20.2% 65.1%)',
-        accent: 'hsl(217.2 32.6% 17.5%)',
+        accent: 'hsl(215 28% 17%)',
         accentForeground: 'hsl(210 40% 98%)',
-        destructive: 'hsl(0 62.8% 30.6%)',
+        destructive: 'hsl(0 84% 60%)',
         destructiveForeground: 'hsl(210 40% 98%)',
-        border: 'hsl(217.2 32.6% 17.5%)',
-        input: 'hsl(217.2 32.6% 17.5%)',
-        ring: 'hsl(224.3 76.3% 94.1%)',
+        border: 'hsl(215 28% 17%)',
+        input: 'hsl(215 28% 17%)',
+        ring: 'hsl(239 84% 67%)',
       },
     },
   } as const;
@@ -218,11 +218,11 @@ export const tokenUtils = {
   getColor: (path: string) => {
     const keys = path.split('.');
     let value: any = colors;
-    
+
     for (const key of keys) {
       value = value?.[key];
     }
-    
+
     return value;
   },
 
@@ -235,11 +235,11 @@ export const tokenUtils = {
   getTypography: (path: string) => {
     const keys = path.split('.');
     let value: any = typography;
-    
+
     for (const key of keys) {
       value = value?.[key];
     }
-    
+
     return value;
   },
 
@@ -247,11 +247,11 @@ export const tokenUtils = {
   getShadow: (path: string) => {
     const keys = path.split('.');
     let value: any = shadows;
-    
+
     for (const key of keys) {
       value = value?.[key];
     }
-    
+
     return value;
   },
 
@@ -259,11 +259,11 @@ export const tokenUtils = {
   getAnimation: (path: string) => {
     const keys = path.split('.');
     let value: any = animations;
-    
+
     for (const key of keys) {
       value = value?.[key];
     }
-    
+
     return value;
   },
 

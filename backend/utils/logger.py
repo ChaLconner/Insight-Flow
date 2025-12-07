@@ -2,6 +2,33 @@ import logging
 import os
 from typing import Optional
 
+import json
+
+class JsonFormatter(logging.Formatter):
+    """
+    JSON formatter for structured logging.
+    """
+    def format(self, record):
+        log_record = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+        }
+        
+        # Add source info if in debug or error
+        if record.levelno >= logging.ERROR or os.getenv("DEBUG", "false").lower() == "true":
+            log_record.update({
+                "filename": record.filename,
+                "lineno": record.lineno,
+                "funcName": record.funcName
+            })
+            
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info)
+            
+        return json.dumps(log_record)
+
 def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     """
     Setup logger with appropriate configuration based on environment.
@@ -33,13 +60,16 @@ def setup_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     console_handler.setLevel(log_level)
     
     # Create formatter
-    if os.getenv("DEBUG", "false").lower() == "true":
+    if os.getenv("ENVIRONMENT") == "production":
+        # Use JSON formatter for production
+        formatter = JsonFormatter()
+    elif os.getenv("DEBUG", "false").lower() == "true":
         # Detailed format for development
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
         )
     else:
-        # Simple format for production
+        # Simple format for other environments (e.g. testing)
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )

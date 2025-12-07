@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 interface Option {
     value: string;
     label: string;
+    description?: string;
+    color?: string; // Optional color for the label
 }
 
 interface CustomSelectProps {
@@ -13,9 +15,10 @@ interface CustomSelectProps {
     options: Option[];
     className?: string;
     size?: "default" | "sm" | "lg" | "icon";
+    placeholder?: string;
 }
 
-export function CustomSelect({ value, onChange, options, className, size = "default" }: CustomSelectProps) {
+export function CustomSelect({ value, onChange, options, className, size = "default", placeholder }: CustomSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -30,7 +33,8 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const selectedLabel = options.find(opt => opt.value === value)?.label || value;
+    const selectedOption = options.find(opt => opt.value === value);
+    const selectedLabel = selectedOption?.label || value || placeholder || "Select...";
 
     const sizeClasses = {
         default: "h-9 px-3 py-2",
@@ -50,7 +54,7 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
                     size === "default" && "text-sm",
                 )}
             >
-                <span className="truncate">{selectedLabel}</span>
+                <span className={cn("truncate", selectedOption?.color)}>{selectedLabel}</span>
                 <ChevronDown className={cn("ml-2 opacity-50 transition-transform", isOpen && "transform rotate-180", size === "sm" ? "h-3 w-3" : "h-4 w-4")} />
             </button>
 
@@ -65,12 +69,22 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
                                     setIsOpen(false);
                                 }}
                                 className={cn(
-                                    "flex w-full items-center px-3 py-2 text-zinc-300 hover:bg-white/10 hover:text-white transition-colors text-left",
-                                    size === "sm" ? "text-xs" : "text-sm",
-                                    value === option.value && "bg-indigo-500/20 text-indigo-300"
+                                    "flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-white/10",
+                                    value === option.value ? "bg-indigo-500/20" : "",
                                 )}
                             >
-                                {option.label}
+                                <span className={cn(
+                                    "font-medium",
+                                    size === "sm" ? "text-xs" : "text-sm",
+                                    option.color || (value === option.value ? "text-indigo-300" : "text-zinc-200")
+                                )}>
+                                    {option.label}
+                                </span>
+                                {option.description && (
+                                    <span className="text-xs text-zinc-500 mt-0.5">
+                                        {option.description}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>

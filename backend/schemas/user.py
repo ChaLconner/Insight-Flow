@@ -80,6 +80,25 @@ class UserCreate(UserBase):
             raise ValueError('รหัสผ่านต้องมีอักขระพิเศษอย่างน้อย 1 ตัว')
         return v
 
+class UserInvite(BaseModel):
+    """Schema for inviting a new user."""
+    email: EmailStr
+    role: Optional[str] = "user"
+
+    @field_validator('email')
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        """Validate email field."""
+        v = v.strip().lower()
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
+            raise ValueError('Invalid email format')
+        return v
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+
 class UserUpdate(BaseModel):
     """Schema for updating user information."""
     name: Optional[str] = None

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,24 @@ import type { Task } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
 import { tasksApi } from "@/lib/api-endpoints";
 import { apiClient } from "@/lib/api-client";
-import { NewTaskModal } from "./NewTaskModal";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TaskItem } from "./TaskItem";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
+import dynamic from 'next/dynamic';
+
+// Optimize heavy modals with dynamic import
+const NewTaskModal = dynamic(() => import('./NewTaskModal').then(mod => mod.NewTaskModal), {
+    loading: () => null,
+    ssr: false
+});
+const DeleteTaskModal = dynamic(() => import('@/components/modals/DeleteTaskModal').then(mod => mod.DeleteTaskModal), {
+    loading: () => null,
+    ssr: false
+});
+
+
 
 export interface TaskListRef {
     refresh: () => void;
@@ -48,6 +60,11 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
 }, ref) => {
     const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+    // Delete Modal State
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [localSearchQuery, setLocalSearchQuery] = useState("");
 
@@ -101,15 +118,15 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
         };
     }, []);
 
-    // Create query key with memoization for better performance
-    const queryKey = useMemo(() => [
+    // Create query key (useQuery handles deep comparison, so direct array is fine)
+    const queryKey = [
         'tasks',
         projectId || 'my',
         page,
         PAGE_SIZE,
         searchQuery,
         statusFilter
-    ], [projectId, page, searchQuery, statusFilter]);
+    ];
 
     // Sync state from URL params when navigating (e.g. back button)
     useEffect(() => {
@@ -197,12 +214,23 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
             const qKey = projectId ? ['tasks', projectId] : ['tasks', 'my'];
             queryClient.invalidateQueries({ queryKey: qKey });
             queryClient.invalidateQueries({ queryKey: ['tasks', 'my'] }); // Always invalidate global list too
+
+            // Close modal and reset state
+            setIsDeleteModalOpen(false);
+            setTaskToDelete(null);
+
             if (onTaskChange) onTaskChange();
 
             toast.success("Task deleted", {
                 description: "The task has been permanently removed.",
             });
         },
+        onError: (err) => {
+            console.error("Failed to delete task", err);
+            toast.error("Failed to delete task", {
+                description: getErrorMessage(err)
+            });
+        }
     });
 
     // Handle refresh logic exposed to parent
@@ -225,18 +253,17 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
         setOpenMenuId(null);
     }, []);
 
-    const handleDeleteTask = useCallback(async (task: Task) => {
-        if (!confirm("Are you sure you want to delete this task?")) return;
+    const handleDeleteTask = useCallback((task: Task) => {
+        setTaskToDelete(task);
+        setIsDeleteModalOpen(true);
+        setOpenMenuId(null);
+    }, []);
 
-        try {
-            await deleteTaskMutation.mutateAsync(task);
-        } catch (err: any) {
-            console.error("Failed to delete task", err);
-            toast.error("Failed to delete task", {
-                description: getErrorMessage(err)
-            });
+    const confirmDeleteTask = useCallback(() => {
+        if (taskToDelete) {
+            deleteTaskMutation.mutate(taskToDelete);
         }
-    }, [deleteTaskMutation]);
+    }, [deleteTaskMutation, taskToDelete]);
 
     const toggleMenu = useCallback((e: React.MouseEvent, taskId: string) => {
         e.stopPropagation();
@@ -388,7 +415,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                             task={task}
                             showProjectName={showProjectName}
                             isOpen={openMenuId === task.id}
-                            isDeleting={deleteTaskMutation.isPending}
+                            isDeleting={deleteTaskMutation.isPending && taskToDelete?.id === task.id}
                             onToggleMenu={toggleMenu}
                             onEdit={handleEditTask}
                             onDelete={handleDeleteTask}
@@ -454,6 +481,17 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                 }}
                 defaultProjectId={projectId}
                 task={editingTask}
+            />
+
+            <DeleteTaskModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => {
+                    setIsDeleteModalOpen(false);
+                    setTaskToDelete(null);
+                }}
+                onConfirm={confirmDeleteTask}
+                task={taskToDelete}
+                isDeleting={deleteTaskMutation.isPending}
             />
         </div>
     );

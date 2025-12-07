@@ -4,7 +4,7 @@ User management router for CRUD operations.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
-from schemas.user import UserResponse, UserCreate, UserUpdate, UserSettingsResponse, UserSettingsUpdate
+from schemas.user import UserResponse, UserCreate, UserUpdate, UserSettingsResponse, UserSettingsUpdate, UserInvite
 from models.user import User
 from models.user_settings import UserSettings
 from services.user_service import UserService
@@ -32,6 +32,32 @@ def get_users(
     """
     user_service = UserService(db)
     return user_service.get_users(skip=skip, limit=limit)
+
+@router.post("/invite", response_model=UserResponse)
+def invite_user(
+    user_invite: UserInvite,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> UserResponse:
+    """
+    Invite a new user.
+    Only admins and managers can invite users.
+    """
+    if current_user.role not in ["admin", "manager"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to invite users"
+        )
+
+    user_service = UserService(db)
+    try:
+        user = user_service.invite_user(user_invite)
+        return user
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 

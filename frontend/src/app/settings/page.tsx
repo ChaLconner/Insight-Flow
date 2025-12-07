@@ -45,6 +45,24 @@ export default function SettingsPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Define types for local state
+  interface NotificationState {
+    email: {
+      tasks: boolean;
+      projects: boolean;
+      mentions: boolean;
+      [key: string]: boolean;
+    };
+    inApp: {
+      tasks: boolean;
+      projects: boolean;
+      mentions: boolean;
+      updates: boolean;
+      system: boolean;
+      [key: string]: boolean;
+    };
+  }
+
   // Use auth store actions
   const {
     isAuthenticated,
@@ -53,8 +71,7 @@ export default function SettingsPage() {
     fetchUserProfile
   } = useAuthStore();
 
-  // Use a local loading for the initial data fetch if needed, 
-  // but mostly we rely on the store's state or a small local spinner
+  // Use a local loading for the initial data fetch if needed
   const [isInitializing, setIsInitializing] = useState(true);
 
   // Password state
@@ -110,7 +127,7 @@ export default function SettingsPage() {
         avatar: rawProfile.avatar ?? rawProfile.avatar_url ?? rawProfile.avatarUrl ?? ""
       });
 
-      // Load settings if not already in store (assuming we might add settings to auth store later, for now we keep local fetch for settings)
+      // Load settings
       loadSettings();
 
       setIsInitializing(false);
@@ -130,24 +147,25 @@ export default function SettingsPage() {
       if (userSettings) {
         setTheme(userSettings.theme ?? "dark");
         if (userSettings.notificationPreferences) {
+          // Safely merge saved preferences with defaults
           setNotifications(prev => ({
             email: {
-              tasks: userSettings.notificationPreferences.email?.tasks ?? prev.email.tasks,
-              projects: userSettings.notificationPreferences.email?.projects ?? prev.email.projects,
-              mentions: userSettings.notificationPreferences.email?.mentions ?? prev.email.mentions
+              ...prev.email,
+              ...(userSettings.notificationPreferences.email || {})
             },
-            inApp: { ...prev.inApp, ...(userSettings.notificationPreferences.inApp || {}) }
+            inApp: {
+              ...prev.inApp,
+              ...(userSettings.notificationPreferences.inApp || {})
+            }
           }));
         }
       }
     } catch (e) {
-      console.warn('Failed to load user settings');
+      console.warn('Failed to load user settings', e);
     }
   };
 
   const handleUpdatePassword = async () => {
-
-
     if (newPassword !== confirmPassword) {
       console.error("Password validation failed: passwords do not match");
       setError("Passwords do not match");
@@ -192,7 +210,7 @@ export default function SettingsPage() {
 
 
   // Notification settings
-  const [notifications, setNotifications] = useState({
+  const [notifications, setNotifications] = useState<NotificationState>({
     email: {
       tasks: true,
       projects: true,
@@ -229,30 +247,27 @@ export default function SettingsPage() {
       setSaving(true);
       setError(null);
 
-      try {
-        const updateData = {
-          ...profileData,
-          first_name: profileData.firstName,
-          last_name: profileData.lastName,
-          name: `${profileData.firstName} ${profileData.lastName}`.trim()
-        };
+      // 1. Prepare profile update
+      const updateData = {
+        ...profileData,
+        first_name: profileData.firstName,
+        last_name: profileData.lastName,
+        name: `${profileData.firstName} ${profileData.lastName}`.trim()
+      };
 
-        const settingsData = {
-          theme,
-          notificationPreferences: notifications
-        };
+      // 2. Prepare settings update
+      const settingsData = {
+        theme,
+        notificationPreferences: notifications
+      };
 
-        // Use store action for user profile update
-        const { updateUserProfile } = useAuthStore.getState();
+      // Use store action for user profile update
+      const { updateUserProfile } = useAuthStore.getState();
 
-        await Promise.all([
-          updateUserProfile(updateData),
-          usersApi.updateSettings(settingsData)
-        ]);
-
-      } catch (apiError) {
-        console.log('API not available, settings saved locally only');
-      }
+      await Promise.all([
+        updateUserProfile(updateData),
+        usersApi.updateSettings(settingsData)
+      ]);
 
       toast.success('Settings saved successfully!');
     } catch (err) {

@@ -5,7 +5,7 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import axiosRetry from 'axios-retry';
 import { API_CONFIG, ERROR_MESSAGES } from '@/lib/constants';
-import { useAuthStore } from '@/stores/auth-store';
+// useAuthStore import removed to prevent circular dependency
 import { toast } from "sonner";
 
 // Request deduplication cache removed for simplicity
@@ -92,6 +92,13 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Callback storage
+let logoutCallback: (() => void) | null = null;
+
+export const registerLogoutHandler = (fn: () => void) => {
+  logoutCallback = fn;
+};
+
 // Helper function to clear all authentication tokens
 async function clearAuthTokens(): Promise<void> {
   if (typeof window === 'undefined') { return; }
@@ -104,8 +111,10 @@ async function clearAuthTokens(): Promise<void> {
     // ignore
   }
 
-  // Clear store
-  useAuthStore.getState().logout();
+  // Execute registered logout handler (clears store)
+  if (logoutCallback) {
+    logoutCallback();
+  }
 
   // Use Next.js router for navigation instead of window.location
   try {

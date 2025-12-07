@@ -97,17 +97,12 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         // Clear localStorage user data
+        // Clear localStorage user data - Removed as we use Zustand persist which handles this
+        // and we want to rely on state management not manual API
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('user');
-          try {
-            // Only keeping critical non-sensitive preferences if any, but better clear auth store.
-            // We use persistence middleware, so we might want to clear that explicitly or let set() handle it.
-            // The persistence middleware automatically syncs state to localStorage.
-            // But we should try to clear the key to be clean.
-            // We won't manually clear 'insight-flow-auth' here because set() updates it.
-          } catch (e) {
-            console.warn('Failed to clear local storage', e);
-          }
+          // We explicitly DO NOT want to manually clear 'user' from localStorage
+          // because Zustand persist middleware manages the 'insight-flow-auth' key.
+          // Clearing 'user' (if it existed from old code) is fine, but we should strictly rely on the store.
         }
 
         // Clear state
@@ -395,7 +390,16 @@ export const authSelectors = {
     }
   },
 
-  // Check if user is active
-  isUserActive: (state: AuthState): boolean =>
-    state.user?.isActive ?? false,
+  isUserActive: (state: AuthState) => state.user?.isActive ?? false,
 } as const;
+
+// Register the logout handler to avoid circular dependencies
+// We can do this safely now that api-client doesn't import auth-store directly
+import { registerLogoutHandler } from '@/lib/api-client';
+
+// Register the logout action
+if (typeof window !== 'undefined') {
+  registerLogoutHandler(() => {
+    useAuthStore.getState().logout();
+  });
+}

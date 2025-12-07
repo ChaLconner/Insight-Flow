@@ -38,6 +38,7 @@ import { CustomSelect } from "@/components/ui/custom-select";
 import { getAvatarUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
+import { InviteUserModal } from "@/components/modals/InviteUserModal";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<UserType[]>([]);
@@ -47,6 +48,7 @@ export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   const { isAuthenticated, isLoading } = useAuthStore();
   const [dataFetched, setDataFetched] = useState(false);
@@ -372,7 +374,7 @@ export default function UsersPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
-            <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white" onClick={() => toast.info("Invite user feature coming soon")}>
+            <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white" onClick={() => setIsInviteModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Invite User
             </Button>
@@ -588,7 +590,7 @@ export default function UsersPage() {
                 : "No users have been added to your team yet."}
             </p>
             {!searchQuery && roleFilter === "all" && statusFilter === "all" && (
-              <Button className="bg-indigo-600 hover:bg-indigo-500 text-white">
+              <Button className="bg-indigo-600 hover:bg-indigo-500 text-white" onClick={() => setIsInviteModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 Invite First User
               </Button>
@@ -637,6 +639,12 @@ export default function UsersPage() {
           </Card>
         )}
       </div>
+
+      <InviteUserModal
+        isOpen={isInviteModalOpen}
+        onClose={() => setIsInviteModalOpen(false)}
+        onSuccess={() => loadUsers(true)}
+      />
     </DashboardLayout>
   );
 }

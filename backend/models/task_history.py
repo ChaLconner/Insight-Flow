@@ -1,7 +1,4 @@
-"""
-Task history model for tracking task activities.
-"""
-from sqlalchemy import Column, String, UUID, ForeignKey, DateTime, Text, Enum
+from sqlalchemy import Column, String, UUID, ForeignKey, DateTime, Text, Enum, Index
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 import enum
@@ -40,3 +37,7 @@ class TaskHistory(BaseModel):
     project = relationship("Project")
     task = relationship("Task")
     user = relationship("User")
+
+    __table_args__ = (
+        Index('ix_task_history_project_timestamp', 'project_id', 'timestamp'),
+    )
