@@ -61,8 +61,70 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Insight-Flow API",
+    description="""
+## Insight-Flow Project Management API
+
+A comprehensive project management and team collaboration platform.
+
+### Features
+- **Projects**: Create and manage projects with team members
+- **Tasks**: Full task lifecycle management with assignments and status tracking
+- **Dashboard**: Real-time analytics and progress tracking
+- **Notifications**: Event-driven notification system
+- **Authentication**: Secure JWT-based authentication with Google OAuth support
+
+### Authentication
+Most endpoints require authentication via JWT token stored in HTTP-only cookies.
+Use `/auth/login` to authenticate and `/auth/logout` to terminate sessions.
+
+### Rate Limiting
+API requests are rate-limited. Please contact support for higher limits.
+    """,
     version="1.0.0",
-    redirect_slashes=True,  # Enable automatic redirect to handle trailing slashes
+    terms_of_service="https://example.com/terms/",
+    contact={
+        "name": "Insight-Flow Support",
+        "email": "support@insight-flow.com",
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    openapi_tags=[
+        {
+            "name": "auth",
+            "description": "Authentication operations - login, logout, token refresh, OAuth",
+        },
+        {
+            "name": "users",
+            "description": "User management - profiles, settings, search",
+        },
+        {
+            "name": "projects",
+            "description": "Project CRUD operations and member management",
+        },
+        {
+            "name": "tasks",
+            "description": "Task management - create, update, assign, track status",
+        },
+        {
+            "name": "dashboard",
+            "description": "Dashboard statistics and analytics overview",
+        },
+        {
+            "name": "analytics",
+            "description": "Detailed project analytics and metrics",
+        },
+        {
+            "name": "notifications",
+            "description": "User notifications and alerts",
+        },
+        {
+            "name": "files",
+            "description": "File upload and management",
+        },
+    ],
+    redirect_slashes=True,
     lifespan=lifespan
 )
 

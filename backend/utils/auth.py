@@ -3,7 +3,9 @@ Authentication utilities for JWT token handling and password management.
 """
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, TYPE_CHECKING
-from jose import JWTError, jwt
+# Using PyJWT instead of python-jose for improved security (CVE-2024-33663, CVE-2024-33664)
+import jwt
+from jwt.exceptions import PyJWTError, ExpiredSignatureError, InvalidTokenError
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 import os
@@ -84,7 +86,13 @@ def verify_token(token: str) -> Dict[str, Any]:
             
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except JWTError as e:
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except (PyJWTError, InvalidTokenError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
