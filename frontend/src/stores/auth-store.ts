@@ -15,7 +15,7 @@ interface AuthState {
   isInitialized: boolean;
 
   // Actions
-  setUser: (user: User) => void;
+  setUser: (user: User | null) => void;
   updateUserAvatar: (avatar: string) => void;
   setLoading: (loading: boolean) => void;
   login: (user: User) => void;
@@ -63,7 +63,9 @@ export const useAuthStore = create<AuthState>()(
 
       updateUserAvatar: (avatar) => {
         set((state) => {
-          if (!state.user) return state;
+          if (!state.user) {
+            return state;
+          }
 
           const updatedUser = {
             ...state.user,
@@ -296,98 +298,40 @@ export const authSelectors = {
     return role === 'admin' || role === 'manager';
   },
 
-  // Get user initials with comprehensive safety checks
+  // Get user initials
   getUserInitials: (state: AuthState): string => {
-    try {
-      // Safety check for undefined/null state
-      if (!state?.user) {
-        return 'U';
-      }
-
-      // Get user object and make sure it's an object
-      const user = state.user;
-      if (!user || typeof user !== 'object') {
-        return 'U';
-      }
-
-      // Helper function to safely extract first character with comprehensive validation
-      const safeCharAt = (str: any, index: number): string => {
-        try {
-          // Check for null, undefined, or not a string-like value
-          if (str == null) {
-            return '';
-          }
-
-          // Convert to string safely and handle edge cases
-          let strValue: string;
-          if (typeof str === 'string') {
-            strValue = str;
-          } else if (typeof str === 'number') {
-            strValue = String(str);
-          } else if (typeof str === 'boolean') {
-            strValue = str ? 'true' : 'false';
-          } else if (str instanceof Date) {
-            strValue = str.toString();
-          } else if (Array.isArray(str)) {
-            strValue = str.join('');
-          } else if (typeof str === 'object') {
-            // Try to get string representation or first meaningful property
-            strValue = str.toString ? str.toString() : JSON.stringify(str);
-          } else {
-            strValue = String(str);
-          }
-
-          // Validate string and length
-          if (typeof strValue !== 'string' || !strValue.trim()) {
-            return '';
-          }
-
-          // Check if string has the requested character
-          if (strValue.length > index && index >= 0) {
-            return strValue.charAt(index);
-          }
-
-          return '';
-        } catch (error) {
-          console.warn('Error in safeCharAt:', error, 'input:', str);
-          return '';
-        }
-      };
-
-      // Extract and validate user properties
-      const firstName = user.firstName;
-      const lastName = user.lastName;
-      const username = user.username;
-      const email = user.email;
-
-      // Get first characters safely with additional validation
-      const firstInitial = safeCharAt(firstName, 0);
-      const lastInitial = safeCharAt(lastName, 0);
-      const usernameInitial = safeCharAt(username, 0);
-      const emailInitial = safeCharAt(email, 0);
-
-      // Combine initials based on available data with fallback logic
-      if (firstInitial && lastInitial) {
-        return `${firstInitial}${lastInitial}`.toUpperCase();
-      }
-      if (firstInitial) {
-        return firstInitial.toUpperCase();
-      }
-      if (lastInitial) {
-        return lastInitial.toUpperCase();
-      }
-      if (usernameInitial) {
-        return usernameInitial.toUpperCase();
-      }
-      if (emailInitial) {
-        return emailInitial.toUpperCase();
-      }
-
-      return 'U'; // Default initial if no other info is available
-    } catch (error) {
-      console.error('Error getting user initials:', error);
-      return 'U'; // Return default initials if there's an error
+    if (!state.user) {
+      return 'U';
     }
+
+    const { firstName, lastName, username, email } = state.user;
+
+    // Strategy 1: First & Last Name
+    if (firstName && lastName) {
+      return (firstName.charAt(0) + lastName.charAt(0)).toUpperCase();
+    }
+
+    // Strategy 2: First Name only
+    if (firstName) {
+      return firstName.charAt(0).toUpperCase();
+    }
+
+    // Strategy 3: Last Name only
+    if (lastName) {
+      return lastName.charAt(0).toUpperCase();
+    }
+
+    // Strategy 4: Username
+    if (username) {
+      return username.charAt(0).toUpperCase();
+    }
+
+    // Strategy 5: Email
+    if (email) {
+      return email.charAt(0).toUpperCase();
+    }
+
+    return 'U';
   },
 
   isUserActive: (state: AuthState) => state.user?.isActive ?? false,

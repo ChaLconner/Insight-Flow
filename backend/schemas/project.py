@@ -39,6 +39,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    member_ids: Optional[List[uuid.UUID]] = None
 
     model_config = ConfigDict(
         alias_generator=to_camel,

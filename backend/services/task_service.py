@@ -63,34 +63,13 @@ class TaskService:
         
         try:
             # Handle status
-            task_status = TaskStatus.TODO
-            if task_data.status:
-                try:
-                    status_lower = task_data.status.lower()
-                    if status_lower in [s.value for s in TaskStatus]:
-                        task_status = TaskStatus(status_lower)
-                except ValueError:
-                    pass
+            task_status = TaskStatus.from_value(task_data.status, default=TaskStatus.TODO)
             
             # Handle priority
-            task_priority = TaskPriority.MEDIUM
-            if task_data.priority:
-                try:
-                    priority_lower = task_data.priority.lower()
-                    if priority_lower in [p.value for p in TaskPriority]:
-                        task_priority = TaskPriority(priority_lower)
-                except ValueError:
-                    pass
+            task_priority = TaskPriority.from_value(task_data.priority, default=TaskPriority.MEDIUM)
 
             # Handle type
-            task_type = TaskType.FEATURE
-            if task_data.type:
-                try:
-                    type_lower = task_data.type.lower()
-                    if type_lower in [t.value for t in TaskType]:
-                        task_type = TaskType(type_lower)
-                except ValueError:
-                    pass
+            task_type = TaskType.from_value(task_data.type, default=TaskType.FEATURE)
 
             db_task = Task(
                 title=task_data.title,
@@ -122,24 +101,37 @@ class TaskService:
             self.db.rollback()
             raise ValueError(f"Task creation failed: {str(e)}")
     
-    def update_task(self, task_id: uuid.UUID, task_data: TaskUpdate, user_id: uuid.UUID) -> Task:
-        """Update task information."""
-        task = self.get_task_by_id(task_id)
-        if not task:
-            raise ValueError("Task not found")
-        
-        # Check permissions: Creator, Assignee, or Project Admin/Owner
+    def _check_task_permission(self, task: Task, user_id: uuid.UUID, allow_assignee: bool = False) -> None:
+        """
+        Check if user has permission to modify task.
+        Raises ValueError if unauthorized.
+        """
         is_authorized = False
-        if task.created_by == user_id or task.assignee_id == user_id:
+        
+        # Creator is always authorized
+        if task.created_by == user_id:
             is_authorized = True
+        # Assignee is authorized if action allows it
+        elif allow_assignee and task.assignee_id == user_id:
+            is_authorized = True
+        # Project Admin/Owner is always authorized
         else:
             logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
             if self.project_service.is_project_admin(task.project_id, user_id):
                 is_authorized = True
         
         if not is_authorized:
-            logger.warning(f"User {user_id} unauthorized to update task {task_id}")
-            raise ValueError("Not authorized to update this task")
+            logger.warning(f"User {user_id} unauthorized for task {task.id}")
+            raise ValueError("Not authorized to perform this action on this task")
+
+    def update_task(self, task_id: uuid.UUID, task_data: TaskUpdate, user_id: uuid.UUID) -> Task:
+        """Update task information."""
+        task = self.get_task_by_id(task_id)
+        if not task:
+            raise ValueError("Task not found")
+        
+        # Check permissions (Assignee allowed)
+        self._check_task_permission(task, user_id, allow_assignee=True)
         
         # Check if assignee exists (if provided)
         if task_data.assignee_id:
@@ -163,40 +155,25 @@ class TaskService:
             task.description = task_data.description
             
         if task_data.status is not None:
-            try:
-                status_lower = task_data.status.lower()
-                if status_lower in [s.value for s in TaskStatus]:
-                    new_status = TaskStatus(status_lower)
-                    if new_status != task.status:
-                        old_values["status"] = task.status.value
-                        new_values["status"] = new_status.value
-                        task.status = new_status
-            except ValueError:
-                pass
+            new_status = TaskStatus.from_value(task_data.status)
+            if new_status and new_status != task.status:
+                old_values["status"] = task.status.value
+                new_values["status"] = new_status.value
+                task.status = new_status
 
         if task_data.priority is not None:
-            try:
-                priority_lower = task_data.priority.lower()
-                if priority_lower in [p.value for p in TaskPriority]:
-                    new_priority = TaskPriority(priority_lower)
-                    if new_priority != task.priority:
-                        old_values["priority"] = task.priority.value
-                        new_values["priority"] = new_priority.value
-                        task.priority = new_priority
-            except ValueError:
-                pass
+            new_priority = TaskPriority.from_value(task_data.priority)
+            if new_priority and new_priority != task.priority:
+                old_values["priority"] = task.priority.value
+                new_values["priority"] = new_priority.value
+                task.priority = new_priority
 
         if task_data.type is not None:
-            try:
-                type_lower = task_data.type.lower()
-                if type_lower in [t.value for t in TaskType]:
-                    new_type = TaskType(type_lower)
-                    if new_type != task.type:
-                        old_values["type"] = task.type.value
-                        new_values["type"] = new_type.value
-                        task.type = new_type
-            except ValueError:
-                pass
+            new_type = TaskType.from_value(task_data.type)
+            if new_type and new_type != task.type:
+                old_values["type"] = task.type.value
+                new_values["type"] = new_type.value
+                task.type = new_type
                 
         if task_data.assignee_id is not None and task_data.assignee_id != task.assignee_id:
             task.assignee_id = task_data.assignee_id
@@ -234,18 +211,8 @@ class TaskService:
         if not task:
             raise ValueError("Task not found")
         
-        # Check permissions: Creator or Project Admin/Owner
-        is_authorized = False
-        if task.created_by == user_id:
-            is_authorized = True
-        else:
-            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
-            if self.project_service.is_project_admin(task.project_id, user_id):
-                is_authorized = True
-        
-        if not is_authorized:
-            logger.warning(f"User {user_id} unauthorized to delete task {task_id}")
-            raise ValueError("Not authorized to delete this task")
+        # Check permissions (Assignee NOT allowed)
+        self._check_task_permission(task, user_id, allow_assignee=False)
         
         self.task_history_service.log_task_deleted(task, user_id)
             
@@ -263,27 +230,16 @@ class TaskService:
         if not task:
             raise ValueError("Task not found")
         
-        # Check permissions: Creator, Assignee, or Project Admin/Owner
-        is_authorized = False
-        if task.created_by == user_id or task.assignee_id == user_id:
-            is_authorized = True
-        else:
-            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
-            if self.project_service.is_project_admin(task.project_id, user_id):
-                is_authorized = True
-        
-        if not is_authorized:
-            logger.warning(f"User {user_id} unauthorized to update task status {task_id}")
-            raise ValueError("Not authorized to update task status")
+        # Check permissions (Assignee allowed)
+        self._check_task_permission(task, user_id, allow_assignee=True)
         
         old_status = task.status
         
         try:
-            status_lower = status_update.status.lower()
-            if status_lower in [s.value for s in TaskStatus]:
-                task.status = TaskStatus(status_lower)
-            else:
+            new_status = TaskStatus.from_value(status_update.status)
+            if not new_status:
                 raise ValueError("Invalid task status")
+            task.status = new_status
                 
             self.db.commit()
             self.db.refresh(task)
@@ -309,18 +265,9 @@ class TaskService:
         if not task:
             raise ValueError("Task not found")
         
-        # Check permissions: Creator or Project Admin/Owner
-        is_authorized = False
-        if task.created_by == user_id:
-            is_authorized = True
-        else:
-            logger.info(f"Checking admin rights for user {user_id} on project {task.project_id}")
-            if self.project_service.is_project_admin(task.project_id, user_id):
-                is_authorized = True
-        
-        if not is_authorized:
-            logger.warning(f"User {user_id} unauthorized to assign task {task_id}")
-            raise ValueError("Not authorized to assign task")
+        # Check permissions (Assignee NOT allowed - unless self-assign if logic existed, but generally assume admin/creator)
+        # Actually logic was creator or admin.
+        self._check_task_permission(task, user_id, allow_assignee=False)
         
         assignee = self.db.query(User).filter(User.id == assign_data.assignee_id).first()
         if not assignee:
@@ -346,9 +293,10 @@ class TaskService:
         limit: int = 100,
         search: Optional[str] = None,
         status: Optional[str] = None
-    ) -> List[Task]:
+    ) -> Union[List[Task], tuple[List[Task], int]]:
         """
         Get tasks assigned to or created by a user with optional filtering.
+        Returns a tuple of (tasks, total_count).
         """
         from sqlalchemy import or_
         
@@ -383,10 +331,13 @@ class TaskService:
                 # Fallback to string comparison if needed, though Task.status should be compatible
                 pass
                 
+        # Calculate total count before applying pagination
+        total_count = query.count()
+                
         # Order by updated_at desc (most recent first)
         query = query.order_by(desc(Task.updated_at))
         
-        return query.offset(skip).limit(limit).all()
+        return query.offset(skip).limit(limit).all(), total_count
     
     def get_project_tasks(
         self, 
@@ -397,9 +348,10 @@ class TaskService:
         sort_order: Optional[str] = None,
         search: Optional[str] = None,
         status: Optional[str] = None
-    ) -> List[Task]:
+    ) -> tuple[List[Task], int]:
         """
         Get tasks for a specific project with optional sorting and filtering.
+        Returns (tasks, total_count).
         """
         from sqlalchemy.orm import joinedload
         from sqlalchemy import or_
@@ -448,5 +400,7 @@ class TaskService:
         else:
             # Default sort
             query = query.order_by(desc(Task.updated_at))
+            
+        total_count = query.count()
         
-        return query.offset(skip).limit(limit).all()
+        return query.offset(skip).limit(limit).all(), total_count

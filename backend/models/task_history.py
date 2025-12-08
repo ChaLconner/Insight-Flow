@@ -17,6 +17,8 @@ class ActivityType(enum.Enum):
     PROJECT_UPDATED = "PROJECT_UPDATED"
     PROJECT_CREATED = "PROJECT_CREATED"
 
+from sqlalchemy.sql import func
+
 class TaskHistory(BaseModel):
     """
     Task history model for tracking all task-related activities.
@@ -31,7 +33,7 @@ class TaskHistory(BaseModel):
     description = Column(Text)
     old_values = Column(Text)  # JSON string of old values for updates
     new_values = Column(Text)  # JSON string of new values for updates
-    timestamp = Column(DateTime(timezone=True), server_default='now()', index=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     
     # Relationships
     project = relationship("Project")

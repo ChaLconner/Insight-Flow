@@ -53,6 +53,12 @@ def get_token_from_cookie_or_header(
     """Get token from Authorization header or HttpOnly cookie."""
     if token:
         return token
+    
+    # Fallback to manual header check if OAuth2 scheme didn't catch it (e.g. Bearer with lowercase b or other issues)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ")[1]
+
     return request.cookies.get(ACCESS_TOKEN_KEY)
 
 def get_current_user(
@@ -357,19 +363,10 @@ def google_login(response: Response, google_data: GoogleAuth, db: Session = Depe
         logger.error(f"Unexpected error during Google login: {str(e)}")
         raise
         
-        pass # Placeholder to signify I realized I need to change signature.
+
         
 
-        return response_data
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in Google login: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error during Google authentication: {str(e)}"
-        )
+
 
 @router.post("/logout")
 def logout(

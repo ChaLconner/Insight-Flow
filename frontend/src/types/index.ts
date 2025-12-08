@@ -175,7 +175,7 @@ export interface Project {
   taskCount?: number;
   completedTasks?: number;
   memberCount?: number;
-  memberSummaries?: any[];
+  memberSummaries?: ProjectMemberSummary[];
   progress?: number;
 }
 
@@ -199,6 +199,15 @@ export enum ProjectRole {
   ADMIN = 'admin',
   MEMBER = 'member',
   VIEWER = 'viewer'
+}
+
+export interface ProjectMemberSummary {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  role: ProjectRole;
 }
 
 export interface ProjectStats {
@@ -236,6 +245,7 @@ export interface UpdateProjectRequest {
   color?: string;
   status?: ProjectStatus;
   settings?: Partial<ProjectSettings>;
+  memberIds?: string[];
 }
 
 // ===========================================
@@ -266,9 +276,17 @@ export interface Task {
   parentId?: string;
   subtasks: Task[];
   dependencies: string[];
-  customFields: Record<string, any>;
+  customFields: Record<string, string | number | boolean | null>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TaskListResponse {
+  items: Task[];
+  total: number;
+  page: number;
+  size: number;
+  hasMore: boolean;
 }
 
 export enum TaskStatus {
@@ -322,8 +340,8 @@ export interface TaskHistoryEntry {
   id: string;
   taskId: string;
   field: string;
-  oldValue: any;
-  newValue: any;
+  oldValue: string | number | boolean | null;
+  newValue: string | number | boolean | null;
   userId: string;
   createdAt: string;
   user: User;
@@ -341,7 +359,7 @@ export interface CreateTaskRequest {
   tags?: string[];
   parentId?: string;
   dependencies?: string[];
-  customFields?: Record<string, any>;
+  customFields?: Record<string, string | number | boolean | null>;
 }
 
 export interface UpdateTaskRequest {
@@ -356,7 +374,7 @@ export interface UpdateTaskRequest {
   actualHours?: number;
   progress?: number;
   tags?: string[];
-  customFields?: Record<string, any>;
+  customFields?: Record<string, string | number | boolean | null>;
 }
 
 export interface ProjectAnalytics {
@@ -438,7 +456,7 @@ export interface Notification {
   type: NotificationType;
   title: string;
   message: string;
-  data?: Record<string, any>;
+  data?: Record<string, string | number | boolean | null>;
   read: boolean;
   actionUrl?: string;
   priority: NotificationPriority;
@@ -515,7 +533,7 @@ export interface TableColumn<T = any> {
   sortable?: boolean;
   width?: string;
   align?: 'left' | 'center' | 'right';
-  render?: (value: any, item: T) => React.ReactNode;
+  render?: (value: T[keyof T], item: T) => React.ReactNode;
 }
 
 export interface FilterOption {
@@ -553,7 +571,7 @@ export interface PaginationState {
 
 export interface SearchState {
   query: string;
-  filters: Record<string, any>;
+  filters: Record<string, string | number | boolean | null | string[]>;
   sort?: SortOption;
 }
 

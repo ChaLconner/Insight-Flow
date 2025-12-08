@@ -24,12 +24,13 @@ if not database_url or "user:password@localhost" in database_url:
     )
 
 # Convert to pg8000 format if needed (since pg8000 is installed)
-# We force pg8000 to ensure consistency and avoid driver issues
-if not database_url.startswith("postgresql+pg8000://"):
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
-    elif database_url.startswith("postgres://"):
-        database_url = database_url.replace("postgres://", "postgresql+pg8000://", 1)
+# We force pg8000 to ensure consistency and avoid driver issues, but allow opting out.
+if os.getenv("DB_FORCE_PG8000", "true").lower() == "true":
+    if not database_url.startswith("postgresql+pg8000://"):
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+pg8000://", 1)
+        elif database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql+pg8000://", 1)
 
 # Prepare connection arguments
 connect_args = {
@@ -58,8 +59,8 @@ engine = create_engine(
     database_url,
     pool_pre_ping=True,       # Validate connections before use
     pool_recycle=300,         # Recycle connections every 5 minutes
-    pool_size=20,             # Increased from 5 to 20 for better concurrency
-    max_overflow=20,          # Increased from 10 to 20
+    pool_size=int(os.getenv("DB_POOL_SIZE", "20")),             # Configurable pool size
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),       # Configurable max overflow
     pool_timeout=30,          # Timeout after 30 seconds waiting for connection
     connect_args=connect_args
 )
@@ -156,20 +157,19 @@ def get_db():
         db_logger.debug("Closing database session")
         db.close()
 
-# Function to create all tables
 def create_tables():
     """
-    Create all database tables including TokenBlacklist.
+    Create all database tables.
+    DEPRECATED: STRICTLY DISABLED. Use Alembic migrations for schema management.
+    Running this function will now raise a RuntimeError to prevent accidental schema drift.
     """
-    try:
-        # First initialize enums
-        init_database()
-        # Then create tables (this will include TokenBlacklist since it's imported in models/__init__.py)
-        Base.metadata.create_all(bind=engine)
-        db_logger.info("All database tables created successfully")
-    except Exception as e:
-        db_logger.error(f"Error creating tables: {e}")
-        raise e
+    error_msg = (
+        "create_tables() is deprecated and disabled. "
+        "Please use Alembic migrations to manage database schema: "
+        "`alembic upgrade head`"
+    )
+    db_logger.error(error_msg)
+    raise RuntimeError(error_msg)
 
 # Function to drop all tables (for testing)
 def drop_tables():

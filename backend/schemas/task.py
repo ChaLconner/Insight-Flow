@@ -2,7 +2,7 @@
 Task schemas for Insight-Flow application.
 """
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, Any
+from typing import Optional, Any, List
 from datetime import datetime
 import uuid
 from .user import UserResponse
@@ -25,7 +25,8 @@ class TaskBase(BaseModel):
             try:
                 return TaskPriority(v.lower()).value
             except ValueError:
-                return TaskPriority.MEDIUM.value
+                # raising strings in ValueError is safer for pydantic serialization if custom handler exists
+                raise ValueError(f"Priority must be one of: {', '.join([e.value for e in TaskPriority])}")
         return TaskPriority.MEDIUM.value
 
     @field_validator('type')
@@ -35,7 +36,7 @@ class TaskBase(BaseModel):
             try:
                 return TaskType(v.lower()).value
             except ValueError:
-                return TaskType.FEATURE.value
+                raise ValueError(f"Type must be one of: {', '.join([e.value for e in TaskType])}")
         return TaskType.FEATURE.value
 
     model_config = ConfigDict(
@@ -95,7 +96,8 @@ class TaskUpdate(BaseModel):
             try:
                 return TaskPriority(v.lower()).value
             except ValueError:
-                return None
+                # raising strings in ValueError is safer for pydantic serialization if custom handler exists
+                raise ValueError(f"Priority must be one of: {', '.join([e.value for e in TaskPriority])}")
         return None
 
     @field_validator('type')
@@ -105,7 +107,7 @@ class TaskUpdate(BaseModel):
             try:
                 return TaskType(v.lower()).value
             except ValueError:
-                return None
+                raise ValueError(f"Type must be one of: {', '.join([e.value for e in TaskType])}")
         return None
 
     model_config = ConfigDict(
@@ -166,6 +168,19 @@ class TaskWithDetails(TaskResponse):
     
     model_config = ConfigDict(
         from_attributes=True,
+        alias_generator=to_camel,
+        populate_by_name=True
+    )
+
+class TaskListResponse(BaseModel):
+    """Schema for paginated task list response."""
+    items: List[TaskWithDetails]
+    total: int
+    page: int
+    size: int
+    has_more: bool
+    
+    model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True
     )

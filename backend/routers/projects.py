@@ -16,11 +16,13 @@ from models.task_history import TaskHistory
 from datetime import datetime, timedelta, timezone
 from services.project_service import ProjectService
 from services.task_service import TaskService
-from schemas.task import TaskResponse, TaskCreate, TaskUpdate, TaskWithDetails, TaskStatusUpdate, TaskAssign
+from schemas.task import TaskResponse, TaskCreate, TaskUpdate, TaskWithDetails, TaskStatusUpdate, TaskAssign, TaskListResponse
 from database import get_db
 from routers.auth import get_current_active_user
 from utils.logger import setup_logger
 from utils.validators import validate_uuid
+from dependencies import require_project_admin, require_project_member, require_project_owner, ProjectPermission
+from models.project import Project
 
 logger = setup_logger("projects_router")
 
@@ -185,7 +187,7 @@ def read_projects_list(
 # Routes with project_id parameter must come AFTER / routes
 @router.get("/projects/{project_id}", response_model=ProjectWithMembers)
 def read_project(
-    project_id: str,
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -195,42 +197,23 @@ def read_project(
     import uuid
     import traceback
     
-    logger.debug(f"Called with project_id={project_id}, user_id={current_user.id}")
+    logger.debug(f"Called with project_id={project.id}, user_id={current_user.id}")
     logger.debug(f"Current user email: {current_user.email}")
     
     project_service = ProjectService(db)
     
-    # Validate UUID
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    
     # Get project with details (optimized single query)
-    project_details = project_service.get_project_with_details(project_uuid)
+    project_details = project_service.get_project_with_details(project.id)
     
     if not project_details:
-        logger.warning(f"Project not found for UUID: {project_uuid}")
+        logger.warning(f"Project not found for UUID: {project.id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
     
-    project = project_details['project']
-    
-    if project.owner_id != current_user.id:
-        try:
-            is_member = project_service.is_project_member(project_uuid, current_user.id)
-        except Exception as e:
-            logger.error(f"Error checking membership: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error checking project membership"
-            )
-            
-        if not is_member:
-            logger.warning(f"User {current_user.id} is not a member of project {project_uuid}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not a member of this project"
-            )
+    # Permission check already done by dependency
+    # project = project_details['project']
     
     members = project_details['members']
     
@@ -296,10 +279,10 @@ def read_project(
             detail="Error creating project response"
         )
 
-@router.put("/projects/{project_id}", response_model=ProjectResponse)
+@router.put("/projects/{project_id}", response_model=ProjectWithMembers)
 def update_project(
-    project_id: str,
     project_data: ProjectUpdate,
+    project: Project = Depends(require_project_admin),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -307,22 +290,97 @@ def update_project(
     Update project information.
     """
     import uuid
+    import traceback
+    
+    logger.debug(f"Updating project {project.id} with data: {project_data}")
+    
     project_service = ProjectService(db)
     
-
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     try:
-        updated_project = project_service.update_project(project_uuid, project_data, current_user.id)
-        return updated_project
+        # Update project
+        updated_project = project_service.update_project(project.id, project_data, current_user.id)
+        
+        # Get full details for response
+        project_details = project_service.get_project_with_details(updated_project.id)
+        
+        if not project_details:
+             raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found after update"
+            )
+            
+        members = project_details['members']
+        
+        # Create detailed member responses
+        member_responses = [
+            ProjectMemberResponse.model_validate({
+                'id': member.id,
+                'project_id': member.project_id,
+                'user_id': member.user_id,
+                'role': member.role,
+                'joined_at': member.joined_at,
+                'user': {
+                    'id': member.user.id,
+                    'email': member.user.email,
+                    'name': member.user.name,
+                    'avatar_url': member.user.avatar_url,
+                    'is_active': member.user.is_active,
+                    'role': member.user.role or "user",
+                    'created_at': member.user.created_at,
+                    'updated_at': member.user.updated_at
+                }
+            }) for member in members
+        ]
+        
+        # Create member summaries
+        member_summaries = [
+            {
+                'id': member.id,
+                'user_id': member.user_id,
+                'name': member.user.name,
+                'email': member.user.email,
+                'avatar': member.user.avatar_url,
+                'role': member.role
+            } for member in members
+        ]
+
+        # Create response
+        project_response = ProjectWithMembers.model_validate({
+            'id': updated_project.id,
+            'name': updated_project.name,
+            'description': updated_project.description,
+            'owner_id': updated_project.owner_id,
+            'is_active': updated_project.is_active,
+            'created_at': updated_project.created_at,
+            'updated_at': updated_project.updated_at,
+            'task_count': project_details['task_count'],
+            'completed_tasks': project_details['completed_tasks'],
+            'overdue_tasks': project_details['overdue_tasks'],
+            'recent_activity': project_details['recent_activity'],
+            'member_count': project_details['member_count'],
+            'members': member_responses,
+            'member_summaries': member_summaries
+        })
+        
+        return project_response
+        
     except ValueError as e:
+        logger.error(f"ValueError updating project: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+    except Exception as e:
+        logger.error(f"Unexpected error updating project: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update project"
+        )
 
 @router.delete("/projects/{project_id}")
 def delete_project(
-    project_id: str,
+    project: Project = Depends(require_project_owner),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -331,27 +389,12 @@ def delete_project(
     """
     import uuid
     project_service = ProjectService(db)
-    
-
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    try:
-        project_service.delete_project(project_uuid, current_user.id)
-        return {"message": "Project deleted successfully"}
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error in delete_project: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred while deleting project"
-        )
+    project_service.delete_project(project.id, current_user.id)
+    return {"message": "Project deleted successfully"}
 
 @router.get("/projects/{project_id}/members", response_model=List[ProjectMemberResponse])
 def read_project_members(
-    project_id: str,
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -359,31 +402,12 @@ def read_project_members(
     Get all members of a project.
     """
     import uuid
-    project_service = ProjectService(db)
-    
     # Check if user is a member of project
-    # Validate UUID
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    
-    # Get project to check ownership
-    project = project_service.get_project_by_id(project_uuid)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-        
-    # Check if user is owner or member
-    if project.owner_id != current_user.id:
-        if not project_service.is_project_member(project_uuid, current_user.id):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not a member of this project"
-            )
+    # Permission check already done by dependency
     
     members = db.query(ProjectMember).options(
         joinedload(ProjectMember.user)
-    ).filter(ProjectMember.project_id == uuid.UUID(project_id)).all()
+    ).filter(ProjectMember.project_id == project.id).all()
     
     # Ensure user data is included in response
     member_responses = []
@@ -461,8 +485,8 @@ def add_project_member(
 
 @router.delete("/projects/{project_id}/members/{member_user_id}")
 def remove_project_member(
-    project_id: str,
     member_user_id: str,
+    project: Project = Depends(require_project_admin),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -471,16 +495,8 @@ def remove_project_member(
     """
     import uuid
     project_service = ProjectService(db)
-    
-
-    try:
-        project_service.remove_project_member(uuid.UUID(project_id), uuid.UUID(member_user_id), current_user.id)
-        return {"message": "Member removed successfully"}
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    project_service.remove_project_member(project.id, uuid.UUID(member_user_id), current_user.id)
+    return {"message": "Member removed successfully"}
 
 from pydantic import BaseModel
 
@@ -489,10 +505,10 @@ class RoleUpdate(BaseModel):
 
 @router.put("/projects/{project_id}/members/{member_user_id}/role")
 def update_member_role(
-    project_id: str,
     member_user_id: str,
     role_update: RoleUpdate,
     request: Request,
+    project: Project = Depends(require_project_owner),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -504,7 +520,7 @@ def update_member_role(
     
     # Add detailed logging for debugging
     logger.info(f"update_member_role called:")
-    logger.info(f"- project_id: {project_id}")
+    logger.info(f"- project_id: {project.id}")
     logger.info(f"- member_user_id: {member_user_id}")
     logger.info(f"- role_update: {role_update}")
     logger.info(f"- current_user: {current_user.id} ({current_user.email})")
@@ -524,7 +540,7 @@ def update_member_role(
         
         logger.info(f"Calling project_service.update_member_role...")
         updated_member = project_service.update_member_role(
-            uuid.UUID(project_id),
+            project.id,
             uuid.UUID(member_user_id),
             role_update.role,
             current_user.id
@@ -566,15 +582,15 @@ def update_member_role(
 # Task Management Endpoints (Project Context)
 # ===========================================
 
-@router.get("/projects/{project_id}/tasks", response_model=List[TaskWithDetails])
+@router.get("/projects/{project_id}/tasks", response_model=TaskListResponse)
 def get_project_tasks(
-    project_id: str,
     skip: int = 0,
     limit: int = 100,
     sort_by: Optional[str] = Query(None, description="Field to sort by"),
     sort_order: Optional[str] = Query(None, description="Sort order (asc/desc)"),
     search: Optional[str] = Query(None, description="Search term for title/description"),
     status: Optional[str] = Query(None, description="Filter by status"),
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -587,7 +603,7 @@ def get_project_tasks(
     
     # Add logging to validate sorting parameters
     logger.info(f"get_project_tasks called with params:")
-    logger.info(f"project_id: {project_id}")
+    logger.info(f"project_id: {project.id}")
     logger.info(f"skip: {skip}")
     logger.info(f"limit: {limit}")
     logger.info(f"sort_by: {sort_by}")
@@ -596,21 +612,12 @@ def get_project_tasks(
     logger.info(f"status: {status}")
     logger.info(f"current_user: {current_user.id}")
     
-    # Validate UUID
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    
-    # Check if user is a member of project
-    if not project_service.is_project_member(project_uuid, current_user.id):
-        logger.warning(f"User {current_user.id} is not a member of project {project_uuid}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
+    # Permission check already done by dependency
     
     try:
         logger.info(f"Calling task_service.get_project_tasks with sorting params")
-        tasks = task_service.get_project_tasks(
-            project_uuid, 
+        tasks, total = task_service.get_project_tasks(
+            project.id, 
             skip=skip, 
             limit=limit, 
             sort_by=sort_by, 
@@ -618,11 +625,11 @@ def get_project_tasks(
             search=search,
             status=status
         )
-        logger.info(f"Found {len(tasks)} tasks for project {project_id}")
+        logger.info(f"Found {len(tasks)} tasks for project {project.id} (Total: {total})")
         logger.debug(f"Tasks data: {[{'id': str(t.id), 'title': t.title} for t in tasks]}")
         
         # Convert tasks to response format with full details
-        task_responses = []
+        items = []
         for task in tasks:
             # Fixed: Properly handle TaskStatus enum conversion and ensure lowercase
             status_value = ""
@@ -649,11 +656,23 @@ def get_project_tasks(
                 'updated_at': task.updated_at,
                 'assignee': task.assignee,
                 'creator': task.creator,
-                'project': task.project
+                'project': task.project,
+                'priority': task.priority.value if hasattr(task.priority, 'value') else task.priority,
+                'type': task.type.value if hasattr(task.type, 'value') else task.type
             })
-            task_responses.append(task_response)
+            items.append(task_response)
         
-        return task_responses
+        # Calculate pagination metadata
+        page = (skip // limit) + 1 if limit > 0 else 1
+        has_more = total > (skip + limit)
+        
+        return TaskListResponse(
+            items=items,
+            total=total,
+            page=page,
+            size=limit,
+            has_more=has_more
+        )
     except Exception as e:
         logger.error(f"Exception in get_project_tasks: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -663,8 +682,8 @@ def get_project_tasks(
 
 @router.post("/projects/{project_id}/tasks", response_model=TaskResponse)
 def create_task_for_project(
-    project_id: str,
     task_data: TaskCreate,
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -673,25 +692,15 @@ def create_task_for_project(
     """
     import uuid
     task_service = TaskService(db)
-    project_service = ProjectService(db)
+    # Check if user is a member of project
+    # Permission check already done by dependency
     
-    logger.info(f"create_task_for_project called with project_id={project_id}")
     logger.info(f"Task data: {task_data}")
     logger.info(f"Current user: {current_user.id}")
     
-    # Validate UUID
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    
     # Override project_id in task_data to ensure consistency
-    task_data.project_id = project_uuid
+    task_data.project_id = project.id
     
-    # Check if user is a member of project
-    if not project_service.is_project_member(project_uuid, current_user.id):
-        logger.warning(f"User {current_user.id} is not a member of project {project_uuid}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
     
     try:
         task = task_service.create_task(task_data, current_user.id)
@@ -716,7 +725,9 @@ def create_task_for_project(
             'created_by': task.created_by,
             'due_date': task.due_date,
             'created_at': task.created_at,
-            'updated_at': task.updated_at
+            'updated_at': task.updated_at,
+            'priority': task.priority.value if hasattr(task.priority, 'value') else task.priority,
+            'type': task.type.value if hasattr(task.type, 'value') else task.type
         })
         
         logger.info(f"DEBUG: TaskResponse created with ID: {task_response.id} (type: {type(task_response.id)})")
@@ -792,16 +803,18 @@ def read_project_task(
         updated_at=task.updated_at,
         assignee=task.assignee,
         creator=task.creator,
-        project=task.project
+        project=task.project,
+        priority=task.priority.value if hasattr(task.priority, 'value') else task.priority,
+        type=task.type.value if hasattr(task.type, 'value') else task.type
     )
     
     return task_response
 
 @router.put("/projects/{project_id}/tasks/{task_id}", response_model=TaskResponse)
 def update_project_task(
-    project_id: str,
     task_id: str,
     task_data: TaskUpdate,
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -813,15 +826,10 @@ def update_project_task(
     project_service = ProjectService(db)
     
     # Validate UUIDs
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Check if user is a member of project first
-    if not project_service.is_project_member(project_uuid, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
+    # Permission check already done by dependency
     
     try:
         task = task_service.get_task_by_id(task_uuid)
@@ -854,8 +862,8 @@ def update_project_task(
 
 @router.delete("/projects/{project_id}/tasks/{task_id}")
 def delete_project_task(
-    project_id: str,
     task_id: str,
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -867,15 +875,10 @@ def delete_project_task(
     project_service = ProjectService(db)
     
     # Validate UUIDs
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Check if user is a member of project first
-    if not project_service.is_project_member(project_uuid, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
+    # Permission check already done by dependency
     
     try:
         task = task_service.get_task_by_id(task_uuid)
@@ -891,7 +894,7 @@ def delete_project_task(
         )
     
     # Verify task belongs to specified project
-    if task.project_id != project_uuid:
+    if task.project_id != project.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found in this project"
@@ -908,9 +911,9 @@ def delete_project_task(
 
 @router.put("/projects/{project_id}/tasks/{task_id}/status", response_model=TaskResponse)
 def update_project_task_status(
-    project_id: str,
     task_id: str,
     status_data: dict[str, str],
+    project: Project = Depends(require_project_member),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -919,10 +922,8 @@ def update_project_task_status(
     """
     import uuid
     task_service = TaskService(db)
-    project_service = ProjectService(db)
     
     # Validate UUIDs
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
     task_uuid = validate_uuid(task_id, "Invalid task ID format")
     
     # Extract status from request body
@@ -937,11 +938,7 @@ def update_project_task_status(
     status_update = TaskStatusUpdate(status=status)
     
     # Check if user is a member of project first
-    if not project_service.is_project_member(project_uuid, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
+    # Permission check already done by dependency
     
     try:
         task = task_service.get_task_by_id(task_uuid)

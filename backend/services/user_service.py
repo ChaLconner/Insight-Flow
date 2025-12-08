@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from models.user import User
 from schemas.user import UserCreate, UserLogin, UserUpdate, UserInvite
 from utils.auth import get_password_hash, authenticate_user, verify_password
+from utils.validators import validate_password_strength
 from utils.logger import logger
 import uuid
 import time
@@ -81,7 +82,9 @@ class UserService:
             )
            
             # Hash password if provided
+            # Hash password if provided
             if user_data.password:
+                validate_password_strength(user_data.password)
                 db_user.hashed_password = get_password_hash(user_data.password)
            
             self.db.add(db_user)
@@ -225,6 +228,7 @@ class UserService:
             raise ValueError("Incorrect current password")
         
         # Update password
+        validate_password_strength(new_password)
         user.hashed_password = self.hash_password(new_password)
         logger.info(f"Password updated for user: {user.email}")
         

@@ -59,24 +59,25 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
             </button>
 
             {isOpen && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-950/90 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100">
                     <div className="py-1 max-h-60 overflow-auto custom-scrollbar">
                         {options.map((option) => (
                             <button
                                 key={option.value}
+                                type="button"
                                 onClick={() => {
                                     onChange(option.value);
                                     setIsOpen(false);
                                 }}
                                 className={cn(
                                     "flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-white/10",
-                                    value === option.value ? "bg-indigo-500/20" : "",
+                                    value === option.value ? "bg-indigo-600/30" : "",
                                 )}
                             >
                                 <span className={cn(
                                     "font-medium",
                                     size === "sm" ? "text-xs" : "text-sm",
-                                    option.color || (value === option.value ? "text-indigo-300" : "text-zinc-200")
+                                    option.color || (value === option.value ? "text-indigo-200" : "text-zinc-200")
                                 )}>
                                     {option.label}
                                 </span>

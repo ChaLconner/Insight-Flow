@@ -1,9 +1,10 @@
 from sqlalchemy import Column, String, UUID, ForeignKey, DateTime, Text, Enum, Index
 from sqlalchemy.orm import relationship
 from .base import BaseModel
+from .base_enum import BaseEnum
 import enum
 
-class TaskStatus(str, enum.Enum):
+class TaskStatus(BaseEnum):
     """Enum for task status."""
     TODO = "todo"
     IN_PROGRESS = "in_progress"
@@ -11,14 +12,14 @@ class TaskStatus(str, enum.Enum):
     DONE = "done"
     CANCELLED = "cancelled"
 
-class TaskPriority(str, enum.Enum):
+class TaskPriority(BaseEnum):
     """Enum for task priority."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     URGENT = "urgent"
 
-class TaskType(str, enum.Enum):
+class TaskType(BaseEnum):
     """Enum for task type."""
     FEATURE = "feature"
     BUG = "bug"

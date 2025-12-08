@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from utils.logger import app_logger
 from middleware.cache import CacheMiddleware
 from database import init_database
+from contextlib import asynccontextmanager
 
 # Load environment variables at startup
 load_dotenv()
@@ -29,33 +30,16 @@ missing_vars = [var for var in required_vars if not os.getenv(var)]
 if missing_vars:
     error_msg = f"CRITICAL ERROR: Missing required environment variables: {', '.join(missing_vars)}"
     app_logger.critical(error_msg)
-    # in production, you might want to raise an error to stop startup
-    # raise RuntimeError(error_msg)
-    # For now, we'll log strictly but allow continuing for dev convenience if needed, 
-    # though strictly we should stop. Let's start with a warning stack for now to avoid breaking existing dev flows instantly 
-    # if they are lazy, but the requirement is "Add environment variable validation".
-    # Given the Critical priority, we should probably be noisy.
+    raise RuntimeError(error_msg)
     
 app_logger.info(f"SECRET_KEY exists: {'YES' if os.getenv('SECRET_KEY') else 'NO'}")
 app_logger.info(f"DATABASE_URL exists: {'YES' if os.getenv('DATABASE_URL') else 'NO'}")
 
-app = FastAPI(
-    title="Insight-Flow API",
-    version="1.0.0",
-    redirect_slashes=True  # Enable automatic redirect to handle trailing slashes
-)
-
-# Mount static files
-# Ensure static directory exists
-if not os.path.exists("static"):
-    os.makedirs("static")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Add startup event to log server binding information
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
     app_logger.info("="*50)
-    app_logger.info("FASTAPI SERVER STARTING UP")
+    app_logger.info("FASTAPI SERVER STARTING UP (LIFESPAN)")
     
     # Initialize database connection
     try:
@@ -70,23 +54,31 @@ async def startup_event():
     app_logger.info(f"Database URL exists: {'YES' if os.getenv('DATABASE_URL') else 'NO'}")
     app_logger.info("="*50)
 
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
+    
+    # Shutdown logic
     app_logger.info("FASTAPI SERVER SHUTTING DOWN")
+
+app = FastAPI(
+    title="Insight-Flow API",
+    version="1.0.0",
+    redirect_slashes=True,  # Enable automatic redirect to handle trailing slashes
+    lifespan=lifespan
+)
+
+# Mount static files
+# Ensure static directory exists
+if not os.path.exists("static"):
+    os.makedirs("static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Add startup event to log server binding information
+# Startup and shutdown events removed in favor of lifespan
 
 # Add CORS middleware with proper configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        # "http://localhost:8000",
-        # "http://127.0.0.1:8000",
-        # "http://localhost:3001", 
-        # "http://127.0.0.1:3001",
-        # "http://localhost:3002",
-        # "http://127.0.0.1:3002",
-    ],
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -96,10 +88,14 @@ app.add_middleware(
 # Custom middleware for CORS debugging removed for performance
 
 # Trusted Host Middleware
+# Trusted Host Middleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
+# Allow strictly configuring allowed hosts in production
+allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,testserver").split(",")
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0", "testserver"]
+    allowed_hosts=allowed_hosts
 )
 
 from fastapi.exceptions import RequestValidationError
@@ -126,6 +122,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """
     # Get the first error message for the main message
     error_msg = "Validation Error"
+    formatted_errors = []
+    
     if exc.errors():
         try:
             # Try to get a clean error message
@@ -134,15 +132,30 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
                 error_msg = e["msg"]
             if "loc" in e:
                  error_msg += f" in {' -> '.join(str(l) for l in e['loc'])}"
-        except:
-            pass
+            
+            # Format errors to be JSON serializable
+            import json
+            for e in exc.errors():
+                # specific handling for 'ctx' which might contain exception objects
+                error_dict = e.copy()
+                if 'ctx' in error_dict:
+                    # exceptions are not serializable, convert to str
+                    if 'error' in error_dict['ctx']:
+                         error_dict['ctx']['error'] = str(error_dict['ctx']['error'])
+                if 'url' in error_dict:
+                    error_dict.pop('url') # URL objects might cause issues too
+                formatted_errors.append(error_dict)
+                
+        except Exception as e:
+            app_logger.error(f"Error formatting validation exception: {e}")
+            formatted_errors = [{"msg": str(exc)}]
 
     return JSONResponse(
         status_code=422,
         content={
             "success": False, 
             "message": error_msg,
-            "errors": exc.errors()
+            "errors": formatted_errors
         }
     )
 

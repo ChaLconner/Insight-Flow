@@ -8,7 +8,9 @@ import {
     User as UserIcon,
     Edit,
     Trash2,
-    Flag
+    Flag,
+    Tag,
+    FolderKanban
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,7 +59,7 @@ export const TaskItem = memo(({
                             <div className="flex items-center gap-4 mt-1 text-xs text-zinc-400">
                                 {showProjectName && task.project && (
                                     <span className="flex items-center gap-1">
-                                        <span className="w-2 h-2 rounded-full bg-primary/50" />
+                                        <FolderKanban className="h-3 w-3 text-zinc-400" />
                                         {task.project.name}
                                     </span>
                                 )}
@@ -67,6 +69,12 @@ export const TaskItem = memo(({
                                         }`}>
                                         <Flag className="h-3 w-3" />
                                         <span className="capitalize">{task.priority}</span>
+                                    </span>
+                                )}
+                                {task.type && (
+                                    <span className="flex items-center gap-1 text-zinc-400">
+                                        <Tag className="h-3 w-3" />
+                                        <span className="capitalize">{task.type}</span>
                                     </span>
                                 )}
                                 {task.dueDate && (
@@ -97,7 +105,7 @@ export const TaskItem = memo(({
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <Badge className={getStatusColor(task.status)}>
+                        <Badge className={`${getStatusColor(task.status)} capitalize`}>
                             {task.status.replace('_', ' ')}
                         </Badge>
                         <div className="relative">

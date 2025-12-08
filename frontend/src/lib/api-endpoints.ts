@@ -553,7 +553,7 @@ export const notificationsApi = {
     return createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get('/notifications/unread-count');
       return data;
-    }, cacheKey);
+    }, cacheKey, 5000000); // เพิ่มเวลาเป็น 5 นาที (300,000ms)
   },
 
   // Mark as read

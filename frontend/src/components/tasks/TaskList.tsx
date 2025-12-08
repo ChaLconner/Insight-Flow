@@ -103,14 +103,25 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
 
     // Update URL when filters change
     useEffect(() => {
-        const params = new URLSearchParams();
-        if (searchQuery) params.set("search", searchQuery);
-        if (statusFilter !== "all") params.set("status", statusFilter);
-        if (page > 1) params.set("page", page.toString());
+        const params = new URLSearchParams(searchParams.toString());
 
-        const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-        router.replace(newUrl, { scroll: false });
-    }, [searchQuery, statusFilter, page, router]);
+        if (searchQuery) params.set("search", searchQuery);
+        else params.delete("search");
+
+        if (statusFilter !== "all") params.set("status", statusFilter);
+        else params.delete("status");
+
+        if (page > 1) params.set("page", page.toString());
+        else params.delete("page");
+
+        // Use string comparison to avoid unnecessary updates
+        const currentString = searchParams.toString();
+        const newString = params.toString();
+
+        if (currentString !== newString) {
+            router.replace(`${window.location.pathname}?${newString}`, { scroll: false });
+        }
+    }, [searchQuery, statusFilter, page, router, searchParams]);
 
     useEffect(() => {
         isMounted.current = true;
@@ -122,6 +133,8 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
     // Use custom hook for data fetching and operations
     const {
         tasks,
+        total,
+        hasMore,
         isLoading,
         isFetching,
         error,
@@ -212,7 +225,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
 
 
     // RENDER LOGIC
-    if (isLoading && !isFetching && tasks.length === 0) {
+    if (isLoading) {
         return (
             <div className="space-y-8">
                 {/* Header Skeleton */}
@@ -302,16 +315,19 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                     />
                 </div>
                 <CustomSelect
-                    value={statusFilter}
+                    value={statusFilter === "all" ? "" : statusFilter}
+                    placeholder="All Status"
                     onChange={(value: string) => {
                         setStatusFilter(value);
                         setPage(1); // Reset to first page when filtering
                     }}
                     options={[
-                        { value: "all", label: "All Status" },
+                        ...(statusFilter !== "all" ? [{ value: "all", label: "All Status" }] : []),
                         { value: "todo", label: "To Do" },
                         { value: "in_progress", label: "In Progress" },
+                        { value: "in_review", label: "In Review" },
                         { value: "done", label: "Done" },
+                        { value: "cancelled", label: "Cancelled" },
                     ]}
                     className="w-full sm:w-48"
                 />
@@ -346,7 +362,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
             {tasks.length > 0 && (
                 <div className="flex justify-between items-center mt-8">
                     <div className="text-sm text-zinc-400">
-                        Showing {((page - 1) * PAGE_SIZE) + 1} to {((page - 1) * PAGE_SIZE) + tasks.length} tasks
+                        Showing {((page - 1) * PAGE_SIZE) + 1} to {Math.min(((page - 1) * PAGE_SIZE) + PAGE_SIZE, total)} of {total} tasks
                     </div>
                     <div className="flex gap-2">
                         <Button
@@ -366,7 +382,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                             variant="glass"
                             size="sm"
                             onClick={() => setPage(p => p + 1)}
-                            disabled={tasks.length < PAGE_SIZE}
+                            disabled={!hasMore}
                             className="flex items-center gap-2 text-white font-medium border-white/10 hover:bg-white/10"
                         >
                             Next
@@ -383,9 +399,9 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                     setEditingTask(null);
                 }}
                 onTaskCreated={() => {
-                    const qKey = projectId ? ['tasks', projectId] : ['tasks', 'my'];
-                    queryClient.invalidateQueries({ queryKey: qKey });
-                    queryClient.invalidateQueries({ queryKey: ['tasks', 'my'] }); // Always invalidate global list too
+                    refetch();
+                    // Invalidate all task queries to ensure consistency across views (project vs global)
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] });
                     setIsNewTaskModalOpen(false);
                     setEditingTask(null);
                     if (onTaskChange) onTaskChange();

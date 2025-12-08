@@ -93,7 +93,7 @@ export function UserSearchSelect({ value, onChange, onUserSelect, className, pla
             </div>
 
             {isOpen && users.length > 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-950/90 backdrop-blur-xl shadow-xl max-h-60 overflow-auto custom-scrollbar">
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-xl max-h-60 overflow-auto custom-scrollbar">
                     {users.map((user) => (
                         <button
                             key={user.id}
@@ -121,7 +121,7 @@ export function UserSearchSelect({ value, onChange, onUserSelect, className, pla
             )}
 
             {isOpen && query.length >= 2 && !isLoading && users.length === 0 && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-950/90 backdrop-blur-xl shadow-xl p-3 text-sm text-zinc-400 text-center">
+                <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-xl p-3 text-sm text-zinc-400 text-center">
                     No matching users found
                 </div>
             )}

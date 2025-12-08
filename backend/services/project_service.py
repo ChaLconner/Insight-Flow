@@ -2,7 +2,7 @@
 Project service layer for project management.
 """
 from typing import Optional, List
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from models.project import Project, ProjectMember, MemberRole
@@ -116,7 +116,7 @@ class ProjectService:
             # provided the member count isn't massive (thousands). 
             # Given pagination of projects (defaults to 100), this is safer.
             all_members = self.db.query(ProjectMember).options(
-                joinedload(ProjectMember.user)
+                selectinload(ProjectMember.user)
             ).filter(ProjectMember.project_id.in_(project_ids)).all()
             
             from collections import defaultdict
@@ -215,7 +215,7 @@ class ProjectService:
         
         # Get members with user data
         members = self.db.query(ProjectMember).options(
-            joinedload(ProjectMember.user)
+            selectinload(ProjectMember.user)
         ).filter(ProjectMember.project_id == project_id).all()
         
         # Recent activity count
@@ -273,8 +273,44 @@ class ProjectService:
             # Aditonal members
             if project_data.members:
                 logger.debug(f"Adding {len(project_data.members)} members to project {db_project.id}")
-                for member_data in project_data.members:
-                    self._add_member_to_session(db_project.id, member_data)
+                
+                # Batch fetch users to avoid N+1 queries
+                user_ids = []
+                for m in project_data.members:
+                    try:
+                        user_ids.append(uuid.UUID(str(m.user_id)))
+                    except ValueError:
+                        logger.warning(f"Invalid UUID provided in members list: {m.user_id}")
+                
+                if user_ids:
+                    # Fetch all users in one query
+                    existing_users = self.db.query(User).filter(User.id.in_(user_ids)).all()
+                    existing_user_ids = {u.id for u in existing_users}
+                    
+                    for member_data in project_data.members:
+                        try:
+                            uid = uuid.UUID(str(member_data.user_id))
+                            if uid not in existing_user_ids:
+                                logger.warning(f"User {uid} not found, skipping addition to project")
+                                continue
+
+                            # Validate role
+                            role_value = member_data.role
+                            if role_value == 'admin':
+                                role_value = MemberRole.ADMIN.value
+                            elif role_value == 'member':
+                                role_value = MemberRole.MEMBER.value
+                            # If 'owner' is passed, we might want to allow allowed? usually only 1 owner.
+                            # Assuming additional members are not owners.
+                            
+                            new_member = ProjectMember(
+                                project_id=db_project.id,
+                                user_id=uid,
+                                role=role_value
+                            )
+                            self.db.add(new_member)
+                        except ValueError:
+                            pass
             
             # Commit the transaction - ALL OR NOTHING
             self.db.commit()
@@ -346,6 +382,43 @@ class ProjectService:
         if project_data.is_active is not None:
             changes["is_active"] = project_data.is_active
             project.is_active = project_data.is_active
+            
+        # Handle member updates
+        if project_data.member_ids is not None:
+            # Fetch current members
+            current_members = self.db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
+            current_user_ids = {m.user_id for m in current_members}
+            new_user_ids = set(project_data.member_ids)
+            
+            # Determine additions and removals
+            to_add_ids = new_user_ids - current_user_ids
+            to_remove_ids = current_user_ids - new_user_ids
+            
+            # Protect owner from removal
+            if project.owner_id in to_remove_ids:
+                to_remove_ids.remove(project.owner_id)
+                
+            # Add new members
+            for uid in to_add_ids:
+                # Verify user exists
+                user_exists = self.db.query(User.id).filter(User.id == uid).first()
+                if user_exists:
+                    new_member = ProjectMember(
+                        project_id=project_id,
+                        user_id=uid,
+                        role=MemberRole.MEMBER.value
+                    )
+                    self.db.add(new_member)
+            
+            # Remove members
+            if to_remove_ids:
+                self.db.query(ProjectMember).filter(
+                    ProjectMember.project_id == project_id,
+                    ProjectMember.user_id.in_(list(to_remove_ids))
+                ).delete(synchronize_session=False)
+
+            if to_add_ids or to_remove_ids:
+                 changes["members"] = f"Added {len(to_add_ids)}, Removed {len(to_remove_ids)}"
         
         try:
             self.db.commit()
@@ -399,7 +472,7 @@ class ProjectService:
     def get_project_members(self, project_id: uuid.UUID) -> List[ProjectMember]:
         """Get all members of a project."""
         return self.db.query(ProjectMember).options(
-            joinedload(ProjectMember.user)
+            selectinload(ProjectMember.user)
         ).filter(ProjectMember.project_id == project_id).all()
     
     def add_project_member(self, project_id: uuid.UUID, member_data: ProjectMemberCreate, user_id: uuid.UUID) -> ProjectMember:
@@ -478,7 +551,7 @@ class ProjectService:
             # Load member with user data
             try:
                 member_with_user = self.db.query(ProjectMember).options(
-                    joinedload(ProjectMember.user)
+                    selectinload(ProjectMember.user)
                 ).filter(ProjectMember.id == db_member.id).first()
             except ValueError:
                 logger.error(f"Error loading member with user data")
@@ -611,7 +684,7 @@ class ProjectService:
             
             # Load member with user data
             member_with_user = self.db.query(ProjectMember).options(
-                joinedload(ProjectMember.user)
+                selectinload(ProjectMember.user)
             ).filter(ProjectMember.id == member.id).first()
             
             logger.info(f"Returning updated member with user data")

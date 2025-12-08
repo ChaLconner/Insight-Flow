@@ -25,6 +25,14 @@ class CacheMiddleware(BaseHTTPMiddleware):
         if request.method != "GET":
             return await call_next(request)
 
+        # Skip caching for dynamic endpoints where real-time data is critical
+        path = request.url.path
+        # We explicitly exclude these paths because they are frequently updated and users expect immediate consistency.
+        # Caching main collections like /projects can also be problematic if creating/deleting projects.
+        excluded_prefixes = ["/tasks", "/projects", "/users", "/notifications", "/auth", "/files"]
+        if any(path.startswith(prefix) for prefix in excluded_prefixes):
+            return await call_next(request)
+
         cache_key = f"{request.method}:{request.url}"
         
         # Check cache

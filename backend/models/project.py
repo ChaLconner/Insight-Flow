@@ -3,9 +3,10 @@ Project models for Insight-Flow application.
 """
 from sqlalchemy import Column, String, Boolean, UUID, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from .base import BaseModel
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Project(BaseModel):
     """
@@ -42,8 +43,13 @@ class ProjectMember(BaseModel):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String(20), nullable=False, default=MemberRole.MEMBER.value)
-    joined_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    joined_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now())
     
     # Relationships
     project = relationship("Project", back_populates="members")
     user = relationship("User", back_populates="project_memberships")
+
+    from sqlalchemy import Index
+    __table_args__ = (
+        Index('ix_project_members_project_user', 'project_id', 'user_id'),
+    )

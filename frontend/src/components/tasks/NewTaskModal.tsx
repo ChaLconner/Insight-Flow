@@ -7,9 +7,10 @@ import {
     AlertCircle,
     Calendar,
     Flag,
-    Tag,
     Briefcase,
-    Layout
+    Layout,
+    CheckCircle2,
+    Tag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { tasksApi, projectsApi } from "@/lib/api-endpoints";
 import type { Project, Task } from "@/types";
-import { TaskPriority, TaskType } from "@/types";
+import { TaskPriority, TaskType, TaskStatus } from "@/types";
 import { format } from "date-fns";
 
 interface NewTaskModalProps {
@@ -33,6 +34,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
     const [description, setDescription] = useState("");
     const [projectId, setProjectId] = useState(defaultProjectId || "");
     const [priority, setPriority] = useState<string>(TaskPriority.MEDIUM);
+    const [status, setStatus] = useState<string>(TaskStatus.TODO);
     const [type, setType] = useState<string>(TaskType.FEATURE);
     const [dueDate, setDueDate] = useState("");
     const [loading, setLoading] = useState(false);
@@ -46,8 +48,10 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                 setTitle(task.title);
                 setDescription(task.description || "");
                 setProjectId(task.projectId);
-                setPriority(task.priority);
-                setType(task.type);
+
+                setPriority(task.priority || TaskPriority.MEDIUM);
+                setStatus(task.status || TaskStatus.TODO);
+                setType(task.type || TaskType.FEATURE);
                 setDueDate(task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : "");
             } else {
                 // Create mode - reset fields
@@ -55,6 +59,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                 setDescription("");
                 setProjectId(defaultProjectId || "");
                 setPriority(TaskPriority.MEDIUM);
+                setStatus(TaskStatus.TODO);
                 setType(TaskType.FEATURE);
                 setDueDate("");
             }
@@ -99,6 +104,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                 title,
                 description,
                 priority: priority as TaskPriority,
+                status: status as TaskStatus,
                 type: type as TaskType,
                 dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
             };
@@ -121,7 +127,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                 setDescription("");
                 if (!defaultProjectId) { setProjectId(""); }
                 setPriority(TaskPriority.MEDIUM);
-                setType(TaskType.FEATURE);
+                setStatus(TaskStatus.TODO);
                 setDueDate("");
             }
         } catch (err) {
@@ -134,13 +140,52 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
 
     // Helper options for selects
     const projectOptions = projects.map(p => ({ value: p.id, label: p.name }));
+
+    const getPriorityColor = (p: string) => {
+        switch (p) {
+            case TaskPriority.URGENT:
+            case TaskPriority.HIGH:
+                return "text-red-400";
+            case TaskPriority.MEDIUM:
+                return "text-yellow-400";
+            case TaskPriority.LOW:
+            default:
+                return "text-blue-400";
+        }
+    };
+
     const priorityOptions = Object.values(TaskPriority).map(p => ({
         value: p,
-        label: p.charAt(0).toUpperCase() + p.slice(1).replace('_', ' ')
+        label: p.charAt(0).toUpperCase() + p.slice(1).replace('_', ' '),
+        color: getPriorityColor(p)
     }));
+
+    const getStatusColor = (s: string) => {
+        switch (s) {
+            case TaskStatus.DONE:
+                return "text-emerald-400";
+            case TaskStatus.IN_PROGRESS:
+                return "text-blue-400";
+            case TaskStatus.IN_REVIEW:
+                return "text-purple-400";
+            case TaskStatus.CANCELLED:
+                return "text-red-400";
+            case TaskStatus.TODO:
+            default:
+                return "text-zinc-400";
+        }
+    };
+
+    const statusOptions = Object.values(TaskStatus).map(s => ({
+        value: s,
+        label: s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' '),
+        color: getStatusColor(s)
+    }));
+
     const typeOptions = Object.values(TaskType).map(t => ({
         value: t,
-        label: t.charAt(0).toUpperCase() + t.slice(1).replace('_', ' ')
+        label: t.charAt(0).toUpperCase() + t.slice(1).replace('_', ' '),
+        color: "text-zinc-400"
     }));
 
     return (
@@ -158,10 +203,10 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#18181b]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+                        className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#18181b]/95 backdrop-blur-xl shadow-2xl"
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/5">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-white/5 rounded-t-2xl">
                             <div className="flex items-center gap-2">
                                 <Layout className="h-5 w-5 text-indigo-400" />
                                 <h2 className="text-lg font-semibold text-white">
@@ -211,7 +256,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                                 </div>
 
                                 {/* Meta Fields Grid */}
-                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                                     {!defaultProjectId && !task && (
                                         <div className="space-y-1.5 col-span-2">
                                             <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
@@ -222,7 +267,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                                                 value={projectId}
                                                 onChange={setProjectId}
                                                 options={projectOptions}
-                                                className="w-full bg-black/20 border-white/10"
+                                                className="w-full"
                                             />
                                         </div>
                                     )}
@@ -236,7 +281,20 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                                             value={priority}
                                             onChange={setPriority}
                                             options={priorityOptions}
-                                            className="w-full bg-black/20 border-white/10"
+                                            className="w-full"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
+                                            <CheckCircle2 className="h-3 w-3" />
+                                            Status
+                                        </div>
+                                        <CustomSelect
+                                            value={status}
+                                            onChange={setStatus}
+                                            options={statusOptions}
+                                            className="w-full"
                                         />
                                     </div>
 
@@ -249,11 +307,11 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                                             value={type}
                                             onChange={setType}
                                             options={typeOptions}
-                                            className="w-full bg-black/20 border-white/10"
+                                            className="w-full"
                                         />
                                     </div>
 
-                                    <div className="space-y-1.5 col-span-2">
+                                    <div className="space-y-1.5">
                                         <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 ml-1 uppercase tracking-wider">
                                             <Calendar className="h-3 w-3" />
                                             Due Date
@@ -263,7 +321,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                                                 type="date"
                                                 value={dueDate}
                                                 onChange={(e) => setDueDate(e.target.value)}
-                                                className="bg-black/20 border-white/10 text-white w-full [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                                                className="w-full h-9 px-3 py-2 bg-white/10 border-white/10 rounded-lg text-sm text-white focus:ring-2 focus:ring-indigo-500/50 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100 transition-colors"
                                             />
                                         </div>
                                     </div>

@@ -34,7 +34,7 @@ const priorityConfig = {
   [TaskPriority.LOW]: { label: "Low", color: "bg-zinc-500/20 text-zinc-400", icon: Flag },
   [TaskPriority.MEDIUM]: { label: "Medium", color: "bg-amber-500/20 text-amber-400", icon: Flag },
   [TaskPriority.HIGH]: { label: "High", color: "bg-orange-500/20 text-orange-400", icon: Flag },
-  [TaskPriority.URGENT]: { label: "Urgent", color: "bg-red-500/20 text-red-400", icon: Flag },
+  [TaskPriority.URGENT]: { label: "Urgent", color: "bg-fuchsia-500/20 text-fuchsia-400", icon: Flag },
 };
 
 const typeConfig = {

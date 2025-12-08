@@ -65,9 +65,7 @@ export default function ProjectsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "name">("newest");
-  const [activeTab, setActiveTab] = useState<'projects' | 'tasks'>(
-    (searchParams.get('tab') as 'projects' | 'tasks') ?? 'projects'
-  );
+  const activeTab: 'projects' | 'tasks' = searchParams.get('tab') === 'tasks' ? 'tasks' : 'projects';
   const taskListRef = useRef<TaskListRef>(null);
 
   const isAuthenticated = useAuthStore(state => state.isAuthenticated);
@@ -84,7 +82,6 @@ export default function ProjectsPage() {
 
 
   const handleTabChange = (tab: 'projects' | 'tasks') => {
-    setActiveTab(tab);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', tab);
     router.push(`/projects?${params.toString()}`);
@@ -388,7 +385,8 @@ export default function ProjectsPage() {
       const apiData = { ...data } as any;
 
       // Map memberIds to members for backend
-      if (apiData.memberIds && Array.isArray(apiData.memberIds)) {
+      // Map memberIds to members for backend ONLY for creation
+      if (modalMode === "create" && apiData.memberIds && Array.isArray(apiData.memberIds)) {
         apiData.members = apiData.memberIds.map((userId: string) => ({
           userId,
           role: 'member'

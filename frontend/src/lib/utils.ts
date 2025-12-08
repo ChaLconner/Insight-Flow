@@ -547,5 +547,10 @@ export function getAvatarUrl(avatarUrl?: string): string {
   // ตรวจสอบว่า path ขึ้นต้นด้วย / หรือไม่
   const normalizedPath = avatarUrl.startsWith('/') ? avatarUrl : `/${avatarUrl}`;
 
+  // Prevent double prefixing if path already starts with baseUrl
+  if (normalizedPath.startsWith(baseUrl)) {
+    return normalizedPath;
+  }
+
   return `${baseUrl}${normalizedPath}`;
 }
