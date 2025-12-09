@@ -270,7 +270,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                       key={color}
                       type="button"
                       onClick={() => handleInputChange("color", color)}
-                      className={`h-8 w-8 rounded-lg border-2 transition-all ${formData.color === color
+                      className={`h-8 w-8 rounded-lg border-2 transition-all cursor-pointer ${formData.color === color
                         ? "border-white scale-110"
                         : "border-white/20 hover:border-white/40"
                         }`}

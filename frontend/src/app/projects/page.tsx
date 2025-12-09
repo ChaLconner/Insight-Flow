@@ -18,7 +18,6 @@ import {
   TrendingUp,
   Archive,
   Trash2,
-  Eye,
   Edit,
   RefreshCw,
   ChevronDown,
@@ -554,7 +553,7 @@ export default function ProjectsPage() {
             </p>
             <button
               onClick={() => !isAuthenticated ? router.push('/auth/login') : handleRefresh()}
-              className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+              className="mt-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
             >
               {!isAuthenticated ? 'Go to Login' : 'Retry'}
             </button>
@@ -583,7 +582,7 @@ export default function ProjectsPage() {
             <Button
               onClick={handleRefresh}
               variant="ghost"
-              className="flex-1 sm:flex-none glass border border-white/10 text-white hover:bg-white/10 hover:text-white"
+              className="flex-1 sm:flex-none glass border border-white/10 text-white hover:bg-white/10 hover:text-white cursor-pointer"
               disabled={refreshing}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
@@ -592,7 +591,7 @@ export default function ProjectsPage() {
             {activeTab === "projects" && (
               <Button
                 onClick={handleCreateProject}
-                className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white"
+                className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 New Project
@@ -606,7 +605,7 @@ export default function ProjectsPage() {
           <button
             onClick={() => handleTabChange("projects")}
             className={`
-              flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200
+              flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer
               ${activeTab === "projects"
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                 : "text-zinc-400 hover:text-white hover:bg-white/5"
@@ -619,7 +618,7 @@ export default function ProjectsPage() {
           <button
             onClick={() => handleTabChange("tasks")}
             className={`
-              flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200
+              flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer
               ${activeTab === "tasks"
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
                 : "text-zinc-400 hover:text-white hover:bg-white/5"
@@ -661,7 +660,7 @@ export default function ProjectsPage() {
                 />
                 <Button
                   variant="ghost"
-                  className={`glass border border-white/10 text-white hover:bg-white/10 hover:text-white ${showFilters ? "bg-white/10 ring-1 ring-indigo-500/50" : ""
+                  className={`glass border border-white/10 text-white hover:bg-white/10 hover:text-white cursor-pointer ${showFilters ? "bg-white/10 ring-1 ring-indigo-500/50" : ""
                     }`}
                   onClick={() => setShowFilters(!showFilters)}
                 >
@@ -679,7 +678,7 @@ export default function ProjectsPage() {
                       setStatusFilter("all");
                       setSortBy("newest");
                     }}
-                    className="text-zinc-400 hover:text-white"
+                    className="text-zinc-400 hover:text-white cursor-pointer"
                   >
                     <X className="h-4 w-4 mr-2" />
                     Clear
@@ -707,7 +706,7 @@ export default function ProjectsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setSortBy("newest")}
-                            className={`text-xs ${sortBy === "newest"
+                            className={`text-xs cursor-pointer ${sortBy === "newest"
                               ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
                               : "text-zinc-400 hover:text-white"
                               }`}
@@ -718,7 +717,7 @@ export default function ProjectsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setSortBy("oldest")}
-                            className={`text-xs ${sortBy === "oldest"
+                            className={`text-xs cursor-pointer ${sortBy === "oldest"
                               ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
                               : "text-zinc-400 hover:text-white"
                               }`}
@@ -729,7 +728,7 @@ export default function ProjectsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => setSortBy("name")}
-                            className={`text-xs ${sortBy === "name"
+                            className={`text-xs cursor-pointer ${sortBy === "name"
                               ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30"
                               : "text-zinc-400 hover:text-white"
                               }`}
@@ -782,7 +781,10 @@ export default function ProjectsPage() {
                     whileHover={{ y: -5, transition: { duration: 0.2 } }}
                     className="h-full"
                   >
-                    <Card className="h-full border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors group flex flex-col">
+                    <Card
+                      className="h-full border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors group flex flex-col cursor-pointer"
+                      onClick={() => router.push(`/projects/${project.id}`)}
+                    >
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -869,24 +871,12 @@ export default function ProjectsPage() {
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="grid grid-cols-4 gap-2 pt-2 mt-auto opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300 transform translate-y-0 lg:translate-y-2 lg:group-hover:translate-y-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label="View Project"
-                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/projects/${project.id}`);
-                            }}
-                          >
-                            <Eye className="h-4 w-4" aria-hidden="true" />
-                          </Button>
+                        <div className="grid grid-cols-3 gap-2 pt-2 mt-auto opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300 transform translate-y-0 lg:translate-y-2 lg:group-hover:translate-y-0">
                           <Button
                             variant="ghost"
                             size="sm"
                             aria-label="Edit Project"
-                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
+                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleEditProject(project);
@@ -898,7 +888,7 @@ export default function ProjectsPage() {
                             variant="ghost"
                             size="sm"
                             aria-label="Project Settings"
-                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
+                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(`/projects/${project.id}/settings`);
@@ -910,7 +900,7 @@ export default function ProjectsPage() {
                             variant="ghost"
                             size="sm"
                             aria-label="Archive Project"
-                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20"
+                            className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleArchiveProject(project);
@@ -941,7 +931,7 @@ export default function ProjectsPage() {
                 {!searchQuery && statusFilter === "all" && (
                   <Button
                     onClick={handleCreateProject}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Create New Project

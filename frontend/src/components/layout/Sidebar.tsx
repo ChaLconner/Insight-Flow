@@ -80,7 +80,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
             <button
               onClick={onClose}
               aria-label="Close sidebar"
-              className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white lg:hidden"
+              className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white lg:hidden cursor-pointer"
             >
               <LogOut className="h-5 w-5 rotate-180" aria-hidden="true" />
             </button>
@@ -123,7 +123,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                 const { logoutAndRedirect } = authActions;
                 logoutAndRedirect('/auth/login');
               }}
-              className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-zinc-400 transition-all hover:bg-white/5 hover:text-white"
+              className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-zinc-400 transition-all hover:bg-white/5 hover:text-white cursor-pointer"
             >
               <LogOut className="h-5 w-5 text-zinc-500 transition-colors group-hover:text-red-400" />
               Sign Out

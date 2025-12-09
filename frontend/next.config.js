@@ -93,10 +93,11 @@ const nextConfig = {
 
     // API Proxy Rewrites
     async rewrites() {
+        const apiUrl = process.env.API_URL || 'http://localhost:8000';
         return [
             {
                 source: '/api/:path*',
-                destination: 'http://localhost:8000/:path*',
+                destination: `${apiUrl}/:path*`,
             },
         ];
     },

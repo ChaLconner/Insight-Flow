@@ -561,3 +561,50 @@ h6 {
     -webkit-backdrop-filter: blur(16px);
   }
 }
+
+/* Clickable elements cursor pointer */
+.clickable {
+  cursor: pointer;
+}
+
+/* Specific clickable elements */
+button {
+  cursor: pointer;
+}
+
+a {
+  cursor: pointer;
+}
+
+input[type="button"] {
+  cursor: pointer;
+}
+
+input[type="submit"] {
+  cursor: pointer;
+}
+
+input[type="radio"] {
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+select {
+  cursor: pointer;
+}
+
+label {
+  cursor: pointer;
+}
+
+/* Elements with click handlers */
+[role="button"] {
+  cursor: pointer;
+}
+
+[onclick] {
+  cursor: pointer;
+}

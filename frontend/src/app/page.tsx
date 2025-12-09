@@ -186,7 +186,7 @@ export default function Home() {
                 bg: "bg-violet-400/10",
               },
             ].map((stat, index) => (
-              <Card key={index} className="border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors">
+              <Card key={index} className="border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors cursor-pointer">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium text-zinc-400">
                     {stat.title}
@@ -215,14 +215,14 @@ export default function Home() {
             <Card className="col-span-4 border-white/10 bg-white/5 backdrop-blur-sm">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg font-semibold text-white">Recent Projects</CardTitle>
-                <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white" asChild>
+                <Button variant="ghost" size="sm" className="text-zinc-400 hover:text-white cursor-pointer" asChild>
                   <a href="/projects">View All</a>
                 </Button>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {recentProjects.length > 0 ? recentProjects.map((project, i) => (
-                    <div key={project.id || i} className="group p-3 rounded-xl hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                    <div key={project.id || i} className="group p-3 rounded-xl hover:bg-white/5 transition-all border border-transparent hover:border-white/5 cursor-pointer">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         {/* Icon & Title */}
                         <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-4 w-full sm:w-auto sm:flex-1 items-center">
@@ -255,7 +255,7 @@ export default function Home() {
                               />
                             </div>
                           </div>
-                          <Badge variant="secondary" className="bg-white/10 text-zinc-300 hover:bg-white/20 shrink-0">
+                          <Badge variant="secondary" className="bg-white/10 text-zinc-300 hover:bg-white/20 shrink-0 cursor-pointer">
                             Active
                           </Badge>
                         </div>

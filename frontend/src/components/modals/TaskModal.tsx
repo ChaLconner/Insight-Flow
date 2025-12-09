@@ -299,7 +299,7 @@ export function TaskModal({ isOpen, onClose, task, mode, onSubmit }: TaskModalPr
                           disabled={isSubmitting}
                         />
                         <IconComponent className={`h-4 w-4 ${config.color.split(' ')[1]}`} />
-                        <span className="text-white text-sm">{config.label}</span>
+                        <span className={`text-sm ${formData.priority === key ? config.color.split(' ')[1] : 'text-zinc-300'}`}>{config.label}</span>
                       </label>
                     );
                   })}

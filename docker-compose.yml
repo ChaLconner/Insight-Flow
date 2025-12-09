@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+pg8000://insightflow:insightflow_secret@db:5432/insightflow
+      - SECRET_KEY=dev_secret_key_change_in_prod
+      - CORS_ORIGINS=http://localhost:3000
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - insight-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - insight-network
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=insightflow
+      - POSTGRES_PASSWORD=insightflow_secret
+      - POSTGRES_DB=insightflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insightflow -d insightflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-network
+
+networks:
+  insight-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

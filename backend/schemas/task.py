@@ -21,28 +21,20 @@ class TaskBase(BaseModel):
     @field_validator('priority')
     @classmethod
     def validate_priority(cls, v: Optional[str]) -> str:
-        if v:
-            try:
-                return TaskPriority(v.lower()).value
-            except ValueError:
-                # raising strings in ValueError is safer for pydantic serialization if custom handler exists
-                raise ValueError(f"Priority must be one of: {', '.join([e.value for e in TaskPriority])}")
-        return TaskPriority.MEDIUM.value
+        return validate_priority_value(v) or TaskPriority.MEDIUM.value
 
     @field_validator('type')
     @classmethod
     def validate_type(cls, v: Optional[str]) -> str:
-        if v:
-            try:
-                return TaskType(v.lower()).value
-            except ValueError:
-                raise ValueError(f"Type must be one of: {', '.join([e.value for e in TaskType])}")
-        return TaskType.FEATURE.value
+        return validate_type_value(v) or TaskType.FEATURE.value
 
     model_config = ConfigDict(
         alias_generator=to_camel,
         populate_by_name=True
     )
+
+
+from utils.validators import validate_status_value, validate_priority_value, validate_type_value
 
 class TaskCreate(TaskBase):
     """Schema for creating a new task."""
@@ -53,13 +45,7 @@ class TaskCreate(TaskBase):
     @field_validator('status')
     @classmethod
     def validate_status(cls, v: Optional[str]) -> str:
-        """Validate status value."""
-        if v is not None:
-            # Accept both lowercase and uppercase, but normalize to lowercase
-            valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
-            if v.lower() not in valid_statuses:
-                raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
-        return v.lower() if v else "todo"  # Normalize to lowercase
+        return validate_status_value(v) or "todo"
     
     model_config = ConfigDict(
         # Exclude id from creation schema - backend will generate it
@@ -81,34 +67,17 @@ class TaskUpdate(BaseModel):
     @field_validator('status')
     @classmethod
     def validate_status(cls, v: Optional[str]) -> Optional[str]:
-        """Validate status value."""
-        if v is not None:
-            # Accept both lowercase and uppercase, but normalize to lowercase
-            valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
-            if v.lower() not in valid_statuses:
-                raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
-        return v.lower() if v else None  # Normalize to lowercase
+        return validate_status_value(v)
 
     @field_validator('priority')
     @classmethod
     def validate_priority(cls, v: Optional[str]) -> Optional[str]:
-        if v:
-            try:
-                return TaskPriority(v.lower()).value
-            except ValueError:
-                # raising strings in ValueError is safer for pydantic serialization if custom handler exists
-                raise ValueError(f"Priority must be one of: {', '.join([e.value for e in TaskPriority])}")
-        return None
+        return validate_priority_value(v)
 
     @field_validator('type')
     @classmethod
     def validate_type(cls, v: Optional[str]) -> Optional[str]:
-        if v:
-            try:
-                return TaskType(v.lower()).value
-            except ValueError:
-                raise ValueError(f"Type must be one of: {', '.join([e.value for e in TaskType])}")
-        return None
+        return validate_type_value(v)
 
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -122,13 +91,10 @@ class TaskStatusUpdate(BaseModel):
     @field_validator('status')
     @classmethod
     def validate_status(cls, v: str) -> str:
-        """Validate status value."""
-        if v is not None:
-            # Accept both lowercase and uppercase, but normalize to lowercase
-            valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
-            if v.lower() not in valid_statuses:
-                raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
-        return v.lower()  # Normalize to lowercase
+        res = validate_status_value(v)
+        if res is None:
+             raise ValueError("Status is required")
+        return res
 
     model_config = ConfigDict(
         alias_generator=to_camel,

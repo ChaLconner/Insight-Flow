@@ -26,7 +26,7 @@ export function NotificationsPopover() {
     } = useNotifications();
 
     // Enable polling
-    useNotificationPolling(30000); // Poll every 30 seconds
+    useNotificationPolling(600000); // Poll every 10 minutes (during development)
 
     // Close on click outside
     useEffect(() => {

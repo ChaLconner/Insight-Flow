@@ -299,6 +299,10 @@ app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(notifications.router)
 app.include_router(files.router)
 
+# Import and include project_tasks router (refactored from projects.py)
+from routers import project_tasks
+app.include_router(project_tasks.router, tags=["project tasks"])
+
 @app.get("/")
 def read_root():
     return {"message": "Hello from FastAPI"}

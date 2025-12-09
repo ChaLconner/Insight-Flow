@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from database import SessionLocal, init_database
 from models.user import User
 from models.project import Project, ProjectMember, MemberRole
-from models.task import Task, TaskStatus
+from models.task import Task, TaskStatus, TaskPriority
 from models.task_history import TaskHistory, ActivityType
 from utils.auth import get_password_hash
 
@@ -111,12 +111,14 @@ def seed_analytics_data():
                 creator = random.choice(team_members)
                 
                 status = random.choice(list(TaskStatus))
+                priority = random.choice(list(TaskPriority))
                 
                 task = Task(
                     id=uuid.uuid4(),
                     title=f"Task {uuid.uuid4().hex[:8]}",
                     description="Generated task for analytics testing",
                     status=status,
+                    priority=priority,
                     project_id=project.id,
                     created_by=creator.id,
                     assignee_id=assignee.id,
@@ -140,7 +142,7 @@ def seed_analytics_data():
                 db.add(history_create)
                 
                 # 3.2 Simulate Completion (if done)
-                if status == TaskStatus.DONE.value:
+                if status == TaskStatus.DONE:
                     # Completion happened 1-10 days after creation
                     completed_at = created_at + timedelta(days=random.randint(1, 10))
                     if completed_at > end_date:
@@ -160,7 +162,7 @@ def seed_analytics_data():
                     )
                     db.add(history_complete)
                 
-                elif status == TaskStatus.IN_PROGRESS.value:
+                elif status == TaskStatus.IN_PROGRESS:
                      # Update happened recently
                     updated_at = created_at + timedelta(days=random.randint(1, 5))
                     task.updated_at = updated_at

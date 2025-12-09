@@ -27,6 +27,16 @@ class TestTaskService:
         db_session.commit()
         db_session.refresh(project)
         
+        # Add user as project member (OWNER) because TaskService now enforces permissions
+        from models.project import ProjectMember, MemberRole
+        member = ProjectMember(
+            project_id=project.id,
+            user_id=test_user.id,
+            role=MemberRole.OWNER.value
+        )
+        db_session.add(member)
+        db_session.commit()
+        
         return {
             "project": project,
             "user": test_user,

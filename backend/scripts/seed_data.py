@@ -1,149 +1,216 @@
-import os
+
 import sys
-from datetime import datetime, timedelta, timezone
+import os
 import uuid
+import random
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.orm import Session
+from sqlalchemy import create_engine
+from passlib.context import CryptContext
 
-# Add current directory to path to allow imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Add the backend directory to sys.path to import modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from database import SessionLocal, init_database
+from database import Base, get_db, engine
 from models.user import User
 from models.project import Project, ProjectMember, MemberRole
-from models.task import Task, TaskStatus
-from utils.auth import get_password_hash
+from models.task import Task, TaskStatus, TaskPriority
+from models.task_history import TaskHistory, ActivityType
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
 
 def seed_data():
-    print("Starting database seeding...")
-    
-    # Initialize database (create enums, etc.)
-    init_database()
-    
-    db = SessionLocal()
-    
+    session = Session(engine)
     try:
-        # Check if users exist
-        default_user = db.query(User).filter(User.email == "admin@example.com").first()
+        print("Seeding data...")
         
-        if not default_user:
-            print("Creating default user...")
-            # Create default user
-            default_user = User(
-                id=uuid.uuid4(),
-                email="admin@example.com",
-                name="Admin User",
-                hashed_password=get_password_hash(os.getenv("ADMIN_PASSWORD", "password123")),
-                role="admin",
-                is_active=True,
-                avatar_url="https://api.dicebear.com/7.x/avataaars/svg?seed=admin"
-            )
-            db.add(default_user)
-            db.commit()
-            db.refresh(default_user)
-            print(f"User created: {default_user.email}")
-        else:
-            print("Default user already exists.")
-
-        print("Creating projects...")
-        # Create projects
-        projects_data = [
-            {
-                "name": "Website Redesign",
-                "description": "Redesigning the corporate website with modern technologies.",
-                "color": "#3b82f6"
-            },
-            {
-                "name": "Mobile App Development",
-                "description": "Developing a cross-platform mobile application for customers.",
-                "color": "#8b5cf6"
-            },
-            {
-                "name": "Marketing Campaign",
-                "description": "Q4 Marketing campaign planning and execution.",
-                "color": "#ec4899"
-            }
+        # 1. Create Users
+        users_data = [
+            {"email": "admin@example.com", "name": "Admin User", "role": "admin"},
+            {"email": "alice@example.com", "name": "Alice Johnson", "role": "user"},
+            {"email": "bob@example.com", "name": "Bob Smith", "role": "user"},
+            {"email": "charlie@example.com", "name": "Charlie Brown", "role": "user"},
+            {"email": "diana@example.com", "name": "Diana Prince", "role": "user"}
         ]
-
+        
+        created_users = []
+        for u_data in users_data:
+            existing_user = session.query(User).filter(User.email == u_data["email"]).first()
+            if not existing_user:
+                user = User(
+                    id=uuid.uuid4(),
+                    email=u_data["email"],
+                    name=u_data["name"],
+                    username=u_data["email"].split('@')[0],
+                    hashed_password=get_password_hash("password123"),
+                    is_active=True,
+                    role=u_data["role"],
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc)
+                )
+                session.add(user)
+                created_users.append(user)
+            else:
+                created_users.append(existing_user)
+        
+        session.flush() # Commit users to get IDs
+        
+        # 2. Create Projects
+        projects_data = [
+            {"name": "Frontend Redesign", "desc": "Modernizing the UI/UX", "owner_idx": 1},
+            {"name": "API Optimization", "desc": "Improving backend performance", "owner_idx": 2},
+            {"name": "Mobile App V2", "desc": "New features for iOS/Android", "owner_idx": 3}
+        ]
+        
         created_projects = []
         for p_data in projects_data:
-            project = Project(
-                id=uuid.uuid4(),
-                name=p_data["name"],
-                description=p_data["description"],
-                owner_id=default_user.id,
-                is_active=True
-            )
-            db.add(project)
-            created_projects.append(project)
+            owner = created_users[p_data["owner_idx"]]
             
-            # Add user as owner member
-            member = ProjectMember(
-                id=uuid.uuid4(),
-                project_id=project.id,
-                user_id=default_user.id,
-                role=MemberRole.OWNER.value
-            )
-            db.add(member)
-        
-        db.commit()
-        print(f"Created {len(created_projects)} projects.")
+            # Check exist name
+            existing_project = session.query(Project).filter(Project.name == p_data["name"]).first()
+            if not existing_project:
+                project = Project(
+                    id=uuid.uuid4(),
+                    name=p_data["name"],
+                    description=p_data["desc"],
+                    owner_id=owner.id,
+                    is_active=True,
+                    created_at=datetime.now(timezone.utc) - timedelta(days=90),
+                    updated_at=datetime.now(timezone.utc)
+                )
+                session.add(project)
+                created_projects.append(project)
+                
+                # Add owner as member
+                pm_owner = ProjectMember(
+                    id=uuid.uuid4(),
+                    project_id=project.id,
+                    user_id=owner.id,
+                    role=MemberRole.OWNER.value,
+                    joined_at=datetime.now(timezone.utc) - timedelta(days=90)
+                )
+                session.add(pm_owner)
+                
+                # Add random members
+                for u in created_users:
+                    if u.id != owner.id and random.random() > 0.4:
+                        pm = ProjectMember(
+                            id=uuid.uuid4(),
+                            project_id=project.id,
+                            user_id=u.id,
+                            role=MemberRole.MEMBER.value,
+                            joined_at=datetime.now(timezone.utc) - timedelta(days=random.randint(10, 80))
+                        )
+                        session.add(pm)
+            else:
+                created_projects.append(existing_project)
+                
+        session.flush()
 
-        # Create tasks for created projects
-        print("Checking for projects without tasks...")
-        all_projects = db.query(Project).all()
-        
-        for project in all_projects:
-            existing_tasks = db.query(Task).filter(Task.project_id == project.id).count()
-            if existing_tasks == 0:
-                print(f"Adding tasks to project: {project.name}")
-                project_tasks = [
-                    {
-                        "title": "Project Kickoff",
-                        "description": "Initial meeting to discuss project goals and timeline.",
-                        "status": TaskStatus.DONE.value,
-                        "due_date": datetime.now(timezone.utc) - timedelta(days=2)
-                    },
-                    {
-                        "title": "Requirements Gathering",
-                        "description": "Collect and document detailed requirements.",
-                        "status": TaskStatus.IN_PROGRESS.value,
-                        "due_date": datetime.now(timezone.utc) + timedelta(days=5)
-                    },
-                    {
-                        "title": "Design Phase",
-                        "description": "Create UI/UX designs and prototypes.",
-                        "status": TaskStatus.TODO.value,
-                        "due_date": datetime.now(timezone.utc) + timedelta(days=10)
-                    },
-                    {
-                        "title": "Implementation",
-                        "description": "Start development based on approved designs.",
-                        "status": TaskStatus.TODO.value,
-                        "due_date": datetime.now(timezone.utc) + timedelta(days=20)
-                    }
-                ]
-
-                for task_data in project_tasks:
-                    task = Task(
+        # 3. Add ALL existing users to the new projects to ensure current user sees data
+        all_users = session.query(User).all()
+        for project in created_projects:
+            current_member_ids = [m.user_id for m in session.query(ProjectMember).filter(ProjectMember.project_id == project.id).all()]
+            
+            for user in all_users:
+                if user.id not in current_member_ids:
+                    pm = ProjectMember(
                         id=uuid.uuid4(),
-                        title=task_data["title"],
-                        description=task_data["description"],
-                        status=task_data["status"],
                         project_id=project.id,
-                        created_by=default_user.id,
-                        assignee_id=default_user.id,
-                        due_date=task_data["due_date"]
+                        user_id=user.id,
+                        role=MemberRole.MEMBER.value,
+                        joined_at=datetime.now(timezone.utc) - timedelta(days=random.randint(10, 80))
                     )
-                    db.add(task)
+                    session.add(pm)
         
-        db.commit()
-        print("Tasks created successfully for all projects.")
-        print("Seeding completed successfully!")
+        session.flush()
+
+        # 4. Create Tasks and History
+        for project in created_projects:
+            # Get members (now includes complete list)
+            members = session.query(ProjectMember).filter(ProjectMember.project_id == project.id).all()
+            member_ids = [m.user_id for m in members]
+            
+            if not members:
+                continue
+
+            for _ in range(50): # 50 Tasks per project
+                bg_days = random.randint(1, 90)
+                created_date = datetime.now(timezone.utc) - timedelta(days=bg_days)
+                
+                status_roll = random.random()
+                if status_roll < 0.3: status = TaskStatus.TODO
+                elif status_roll < 0.7: status = TaskStatus.IN_PROGRESS
+                elif status_roll < 0.8: status = TaskStatus.IN_REVIEW
+                else: status = TaskStatus.DONE
+                
+                creator_id = random.choice(member_ids)
+                
+                # Assign 80% of TODO tasks, and 100% of others
+                if status == TaskStatus.TODO:
+                     assignee_id = random.choice(member_ids) if random.random() < 0.8 else None
+                else:
+                     assignee_id = random.choice(member_ids)
+                
+                task = Task(
+                    id=uuid.uuid4(),
+                    title=f"Task {uuid.uuid4().hex[:6]}",
+                    description="Automatically generated task description.",
+                    status=status,
+                    priority=random.choice(list(TaskPriority)),
+                    project_id=project.id,
+                    created_by=creator_id,
+                    assignee_id=assignee_id,
+                    created_at=created_date, # This assumes BaseModel allows override or we set it later
+                    due_date=created_date + timedelta(days=random.randint(2, 14))
+                )
+                # Hack to override server_default timestamp if needed, but BaseModel usually OK if value provided
+                session.add(task)
+                
+                # Create history for creation
+                h_create = TaskHistory(
+                    id=uuid.uuid4(),
+                    project_id=project.id,
+                    task_id=task.id,
+                    user_id=creator_id,
+                    activity_type=ActivityType.TASK_CREATED,
+                    task_title=task.title,
+                    description=f"Task created by user",
+                    timestamp=created_date
+                )
+                session.add(h_create)
+                
+                # If completed, add history
+                if status == TaskStatus.DONE:
+                    completion_days = random.randint(1, bg_days) if bg_days > 1 else 0
+                    completed_date = created_date + timedelta(days=completion_days)
+                    if completed_date > datetime.now(timezone.utc):
+                        completed_date = datetime.now(timezone.utc)
+                        
+                    h_complete = TaskHistory(
+                        id=uuid.uuid4(),
+                        project_id=project.id,
+                        task_id=task.id,
+                        user_id=assignee_id or creator_id,
+                        activity_type=ActivityType.TASK_COMPLETED,
+                        task_title=task.title,
+                        description=f"Task completed",
+                        timestamp=completed_date,
+                        new_values='{"status": "done"}'
+                    )
+                    session.add(h_complete)
+
+        session.commit()
+        print("Data seeded successfully!")
 
     except Exception as e:
-        print(f"An error occurred during seeding: {e}")
-        db.rollback()
+        print(f"Error seeding data: {e}")
+        session.rollback()
     finally:
-        db.close()
+        session.close()
 
 if __name__ == "__main__":
     seed_data()

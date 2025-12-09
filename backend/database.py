@@ -51,7 +51,23 @@ if "pg8000" in database_url:
 db_logger = logging.getLogger("database")
 db_logger.info("="*50)
 db_logger.info("DATABASE CONFIGURATION")
-db_logger.info(f"DATABASE_URL: {database_url}")
+# Redact password from logged URL for security
+redacted_url = database_url
+if "@" in redacted_url and ":" in redacted_url:
+    # Simple redaction for standard postgres://user:pass@host format
+    try:
+        prefix = redacted_url.split("@")[0]
+        suffix = redacted_url.split("@")[1]
+        if ":" in prefix:
+            user_part = prefix.split(":")[0]
+            # Keep scheme and user, hide password
+            scheme_part = user_part.split("://")[0] + "://"
+            username = user_part.split("://")[1] if "://" in user_part else user_part
+            redacted_url = f"{scheme_part}{username}:****@{suffix}"
+    except Exception:
+        redacted_url = "postgresql://****:****@****"
+        
+db_logger.info(f"DATABASE_URL: {redacted_url}")
 db_logger.info("="*50)
 
 # Create engine with improved connection settings for better reliability

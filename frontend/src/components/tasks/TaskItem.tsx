@@ -64,8 +64,9 @@ export const TaskItem = memo(({
                                     </span>
                                 )}
                                 {task.priority && (
-                                    <span className={`flex items-center gap-1 ${task.priority === 'high' || task.priority === 'urgent' ? 'text-red-400' :
-                                        task.priority === 'medium' ? 'text-yellow-400' : 'text-blue-400'
+                                    <span className={`flex items-center gap-1 ${task.priority === 'urgent' ? 'text-fuchsia-400' :
+                                        task.priority === 'high' ? 'text-red-400' :
+                                            task.priority === 'medium' ? 'text-yellow-400' : 'text-blue-400'
                                         }`}>
                                         <Flag className="h-3 w-3" />
                                         <span className="capitalize">{task.priority}</span>
@@ -127,7 +128,7 @@ export const TaskItem = memo(({
                                             e.stopPropagation();
                                             onEdit(task);
                                         }}
-                                        className="w-full flex items-center px-4 py-2 text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors text-left"
+                                        className="w-full flex items-center px-4 py-2 text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors text-left cursor-pointer"
                                     >
                                         <Edit className="mr-2 h-4 w-4" />
                                         Edit Task
@@ -138,7 +139,7 @@ export const TaskItem = memo(({
                                             e.stopPropagation();
                                             onDelete(task);
                                         }}
-                                        className="w-full flex items-center px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-left"
+                                        className="w-full flex items-center px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-left cursor-pointer"
                                     >
                                         <Trash2 className="mr-2 h-4 w-4" />
                                         {isDeleting ? 'Deleting...' : 'Delete Task'}

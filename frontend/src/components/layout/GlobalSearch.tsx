@@ -121,7 +121,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
             {query && (
                 <button
                     onClick={clearSearch}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors cursor-pointer"
                 >
                     <X className="h-4 w-4" />
                 </button>
@@ -144,7 +144,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
                                         <button
                                             key={project.id}
                                             onClick={() => handleSelectProject(project)}
-                                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors group"
+                                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors group cursor-pointer"
                                         >
                                             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500/20 group-hover:text-indigo-300 transition-colors">
                                                 <Folder className="h-4 w-4" />
@@ -167,7 +167,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
                                         <button
                                             key={task.id}
                                             onClick={() => handleSelectTask(task)}
-                                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors group"
+                                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors group cursor-pointer"
                                         >
                                             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20 group-hover:text-emerald-300 transition-colors">
                                                 <CheckSquare className="h-4 w-4" />

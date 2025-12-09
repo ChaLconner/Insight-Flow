@@ -54,6 +54,11 @@ class TaskService:
         project = self.db.query(Project).filter(Project.id == task_data.project_id).first()
         if not project:
             raise ValueError("Project not found")
+            
+        # Permission Check: User must be a project member to create tasks
+        if not self.project_service.is_project_member(task_data.project_id, created_by):
+            logger.warning(f"User {created_by} attempted to create task in project {task_data.project_id} without membership")
+            raise ValueError("Not authorized to create tasks in this project")
         
         # Check if assignee exists (if provided)
         if task_data.assignee_id:

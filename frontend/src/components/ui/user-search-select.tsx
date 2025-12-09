@@ -98,7 +98,7 @@ export function UserSearchSelect({ value, onChange, onUserSelect, className, pla
                         <button
                             key={user.id}
                             onClick={() => handleSelect(user)}
-                            className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/10 transition-colors"
+                            className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/10 transition-colors cursor-pointer"
                         >
                             <div className="h-8 w-8 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center shrink-0">
                                 {user.avatar ? (

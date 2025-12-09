@@ -71,7 +71,7 @@ export const STATUS_COLORS = {
   PRIORITY_LOW: '#22c55e',
   PRIORITY_MEDIUM: '#f59e0b',
   PRIORITY_HIGH: '#f97316',
-  PRIORITY_URGENT: '#ef4444',
+  PRIORITY_URGENT: '#e879f9',
 
   // Project Status
   ACTIVE: '#22c55e',

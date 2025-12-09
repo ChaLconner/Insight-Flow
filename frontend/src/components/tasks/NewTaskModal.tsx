@@ -144,6 +144,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
     const getPriorityColor = (p: string) => {
         switch (p) {
             case TaskPriority.URGENT:
+                return "text-fuchsia-400";
             case TaskPriority.HIGH:
                 return "text-red-400";
             case TaskPriority.MEDIUM:
@@ -213,7 +214,7 @@ export function NewTaskModal({ isOpen, onClose, onTaskCreated, defaultProjectId,
                                     {task ? "Edit Task" : "Create New Task"}
                                 </h2>
                             </div>
-                            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-zinc-400 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+                            <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 text-zinc-400 hover:text-white rounded-full hover:bg-white/10 transition-colors cursor-pointer">
                                 <X className="h-4 w-4" />
                             </Button>
                         </div>

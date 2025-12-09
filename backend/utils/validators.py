@@ -61,3 +61,31 @@ def validate_password_strength(password: str) -> str:
         )
         
     return password
+
+
+from models.task import TaskPriority, TaskType
+
+def validate_status_value(v: Optional[str]) -> Optional[str]:
+    """Validate status value."""
+    if v is not None:
+        valid_statuses = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
+        if v.lower() not in valid_statuses:
+            raise ValueError(f"Status must be one of: {', '.join(valid_statuses)}")
+        return v.lower()
+    return None
+
+def validate_priority_value(v: Optional[str]) -> Optional[str]:
+    if v:
+        try:
+            return TaskPriority(v.lower()).value
+        except ValueError:
+            raise ValueError(f"Priority must be one of: {', '.join([e.value for e in TaskPriority])}")
+    return None
+
+def validate_type_value(v: Optional[str]) -> Optional[str]:
+    if v:
+        try:
+            return TaskType(v.lower()).value
+        except ValueError:
+            raise ValueError(f"Type must be one of: {', '.join([e.value for e in TaskType])}")
+    return None

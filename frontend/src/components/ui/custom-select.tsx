@@ -49,7 +49,7 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
-                    "flex items-center justify-between w-full rounded-lg glass border border-white/10 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50",
+                    "flex items-center justify-between w-full rounded-lg glass border border-white/10 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer",
                     sizeClasses[size],
                     size === "default" && "text-sm",
                 )}
@@ -70,7 +70,7 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
                                     setIsOpen(false);
                                 }}
                                 className={cn(
-                                    "flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-white/10",
+                                    "flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-white/10 cursor-pointer",
                                     value === option.value ? "bg-indigo-600/30" : "",
                                 )}
                             >

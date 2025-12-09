@@ -19,6 +19,7 @@ import type {
   RecentActivity,
   InviteUserRequest
 } from '@/types';
+import type { AnalyticsResponse } from '@/app/analytics/types';
 
 // ===========================================
 // Authentication Endpoints
@@ -524,7 +525,7 @@ export const dashboardApi = {
 
 export const analyticsApi = {
   // Get analytics overview
-  getAnalytics: async (period: string): Promise<any> => {
+  getAnalytics: async (period: string): Promise<AnalyticsResponse> => {
     const cacheKey = `analytics-getAnalytics-${period}`;
     return createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get('/analytics/overview', { params: { period } });
