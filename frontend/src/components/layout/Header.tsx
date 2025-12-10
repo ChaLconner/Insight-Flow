@@ -3,13 +3,26 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { Bell, Search, User, Menu, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth-state";
 import { GlobalSearch } from "./GlobalSearch";
-import { NotificationsPopover } from "./NotificationsPopover";
 import { cn, getAvatarUrl } from "@/lib/utils";
+
+// Dynamic import to reduce initial bundle size (framer-motion is heavy)
+const NotificationsPopover = dynamic(
+    () => import("./NotificationsPopover").then((mod) => mod.NotificationsPopover),
+    {
+        loading: () => (
+            <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full text-zinc-400">
+                <Bell className="h-5 w-5" />
+            </Button>
+        ),
+        ssr: false // Notifications are client-side only anyway
+    }
+);
 
 interface HeaderProps {
     onMenuClick: () => void;
@@ -125,6 +138,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                                     src={getAvatarUrl(user.avatar)}
                                     alt={user.firstName || 'User'}
                                     fill
+                                    priority
                                     className="object-cover"
                                     sizes="40px"
                                 />

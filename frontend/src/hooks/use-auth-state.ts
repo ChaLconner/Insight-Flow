@@ -259,36 +259,71 @@ export const usePermissions = () => {
 
 export const useSessionTimeout = (timeoutMinutes: number = 30) => {
   const { updateActivity, checkAuthStatus } = useAuthState();
+  const lastActivityRef = useRef(Date.now());
 
   useEffect(() => {
-    const timeoutMs = timeoutMinutes * 60 * 1000;
+    const CHECK_INTERVAL = 60 * 1000; // Check every minute
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const updateActivityTimer = setTimeout(() => {
-      updateActivity();
-    }, 5000); // Update every 5 minutes
+    const checkSession = () => {
+      // Don't check if hidden (optimization)
+      if (document.hidden) return;
 
-    const checkSessionTimer = setTimeout(() => {
       if (!checkAuthStatus()) {
-        // Session expired, logout
+        // Session expired
         useAuthStore.getState().logout();
         window.location.href = '/auth/login?expired=true';
       }
-    }, timeoutMs);
+    };
+
+    const startChecking = () => {
+      if (!intervalId) {
+        intervalId = setInterval(checkSession, CHECK_INTERVAL);
+      }
+    };
+
+    const stopChecking = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    // Handle visibility
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Perform an immediate check when becoming visible to catch expired sessions
+        checkSession();
+        startChecking();
+      } else {
+        stopChecking();
+      }
+    };
+
+    // throttled activity updater
+    const handleActivity = () => {
+      const now = Date.now();
+      // Only update store max once per minute to avoid thrashing
+      if (now - lastActivityRef.current > 60 * 1000) {
+        updateActivity();
+        lastActivityRef.current = now;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Activity listeners
     const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-
-    const handleActivity = () => {
-      updateActivity();
-    };
-
     activityEvents.forEach(event => {
       document.addEventListener(event, handleActivity, { capture: true, passive: true });
     });
 
+    // Start initial check
+    startChecking();
+
     return () => {
-      clearTimeout(updateActivityTimer);
-      clearTimeout(checkSessionTimer);
+      stopChecking();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       activityEvents.forEach(event => {
         document.removeEventListener(event, handleActivity, { capture: true } as any);
       });

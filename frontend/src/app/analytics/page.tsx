@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, lazy, Suspense } from "react";
+import { useState, useMemo, useCallback, lazy } from "react";
 import dynamic from "next/dynamic";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { AnalyticsPeriod } from "@/types";
@@ -10,12 +10,13 @@ import { TeamWorkloadParams } from "@/app/analytics/types";
 // Components
 import { AnalyticsHeader } from "@/components/analytics/AnalyticsHeader";
 import { KeyMetrics } from "@/components/analytics/KeyMetrics";
-import { ChartCarousel } from "@/components/analytics/ChartCarousel";
+// ChartCarousel is now lazy loaded
 import { AnalyticsError } from "@/components/analytics/AnalyticsError";
 import {
   AnalyticsPageSkeleton,
   PerformanceTrendsSkeleton,
-  ListSkeleton
+  ListSkeleton,
+  ChartCarouselSkeleton
 } from "@/components/analytics/AnalyticsSkeletons";
 
 // ============================================
@@ -25,6 +26,14 @@ const PerformanceTrends = dynamic(
   () => import("@/components/analytics/PerformanceTrends").then(mod => ({ default: mod.PerformanceTrends })),
   {
     loading: () => <PerformanceTrendsSkeleton />,
+    ssr: false
+  }
+);
+
+const ChartCarousel = dynamic(
+  () => import("@/components/analytics/ChartCarousel").then(mod => ({ default: mod.ChartCarousel })),
+  {
+    loading: () => <ChartCarouselSkeleton />,
     ssr: false
   }
 );
@@ -160,17 +169,11 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Below the fold - lazy loaded */}
-        <Suspense fallback={<PerformanceTrendsSkeleton />}>
-          <PerformanceTrends trends={data.trends ?? EMPTY_ARRAY} />
-        </Suspense>
+        <PerformanceTrends trends={data.trends ?? EMPTY_ARRAY} />
 
         <div className="grid gap-8 lg:grid-cols-2">
-          <Suspense fallback={<ListSkeleton title="Project Performance" />}>
-            <ProjectList projects={data.projects ?? EMPTY_ARRAY} />
-          </Suspense>
-          <Suspense fallback={<ListSkeleton title="Team Performance" />}>
-            <TeamList team={data.team ?? EMPTY_ARRAY} />
-          </Suspense>
+          <ProjectList projects={data.projects ?? EMPTY_ARRAY} />
+          <TeamList team={data.team ?? EMPTY_ARRAY} />
         </div>
       </div>
     </ProtectedLayout>

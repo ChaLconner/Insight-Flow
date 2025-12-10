@@ -183,6 +183,10 @@ class AnalyticsService:
                     "velocity": velocity
                 })
 
+            # Limit to top 50 projects (sorted by name) to prevent huge payload
+            projects_data.sort(key=lambda x: x['name'])
+            projects_data = projects_data[:50]
+
             # Team performance - Aggregated
             team_stats = self.db.query(
                 Task.assignee_id,

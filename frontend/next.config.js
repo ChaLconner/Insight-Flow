@@ -4,7 +4,7 @@ const nextConfig = {
     reactStrictMode: true,
     compress: true, // Enable gzip compression
     poweredByHeader: false, // Security improvement (removes X-Powered-By)
-    productionBrowserSourceMaps: true, // Generate source maps for debugging source-map-loader issues
+    productionBrowserSourceMaps: false, // Disable source maps in production for performance
 
     // Image optimization - updated for Next.js 16
     images: {

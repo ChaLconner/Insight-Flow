@@ -567,17 +567,47 @@ export const useNotificationPolling = (intervalMs = 30000) => {
     // Initial fetch
     fetchNotifications();
 
-    const interval = setInterval(async () => {
-      const hasChanged = await fetchUnreadCount();
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-      // If unread count changed, fetch the full list to update UI
-      // Also fetch if we have unread items to ensure we have the latest details
-      if (hasChanged) {
-        fetchNotifications();
+    const startPolling = () => {
+      if (intervalId) { return; }
+      intervalId = setInterval(async () => {
+        // Don't poll if document is hidden (bfcache/background tab optimization)
+        if (document.visibilityState === 'hidden') { return; }
+
+        const hasChanged = await fetchUnreadCount();
+        if (hasChanged) {
+          fetchNotifications();
+        }
+      }, intervalMs);
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
       }
-    }, intervalMs);
+    };
 
-    return () => clearInterval(interval);
+    // Handle visibility change to suspend/resume polling
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications(); // Fetch immediately on resume
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    // Start initial polling
+    startPolling();
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchNotifications, fetchUnreadCount, intervalMs]);
 };
 

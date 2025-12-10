@@ -99,6 +99,17 @@ export const ListSkeleton = memo(function ListSkeleton({ title }: { title: strin
   );
 });
 
+export const ChartCarouselSkeleton = memo(function ChartCarouselSkeleton() {
+  return (
+    <div className="h-[450px] rounded-xl border border-white/5 bg-white/5 backdrop-blur-sm flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-10 h-10 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+    </div>
+  );
+});
+
 export const HeaderSkeleton = memo(function HeaderSkeleton() {
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -130,12 +141,7 @@ export const AnalyticsPageSkeleton = memo(function AnalyticsPageSkeleton() {
         </div>
 
         {/* Chart Carousel Skeleton */}
-        <div className="h-[450px] rounded-xl border border-white/5 bg-white/5 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-            <Skeleton className="h-4 w-32" />
-          </div>
-        </div>
+        <ChartCarouselSkeleton />
 
         {/* Trends Skeleton */}
         <PerformanceTrendsSkeleton />

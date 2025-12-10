@@ -521,20 +521,10 @@ export const notificationActions = {
 // Auto-cleanup old notifications
 // ===========================================
 
-if (typeof window !== 'undefined') {
-  // Clean up notifications older than 30 days every hour
-  setInterval(() => {
-    const { notifications } = useNotificationStore.getState();
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+// ===========================================
+// Auto-cleanup old notifications
+// ===========================================
 
-    const oldNotifications = notifications.filter(n =>
-      new Date(n.createdAt) < thirtyDaysAgo
-    );
-
-    if (oldNotifications.length > 0) {
-      oldNotifications.forEach(notification => {
-        useNotificationStore.getState().removeNotification(notification.id);
-      });
-    }
-  }, 60 * 60 * 1000); // Every hour
-}
+// Note: Cleanup logic should be handled by a component hook (e.g., in a high-level layout)
+// rather than a global side effect in the module to avoid issues with bfcache and SSR.
+// See use-notifications.ts for polling/cleanup logic.

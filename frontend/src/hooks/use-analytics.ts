@@ -1,4 +1,5 @@
 
+// React Query automatically handles window focus and background refetching optimizations.
 import { useQuery } from '@tanstack/react-query';
 import { AnalyticsPeriod } from "@/types";
 import { analyticsApi } from "@/lib/api-endpoints";
@@ -9,7 +10,7 @@ export function useAnalytics(period: AnalyticsPeriod) {
         queryKey: ["analytics", period],
         queryFn: () => analyticsApi.getAnalytics(period),
         refetchInterval: 300000, // 5 minutes
-        staleTime: 60000, // 1 minute
+        staleTime: 300000, // 5 minutes (analytics data doesn't change that often)
         placeholderData: (previousData) => previousData, // Keep previous data while loading new period
     });
 }

@@ -5,23 +5,31 @@ export class TokenManager {
     private static readonly AUTH_STORAGE_KEY = 'insight-flow-auth';
 
     static getAccessToken(): string | null {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === 'undefined') {
+            return null;
+        }
         return localStorage.getItem(this.ACCESS_TOKEN_KEY);
     }
 
     static getRefreshToken(): string | null {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === 'undefined') {
+            return null;
+        }
         return localStorage.getItem(this.REFRESH_TOKEN_KEY);
     }
 
     static setTokens(accessToken: string, refreshToken: string): void {
-        if (typeof window === 'undefined') return;
+        if (typeof window === 'undefined') {
+            return;
+        }
         localStorage.setItem(this.ACCESS_TOKEN_KEY, accessToken);
         localStorage.setItem(this.REFRESH_TOKEN_KEY, refreshToken);
     }
 
     static clearTokens(): void {
-        if (typeof window === 'undefined') return;
+        if (typeof window === 'undefined') {
+            return;
+        }
         localStorage.removeItem(this.ACCESS_TOKEN_KEY);
         localStorage.removeItem(this.REFRESH_TOKEN_KEY);
         localStorage.removeItem(this.USER_KEY);
@@ -33,7 +41,9 @@ export class TokenManager {
     }
 
     static getUser(): any | null {
-        if (typeof window === 'undefined') return null;
+        if (typeof window === 'undefined') {
+            return null;
+        }
         const userStr = localStorage.getItem(this.USER_KEY);
         try {
             return userStr ? JSON.parse(userStr) : null;

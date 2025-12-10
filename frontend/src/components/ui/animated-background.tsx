@@ -90,7 +90,7 @@ export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) 
         const dx = mouseRef.current.x - particle.x;
         const dy = mouseRef.current.y - particle.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        
+
         if (distance < 100) {
           const force = (100 - distance) / 100;
           particle.vx -= (dx / distance) * force * 0.02;
@@ -108,7 +108,7 @@ export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) 
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Add glow effect
         ctx.shadowColor = particle.color;
         ctx.shadowBlur = particle.size * 2;
@@ -150,6 +150,21 @@ export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) 
     });
     window.addEventListener("mousemove", handleMouseMove);
 
+    // Visibility change handler to pause animation when not visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+          animationRef.current = undefined;
+        }
+      } else {
+        if (!animationRef.current) {
+          animate();
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     // Cleanup
     return () => {
       if (animationRef.current) {
@@ -157,6 +172,7 @@ export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) 
       }
       window.removeEventListener("resize", resizeCanvas);
       window.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
