@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import Image from "next/image";
 import { format } from "date-fns";
 import {
     MoreHorizontal,
@@ -87,14 +88,12 @@ export const TaskItem = memo(({
                                 {task.assignee && (
                                     <span className="flex items-center gap-1.5">
                                         {task.assignee.avatar ? (
-                                            <img
+                                            <Image
                                                 src={getAvatarUrl(task.assignee.avatar)}
-                                                alt={task.assignee.firstName}
-                                                className="h-4 w-4 rounded-full object-cover"
-                                                onError={(e) => {
-                                                    e.currentTarget.style.display = 'none';
-                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                                }}
+                                                alt={task.assignee.firstName || 'Assignee'}
+                                                width={16}
+                                                height={16}
+                                                className="rounded-full object-cover"
                                             />
                                         ) : null}
                                         <UserIcon className={`h-3 w-3 ${task.assignee.avatar ? 'hidden' : ''}`} />

@@ -68,14 +68,14 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
         <div className="flex h-full flex-col px-4 py-6">
           {/* Logo */}
           <div className="mb-10 flex items-center justify-between px-2">
-            <div className="flex items-center gap-3">
+            <Link href="/dashboard" onClick={() => onClose()} className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20">
                 <Layers className="h-6 w-6 text-white" />
               </div>
               <span className="text-xl font-bold tracking-tight text-white">
                 Insight Flow
               </span>
-            </div>
+            </Link>
             {/* Close button for mobile */}
             <button
               onClick={onClose}

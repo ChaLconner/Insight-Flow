@@ -26,7 +26,7 @@ export { format, formatDistanceToNow, isValid, parseISO } from 'date-fns';
 export { motion } from 'framer-motion';
 
 // Icon library
-export * from 'lucide-react';
+
 
 
 
@@ -40,7 +40,7 @@ export { useForm, useController, FormProvider } from 'react-hook-form';
 export { z } from 'zod';
 
 // React Dropzone
-export { useDropzone } from 'react-dropzone';
+
 
 // ===========================================
 // Glassmorphism Theme Classes

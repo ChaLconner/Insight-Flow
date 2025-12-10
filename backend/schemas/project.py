@@ -11,8 +11,8 @@ from utils.schema_utils import to_camel
 
 class ProjectBase(BaseModel):
     """Base project schema."""
-    name: str
-    description: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
 
     model_config = ConfigDict(
         alias_generator=to_camel,

@@ -171,7 +171,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                         <BarChart
                             layout="vertical"
                             data={displayData}
-                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                            margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.1)" />
                             <XAxis
@@ -189,7 +189,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
-                                width={100}
+                                width={80}
                                 tickFormatter={(value) => value.length > 12 ? `${value.substring(0, 12)}...` : value}
                             />
                             <Tooltip

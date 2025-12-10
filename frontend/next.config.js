@@ -2,6 +2,7 @@
 const nextConfig = {
     // Production optimizations
     reactStrictMode: true,
+    compress: true, // Enable gzip compression
     poweredByHeader: false, // Security improvement (removes X-Powered-By)
     productionBrowserSourceMaps: true, // Generate source maps for debugging source-map-loader issues
 
@@ -12,10 +13,10 @@ const nextConfig = {
             { protocol: 'https', hostname: 'your-api-domain.com', pathname: '/**' },
             { protocol: 'https', hostname: 'lh3.googleusercontent.com', pathname: '/**' },
             { protocol: 'https', hostname: '*.googleusercontent.com', pathname: '/**' },
-            { protocol: 'https', hostname: 'ui-avatars.com', pathname: '/**' }
+            { protocol: 'https', hostname: 'ui-avatars.com', pathname: '/**' },
+            { protocol: 'https', hostname: 'api.dicebear.com', pathname: '/**' }
         ],
         formats: ['image/webp', 'image/avif'],
-        deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
         deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
         imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
         dangerouslyAllowSVG: true,

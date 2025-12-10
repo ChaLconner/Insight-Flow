@@ -43,7 +43,7 @@ export const useAuthState = () => {
 
       // Initialize auth checks for session via cookie
       try {
-        console.log('🔄 Initializing auth...');
+
         await authActions.initializeAuth();
       } catch (error) {
         console.error('❌ Failed to initialize auth:', error);

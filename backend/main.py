@@ -285,7 +285,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 from middleware.monitoring import PerformanceMiddleware
+from middleware.security import SecurityHeadersMiddleware
+from middleware.rate_limit import RateLimitMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(RateLimitMiddleware, calls=200, period=60) # 200 req/min
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(PerformanceMiddleware)
 app.add_middleware(CacheMiddleware, cache_timeout=60)
 

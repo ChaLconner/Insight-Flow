@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, LayoutGrid, ListTodo } from "lucide-react";
+import { Plus, LayoutGrid, ListTodo } from "lucide-react";
 
 interface ProjectHeaderProps {
     activeTab: 'projects' | 'tasks';
@@ -32,15 +32,7 @@ export const ProjectHeader = memo(function ProjectHeader({
                     </p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                    <Button
-                        onClick={onRefresh}
-                        variant="ghost"
-                        className="flex-1 sm:flex-none glass border border-white/10 text-white hover:bg-white/10 hover:text-white cursor-pointer"
-                        disabled={isRefetching}
-                    >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
-                        Refresh
-                    </Button>
+
                     {activeTab === "projects" && (
                         <Button
                             onClick={onCreateProject}

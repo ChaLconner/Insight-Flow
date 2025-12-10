@@ -81,7 +81,7 @@ const DashboardStats = memo(function DashboardStats({ stats }: DashboardStatsPro
     }, [stats]);
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {statsCards.map((stat) => (
                 <StatsCard
                     key={stat.key}

@@ -1,19 +1,22 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, memo } from 'react';
+import { Suspense, lazy, useState, useCallback, useMemo, memo } from 'react';
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { AnalyticsPeriod } from "@/types";
 import { BurndownDataPoint, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from "@/app/analytics/types";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Import charts
+// Import charts - Keep BurndownChart eager for specific LCP optimization
 import { BurndownChart } from "./BurndownChart";
-import { WorkloadChart } from "./WorkloadChart";
-import { CreationCompletionChart } from "./CreationCompletionChart";
-import { StatusDistributionChart } from "./StatusDistributionChart";
-import { PriorityChart } from "./PriorityChart";
+
+// Lazy load secondary charts
+const WorkloadChart = lazy(() => import("./WorkloadChart").then(mod => ({ default: mod.WorkloadChart })));
+const CreationCompletionChart = lazy(() => import("./CreationCompletionChart").then(mod => ({ default: mod.CreationCompletionChart })));
+const StatusDistributionChart = lazy(() => import("./StatusDistributionChart").then(mod => ({ default: mod.StatusDistributionChart })));
+const PriorityChart = lazy(() => import("./PriorityChart").then(mod => ({ default: mod.PriorityChart })));
+
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
 
 interface ChartCarouselProps {
@@ -64,6 +67,12 @@ const SLIDE_TRANSITION = {
     opacity: { duration: 0.2 }
 } as const;
 
+const ChartLoadingFallback = () => (
+    <div className="flex h-full w-full items-center justify-center bg-white/5 rounded-xl border border-white/10">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+    </div>
+);
+
 const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
     burndownData,
     workloadData,
@@ -93,13 +102,15 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
         {
             component: (
                 <ChartErrorBoundary fallbackTitle="Workload Chart Error">
-                    <WorkloadChart
-                        data={workloadData}
-                        usePagination={usePaginatedWorkload}
-                        paginatedData={paginatedWorkloadData}
-                        onPageChange={onWorkloadPageChange}
-                        isLoading={isWorkloadLoading}
-                    />
+                    <Suspense fallback={<ChartLoadingFallback />}>
+                        <WorkloadChart
+                            data={workloadData}
+                            usePagination={usePaginatedWorkload}
+                            paginatedData={paginatedWorkloadData}
+                            onPageChange={onWorkloadPageChange}
+                            isLoading={isWorkloadLoading}
+                        />
+                    </Suspense>
                 </ChartErrorBoundary>
             ),
             key: 'workload'
@@ -107,7 +118,9 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
         {
             component: (
                 <ChartErrorBoundary fallbackTitle="Trends Chart Error">
-                    <CreationCompletionChart data={dailyTrendsData} />
+                    <Suspense fallback={<ChartLoadingFallback />}>
+                        <CreationCompletionChart data={dailyTrendsData} />
+                    </Suspense>
                 </ChartErrorBoundary>
             ),
             key: 'creation-completion'
@@ -115,7 +128,9 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
         {
             component: (
                 <ChartErrorBoundary fallbackTitle="Status Distribution Error">
-                    <StatusDistributionChart data={statusDistribution} />
+                    <Suspense fallback={<ChartLoadingFallback />}>
+                        <StatusDistributionChart data={statusDistribution} />
+                    </Suspense>
                 </ChartErrorBoundary>
             ),
             key: 'status-distribution'
@@ -123,7 +138,9 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
         {
             component: (
                 <ChartErrorBoundary fallbackTitle="Priority Chart Error">
-                    <PriorityChart data={priorityDistribution} />
+                    <Suspense fallback={<ChartLoadingFallback />}>
+                        <PriorityChart data={priorityDistribution} />
+                    </Suspense>
                 </ChartErrorBoundary>
             ),
             key: 'priority-distribution'
@@ -155,17 +172,47 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
     return (
         <div className="relative group pb-8">
             {/* Period Selector */}
-            <div className="absolute top-4 right-4 z-20 w-[160px]">
-                <CustomSelect
-                    value={period}
-                    onChange={handlePeriodChange}
-                    options={PERIOD_OPTIONS}
-                    size="sm"
-                />
+            {/* Period Selector - Moved outside to prevent overlap with chart headers */}
+            <div className="flex justify-end pb-2 px-1 z-10 relative">
+                <div className="w-[160px]">
+                    <CustomSelect
+                        value={period}
+                        onChange={handlePeriodChange}
+                        options={PERIOD_OPTIONS}
+                        size="sm"
+                    />
+                </div>
             </div>
 
             {/* Carousel Viewport */}
-            <div className="relative h-[450px] overflow-hidden rounded-xl border border-white/5 bg-white/5 backdrop-blur-sm">
+            <div className="relative h-[450px] overflow-hidden rounded-xl">
+
+                {/* Left Navigation Zone */}
+                <div
+                    className="absolute top-24 bottom-12 left-0 w-12 z-10 cursor-pointer flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 transition-all"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        prevSlide();
+                    }}
+                    role="button"
+                    aria-label="Previous slide"
+                >
+                    <ChevronLeft className="h-8 w-8" />
+                </div>
+
+                {/* Right Navigation Zone */}
+                <div
+                    className="absolute top-24 bottom-12 right-0 w-12 z-10 cursor-pointer flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 transition-all"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        nextSlide();
+                    }}
+                    role="button"
+                    aria-label="Next slide"
+                >
+                    <ChevronRight className="h-8 w-8" />
+                </div>
+
                 <AnimatePresence initial={false} custom={direction} mode="popLayout">
                     <motion.div
                         key={currentIndex}
@@ -175,7 +222,20 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
                         animate="center"
                         exit="exit"
                         transition={SLIDE_TRANSITION}
-                        className="absolute w-full h-full"
+                        drag="x"
+                        dragConstraints={{ left: 0, right: 0 }}
+                        dragElastic={1}
+                        onDragEnd={(e, { offset, velocity }) => {
+                            const swipe = Math.abs(offset.x) * velocity.x;
+                            const swipeConfidenceThreshold = 10000;
+
+                            if (swipe < -swipeConfidenceThreshold) {
+                                nextSlide();
+                            } else if (swipe > swipeConfidenceThreshold) {
+                                prevSlide();
+                            }
+                        }}
+                        className="absolute w-full h-full cursor-grab active:cursor-grabbing"
                     >
                         <div className="h-full w-full">
                             {charts[currentIndex].component}
@@ -184,28 +244,7 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
                 </AnimatePresence>
             </div>
 
-            {/* Navigation Buttons */}
-            <div className="absolute top-[200px] -translate-y-1/2 left-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity pl-2">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={prevSlide}
-                    className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-sm border border-white/10"
-                >
-                    <ChevronLeft className="h-6 w-6" />
-                </Button>
-            </div>
 
-            <div className="absolute top-[200px] -translate-y-1/2 right-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity pr-2">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={nextSlide}
-                    className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-sm border border-white/10"
-                >
-                    <ChevronRight className="h-6 w-6" />
-                </Button>
-            </div>
 
             {/* Pagination Indicators */}
             <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-2">

@@ -12,8 +12,8 @@ from models.task import TaskPriority, TaskType
 
 class TaskBase(BaseModel):
     """Base task schema."""
-    title: str
-    description: Optional[str] = None
+    title: str = Field(..., min_length=1, max_length=150)
+    description: Optional[str] = Field(None, max_length=2000)
     due_date: Optional[datetime] = None
     priority: Optional[str] = "medium"
     type: Optional[str] = "feature"

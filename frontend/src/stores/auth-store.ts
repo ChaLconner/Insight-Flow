@@ -199,7 +199,7 @@ export const useAuthStore = create<AuthState>()(
           } catch (fetchError: any) {
             if (fetchError.name !== 'AbortError') {
               // Network error or other
-              console.log('Auth check network error, assuming not authenticated');
+              console.warn('Auth check network error, assuming not authenticated');
               logout();
             }
           }

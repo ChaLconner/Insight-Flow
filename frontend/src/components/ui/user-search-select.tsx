@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { Search, Loader2, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -102,7 +103,13 @@ export function UserSearchSelect({ value, onChange, onUserSelect, className, pla
                         >
                             <div className="h-8 w-8 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center shrink-0">
                                 {user.avatar ? (
-                                    <img src={getAvatarUrl(user.avatar)} alt={user.username} className="h-full w-full object-cover" />
+                                    <Image
+                                        src={getAvatarUrl(user.avatar)}
+                                        alt={user.username}
+                                        fill
+                                        className="object-cover"
+                                        sizes="32px"
+                                    />
                                 ) : (
                                     <span className="text-xs font-medium text-zinc-400">
                                         {user.firstName?.[0]}{user.lastName?.[0]}

@@ -25,6 +25,15 @@ class TaskService:
     def get_task_by_id(self, task_id: uuid.UUID) -> Optional[Task]:
         """Get task by ID."""
         return self.db.query(Task).filter(Task.id == task_id).first()
+
+    def get_task_with_details(self, task_id: uuid.UUID) -> Optional[Task]:
+        """Get task by ID with all relationships eagerly loaded."""
+        from sqlalchemy.orm import joinedload
+        return self.db.query(Task).options(
+            joinedload(Task.assignee),
+            joinedload(Task.creator),
+            joinedload(Task.project)
+        ).filter(Task.id == task_id).first()
     
     def get_tasks(self, skip: int = 0, limit: int = 100, project_id: Optional[uuid.UUID] = None,
                 assignee_id: Optional[uuid.UUID] = None, status: Optional[TaskStatus] = None) -> List[Task]:
@@ -46,7 +55,7 @@ class TaskService:
         
         return query.offset(skip).limit(limit).all()
     
-    def create_task(self, task_data: TaskCreate, created_by: uuid.UUID) -> Task:
+    def create_task(self, task_data: TaskCreate, created_by: uuid.UUID, background_tasks = None) -> Task:
         """Create a new task."""
         logger.info(f"Creating task with data: {task_data}, created_by: {created_by}")
         
@@ -93,9 +102,50 @@ class TaskService:
             self.db.refresh(db_task)
             
             # Log activities
-            self.task_history_service.log_task_created(db_task, created_by)
-            if task_data.assignee_id:
-                self.task_history_service.log_task_assigned(db_task, task_data.assignee_id, created_by)
+            if background_tasks:
+                from services.task_history_service import log_activity_background
+                
+                # Log creation
+                new_values = {
+                    "title": db_task.title,
+                    "description": db_task.description,
+                    "status": db_task.status.value if hasattr(db_task.status, 'value') else str(db_task.status),
+                    "assignee_id": str(db_task.assignee_id) if db_task.assignee_id else None,
+                    "due_date": db_task.due_date.isoformat() if db_task.due_date else None
+                }
+                
+                background_tasks.add_task(
+                    log_activity_background,
+                    "task_created",
+                    str(db_task.project_id),
+                    str(created_by),
+                    str(db_task.id),
+                    db_task.title,
+                    f"Created task: {db_task.title}",
+                    None,
+                    new_values
+                )
+                
+                # Log assignment if needed
+                if task_data.assignee_id:
+                    assignee_name = assignee.name if assignee else "Unknown User"
+                    assign_values = {"assignee_id": str(task_data.assignee_id), "assignee_name": assignee_name}
+                    background_tasks.add_task(
+                        log_activity_background,
+                        "task_assigned",
+                        str(db_task.project_id),
+                        str(created_by),
+                        str(db_task.id),
+                        db_task.title,
+                        f"Assigned task '{db_task.title}' to {assignee_name}",
+                        None,
+                        assign_values
+                    )
+            else:
+                # Fallback to sync logging
+                self.task_history_service.log_task_created(db_task, created_by)
+                if task_data.assignee_id:
+                    self.task_history_service.log_task_assigned(db_task, task_data.assignee_id, created_by)
             
             return db_task
             

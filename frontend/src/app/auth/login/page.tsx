@@ -60,13 +60,9 @@ export default function LoginPage() {
     }
 
     try {
-      console.log('🔄 Starting login process...');
 
       // Call backend API
-      console.log('📡 Calling login API...');
-      console.log('📧 Email:', formData.email);
-      console.log('🔑 Password length:', formData.password.length);
-      console.log('🌐 API Base URL:', API_CONFIG.BASE_URL);
+
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/auth/login`, {
         method: 'POST',
@@ -79,8 +75,7 @@ export default function LoginPage() {
         }),
       });
 
-      console.log('📨 Login response status:', response.status);
-      console.log('📨 Login response headers:', Array.from(response.headers.entries()));
+
 
       if (!response.ok) {
         let errorData;
@@ -97,14 +92,8 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      console.log('✅ Login successful, received data:', data);
-      console.log('🔍 Login response structure:', {
-        hasAccessToken: !!data.access_token,
-        hasRefreshToken: !!data.refresh_token,
-        hasUser: !!data.user,
-        dataKeys: Object.keys(data),
-        expectedUserKeys: ['id', 'email', 'name', 'role']
-      });
+
+
 
       // Use authActions to properly handle login
       await authActions.loginWithResponse(data);
@@ -112,9 +101,7 @@ export default function LoginPage() {
       // Get the user data from the store after login
       const user = data.user;
 
-      console.log('🚀 Redirecting to appropriate page based on user role...');
-      console.log('👤 User object after login:', user);
-      console.log('🔑 User role:', user?.role);
+
 
       // Determine redirect URL based on user role with better fallbacks
       let redirectUrl = "/dashboard"; // Default redirect to dashboard
@@ -138,7 +125,7 @@ export default function LoginPage() {
             redirectUrl = "/dashboard"; // Default to dashboard
         }
       } else {
-        console.log('⚠️ No user role found, defaulting to dashboard');
+
         redirectUrl = "/dashboard"; // Default for users without role
       }
 
@@ -171,7 +158,7 @@ export default function LoginPage() {
     onSuccess: async (tokenResponse) => {
       try {
         setIsLoading(true);
-        console.log('🔄 Starting Google login process...');
+
 
         // Call backend API with Google token
         const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {

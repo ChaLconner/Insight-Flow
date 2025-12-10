@@ -130,7 +130,7 @@ export default function RegisterPage() {
       try {
         setIsLoading(true);
         setApiError("");
-        console.log('🔄 Starting Google login/register process...');
+
 
         // Call backend API with Google token
         const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {
@@ -148,7 +148,7 @@ export default function RegisterPage() {
         }
 
         const data = await response.json();
-        console.log('✅ Google login/register successful');
+
 
         toast.success(`Welcome ${data.user.firstName || 'User'}!`, {
           description: "Successfully signed in with Google.",

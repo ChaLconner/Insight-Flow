@@ -32,17 +32,17 @@ axiosRetry(apiClient, {
   retryCondition: (error: AxiosError) => {
     // Retry on network errors and 5xx server errors
     if (!error.response) {
-      console.log(`🔄 Retrying network error (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
+      console.warn(`🔄 Retrying network error (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
       return true;
     }
     if (error.response?.status >= 500) {
-      console.log(`🔄 Retrying server error ${error.response.status} (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
+      console.warn(`🔄 Retrying server error ${error.response.status} (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
       return true;
     }
     return false;
   },
   onRetry: (retryCount, error, requestConfig) => {
-    console.log(`🔄 Retry attempt ${retryCount} for ${requestConfig.url}`, error.message);
+    console.warn(`🔄 Retry attempt ${retryCount} for ${requestConfig.url}`, error.message);
   },
 });
 
@@ -293,11 +293,11 @@ export function createDeduplicatedRequest<T = any>(
 // Backend health check with retry
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    console.log('🏥 Checking backend health...');
+
     const response = await apiClient.get('/minimal-test', {
       timeout: 5000 // Shorter timeout for health check
     });
-    console.log('✅ Backend health check successful:', response.data);
+
     return true;
   } catch (error: any) {
     console.error('❌ Backend health check failed:', error.message);
@@ -308,11 +308,11 @@ export async function checkBackendHealth(): Promise<boolean> {
 // Wait for backend to be ready with timeout
 export async function waitForBackend(maxAttempts: number = 10, delay: number = 1000): Promise<boolean> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    console.log(`⏳ Waiting for backend... attempt ${attempt}/${maxAttempts}`);
+
 
     const isHealthy = await checkBackendHealth();
     if (isHealthy) {
-      console.log('✅ Backend is ready!');
+
       return true;
     }
 

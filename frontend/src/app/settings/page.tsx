@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -368,14 +369,12 @@ export default function SettingsPage() {
             >
               <div className="h-24 w-24 rounded-full overflow-hidden ring-2 ring-white/10 group-hover:ring-indigo-500/50 transition-all duration-300 bg-zinc-800 flex items-center justify-center">
                 {profileData.avatar ? (
-                  <img
+                  <Image
                     src={getAvatarUrl(profileData.avatar)}
                     alt="Profile"
-                    className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.parentElement?.classList.add('fallback-active');
-                    }}
+                    fill
+                    className="object-cover group-hover:scale-110 transition-transform duration-500"
+                    sizes="96px"
                   />
                 ) : (
                   <User className="h-10 w-10 text-zinc-400" />

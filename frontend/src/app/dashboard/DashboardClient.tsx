@@ -181,7 +181,7 @@ export default function DashboardClient() {
                     Press R to refresh dashboard.
                 </div>
 
-                <main className="space-y-8">
+                <main id="main-content" className="space-y-8">
                     {/* Welcome Section with Refresh and Quick Actions */}
                     <DashboardHeader
                         onRefresh={handleRefresh}

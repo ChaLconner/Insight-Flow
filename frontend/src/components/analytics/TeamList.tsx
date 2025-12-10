@@ -1,5 +1,6 @@
 
 import React, { memo } from 'react';
+import Image from "next/image";
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,14 +31,12 @@ const TeamListComponent: React.FC<TeamListProps> = ({ team }) => {
                                 <div className="flex items-center gap-3">
                                     <div className="h-10 w-10 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0 relative group">
                                         {member.avatar ? (
-                                            <img
+                                            <Image
                                                 src={getAvatarUrl(member.avatar)}
                                                 alt={member.name}
-                                                className="h-full w-full object-cover"
-                                                onError={(e) => {
-                                                    e.currentTarget.style.display = 'none';
-                                                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                                }}
+                                                fill
+                                                className="object-cover"
+                                                sizes="40px"
                                             />
                                         ) : null}
                                         <span className={`${member.avatar ? 'hidden' : ''} text-sm font-medium text-zinc-300`}>

@@ -112,7 +112,7 @@ export const useNotifications = () => {
 
   // Integration with console notifications (temporary replacement for toast)
   const showToastForNotification = useCallback((notification: any) => {
-    console.log(`[${notification.type.toUpperCase()}] ${notification.title}: ${notification.message}`);
+
     if (typeof window !== 'undefined') {
       try {
         if ('Notification' in window && Notification.permission === 'granted') {

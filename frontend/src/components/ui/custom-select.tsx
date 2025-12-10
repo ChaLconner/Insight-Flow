@@ -48,8 +48,11 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
+                aria-haspopup="listbox"
+                aria-expanded={isOpen}
+                aria-label={placeholder || "Select option"}
                 className={cn(
-                    "flex items-center justify-between w-full rounded-lg glass border border-white/10 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer",
+                    "flex items-center justify-between w-full rounded-lg glass border border-white/10 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer relative z-20",
                     sizeClasses[size],
                     size === "default" && "text-sm",
                 )}
@@ -60,11 +63,13 @@ export function CustomSelect({ value, onChange, options, className, size = "defa
 
             {isOpen && (
                 <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100">
-                    <div className="py-1 max-h-60 overflow-auto custom-scrollbar">
+                    <div className="py-1 max-h-60 overflow-auto custom-scrollbar" role="listbox">
                         {options.map((option) => (
                             <button
                                 key={option.value}
                                 type="button"
+                                role="option"
+                                aria-selected={value === option.value}
                                 onClick={() => {
                                     onChange(option.value);
                                     setIsOpen(false);

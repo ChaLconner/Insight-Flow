@@ -323,10 +323,10 @@ export const useNotificationStore = create<NotificationState>()(
             const audio = new Audio('/sounds/notification.mp3');
             audio.volume = 0.5;
             audio.play().catch(error => {
-              console.log('Could not play notification sound:', error);
+              console.error('Could not play notification sound:', error);
             });
           } catch (error) {
-            console.log('Notification sound not available:', error);
+            console.error('Notification sound not available:', error);
           }
         }
       },

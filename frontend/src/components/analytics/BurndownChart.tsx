@@ -38,7 +38,7 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({ data, period }) 
     }, [period]);
 
     return (
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full">
+        <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full" role="figure" aria-label={`Burndown chart showing ${title}`}>
             <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg font-semibold text-white">{title}</CardTitle>
             </CardHeader>
@@ -47,7 +47,7 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({ data, period }) 
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart
                             data={data}
-                            margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                            margin={{ top: 10, right: 5, left: 0, bottom: 0 }}
                         >
                             <defs>
                                 <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">

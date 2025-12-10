@@ -124,7 +124,7 @@ const KeyMetricsComponent: React.FC<KeyMetricsProps> = ({ data, period, trends =
     ], [data, getTrendData]);
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {metrics.map((metric, index) => (
                 <MetricCard
                     key={index}

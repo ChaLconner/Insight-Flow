@@ -39,7 +39,7 @@ export const authActions = {
       description: 'You have successfully logged in.',
     });
 
-    console.log('✅ Login successful for user:', user?.email ?? 'unknown');
+
   },
 
   // Alternative login method for compatibility
@@ -90,10 +90,10 @@ export const authActions = {
 // Listen for auth events (only in browser environment)
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:login', (event: any) => {
-    console.log('🔔 Auth event received: login', event.detail);
+
   });
 
   window.addEventListener('auth:logout', () => {
-    console.log('🔔 Auth event received: logout');
+
   });
 }

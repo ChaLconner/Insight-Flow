@@ -130,7 +130,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
                 setUsers(userList);
                 setHasMore(userList.length === pageSize);
             } catch (apiError) {
-                console.log('API issue:', apiError);
+                console.error('API issue:', apiError);
                 setUsers([]);
             }
 

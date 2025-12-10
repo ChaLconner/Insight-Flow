@@ -1,7 +1,7 @@
 
 import React, { memo } from 'react';
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+
 
 interface AnalyticsHeaderProps {
     onRefresh: () => void;
@@ -21,15 +21,7 @@ const AnalyticsHeaderComponent: React.FC<AnalyticsHeaderProps> = ({
                 </p>
             </div>
             <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-                <Button
-                    onClick={onRefresh}
-                    disabled={isRefetching}
-                    variant="outline"
-                    className="gap-2 bg-white/5 border-white/10 hover:bg-white/10 text-white cursor-pointer"
-                >
-                    <RefreshCw className={`h-4 w-4 ${isRefetching ? 'animate-spin' : ''}`} />
-                    {isRefetching ? 'Refreshing...' : 'Refresh'}
-                </Button>
+
             </div>
         </div>
     );

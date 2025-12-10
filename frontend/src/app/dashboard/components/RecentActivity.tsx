@@ -17,7 +17,7 @@ const RecentActivity = memo(function RecentActivity({ activities }: RecentActivi
             <CardContent>
                 <div className="space-y-8">
                     {activities.length > 0 ? (
-                        activities.map((activity, index) => (
+                        activities.slice(0, 5).map((activity, index) => (
                             <ActivityItem
                                 key={activity.id || index}
                                 activity={activity}

@@ -708,6 +708,12 @@ class AnalyticsService:
         """Get dashboard metrics for a project."""
         from services.task_history_service import TaskHistoryService
         
+        # Check cache
+        cache_key = f"project_dashboard:{project_id}"
+        cached_data = _get_from_cache(cache_key)
+        if cached_data is not None:
+            return cached_data
+
         # Task statistics
         total_tasks = self.db.query(Task).filter(Task.project_id == project_id).count()
         completed_tasks = self.db.query(Task).filter(
@@ -723,7 +729,12 @@ class AnalyticsService:
         ).count()
         
         # Member statistics
-        members = self.db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
+        from sqlalchemy.orm import joinedload
+        members = self.db.query(ProjectMember).options(
+            joinedload(ProjectMember.user)
+        ).filter(ProjectMember.project_id == project_id).all()
+        
+        # ... existing activity fetching ...
         
         # Get actual recent activity from database
         task_history_service = TaskHistoryService(self.db)
@@ -765,7 +776,7 @@ class AnalyticsService:
             
             recent_activity.append(formatted_activity)
             
-        return {
+        result = {
             "task_stats": {
                 "total": total_tasks,
                 "todo": todo_tasks,
@@ -775,14 +786,18 @@ class AnalyticsService:
             "member_stats": [
                 {
                     "user_id": str(member.user_id),
-                    "name": f"User {member.user_id}",
-                    "email": f"user{member.user_id}@example.com"
+                    "name": member.user.name if member.user else f"User {member.user_id}",
+                    "email": member.user.email if member.user else f"user{member.user_id}@example.com",
+                    "avatar_url": member.user.avatar_url if member.user else None
                 } for member in members
             ],
             "productivity_score": completed_tasks / max(total_tasks, 1) * 100 if total_tasks > 0 else 0.0,
             "completion_rate": completed_tasks / max(total_tasks, 1) * 100 if total_tasks > 0 else 0.0,
             "recent_activity": recent_activity
         }
+        
+        _set_cache(cache_key, result)
+        return result
 
     def get_team_workload_paginated(
         self, 

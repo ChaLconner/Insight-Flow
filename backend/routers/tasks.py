@@ -2,7 +2,7 @@
 Task management router for CRUD operations.
 """
 from typing import List, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import asc, desc
 from schemas.task import TaskResponse, TaskCreate, TaskUpdate, TaskWithDetails, TaskStatusUpdate, TaskAssign, TaskListResponse
@@ -84,6 +84,7 @@ def get_my_tasks(
 @router.post("/", response_model=TaskResponse)
 def create_task(
     task_data: TaskCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -93,7 +94,7 @@ def create_task(
     task_service = TaskService(db)
     
     try:
-        task = task_service.create_task(task_data, current_user.id)
+        task = task_service.create_task(task_data, current_user.id, background_tasks)
         return task
     except ValueError as e:
         raise HTTPException(
@@ -139,12 +140,22 @@ def get_all_tasks(
 
 @router.get("/{task_id}", response_model=TaskWithDetails)
 def read_task(
-    task: Task = Depends(get_authorized_task)
+    task: Task = Depends(get_authorized_task),
+    db: Session = Depends(get_db)
 ) -> Any:
     """
     Get task by ID with full details.
     """
-    return map_task_to_response(task)
+    # The dependency already checked permissions, but we fetch again 
+    # with eager loading for performance (2 queries total vs 1 + 3 lazy loads)
+    task_service = TaskService(db)
+    detailed_task = task_service.get_task_with_details(task.id)
+    
+    if not detailed_task:
+        # Should not happen given dependency check
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    return TaskWithDetails.model_validate(detailed_task)
 
 @router.put("/{task_id}", response_model=TaskResponse)
 def update_task(

@@ -10,6 +10,7 @@ export function useAnalytics(period: AnalyticsPeriod) {
         queryFn: () => analyticsApi.getAnalytics(period),
         refetchInterval: 300000, // 5 minutes
         staleTime: 60000, // 1 minute
+        placeholderData: (previousData) => previousData, // Keep previous data while loading new period
     });
 }
 

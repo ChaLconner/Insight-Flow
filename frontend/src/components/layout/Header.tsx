@@ -23,7 +23,7 @@ export function Header({ onMenuClick }: HeaderProps) {
     // ตรวจสอบการอัปเดตข้อมูลผู้ใช้แบบ real-time
     useEffect(() => {
         if (user?.avatar) {
-            console.log('🖼️ Header: Avatar updated to', getAvatarUrl(user.avatar));
+
         }
     }, [user?.avatar]);
 
@@ -32,7 +32,7 @@ export function Header({ onMenuClick }: HeaderProps) {
         if (path.startsWith('/projects')) return 'Projects';
         if (path.startsWith('/tasks')) return 'Tasks';
         if (path.startsWith('/analytics')) return 'Analytics';
-        if (path.startsWith('/users')) return 'Team';
+        if (path.startsWith('/users')) return 'Users';
         if (path.startsWith('/settings')) return 'Settings';
         return 'Dashboard';
     };

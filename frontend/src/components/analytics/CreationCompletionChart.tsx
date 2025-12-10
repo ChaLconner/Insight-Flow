@@ -52,7 +52,7 @@ const CreationCompletionChartComponent: React.FC<CreationCompletionChartProps> =
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                             data={data}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                            margin={{ top: 20, right: 10, left: 0, bottom: 5 }}
                         >
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.1)" />
                             <XAxis

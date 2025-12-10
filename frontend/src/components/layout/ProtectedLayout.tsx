@@ -72,7 +72,7 @@ export function ProtectedLayout({ children, requiredRole }: ProtectedLayoutProps
         if (!hasRequiredAccess) {
             // Prevent redirect loop if already on dashboard
             if (window.location.pathname !== '/dashboard') {
-                console.log('🔒 ProtectedLayout: Redirecting for insufficient role access');
+
                 router.push('/dashboard');
             }
         }

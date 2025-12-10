@@ -57,6 +57,7 @@ class Task(BaseModel):
     
     __table_args__ = (
         Index('ix_tasks_project_status', 'project_id', 'status'),
+        Index('ix_tasks_project_due_date', 'project_id', 'due_date'),
     )
 
     def __init__(self, **kwargs):

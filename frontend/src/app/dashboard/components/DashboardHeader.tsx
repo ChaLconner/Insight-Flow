@@ -4,7 +4,6 @@ import React, { memo, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-    RefreshCw,
     Plus,
     FolderPlus,
     ClipboardList,
@@ -74,20 +73,7 @@ const DashboardHeader = memo(function DashboardHeader({
                     System Online
                 </Badge>
 
-                {/* Refresh Button */}
-                {onRefresh && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRefresh}
-                        disabled={isRefetching}
-                        className="glass border-white/10 text-zinc-300 hover:text-white hover:bg-white/10 cursor-pointer"
-                        aria-label="Refresh dashboard data"
-                    >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? 'animate-spin' : ''}`} />
-                        {isRefetching ? 'Refreshing...' : 'Refresh'}
-                    </Button>
-                )}
+
 
                 {/* Quick Actions Dropdown */}
                 <DropdownMenu>

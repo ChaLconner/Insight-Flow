@@ -1,6 +1,7 @@
 "use client";
 
 import React, { memo, useCallback } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Mail, User, Activity, Edit, UserX, UserCheck, MoreVertical } from "lucide-react";
 import { RoleBadge, StatusBadge } from "./UserBadges";
@@ -40,14 +41,12 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
                         aria-label={`Avatar of ${fullName}`}
                     >
                         {user.avatar ? (
-                            <img
+                            <Image
                                 src={getAvatarUrl(user.avatar)}
                                 alt={`${fullName}'s avatar`}
-                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
-                                onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                }}
+                                fill
+                                className="object-cover transition-transform duration-300 group-hover:scale-110"
+                                sizes="48px"
                             />
                         ) : null}
                         <span

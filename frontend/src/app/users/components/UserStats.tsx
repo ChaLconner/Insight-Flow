@@ -20,7 +20,7 @@ export function UserStats({ stats }: UserStatsProps) {
     const verifiedPercentage = stats.total > 0 ? Math.round((stats.verified / stats.total) * 100) : 0;
 
     return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-zinc-400">

@@ -298,3 +298,45 @@ class TaskHistoryService:
             description=f"Created project: {project_name}",
             new_values={"project_name": project_name, "action": "created"}
         )
+
+# Standalone function for background tasks
+def log_activity_background(
+    activity_type_str: str,
+    project_id_str: str,
+    user_id_str: str,
+    task_id_str: Optional[str] = None,
+    task_title: Optional[str] = None,
+    description: Optional[str] = None,
+    old_values: Optional[Dict[str, Any]] = None,
+    new_values: Optional[Dict[str, Any]] = None
+):
+    """
+    Background task wrapper for logging activity.
+    Handles its own database session.
+    """
+    from database import get_db_context
+    from models.task_history import ActivityType
+    
+    # Reconstruct UUIDs
+    try:
+        project_id = uuid.UUID(project_id_str)
+        user_id = uuid.UUID(user_id_str)
+        task_id = uuid.UUID(task_id_str) if task_id_str else None
+        
+        # Convert string back to enum
+        activity_type = ActivityType(activity_type_str)
+        
+        with get_db_context() as db:
+            service = TaskHistoryService(db)
+            service.create_activity(
+                activity_type=activity_type,
+                project_id=project_id,
+                user_id=user_id,
+                task_id=task_id,
+                task_title=task_title,
+                description=description,
+                old_values=old_values,
+                new_values=new_values
+            )
+    except Exception as e:
+        logger.error(f"Failed to execute background activity log: {e}")

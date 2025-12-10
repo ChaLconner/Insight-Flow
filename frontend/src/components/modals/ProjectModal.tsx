@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -322,14 +323,12 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                       {/* Avatar */}
                       <div className="h-8 w-8 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                         {user.avatar ? (
-                          <img
+                          <Image
                             src={getAvatarUrl(user.avatar)}
                             alt={`${user.firstName} ${user.lastName}`}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.parentElement?.querySelector('span')?.classList.remove('hidden');
-                            }}
+                            fill
+                            className="object-cover"
+                            sizes="32px"
                           />
                         ) : null}
                         <span className={`text-xs font-medium text-zinc-300 ${user.avatar ? 'hidden' : ''}`}>

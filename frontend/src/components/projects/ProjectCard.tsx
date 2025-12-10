@@ -61,8 +61,17 @@ export const ProjectCard = memo(function ProjectCard({
             className="h-full"
         >
             <Card
-                className="h-full border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors group flex flex-col cursor-pointer"
+                className="h-full border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors group flex flex-col cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-500/50 outline-none"
                 onClick={() => router.push(`/projects/${project.id}`)}
+                role="button"
+                tabIndex={0}
+                aria-label={`View details for project ${project.name}`}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(`/projects/${project.id}`);
+                    }
+                }}
             >
                 <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-4">

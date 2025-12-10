@@ -58,8 +58,7 @@ export const authApi = {
     // Log entry and stack to help find duplicate callers
     if (process.env.NODE_ENV === 'development') {
       try {
-        console.log('🔍 authApi.getCurrentUser called at', new Date().toISOString());
-        console.log(new Error('authApi.getCurrentUser stack:').stack);
+
       } catch (_e) {
         // ignore
       }
@@ -81,13 +80,13 @@ export const authApi = {
             : null;
 
           if (!token) {
-            console.log('🔍 authApi.getCurrentUser: No token available, not retrying');
+
             throw err; // No token, don't retry
           }
 
           try {
             const { API_CONFIG } = await import('@/lib/constants');
-            console.log('🔍 authApi.getCurrentUser: Retrying with token from localStorage');
+
             // Use direct axios call to avoid interceptor side effects
             const axios = (await import('axios')).default;
             const resp = await axios.get(`${API_CONFIG.BASE_URL}/auth/me`, {
@@ -96,7 +95,7 @@ export const authApi = {
             });
             return resp.data;
           } catch (_fallbackErr) {
-            console.log('🔍 authApi.getCurrentUser: Retry failed');
+
             // fall through to throw original error
           }
         }
@@ -107,7 +106,7 @@ export const authApi = {
 
   // Change password
   changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
-    console.log("API: Change password request");
+
     try {
       const response = await apiClient.post('/auth/change-password', {
         currentPassword,
@@ -123,10 +122,10 @@ export const authApi = {
 
   // Forgot password
   forgotPassword: async (email: string): Promise<any> => {
-    console.log("API: Forgot password request for email:", email);
+
     try {
       const response = await apiClient.post('/auth/forgot-password', { email });
-      console.log("API: Forgot password response:", response.data);
+
       return response.data;
     } catch (error: any) {
       console.error("API: Forgot password error:", error);
@@ -136,13 +135,13 @@ export const authApi = {
 
   // Reset password
   resetPassword: async (token: string, newPassword: string): Promise<any> => {
-    console.log("API: Reset password request");
+
     try {
       const response = await apiClient.post('/auth/reset-password', {
         token,
         new_password: newPassword,
       });
-      console.log("API: Reset password response:", response.data);
+
       return response.data;
     } catch (error: any) {
       console.error("API: Reset password error:", error);
@@ -152,10 +151,10 @@ export const authApi = {
 
   // Validate reset token
   validateResetToken: async (token: string): Promise<any> => {
-    console.log("API: Validate reset token request");
+
     try {
       const response = await apiClient.post('/auth/validate-reset-token', { token });
-      console.log("API: Validate reset token response:", response.data);
+
       return response.data;
     } catch (error: any) {
       console.error("API: Validate reset token error:", error);
@@ -326,11 +325,11 @@ export const projectsApi = {
     const cacheKey = `projects-getProjects-${skip}-${limit}-${userProjectsOnly}`;
 
     return createDeduplicatedRequest(async () => {
-      console.log('🔄 projectsApi.getProjects: Making API call');
+
       const { data } = await apiClient.get('/projects', {
         params: { skip, limit, user_projects_only: userProjectsOnly }
       });
-      console.log('✅ projectsApi.getProjects: API call successful');
+
       return data;
     }, cacheKey);
   },
