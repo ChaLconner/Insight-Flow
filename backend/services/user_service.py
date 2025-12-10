@@ -169,15 +169,23 @@ class UserService:
             self.db.rollback()
             raise ValueError("Cannot delete user - user has associated data")
 
-    def search_users(self, query: str) -> List[User]:
-        """Search users by email or name."""
-        if not query or len(query.strip()) == 0:
-            return self.db.query(User).limit(100).all()
+    def search_users(self, query: str, skip: int = 0, limit: int = 100, role: Optional[str] = None, is_active: Optional[bool] = None) -> List[User]:
+        """Search users by email or name with pagination and filters."""
+        db_query = self.db.query(User)
         
-        query = query.strip()
-        return self.db.query(User).filter(
-            (User.email.ilike(f"%{query}%")) | (User.name.ilike(f"%{query}%"))
-        ).limit(10).all()
+        if query and len(query.strip()) > 0:
+            query = query.strip()
+            db_query = db_query.filter(
+                (User.email.ilike(f"%{query}%")) | (User.name.ilike(f"%{query}%"))
+            )
+        
+        if role and role != "all":
+            db_query = db_query.filter(User.role == role)
+            
+        if is_active is not None:
+            db_query = db_query.filter(User.is_active == is_active)
+            
+        return db_query.offset(skip).limit(limit).all()
     
     def create_or_update_google_user(self, google_id: str, email: str, name: str, avatar_url: Optional[str] = None) -> User:
         """Create or update user from Google authentication."""
@@ -268,3 +276,24 @@ class UserService:
             self.db.rollback()
             logger.error(f"Error inviting user: {e}")
             raise ValueError("Failed to invite user")
+
+    def get_user_stats(self) -> dict:
+        """Get user statistics."""
+        total = self.db.query(User).count()
+        active = self.db.query(User).filter(User.is_active == True).count()
+        verified = self.db.query(User).filter(User.is_active == True).count() # Assuming active implies verified
+        
+        admins = self.db.query(User).filter(User.role == "admin").count()
+        managers = self.db.query(User).filter(User.role == "manager").count()
+        members = self.db.query(User).filter(User.role == "member").count()
+        viewers = self.db.query(User).filter(User.role == "viewer").count()
+        
+        return {
+            "total": total,
+            "active": active,
+            "verified": verified,
+            "admins": admins,
+            "managers": managers,
+            "members": members,
+            "viewers": viewers
+        }

@@ -4,7 +4,7 @@ import React, { useState, useCallback, useMemo, memo } from 'react';
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AnalyticsPeriod } from "@/types";
-import { BurndownDataPoint } from "@/app/analytics/types";
+import { BurndownDataPoint, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from "@/app/analytics/types";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -25,6 +25,12 @@ interface ChartCarouselProps {
 
     period: AnalyticsPeriod;
     setPeriod: (value: AnalyticsPeriod) => void;
+
+    // Pagination support for large team workload (1K-100K users)
+    usePaginatedWorkload?: boolean;
+    paginatedWorkloadData?: TeamWorkloadPaginatedResponse | null;
+    onWorkloadPageChange?: (params: TeamWorkloadParams) => void;
+    isWorkloadLoading?: boolean;
 }
 
 // Period options moved outside component to prevent recreation
@@ -65,7 +71,11 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
     statusDistribution,
     priorityDistribution,
     period,
-    setPeriod
+    setPeriod,
+    usePaginatedWorkload = false,
+    paginatedWorkloadData,
+    onWorkloadPageChange,
+    isWorkloadLoading = false
 }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [direction, setDirection] = useState(0);
@@ -83,7 +93,13 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
         {
             component: (
                 <ChartErrorBoundary fallbackTitle="Workload Chart Error">
-                    <WorkloadChart data={workloadData} />
+                    <WorkloadChart
+                        data={workloadData}
+                        usePagination={usePaginatedWorkload}
+                        paginatedData={paginatedWorkloadData}
+                        onPageChange={onWorkloadPageChange}
+                        isLoading={isWorkloadLoading}
+                    />
                 </ChartErrorBoundary>
             ),
             key: 'workload'
@@ -112,7 +128,7 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
             ),
             key: 'priority-distribution'
         }
-    ], [burndownData, workloadData, dailyTrendsData, statusDistribution, priorityDistribution, period]);
+    ], [burndownData, workloadData, dailyTrendsData, statusDistribution, priorityDistribution, period, usePaginatedWorkload, paginatedWorkloadData, onWorkloadPageChange, isWorkloadLoading]);
 
     // Memoize navigation handlers
     const nextSlide = useCallback(() => {

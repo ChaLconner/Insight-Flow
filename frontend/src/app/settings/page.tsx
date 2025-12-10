@@ -656,7 +656,7 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               { id: 'light', label: 'Light', icon: Sun, color: 'bg-zinc-100' },
               { id: 'dark', label: 'Dark', icon: Moon, color: 'bg-zinc-900' },

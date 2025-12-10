@@ -9,51 +9,83 @@ from database import get_db
 from routers.auth import get_current_active_user
 from utils.logger import setup_logger
 from services.dashboard_service import DashboardService
+from schemas.dashboard import (
+    DashboardOverviewResponse,
+    DashboardStatsResponse,
+    DashboardProjectResponse,
+    DashboardActivityResponse,
+    ActivityUserResponse,
+    ActivityProjectResponse,
+    TodayTaskResponse,
+)
 
 logger = setup_logger("dashboard_router")
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-@router.get("/overview")
+@router.get("/overview", response_model=DashboardOverviewResponse)
 def get_dashboard_overview(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+) -> DashboardOverviewResponse:
     """
     Get dashboard overview with statistics and recent activities.
+    
+    Returns:
+        DashboardOverviewResponse: Stats, recent projects, and recent activities
     """
     try:
         service = DashboardService(db)
         
         # Get stats
-        stats = service.get_overview_stats(current_user.id)
+        stats_data = service.get_overview_stats(current_user.id)
+        stats = DashboardStatsResponse(**stats_data)
         
         # Get recent projects
-        recent_projects = service.get_recent_projects(current_user.id, limit=5)
+        recent_projects_data = service.get_recent_projects(current_user.id, limit=5)
+        recent_projects = [
+            DashboardProjectResponse(**project) for project in recent_projects_data
+        ]
         
         # Get recent activities
         activities_data = service.get_recent_activities(current_user.id, limit=10)
         
-        # Map activities to match overview response format (project name as string)
+        # Map activities to response format
         recent_activities = []
         for activity in activities_data:
             # Handle potential variation in project data structure
-            project_name = "Unknown Project"
-            if isinstance(activity["project"], dict):
-                project_name = activity["project"].get("name", "Unknown Project")
-            elif isinstance(activity["project"], str):
-                project_name = activity["project"]
+            project_info = activity.get("project")
+            project_response = None
+            
+            if isinstance(project_info, dict):
+                project_response = ActivityProjectResponse(
+                    id=project_info.get("id"),
+                    name=project_info.get("name", "Unknown Project")
+                )
+            elif isinstance(project_info, str):
+                project_response = ActivityProjectResponse(name=project_info)
+            
+            user_info = activity.get("user", {})
+            user_response = ActivityUserResponse(
+                id=user_info.get("id", ""),
+                name=user_info.get("name", "Unknown User"),
+                avatar=user_info.get("avatar")
+            )
+            
+            recent_activities.append(DashboardActivityResponse(
+                id=activity.get("id", ""),
+                user=user_response,
+                action=activity.get("action", ""),
+                target=activity.get("target"),
+                time=activity.get("time"),
+                project=project_response
+            ))
 
-            recent_activities.append({
-                **activity,
-                "project": project_name
-            })
-
-        return {
-            "stats": stats,
-            "recentProjects": recent_projects,
-            "recentActivities": recent_activities
-        }
+        return DashboardOverviewResponse(
+            stats=stats,
+            recentProjects=recent_projects,
+            recentActivities=recent_activities
+        )
         
     except Exception as e:
         logger.error(f"Error getting dashboard overview: {e}")

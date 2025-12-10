@@ -1,187 +1,178 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, lazy, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { AnalyticsPeriod } from "@/types";
-import { useAnalytics } from "@/hooks/use-analytics";
+import { useAnalytics, useTeamWorkload } from "@/hooks/use-analytics";
+import { TeamWorkloadParams } from "@/app/analytics/types";
 
 // Components
 import { AnalyticsHeader } from "@/components/analytics/AnalyticsHeader";
 import { KeyMetrics } from "@/components/analytics/KeyMetrics";
 import { ChartCarousel } from "@/components/analytics/ChartCarousel";
-import { PerformanceTrends } from "@/components/analytics/PerformanceTrends";
-import { ProjectList } from "@/components/analytics/ProjectList";
-import { TeamList } from "@/components/analytics/TeamList";
+import { AnalyticsError } from "@/components/analytics/AnalyticsError";
+import {
+  AnalyticsPageSkeleton,
+  PerformanceTrendsSkeleton,
+  ListSkeleton
+} from "@/components/analytics/AnalyticsSkeletons";
 
+// ============================================
+// Lazy loaded components (below the fold)
+// ============================================
+const PerformanceTrends = dynamic(
+  () => import("@/components/analytics/PerformanceTrends").then(mod => ({ default: mod.PerformanceTrends })),
+  {
+    loading: () => <PerformanceTrendsSkeleton />,
+    ssr: false
+  }
+);
+
+const ProjectList = dynamic(
+  () => import("@/components/analytics/ProjectList").then(mod => ({ default: mod.ProjectList })),
+  {
+    loading: () => <ListSkeleton title="Project Performance" />,
+    ssr: false
+  }
+);
+
+const TeamList = dynamic(
+  () => import("@/components/analytics/TeamList").then(mod => ({ default: mod.TeamList })),
+  {
+    loading: () => <ListSkeleton title="Team Performance" />,
+    ssr: false
+  }
+);
+
+// ============================================
+// Constants
+// ============================================
+const INITIAL_WORKLOAD_PARAMS: TeamWorkloadParams = {
+  page: 1,
+  pageSize: 10,
+  sortBy: 'tasks',
+  sortOrder: 'desc'
+} as const;
+
+const PAGINATION_THRESHOLD = 10;
+const EMPTY_ARRAY: never[] = [];
+
+// ============================================
+// Main Component
+// ============================================
 export default function AnalyticsPage() {
+  // State
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(AnalyticsPeriod.MONTH);
-  const { data, isLoading, error, refetch, isRefetching } = useAnalytics(selectedPeriod);
+  const [workloadParams, setWorkloadParams] = useState<TeamWorkloadParams>(INITIAL_WORKLOAD_PARAMS);
 
-  const handleRefresh = () => {
+  // Data fetching hooks
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    isRefetching
+  } = useAnalytics(selectedPeriod);
+
+  const {
+    data: paginatedWorkload,
+    isLoading: isWorkloadLoading,
+    isFetching: isWorkloadFetching
+  } = useTeamWorkload(workloadParams);
+
+  // ============================================
+  // Memoized values
+  // ============================================
+
+  // Check if we should use paginated mode
+  const usePaginatedWorkload = useMemo(() => {
+    const teamWorkloadCount = data?.teamWorkload?.length ?? 0;
+    const paginatedTotal = paginatedWorkload?.total ?? 0;
+    return teamWorkloadCount >= PAGINATION_THRESHOLD || paginatedTotal > PAGINATION_THRESHOLD;
+  }, [data?.teamWorkload?.length, paginatedWorkload?.total]);
+
+  // Combined loading state for workload
+  const isWorkloadBusy = isWorkloadLoading || isWorkloadFetching;
+
+  // ============================================
+  // Callbacks
+  // ============================================
+
+  const handleRefresh = useCallback(() => {
     refetch();
-  };
+  }, [refetch]);
 
-  /* Memoized data props to prevent unnecessary re-renders */
-  const overviewData = useMemo(() => data?.overview, [data]);
-  const burndownData = useMemo(() => data?.weeklyBurndown || [], [data]);
-  const workloadData = useMemo(() => data?.teamWorkload || [], [data]);
-  const dailyTrendsData = useMemo(() => data?.dailyTrends || [], [data]);
-  const trendsData = useMemo(() => data?.trends || [], [data]);
-  const projectsData = useMemo(() => data?.projects || [], [data]);
-  const teamData = useMemo(() => data?.team || [], [data]);
-  const statusDistribution = useMemo(() => data?.statusDistribution || [], [data]);
-  const priorityDistribution = useMemo(() => data?.priorityDistribution || [], [data]);
+  const handleWorkloadPageChange = useCallback((params: TeamWorkloadParams) => {
+    setWorkloadParams(params);
+  }, []);
 
+  const handleRetry = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  // ============================================
+  // Render logic
+  // ============================================
+
+  // Loading state
   if (isLoading) {
-    return (
-      <ProtectedLayout>
-        <div className="space-y-8">
-          {/* Header Skeleton */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-48" />
-              <Skeleton className="h-4 w-64" />
-            </div>
-            <div className="flex flex-wrap gap-3 w-full sm:w-auto">
-              <Skeleton className="h-10 w-32" />
-              <Skeleton className="h-10 w-24" />
-              <Skeleton className="h-10 w-24" />
-              <Skeleton className="h-10 w-24" />
-            </div>
-          </div>
-
-          {/* Key Metrics Skeleton */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
-              <Card key={i} className="border-white/10 bg-white/5 backdrop-blur-sm">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-4" />
-                </CardHeader>
-                <CardContent>
-                  <Skeleton className="h-8 w-16 mb-2" />
-                  <Skeleton className="h-3 w-32" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Trends Skeleton */}
-          <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                    <div className="space-y-2">
-                      <Skeleton className="h-3 w-24" />
-                      <Skeleton className="h-6 w-12" />
-                    </div>
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-12 ml-auto" />
-                      <Skeleton className="h-3 w-20" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Performance Charts Skeleton */}
-          <div className="grid gap-8 lg:grid-cols-2">
-            {[...Array(2)].map((_, i) => (
-              <Card key={i} className="border-white/10 bg-white/5 backdrop-blur-sm">
-                <CardHeader>
-                  <Skeleton className="h-6 w-48" />
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {[...Array(4)].map((_, j) => (
-                      <div key={j} className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-                        <div className="flex-1 space-y-2">
-                          <div className="flex justify-between">
-                            <Skeleton className="h-4 w-32" />
-                            <Skeleton className="h-4 w-16" />
-                          </div>
-                          <Skeleton className="h-3 w-48" />
-                          <Skeleton className="h-2 w-full rounded-full" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </ProtectedLayout>
-    );
+    return <AnalyticsPageSkeleton />;
   }
 
-  if (error ?? !data) {
-    return (
-      <ProtectedLayout>
-        <div className="flex flex-col items-center justify-center h-64 space-y-4">
-          <div className="text-red-400 text-center">
-            <p className="text-lg font-medium">{error instanceof Error ? error.message : 'Failed to load analytics data'}</p>
-            <Button
-              onClick={() => refetch()}
-              className="mt-2 bg-indigo-600 hover:bg-indigo-500 text-white"
-            >
-              Retry
-            </Button>
-          </div>
-        </div>
-      </ProtectedLayout>
-    );
+  // Error state
+  if (error || !data) {
+    return <AnalyticsError error={error} onRetry={handleRetry} />;
   }
 
+  // Success state
   return (
     <ProtectedLayout>
       <div className="space-y-8">
+        {/* Above the fold - critical content */}
         <AnalyticsHeader
           onRefresh={handleRefresh}
           isRefetching={isRefetching}
         />
 
-        {overviewData && (
+        {data.overview && (
           <KeyMetrics
-            data={overviewData}
+            data={data.overview}
             period={selectedPeriod}
-            trends={trendsData}
+            trends={data.trends ?? EMPTY_ARRAY}
           />
         )}
 
         <div className="mb-12">
           <ChartCarousel
-            burndownData={burndownData}
-            workloadData={workloadData}
-            dailyTrendsData={dailyTrendsData}
-            statusDistribution={statusDistribution}
-            priorityDistribution={priorityDistribution}
+            burndownData={data.weeklyBurndown ?? EMPTY_ARRAY}
+            workloadData={data.teamWorkload ?? EMPTY_ARRAY}
+            dailyTrendsData={data.dailyTrends ?? EMPTY_ARRAY}
+            statusDistribution={data.statusDistribution ?? EMPTY_ARRAY}
+            priorityDistribution={data.priorityDistribution ?? EMPTY_ARRAY}
             period={selectedPeriod}
             setPeriod={setSelectedPeriod}
+            usePaginatedWorkload={usePaginatedWorkload}
+            paginatedWorkloadData={paginatedWorkload}
+            onWorkloadPageChange={handleWorkloadPageChange}
+            isWorkloadLoading={isWorkloadBusy}
           />
         </div>
 
-        <PerformanceTrends
-          trends={trendsData}
-        />
+        {/* Below the fold - lazy loaded */}
+        <Suspense fallback={<PerformanceTrendsSkeleton />}>
+          <PerformanceTrends trends={data.trends ?? EMPTY_ARRAY} />
+        </Suspense>
 
         <div className="grid gap-8 lg:grid-cols-2">
-          <ProjectList
-            projects={projectsData}
-          />
-          <TeamList
-            team={teamData}
-          />
+          <Suspense fallback={<ListSkeleton title="Project Performance" />}>
+            <ProjectList projects={data.projects ?? EMPTY_ARRAY} />
+          </Suspense>
+          <Suspense fallback={<ListSkeleton title="Team Performance" />}>
+            <TeamList team={data.team ?? EMPTY_ARRAY} />
+          </Suspense>
         </div>
       </div>
-    </ProtectedLayout >
+    </ProtectedLayout>
   );
 }

@@ -61,7 +61,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-72 border-r border-white/10 bg-black/90 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0 lg:bg-black/40",
+          "fixed left-0 top-0 z-50 h-screen w-72 border-r border-white/10 bg-black/90 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0 lg:bg-black/40 [content-visibility:auto]",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -119,6 +119,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
           {/* User Profile / Footer */}
           <div className="mt-auto border-t border-white/10 pt-6">
             <button
+              type="button"
+              aria-label="Sign out"
               onClick={() => {
                 const { logoutAndRedirect } = authActions;
                 logoutAndRedirect('/auth/login');

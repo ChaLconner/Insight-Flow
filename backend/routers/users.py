@@ -33,6 +33,17 @@ def get_users(
     user_service = UserService(db)
     return user_service.get_users(skip=skip, limit=limit)
 
+@router.get("/stats")
+def get_user_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> dict:
+    """
+    Get user statistics.
+    """
+    user_service = UserService(db)
+    return user_service.get_user_stats()
+
 @router.post("/invite", response_model=UserResponse)
 def invite_user(
     user_invite: UserInvite,
@@ -114,19 +125,27 @@ def search_user_by_email(
 
 @router.get("/search", response_model=List[UserResponse])
 def search_users(
-    q: str,
+    q: str = "",
     skip: int = 0,
     limit: int = 20,
+    role: str = None,
+    status: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> List[UserResponse]:
     """
-    Search users by email or name.
+    Search users by email or name with filters.
     """
     user_service = UserService(db)
-    # The service might return all matching, we slice here for safety if service doesn't support pagination yet
-    users = user_service.search_users(q)
-    return users[skip : skip + limit]
+    
+    is_active = None
+    if status == "active":
+        is_active = True
+    elif status == "inactive":
+        is_active = False
+        
+    users = user_service.search_users(q, skip=skip, limit=limit, role=role, is_active=is_active)
+    return users
 
 @router.get("/me/settings", response_model=UserSettingsResponse)
 def get_current_user_settings(

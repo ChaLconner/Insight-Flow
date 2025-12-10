@@ -2,23 +2,36 @@
 const nextConfig = {
     // Production optimizations
     reactStrictMode: true,
+    poweredByHeader: false, // Security improvement (removes X-Powered-By)
+    productionBrowserSourceMaps: true, // Generate source maps for debugging source-map-loader issues
 
     // Image optimization - updated for Next.js 16
     images: {
         remotePatterns: [
             { protocol: 'http', hostname: 'localhost', port: '8000', pathname: '/**' },
-            { protocol: 'https', hostname: 'your-api-domain.com', pathname: '/**' }
+            { protocol: 'https', hostname: 'your-api-domain.com', pathname: '/**' },
+            { protocol: 'https', hostname: 'lh3.googleusercontent.com', pathname: '/**' },
+            { protocol: 'https', hostname: '*.googleusercontent.com', pathname: '/**' },
+            { protocol: 'https', hostname: 'ui-avatars.com', pathname: '/**' }
         ],
         formats: ['image/webp', 'image/avif'],
         deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+        deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
         imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+        dangerouslyAllowSVG: true,
+        contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     },
 
     // Experimental features
     experimental: {
         optimizePackageImports: [
             'lucide-react',
-            'recharts'
+            'recharts',
+            'framer-motion',
+            'date-fns',
+            '@radix-ui/react-icons',
+            'clsx',
+            'tailwind-merge'
         ],
     },
 
@@ -54,6 +67,10 @@ const nextConfig = {
                         key: 'Cross-Origin-Opener-Policy',
                         value: 'same-origin-allow-popups',
                     },
+                    {
+                        key: 'Permissions-Policy',
+                        value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+                    },
                 ],
             },
             {
@@ -74,9 +91,24 @@ const nextConfig = {
                     },
                 ],
             },
-            // Note: CORS for backend API is handled by the backend server (FastAPI).
-            // Avoid adding wildcard CORS headers here which can conflict with
-            // `Access-Control-Allow-Credentials` when credentials are used.
+            {
+                source: '/(.*).(jpg|jpeg|gif|png|svg|ico|webp|avif)',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=31536000, immutable',
+                    },
+                ],
+            },
+            {
+                source: '/(.*).(woff|woff2|ttf|otf|eot)',
+                headers: [
+                    {
+                        key: 'Cache-Control',
+                        value: 'public, max-age=31536000, immutable',
+                    },
+                ],
+            },
         ];
     },
 
@@ -101,9 +133,6 @@ const nextConfig = {
             },
         ];
     },
-
-    // Removed webpack config for Next.js 16 with Turbopack
-    // Turbopack handles optimizations automatically
 };
 
 module.exports = nextConfig;

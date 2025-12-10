@@ -6,6 +6,15 @@ from .project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectMembe
 from .task import TaskCreate, TaskUpdate, TaskResponse
 from .notification import NotificationCreate, NotificationResponse
 from .password_reset import ForgotPasswordRequest, ForgotPasswordResponse, ResetPasswordRequest, ResetPasswordResponse
+from .dashboard import (
+    DashboardStatsResponse,
+    DashboardProjectResponse,
+    DashboardActivityResponse,
+    DashboardOverviewResponse,
+    TodayTaskResponse,
+    ActivityUserResponse,
+    ActivityProjectResponse,
+)
 
 __all__ = [
     "UserCreate",
@@ -26,4 +35,11 @@ __all__ = [
     "ForgotPasswordResponse",
     "ResetPasswordRequest",
     "ResetPasswordResponse",
+    "DashboardStatsResponse",
+    "DashboardProjectResponse",
+    "DashboardActivityResponse",
+    "DashboardOverviewResponse",
+    "TodayTaskResponse",
+    "ActivityUserResponse",
+    "ActivityProjectResponse",
 ]

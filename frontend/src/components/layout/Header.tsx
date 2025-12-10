@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import { Bell, Search, User, Menu, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -119,23 +120,15 @@ export function Header({ onMenuClick }: HeaderProps) {
                         className="h-10 w-10 rounded-full bg-gradient-to-br from-zinc-800 to-zinc-900 ring-1 ring-white/10 hover:ring-indigo-500/50 overflow-hidden p-0"
                     >
                         {user?.avatar ? (
-                            <img
-                                src={getAvatarUrl(user.avatar)}
-                                alt={user.firstName || 'User'}
-                                className="h-full w-full object-cover"
-                                onError={(e) => {
-                                    // Fallback to default avatar if image fails to load
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    const parent = target.parentElement;
-                                    if (parent) {
-                                        const fallbackIcon = document.createElement('div');
-                                        fallbackIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>';
-                                        fallbackIcon.className = 'flex items-center justify-center h-full w-full';
-                                        parent.appendChild(fallbackIcon);
-                                    }
-                                }}
-                            />
+                            <div className="relative h-full w-full">
+                                <Image
+                                    src={getAvatarUrl(user.avatar)}
+                                    alt={user.firstName || 'User'}
+                                    fill
+                                    className="object-cover"
+                                    sizes="40px"
+                                />
+                            </div>
                         ) : (
                             <User className="h-5 w-5 text-zinc-400" />
                         )}

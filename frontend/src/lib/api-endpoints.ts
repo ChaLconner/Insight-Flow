@@ -19,7 +19,7 @@ import type {
   RecentActivity,
   InviteUserRequest
 } from '@/types';
-import type { AnalyticsResponse } from '@/app/analytics/types';
+import type { AnalyticsResponse, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from '@/app/analytics/types';
 
 // ===========================================
 // Authentication Endpoints
@@ -426,10 +426,14 @@ export const usersApi = {
   },
 
   // Search users
-  searchUsers: async (query: string): Promise<User[]> => {
-    const cacheKey = `users-searchUsers-${query}`;
+  searchUsers: async (query: string, skip = 0, limit = 20, role?: string, status?: string): Promise<User[]> => {
+    const cacheKey = `users-searchUsers-${query}-${skip}-${limit}-${role}-${status}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/users/search', { params: { q: query } });
+      const params: any = { q: query, skip, limit };
+      if (role && role !== 'all') params.role = role;
+      if (status && status !== 'all') params.status = status;
+
+      const { data } = await apiClient.get('/users/search', { params });
       return data;
     }, cacheKey);
   },
@@ -453,6 +457,15 @@ export const usersApi = {
   inviteUser: async (userData: InviteUserRequest): Promise<User> => {
     const { data } = await apiClient.post('/users/invite', userData);
     return data;
+  },
+
+  // Get user stats
+  getStats: async (): Promise<any> => {
+    const cacheKey = 'users-getStats';
+    return createDeduplicatedRequest(async () => {
+      const { data } = await apiClient.get('/users/stats');
+      return data;
+    }, cacheKey);
   },
 };
 
@@ -531,6 +544,20 @@ export const analyticsApi = {
       const { data } = await apiClient.get('/analytics/overview', { params: { period } });
       return data;
     }, cacheKey);
+  },
+
+  // Get paginated team workload (scalable for 1K-100K users)
+  getTeamWorkload: async (params: TeamWorkloadParams): Promise<TeamWorkloadPaginatedResponse> => {
+    const { data } = await apiClient.get('/analytics/team-workload', {
+      params: {
+        page: params.page || 1,
+        page_size: params.pageSize || 10,
+        search: params.search || undefined,
+        sort_by: params.sortBy || 'tasks',
+        sort_order: params.sortOrder || 'desc'
+      }
+    });
+    return data;
   },
 };
 

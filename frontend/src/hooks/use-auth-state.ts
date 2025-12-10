@@ -283,14 +283,14 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
     };
 
     activityEvents.forEach(event => {
-      document.addEventListener(event, handleActivity, true);
+      document.addEventListener(event, handleActivity, { capture: true, passive: true });
     });
 
     return () => {
       clearTimeout(updateActivityTimer);
       clearTimeout(checkSessionTimer);
       activityEvents.forEach(event => {
-        document.removeEventListener(event, handleActivity, true);
+        document.removeEventListener(event, handleActivity, { capture: true } as any);
       });
     };
   }, [updateActivity, checkAuthStatus, timeoutMinutes]);

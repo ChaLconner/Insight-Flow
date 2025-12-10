@@ -56,7 +56,7 @@ export const TaskItem = memo(({
                             }`} />
                         <div className="min-w-0 flex-1">
                             <h4 className="text-white font-medium truncate">{task.title}</h4>
-                            <div className="flex items-center gap-4 mt-1 text-xs text-zinc-400">
+                            <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1 text-xs text-zinc-400">
                                 {showProjectName && task.project && (
                                     <span className="flex items-center gap-1">
                                         <FolderKanban className="h-3 w-3 text-zinc-400" />

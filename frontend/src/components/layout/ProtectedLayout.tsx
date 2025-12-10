@@ -45,16 +45,7 @@ function RoleRedirectLayout() {
     );
 }
 
-// Loading component for initial loading state
-function InitialLoadingLayout() {
-    return (
-        <DashboardLayout>
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-            </div>
-        </DashboardLayout>
-    );
-}
+
 
 export function ProtectedLayout({ children, requiredRole }: ProtectedLayoutProps) {
     // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL - BEFORE ANY CONDITIONAL RETURNS
@@ -94,11 +85,16 @@ export function ProtectedLayout({ children, requiredRole }: ProtectedLayoutProps
         }
     }, [isLoading]);
 
-    // Show loading spinner while checking authentication
-    // CHANGED: Render DashboardLayout with a centered spinner instead of a full-screen blocking overlay
-    // This improves UX by showing the app structure immediately
+    // Show loading spinner while checking authentication (LCP Optimization)
+    // Render DashboardLayout immediately with a spinner to show the "App Shell" ASAP
     if (isLoading) {
-        return <InitialLoadingLayout />;
+        return (
+            <DashboardLayout>
+                <div className="flex h-[calc(100vh-4rem)] w-full items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                </div>
+            </DashboardLayout>
+        );
     }
 
     // If not authenticated, useRequireAuth will handle redirect

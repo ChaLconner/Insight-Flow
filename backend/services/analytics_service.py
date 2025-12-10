@@ -783,3 +783,133 @@ class AnalyticsService:
             "completion_rate": completed_tasks / max(total_tasks, 1) * 100 if total_tasks > 0 else 0.0,
             "recent_activity": recent_activity
         }
+
+    def get_team_workload_paginated(
+        self, 
+        user_id: uuid.UUID, 
+        page: int = 1, 
+        page_size: int = 10,
+        search: Optional[str] = None,
+        sort_by: str = "tasks",
+        sort_order: str = "desc"
+    ) -> Dict[str, Any]:
+        """
+        Get paginated team workload data for scalability with large user counts.
+        
+        Args:
+            user_id: Current user ID
+            page: Page number (1-indexed)
+            page_size: Number of items per page (max 100)
+            search: Optional search term for user names
+            sort_by: Field to sort by ('tasks' or 'name')
+            sort_order: Sort order ('asc' or 'desc')
+            
+        Returns:
+            Paginated team workload data
+        """
+        try:
+            # Validate pagination parameters
+            page = max(1, page)
+            page_size = min(max(1, page_size), 100)  # Max 100 per page
+            
+            # Get accessible project IDs
+            accessible_projects_query = self.db.query(Project.id).outerjoin(
+                ProjectMember, Project.id == ProjectMember.project_id
+            ).filter(
+                or_(
+                    Project.owner_id == user_id,
+                    ProjectMember.user_id == user_id
+                )
+            ).distinct()
+            
+            project_ids = [p[0] for p in accessible_projects_query.all()]
+            
+            if not project_ids:
+                return {
+                    "items": [],
+                    "total": 0,
+                    "page": page,
+                    "page_size": page_size,
+                    "total_pages": 0,
+                    "has_next": False,
+                    "has_prev": False
+                }
+            
+            # Build workload query with counts
+            workload_query = self.db.query(
+                Task.assignee_id,
+                func.count(Task.id).label('task_count')
+            ).filter(
+                Task.project_id.in_(project_ids),
+                Task.assignee_id.isnot(None)
+            ).group_by(Task.assignee_id)
+            
+            workload_subquery = workload_query.subquery()
+            
+            # Join with User table
+            user_workload_query = self.db.query(
+                User.id,
+                User.name,
+                User.username,
+                User.avatar_url,
+                workload_subquery.c.task_count
+            ).join(
+                workload_subquery, User.id == workload_subquery.c.assignee_id
+            )
+            
+            # Apply search filter
+            if search:
+                search_pattern = f"%{search}%"
+                user_workload_query = user_workload_query.filter(
+                    or_(
+                        User.name.ilike(search_pattern),
+                        User.username.ilike(search_pattern)
+                    )
+                )
+            
+            # Get total count before pagination
+            total_count = user_workload_query.count()
+            total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+            
+            # Apply sorting
+            if sort_by == "name":
+                order_column = User.name if sort_order == "asc" else User.name.desc()
+            else:  # default: tasks
+                order_column = workload_subquery.c.task_count.desc() if sort_order == "desc" else workload_subquery.c.task_count
+            
+            user_workload_query = user_workload_query.order_by(order_column)
+            
+            # Apply pagination
+            offset = (page - 1) * page_size
+            results = user_workload_query.offset(offset).limit(page_size).all()
+            
+            # Format results
+            items = []
+            for user_id_result, name, username, avatar_url, task_count in results:
+                items.append({
+                    "name": name or username or f"User {user_id_result}",
+                    "avatar": avatar_url,
+                    "tasks": task_count
+                })
+            
+            return {
+                "items": items,
+                "total": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting paginated team workload: {str(e)}")
+            return {
+                "items": [],
+                "total": 0,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": 0,
+                "has_next": False,
+                "has_prev": False
+            }

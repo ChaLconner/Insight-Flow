@@ -9,6 +9,7 @@ from models.user import User
 from models.project import Project, ProjectMember
 from models.task import Task, TaskStatus
 from models.task_history import TaskHistory, ActivityType
+from utils.cache import cache_dashboard_stats
 import uuid
 
 class DashboardService:
@@ -28,11 +29,14 @@ class DashboardService:
             )
         )
 
+    @cache_dashboard_stats(ttl_seconds=60)  # Cache stats for 60 seconds
     def get_overview_stats(self, user_id: uuid.UUID) -> Dict[str, Any]:
         """
         Get dashboard overview statistics.
+        Results are cached for 60 seconds per user.
         """
         accessible_projects_subquery = self._get_accessible_projects_query(user_id)
+
 
         # 1. Total Projects
         total_projects = self.db.query(func.count(distinct(Project.id))).outerjoin(

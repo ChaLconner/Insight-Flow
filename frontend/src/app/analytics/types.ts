@@ -55,3 +55,28 @@ export interface AnalyticsResponse {
     teamWorkload: { name: string; avatar?: string; tasks: number }[];
     dailyTrends: { date: string; created: number; completed: number }[];
 }
+
+// Types for paginated team workload (scalable for 1K-100K users)
+export interface TeamWorkloadItem {
+    name: string;
+    avatar?: string;
+    tasks: number;
+}
+
+export interface TeamWorkloadPaginatedResponse {
+    items: TeamWorkloadItem[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+    has_next: boolean;
+    has_prev: boolean;
+}
+
+export interface TeamWorkloadParams {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortBy?: 'tasks' | 'name';
+    sortOrder?: 'asc' | 'desc';
+}

@@ -23,7 +23,8 @@ from schemas.analytics import (
     ActivityResponse, 
     BatchActivityResponse, 
     AnalyticsOverviewResponse,
-    BatchActivityRequest
+    BatchActivityRequest,
+    TeamWorkloadPaginatedResponse
 )
 
 # Create router instance
@@ -44,6 +45,36 @@ def get_analytics_overview(
     analytics_service = AnalyticsService(db)
     # The service returns a dict that matches the AnalyticsOverviewResponse structure
     return analytics_service.get_user_analytics_overview(current_user.id, period=period)
+
+@router.get("/team-workload", response_model=TeamWorkloadPaginatedResponse)
+def get_team_workload(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
+    search: str = Query(None, description="Search term for user names"),
+    sort_by: str = Query("tasks", description="Sort by: 'tasks' or 'name'"),
+    sort_order: str = Query("desc", description="Sort order: 'asc' or 'desc'"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get paginated team workload data.
+    
+    Supports:
+    - Pagination: page, page_size (max 100)
+    - Search: filter by user name
+    - Sorting: by tasks count or user name
+    
+    This endpoint is optimized for large user counts (1K-100K users).
+    """
+    analytics_service = AnalyticsService(db)
+    return analytics_service.get_team_workload_paginated(
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
 
 @router.get("/projects/{project_id}/dashboard")
 def get_dashboard_metrics(

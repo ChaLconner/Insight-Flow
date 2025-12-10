@@ -75,6 +75,19 @@ class TeamWorkload(BaseModel):
     avatar: Optional[str] = None
     tasks: int
 
+class TeamWorkloadPaginatedResponse(BaseModel):
+    """Paginated team workload response for handling large user counts"""
+    items: List[TeamWorkload] = []
+    total: int = Field(default=0, ge=0, description="Total number of team members")
+    page: int = Field(default=1, ge=1, description="Current page number")
+    page_size: int = Field(default=10, ge=1, le=100, description="Number of items per page")
+    total_pages: int = Field(default=0, ge=0, description="Total number of pages")
+    has_next: bool = Field(default=False, description="Whether there are more pages")
+    has_prev: bool = Field(default=False, description="Whether there are previous pages")
+
+    class Config:
+        from_attributes = True
+
 class DailyTrend(BaseModel):
     """Daily task creation/completion trend"""
     date: str
