@@ -32,11 +32,11 @@ axiosRetry(apiClient, {
   retryCondition: (error: AxiosError) => {
     // Retry on network errors and 5xx server errors
     if (!error.response) {
-      console.warn(`🔄 Retrying network error (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
+      console.warn(`🔄 Retrying network error (attempt ${(error.config?.['axios-retry']?.retryCount ?? 0) + 1})`);
       return true;
     }
     if (error.response?.status >= 500) {
-      console.warn(`🔄 Retrying server error ${error.response.status} (attempt ${error.config?.['axios-retry']?.retryCount || 0 + 1})`);
+      console.warn(`🔄 Retrying server error ${error.response.status} (attempt ${(error.config?.['axios-retry']?.retryCount ?? 0) + 1})`);
       return true;
     }
     return false;
@@ -144,7 +144,7 @@ function getErrorMessage(error: AxiosError): string {
     }
 
     // Generic network error with retry info
-    const retryCount = error.config?.['axios-retry']?.retryCount || 0;
+    const retryCount = error.config?.['axios-retry']?.retryCount ?? 0;
     if (retryCount > 0) {
       return `Network error after ${retryCount} retry attempts. Please check your connection.`;
     }
@@ -157,7 +157,7 @@ function getErrorMessage(error: AxiosError): string {
 
   switch (status) {
     case 400:
-      return data?.message || ERROR_MESSAGES.VALIDATION_ERROR;
+      return data?.message ?? ERROR_MESSAGES.VALIDATION_ERROR;
     case 401:
       return ERROR_MESSAGES.UNAUTHORIZED;
     case 403:
@@ -165,7 +165,7 @@ function getErrorMessage(error: AxiosError): string {
     case 404:
       return ERROR_MESSAGES.NOT_FOUND;
     case 422:
-      return data?.message || ERROR_MESSAGES.VALIDATION_ERROR;
+      return data?.message ?? ERROR_MESSAGES.VALIDATION_ERROR;
     case 429:
       return ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
     case 500:
@@ -249,7 +249,7 @@ export async function downloadFile(url: string, filename?: string): Promise<void
     const downloadUrl = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = filename || 'download';
+    link.download = filename ?? 'download';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

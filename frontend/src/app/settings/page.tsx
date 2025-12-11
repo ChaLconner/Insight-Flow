@@ -89,11 +89,19 @@ export default function SettingsPage() {
 
   const calculateStrength = (password: string) => {
     let strength = 0;
-    if (password.length > 6) {strength += 25;}
-    if (password.match(/[A-Z]/)) {strength += 25;}
-    if (password.match(/[0-9]/)) {strength += 25;}
-    if (password.match(/[^A-Za-z0-9]/)) {strength += 25;}
-    return strength;
+    // Backend requires at least 8 characters
+    if (password.length >= 8) { strength += 25; }
+    // Backend requires uppercase
+    if (password.match(/[A-Z]/)) { strength += 25; }
+    // Backend requires lowercase (implicit in typical valid passwords, but enforced by backend)
+    if (password.match(/[a-z]/)) { strength += 15; }
+    // Backend requires number from 0-9
+    if (password.match(/[0-9]/)) { strength += 25; }
+    // Special chars are good but not strictly required by this backend regex, keeping for good measure
+    if (password.match(/[^A-Za-z0-9]/)) { strength += 10; }
+
+    // Cap at 100
+    return Math.min(strength, 100);
   };
 
   useEffect(() => {
@@ -199,7 +207,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!user) {return;}
+    if (!user) { return; }
 
     try {
       setSaving(true);
@@ -236,7 +244,7 @@ export default function SettingsPage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {return;}
+    if (!file) { return; }
 
     const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {

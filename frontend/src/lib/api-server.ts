@@ -1,10 +1,9 @@
 import { cookies } from 'next/headers';
-import { API_CONFIG } from '@/lib/constants';
-import type { Project, Task } from '@/types';
+import type { Task } from '@/types';
 import { transformProjectData } from '@/lib/project-utils';
 
 // Use backend directly for server-side fetching to avoid loopback overhead and URL issues
-const SERVER_BASE_URL = process.env.API_URL || 'http://localhost:8000';
+const SERVER_BASE_URL = process.env.API_URL ?? 'http://localhost:8000';
 
 async function fetchServer<T>(path: string, options: RequestInit = {}): Promise<T> {
     const cookieStore = await cookies();

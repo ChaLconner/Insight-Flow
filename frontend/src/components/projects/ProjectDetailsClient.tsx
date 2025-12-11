@@ -60,7 +60,7 @@ export function ProjectDetailsClient({ project: initialProject }: ProjectDetails
                         <Calendar className="h-4 w-4 text-zinc-400" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-white">{initialProject.taskCount || 0}</div>
+                        <div className="text-2xl font-bold text-white">{initialProject.taskCount ?? 0}</div>
                         <p className="text-xs text-zinc-500">Active tasks</p>
                     </CardContent>
                 </Card>
@@ -70,7 +70,7 @@ export function ProjectDetailsClient({ project: initialProject }: ProjectDetails
                         <Users className="h-4 w-4 text-zinc-400" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-white">{initialProject.memberCount || 0}</div>
+                        <div className="text-2xl font-bold text-white">{initialProject.memberCount ?? 0}</div>
                         <p className="text-xs text-zinc-500">Team members</p>
                     </CardContent>
                 </Card>
@@ -81,7 +81,7 @@ export function ProjectDetailsClient({ project: initialProject }: ProjectDetails
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-white">
-                            {initialProject.taskCount ? Math.round(((initialProject.completedTasks || 0) / initialProject.taskCount) * 100) : 0}%
+                            {initialProject.taskCount ? Math.round(((initialProject.completedTasks ?? 0) / initialProject.taskCount) * 100) : 0}%
                         </div>
                         <p className="text-xs text-zinc-500">Completion rate</p>
                     </CardContent>

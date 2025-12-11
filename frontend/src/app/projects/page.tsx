@@ -1,7 +1,7 @@
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { ProjectsClient } from "@/components/projects/ProjectsClient";
 import { serverApi } from "@/lib/api-server";
-import { Metadata } from "next";
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: 'Projects | Insight Flow',

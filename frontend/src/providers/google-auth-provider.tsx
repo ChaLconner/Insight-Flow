@@ -17,7 +17,7 @@ export function GoogleAuthProvider({ children }: GoogleAuthProviderProps) {
   }
 
   return (
-    <GoogleOAuthProvider clientId={clientId || "missing-google-client-id"}>
+    <GoogleOAuthProvider clientId={clientId ?? "missing-google-client-id"}>
       {children}
     </GoogleOAuthProvider>
   );

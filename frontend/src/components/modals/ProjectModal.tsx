@@ -96,11 +96,11 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
       const members = project.members || [];
       const users: User[] = members.map(m => {
         const member = m as any;
-        return member.user || {
+        return member.user ?? {
           id: member.userId,
-          firstName: member.name?.split(' ')[0] || 'Unknown',
-          lastName: member.name?.split(' ').slice(1).join(' ') || 'User',
-          email: member.email || '',
+          firstName: member.name?.split(' ')[0] ?? 'Unknown',
+          lastName: member.name?.split(' ').slice(1).join(' ') ?? 'User',
+          email: member.email ?? '',
           username: 'unknown',
           role: 'user',
           avatar: member.avatar,

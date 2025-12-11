@@ -57,11 +57,7 @@ export const authApi = {
   getCurrentUser: async (): Promise<User> => {
     // Log entry and stack to help find duplicate callers
     if (process.env.NODE_ENV === 'development') {
-      try {
-
-      } catch (_e) {
-        // ignore
-      }
+      // Empty block intentionally - used for debugging when needed
     }
 
     const cacheKey = 'auth-getCurrentUser';
@@ -208,8 +204,8 @@ export const tasksApi = {
     const cacheKey = `tasks-getMyTasks-${skip}-${limit}-${search}-${status}`;
     return createDeduplicatedRequest(async () => {
       const params: any = { skip, limit };
-      if (search) {params.search = search;}
-      if (status && status !== 'all') {params.status = status;}
+      if (search) { params.search = search; }
+      if (status && status !== 'all') { params.status = status; }
       const { data } = await apiClient.get('/tasks/my/tasks', { params });
       return data;
     }, cacheKey);
@@ -429,8 +425,8 @@ export const usersApi = {
     const cacheKey = `users-searchUsers-${query}-${skip}-${limit}-${role}-${status}`;
     return createDeduplicatedRequest(async () => {
       const params: any = { q: query, skip, limit };
-      if (role && role !== 'all') {params.role = role;}
-      if (status && status !== 'all') {params.status = status;}
+      if (role && role !== 'all') { params.role = role; }
+      if (status && status !== 'all') { params.status = status; }
 
       const { data } = await apiClient.get('/users/search', { params });
       return data;
@@ -549,11 +545,11 @@ export const analyticsApi = {
   getTeamWorkload: async (params: TeamWorkloadParams): Promise<TeamWorkloadPaginatedResponse> => {
     const { data } = await apiClient.get('/analytics/team-workload', {
       params: {
-        page: params.page || 1,
-        page_size: params.pageSize || 10,
-        search: params.search || undefined,
-        sort_by: params.sortBy || 'tasks',
-        sort_order: params.sortOrder || 'desc'
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? 10,
+        search: params.search ?? undefined,
+        sort_by: params.sortBy ?? 'tasks',
+        sort_order: params.sortOrder ?? 'desc'
       }
     });
     return data;

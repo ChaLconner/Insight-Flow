@@ -533,7 +533,7 @@ export function memoize<T extends (...args: Parameters<T>) => ReturnType<T>>(
  * @returns Full URL ที่พร้อมใช้งาน
  */
 export function getAvatarUrl(avatarUrl?: string): string {
-  if (!avatarUrl) {return '';}
+  if (!avatarUrl) { return ''; }
 
   // ถ้าเป็น full URL อยู่แล้ว ให้ใช้เลย
   if (avatarUrl.startsWith('http') || avatarUrl.startsWith('blob:')) {
@@ -541,8 +541,8 @@ export function getAvatarUrl(avatarUrl?: string): string {
   }
 
   // ถ้าเป็น relative path ให้ต่อกับ BASE_URL
-  const { API_CONFIG } = require('@/lib/constants');
-  const baseUrl = API_CONFIG.BASE_URL || 'http://localhost:8000';
+  // Use inline constant to avoid require() - API_CONFIG.BASE_URL is '/api'
+  const baseUrl = '/api';
 
   // ตรวจสอบว่า path ขึ้นต้นด้วย / หรือไม่
   const normalizedPath = avatarUrl.startsWith('/') ? avatarUrl : `/${avatarUrl}`;

@@ -33,27 +33,22 @@ export function Header({ onMenuClick }: HeaderProps) {
     const pathname = usePathname();
     const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-    // ตรวจสอบการอัปเดตข้อมูลผู้ใช้แบบ real-time
-    useEffect(() => {
-        if (user?.avatar) {
 
-        }
-    }, [user?.avatar]);
 
     const getPageTitle = (path: string) => {
-        if (path === '/') {return 'Dashboard';}
-        if (path.startsWith('/projects')) {return 'Projects';}
-        if (path.startsWith('/tasks')) {return 'Tasks';}
-        if (path.startsWith('/analytics')) {return 'Analytics';}
-        if (path.startsWith('/users')) {return 'Users';}
-        if (path.startsWith('/settings')) {return 'Settings';}
+        if (path === '/') { return 'Dashboard'; }
+        if (path.startsWith('/projects')) { return 'Projects'; }
+        if (path.startsWith('/tasks')) { return 'Tasks'; }
+        if (path.startsWith('/analytics')) { return 'Analytics'; }
+        if (path.startsWith('/users')) { return 'Users'; }
+        if (path.startsWith('/settings')) { return 'Settings'; }
         return 'Dashboard';
     };
 
     const getGreeting = () => {
         const hour = new Date().getHours();
-        if (hour < 12) {return 'Good morning';}
-        if (hour < 18) {return 'Good afternoon';}
+        if (hour < 12) { return 'Good morning'; }
+        if (hour < 18) { return 'Good afternoon'; }
         return 'Good evening';
     };
 
@@ -96,7 +91,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                         {getPageTitle(pathname)}
                     </h1>
                     <p className="text-sm text-zinc-400 hidden sm:block">
-                        {getGreeting()}, <span className="text-indigo-400 font-medium">{user?.firstName || 'User'}</span>
+                        {getGreeting()}, <span className="text-indigo-400 font-medium">{user?.firstName ?? 'User'}</span>
                     </p>
                 </div>
             </div>
@@ -124,8 +119,8 @@ export function Header({ onMenuClick }: HeaderProps) {
                 {/* User Profile */}
                 <div className="flex items-center gap-3 border-l border-white/10 pl-4">
                     <div className="flex-col items-end hidden md:flex">
-                        <span className="text-sm font-medium text-white">{user?.firstName || user?.email || 'User'}</span>
-                        <span className="text-xs text-zinc-400">{user?.role || 'User'}</span>
+                        <span className="text-sm font-medium text-white">{user?.firstName ?? user?.email ?? 'User'}</span>
+                        <span className="text-xs text-zinc-400">{user?.role ?? 'User'}</span>
                     </div>
                     <Button
                         variant="ghost"
@@ -136,7 +131,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                             <div className="relative h-full w-full">
                                 <Image
                                     src={getAvatarUrl(user.avatar)}
-                                    alt={user.firstName || 'User'}
+                                    alt={user.firstName ?? 'User'}
                                     fill
                                     priority
                                     className="object-cover"

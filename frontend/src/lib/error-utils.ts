@@ -15,7 +15,7 @@ export const getErrorMessage = (error: unknown): string => {
             // Handle array of errors (e.g. validation errors)
             if (Array.isArray(error.response.data.detail)) {
                 return error.response.data.detail
-                    .map((err: any) => err.msg || err.message || JSON.stringify(err))
+                    .map((err: { msg?: string; message?: string }) => err.msg ?? err.message ?? JSON.stringify(err))
                     .join(', ');
             }
         }

@@ -27,8 +27,8 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
         }
     }, [user.isActive]);
 
-    const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User';
-    const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
+    const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || 'Unknown User';
+    const initials = `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase();
 
     return (
         <div className="p-6 hover:bg-white/5 transition-colors">

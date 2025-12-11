@@ -77,5 +77,5 @@ export function getUserInitials(firstName?: string, lastName?: string): string {
  * @returns Full name string
  */
 export function getFullName(firstName?: string, lastName?: string): string {
-    return `${firstName || ''} ${lastName || ''}`.trim() || 'Unknown User';
+    return `${firstName ?? ''} ${lastName ?? ''}`.trim() || 'Unknown User';
 }

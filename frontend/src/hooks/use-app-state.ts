@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 export const useAppState = () => {
   // Zustand store state
   const store = useAppStore();
-  
+
   // Selectors
   const isLoading = appSelectors.isLoading(store);
   const isSideNavOpen = appSelectors.isSideNavOpen(store);
@@ -23,7 +23,7 @@ export const useAppState = () => {
   const forms = appSelectors.getForms(store);
   const currentProjectId = appSelectors.getCurrentProjectId(store);
   const userPreferences = appSelectors.getUserPreferences(store);
-  
+
   // Actions
   const setLoading = store.setLoading;
   const toggleSideNav = store.toggleSideNav;
@@ -42,7 +42,7 @@ export const useAppState = () => {
   const setCurrentProjectId = store.setCurrentProjectId;
   const updateUserPreferences = store.updateUserPreferences;
   const setBreadcrumbs = store.setBreadcrumbs;
-  
+
   // Custom app actions
   const setPageTitle = store.setPageTitle;
   const showToast = store.showToast;
@@ -50,24 +50,24 @@ export const useAppState = () => {
   const addNotification = store.addNotification;
   const removeNotification = store.removeNotification;
   const clearNotifications = store.clearNotifications;
-  
+
   // Advanced actions
   const navigateWithBreadcrumb = store.navigateWithBreadcrumb;
   const resetAppState = store.resetAppState;
-  
+
   // Convenience functions for toast notifications
   const showSuccess = useCallback((message: string, description?: string) => {
     toast.success(message, {
       description,
       action: {
         label: "Undo",
-        onClick: () => {},
+        onClick: () => { },
       },
     });
-    addAlert({ 
-      type: 'success', 
-      title: message, 
-      message: description || '' 
+    addAlert({
+      type: 'success',
+      title: message,
+      message: description ?? ''
     });
   }, [addAlert]);
 
@@ -76,13 +76,13 @@ export const useAppState = () => {
       description,
       action: {
         label: "Retry",
-        onClick: () => {},
+        onClick: () => { },
       },
     });
-    addAlert({ 
-      type: 'error', 
-      title: message, 
-      message: description || '' 
+    addAlert({
+      type: 'error',
+      title: message,
+      message: description ?? ''
     });
   }, [addAlert]);
 
@@ -90,10 +90,10 @@ export const useAppState = () => {
     toast.warning(message, {
       description,
     });
-    addAlert({ 
-      type: 'warning', 
-      title: message, 
-      message: description || '' 
+    addAlert({
+      type: 'warning',
+      title: message,
+      message: description ?? ''
     });
   }, [addAlert]);
 
@@ -101,10 +101,10 @@ export const useAppState = () => {
     toast.info(message, {
       description,
     });
-    addAlert({ 
-      type: 'info', 
-      title: message, 
-      message: description || '' 
+    addAlert({
+      type: 'info',
+      title: message,
+      message: description ?? ''
     });
   }, [addAlert]);
 
@@ -128,9 +128,9 @@ export const useAppState = () => {
       data: {
         onConfirm,
         description: options?.description,
-        confirmText: options?.confirmText || 'Confirm',
-        cancelText: options?.cancelText || 'Cancel',
-        variant: options?.variant || 'default',
+        confirmText: options?.confirmText ?? 'Confirm',
+        cancelText: options?.cancelText ?? 'Cancel',
+        variant: options?.variant ?? 'default',
       },
     });
   }, [showModal]);
@@ -154,8 +154,8 @@ export const useAppState = () => {
       data: {
         fields,
         onSubmit,
-        submitText: options?.submitText || 'Submit',
-        cancelText: options?.cancelText || 'Cancel',
+        submitText: options?.submitText ?? 'Submit',
+        cancelText: options?.cancelText ?? 'Cancel',
         initialData: options?.initialData,
       },
     });
@@ -174,7 +174,7 @@ export const useAppState = () => {
     forms,
     currentProjectId,
     userPreferences,
-    
+
     // Navigation and UI actions
     setLoading,
     toggleSideNav,
@@ -183,7 +183,7 @@ export const useAppState = () => {
     setPageTitle,
     setBreadcrumbs,
     setCurrentProjectId,
-    
+
     // Alert management
     addAlert,
     removeAlert,
@@ -192,38 +192,38 @@ export const useAppState = () => {
     showError,
     showWarning,
     showInfo,
-    
+
     // Modal management
     showModal,
     hideModal,
     closeAllModals,
     showConfirmDialog,
     showFormDialog,
-    
+
     // Search management
     setSearch,
     clearSearch,
-    
+
     // Form management
     updateForm,
     clearForm,
-    
+
     // User preferences
     updateUserPreferences,
-    
+
     // Advanced features
     navigateWithBreadcrumb,
     resetAppState,
-    
+
     // Toast notifications
     showToast,
     hideToast,
-    
+
     // Notifications
     addNotification,
     removeNotification,
     clearNotifications,
-    
+
     // Store methods for advanced usage
     setUserPreferences: store.setUserPreferences,
   };
@@ -235,18 +235,18 @@ export const useAppState = () => {
 
 export const useLoading = () => {
   const { isLoading, setLoading } = useAppState();
-  
+
   const startLoading = useCallback((message?: string) => {
-    setLoading({ 
-      isLoading: true, 
-      message: message || 'Loading...' 
+    setLoading({
+      isLoading: true,
+      message: message ?? 'Loading...'
     });
   }, [setLoading]);
 
   const stopLoading = useCallback(() => {
-    setLoading({ 
-      isLoading: false, 
-      message: '' 
+    setLoading({
+      isLoading: false,
+      message: ''
     });
   }, [setLoading]);
 
@@ -278,13 +278,13 @@ export const useLoading = () => {
 // ===========================================
 
 export const useModal = () => {
-  const { 
-    modals, 
-    showModal, 
-    hideModal, 
-    closeAllModals, 
-    showConfirmDialog, 
-    showFormDialog 
+  const {
+    modals,
+    showModal,
+    hideModal,
+    closeAllModals,
+    showConfirmDialog,
+    showFormDialog
   } = useAppState();
 
   const isModalOpen = useCallback((id: string): boolean => {
@@ -394,9 +394,9 @@ export const useBreadcrumbs = () => {
 export const useForm = (formId: string) => {
   const { forms, updateForm, clearForm } = useAppState();
 
-  const formData = forms[formId]?.data || {};
-  const formErrors = forms[formId]?.errors || {};
-  const formTouched = forms[formId]?.touched || {};
+  const formData = forms[formId]?.data ?? {};
+  const formErrors = forms[formId]?.errors ?? {};
+  const formTouched = forms[formId]?.touched ?? {};
 
   const updateField = useCallback((field: string, value: any) => {
     updateForm(formId, {
@@ -424,7 +424,7 @@ export const useForm = (formId: string) => {
 
   const validateField = useCallback((field: string, validator: (value: any) => string | null) => {
     const error = validator(formData[field]);
-    setFieldError(field, error || '');
+    setFieldError(field, error ?? '');
     return !error;
   }, [formData, setFieldError]);
 
@@ -433,7 +433,7 @@ export const useForm = (formId: string) => {
   }, [clearForm, formId]);
 
   const isFieldTouched = useCallback((field: string) => {
-    return formTouched[field] || false;
+    return formTouched[field] ?? false;
   }, [formTouched]);
 
   const getFieldError = useCallback((field: string) => {

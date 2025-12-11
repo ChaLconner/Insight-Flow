@@ -75,8 +75,8 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
     const queryClient = useQueryClient();
 
     // Initialize state from URL params with memoization
-    const [searchQuery, setSearchQuery] = useState(() => searchParams.get("search") || "");
-    const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get("status") || "all");
+    const [searchQuery, setSearchQuery] = useState(() => searchParams.get("search") ?? "");
+    const [statusFilter, setStatusFilter] = useState<string>(() => searchParams.get("status") ?? "all");
     const [page, setPage] = useState(() => {
         const pageParam = searchParams.get("page");
         return pageParam ? parseInt(pageParam, 10) : 1;
@@ -268,7 +268,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
 
     if (error) {
         const errorMessage = typeof error === 'string' ? error :
-            (error as any)?.message || 'Failed to load tasks.';
+            (error as any)?.message ?? 'Failed to load tasks.';
 
         return (
             <div className="flex flex-col items-center justify-center h-64 space-y-4">

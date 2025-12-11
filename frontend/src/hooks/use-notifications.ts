@@ -178,8 +178,8 @@ export const useNotifications = () => {
       userId: 'current-user', // This should come from auth context in real implementation
       title,
       message,
-      type: options.type || NotificationType.SYSTEM,
-      priority: options.priority || NotificationPriority.MEDIUM,
+      type: options.type ?? NotificationType.SYSTEM,
+      priority: options.priority ?? NotificationPriority.MEDIUM,
       read: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -206,9 +206,9 @@ export const useNotifications = () => {
       data?: any;
     }
   ) => {
-    return createNotification(title, message || '', {
+    return createNotification(title, message ?? '', {
       type: NotificationType.SYSTEM,
-      priority: options?.priority || NotificationPriority.MEDIUM,
+      priority: options?.priority ?? NotificationPriority.MEDIUM,
       action: options?.action,
       data: options?.data,
     });
@@ -224,9 +224,9 @@ export const useNotifications = () => {
       duration?: number;
     }
   ) => {
-    return createNotification(title, message || '', {
+    return createNotification(title, message ?? '', {
       type: NotificationType.SYSTEM,
-      priority: options?.priority || NotificationPriority.HIGH,
+      priority: options?.priority ?? NotificationPriority.HIGH,
       action: options?.action,
       data: options?.data,
       showToast: options?.duration !== 0,
@@ -242,9 +242,9 @@ export const useNotifications = () => {
       data?: any;
     }
   ) => {
-    return createNotification(title, message || '', {
+    return createNotification(title, message ?? '', {
       type: NotificationType.SYSTEM,
-      priority: options?.priority || NotificationPriority.MEDIUM,
+      priority: options?.priority ?? NotificationPriority.MEDIUM,
       action: options?.action,
       data: options?.data,
     });
@@ -259,9 +259,9 @@ export const useNotifications = () => {
       data?: any;
     }
   ) => {
-    return createNotification(title, message || '', {
+    return createNotification(title, message ?? '', {
       type: NotificationType.SYSTEM,
-      priority: options?.priority || NotificationPriority.MEDIUM,
+      priority: options?.priority ?? NotificationPriority.MEDIUM,
       action: options?.action,
       data: options?.data,
     });
@@ -388,7 +388,7 @@ export const useNotifications = () => {
 
     const notification = new Notification(title, {
       body: options?.body,
-      icon: options?.icon || '/favicon.ico',
+      icon: options?.icon ?? '/favicon.ico',
       tag: options?.tag,
       requireInteraction: options?.requireInteraction,
     });
@@ -681,7 +681,7 @@ export const useNotificationSound = () => {
         const audio = new Audio('/sounds/notification.mp3');
         audio.volume = volume;
         audio.play().catch(() => { });
-      } catch (e) { }
+      } catch (_e) { /* Sound file not found, oscillator fallback was used */ }
 
     } catch (error) {
       console.warn('Failed to play notification sound:', error);

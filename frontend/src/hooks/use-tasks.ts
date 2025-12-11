@@ -27,7 +27,7 @@ export const useTasks = ({
 
     const queryKey = [
         'tasks',
-        projectId || 'my',
+        projectId ?? 'my',
         page,
         pageSize,
         searchQuery,
@@ -97,9 +97,9 @@ export const useTasks = ({
     });
 
     // Helper to get items safely
-    const tasks = taskResponse?.items || [];
-    const total = taskResponse?.total || 0;
-    const hasMore = taskResponse?.hasMore || false;
+    const tasks = taskResponse?.items ?? [];
+    const total = taskResponse?.total ?? 0;
+    const hasMore = taskResponse?.hasMore ?? false;
 
     const updateTaskMutation = useMutation({
         mutationFn: async (task: Partial<Task> & { id: string }) => {
@@ -122,7 +122,7 @@ export const useTasks = ({
 
             if (previousData) {
                 queryClient.setQueryData<TaskListResponse>(queryKey, (old) => {
-                    if (!old) {return old;}
+                    if (!old) { return old; }
                     return {
                         ...old,
                         items: old.items.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t)
@@ -157,7 +157,7 @@ export const useTasks = ({
 
             if (previousData) {
                 queryClient.setQueryData<TaskListResponse>(queryKey, (old) => {
-                    if (!old) {return old;}
+                    if (!old) { return old; }
                     return {
                         ...old,
                         items: old.items.filter(t => t.id !== deletedTask.id),

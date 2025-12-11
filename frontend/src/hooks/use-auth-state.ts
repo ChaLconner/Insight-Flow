@@ -221,21 +221,21 @@ export const usePermissions = () => {
     canManageUserRoles: user?.role === 'admin',
 
     // Project Management
-    canCreateProjects: ['admin', 'manager'].includes(user?.role || ''),
-    canEditProjects: ['admin', 'manager'].includes(user?.role || ''),
+    canCreateProjects: ['admin', 'manager'].includes(user?.role ?? ''),
+    canEditProjects: ['admin', 'manager'].includes(user?.role ?? ''),
     canDeleteProjects: user?.role === 'admin',
-    canManageProjectMembers: ['admin', 'manager'].includes(user?.role || ''),
+    canManageProjectMembers: ['admin', 'manager'].includes(user?.role ?? ''),
 
     // Task Management
     canCreateTasks: true, // All authenticated users
     canEditOwnTasks: true, // Users can edit tasks they created or assigned to
-    canEditAllTasks: ['admin', 'manager'].includes(user?.role || ''),
-    canDeleteTasks: ['admin', 'manager'].includes(user?.role || ''),
-    canAssignTasks: ['admin', 'manager'].includes(user?.role || ''),
+    canEditAllTasks: ['admin', 'manager'].includes(user?.role ?? ''),
+    canDeleteTasks: ['admin', 'manager'].includes(user?.role ?? ''),
+    canAssignTasks: ['admin', 'manager'].includes(user?.role ?? ''),
 
     // Analytics & Reports
-    canViewAnalytics: ['admin', 'manager'].includes(user?.role || ''),
-    canExportReports: ['admin', 'manager'].includes(user?.role || ''),
+    canViewAnalytics: ['admin', 'manager'].includes(user?.role ?? ''),
+    canExportReports: ['admin', 'manager'].includes(user?.role ?? ''),
 
     // Settings
     canManageSettings: user?.role === 'admin',
@@ -267,7 +267,7 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
 
     const checkSession = () => {
       // Don't check if hidden (optimization)
-      if (document.hidden) {return;}
+      if (document.hidden) { return; }
 
       if (!checkAuthStatus()) {
         // Session expired
@@ -277,9 +277,7 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
     };
 
     const startChecking = () => {
-      if (!intervalId) {
-        intervalId = setInterval(checkSession, CHECK_INTERVAL);
-      }
+      intervalId ??= setInterval(checkSession, CHECK_INTERVAL);
     };
 
     const stopChecking = () => {

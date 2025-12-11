@@ -49,10 +49,15 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
 
         setLoading(true);
         try {
-            const [projects, tasks] = await Promise.all([
+            const [projectsData, tasksData] = await Promise.all([
                 projectsApi.getProjects(0, 100),
                 tasksApi.getTasks(0, 100)
             ]);
+
+            // Normalize data to ensure we have arrays, handling both direct arrays and paginated responses
+            const projects = Array.isArray(projectsData) ? projectsData : (projectsData as any).items || [];
+            const tasks = Array.isArray(tasksData) ? tasksData : (tasksData as any).items || [];
+
             setCachedData({ projects, tasks });
         } catch (error) {
             console.error("Failed to load search data:", error);
@@ -114,8 +119,15 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
                 }}
                 onFocus={handleFocus}
                 placeholder="Search projects, tasks..."
-                autoComplete="off"
+                autoComplete="new-password"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 name="global-search-query"
+                id="global-search-input"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-form-type="other"
                 className="h-10 rounded-full border-white/10 bg-white/5 pl-10 pr-10 text-sm text-white placeholder:text-zinc-500 focus:border-indigo-50/50 focus:bg-white/10 focus:ring-0 transition-all duration-200"
             />
             {query && (

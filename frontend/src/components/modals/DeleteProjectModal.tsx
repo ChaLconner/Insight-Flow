@@ -31,7 +31,7 @@ export function DeleteProjectModal({
         }
     }, [isOpen]);
 
-    const isConfirmed = project && confirmName === project.name;
+    const isConfirmed = confirmName === project?.name;
 
     return (
         <AnimatePresence>
