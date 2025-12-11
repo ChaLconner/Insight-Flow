@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Activity, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
-import { AnalyticsTeamMember } from "@/app/analytics/types";
+import type { AnalyticsTeamMember } from "@/app/analytics/types";
 import { getAvatarUrl } from "@/lib/utils";
 
 interface TeamListProps {

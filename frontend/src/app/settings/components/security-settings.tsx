@@ -45,9 +45,10 @@ export function SecuritySettings({
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <Label className="text-zinc-300">Current Password</Label>
+                        <Label htmlFor="currentPassword" className="text-zinc-300">Current Password</Label>
                         <div className="relative">
                             <Input
+                                id="currentPassword"
                                 type={showPassword ? "text" : "password"}
                                 value={currentPassword}
                                 autoComplete="new-password"
@@ -66,9 +67,10 @@ export function SecuritySettings({
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label className="text-zinc-300">New Password</Label>
+                        <Label htmlFor="newPassword" className="text-zinc-300">New Password</Label>
                         <div className="relative">
                             <Input
+                                id="newPassword"
                                 type={showPassword ? "text" : "password"}
                                 value={newPassword}
                                 autoComplete="new-password"
@@ -103,9 +105,10 @@ export function SecuritySettings({
                         )}
                     </div>
                     <div className="space-y-2">
-                        <Label className="text-zinc-300">Confirm Password</Label>
+                        <Label htmlFor="confirmPassword" className="text-zinc-300">Confirm Password</Label>
                         <div className="relative">
                             <Input
+                                id="confirmPassword"
                                 type={showPassword ? "text" : "password"}
                                 value={confirmPassword}
                                 autoComplete="new-password"

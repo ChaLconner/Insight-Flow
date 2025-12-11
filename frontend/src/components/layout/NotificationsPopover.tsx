@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Trash2, Check } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Notification } from "@/types";
+import type { Notification } from "@/types";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useNotifications, useNotificationPolling } from "@/hooks/use-notifications";

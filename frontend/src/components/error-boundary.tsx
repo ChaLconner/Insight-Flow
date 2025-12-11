@@ -1,6 +1,7 @@
 'use client';
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
+import React, { Component } from 'react';
 import { Button } from '@/components/ui/button';
 
 interface Props {
@@ -26,7 +27,7 @@ export class ErrorBoundary extends Component<Props, State> {
         console.error('Uncaught error:', error, errorInfo);
     }
 
-    private handleRetry = () => {
+    private readonly handleRetry = () => {
         this.setState({ hasError: false, error: null });
         window.location.reload();
     };

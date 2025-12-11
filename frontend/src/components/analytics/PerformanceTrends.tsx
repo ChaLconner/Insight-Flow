@@ -1,7 +1,7 @@
 
 import React, { memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AnalyticsTrend } from "@/app/analytics/types";
+import type { AnalyticsTrend } from "@/app/analytics/types";
 import { getTrendIcon, getTrendColor } from "@/utils/analytics-helpers";
 
 interface PerformanceTrendsProps {

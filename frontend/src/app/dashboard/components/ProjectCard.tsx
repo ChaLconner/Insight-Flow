@@ -29,10 +29,10 @@ const STATUS_CONFIG = {
 } as const;
 
 const ProjectCard = memo(function ProjectCard({ project }: ProjectCardProps) {
-    const projectColor = project.color || '#6366f1';
-    const projectProgress = project.progress || 0;
+    const projectColor = project.color ?? '#6366f1';
+    const projectProgress = project.progress ?? 0;
     const projectInitial = project.name && typeof project.name === 'string' ? project.name[0] : '';
-    const statusConfig = STATUS_CONFIG[project.status || 'active'];
+    const statusConfig = STATUS_CONFIG[project.status ?? 'active'];
 
     return (
         <Link href={`/projects/${project.id}`}>
@@ -53,7 +53,7 @@ const ProjectCard = memo(function ProjectCard({ project }: ProjectCardProps) {
                                 {project.name}
                             </h4>
                             <p className="text-sm text-zinc-400 truncate">
-                                {project.description || 'No description'}
+                                {project.description ?? 'No description'}
                             </p>
                         </div>
                     </div>

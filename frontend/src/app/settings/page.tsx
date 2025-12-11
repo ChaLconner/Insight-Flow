@@ -89,10 +89,10 @@ export default function SettingsPage() {
 
   const calculateStrength = (password: string) => {
     let strength = 0;
-    if (password.length > 6) strength += 25;
-    if (password.match(/[A-Z]/)) strength += 25;
-    if (password.match(/[0-9]/)) strength += 25;
-    if (password.match(/[^A-Za-z0-9]/)) strength += 25;
+    if (password.length > 6) {strength += 25;}
+    if (password.match(/[A-Z]/)) {strength += 25;}
+    if (password.match(/[0-9]/)) {strength += 25;}
+    if (password.match(/[^A-Za-z0-9]/)) {strength += 25;}
     return strength;
   };
 
@@ -199,7 +199,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveSettings = async () => {
-    if (!user) return;
+    if (!user) {return;}
 
     try {
       setSaving(true);
@@ -236,7 +236,7 @@ export default function SettingsPage() {
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {return;}
 
     const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {

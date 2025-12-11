@@ -4,7 +4,7 @@ import { Suspense, lazy, useState, useCallback, useMemo, memo } from 'react';
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { AnalyticsPeriod } from "@/types";
-import { BurndownDataPoint, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from "@/app/analytics/types";
+import type { BurndownDataPoint, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from "@/app/analytics/types";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { motion, AnimatePresence } from "framer-motion";
 

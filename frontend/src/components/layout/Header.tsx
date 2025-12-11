@@ -41,19 +41,19 @@ export function Header({ onMenuClick }: HeaderProps) {
     }, [user?.avatar]);
 
     const getPageTitle = (path: string) => {
-        if (path === '/') return 'Dashboard';
-        if (path.startsWith('/projects')) return 'Projects';
-        if (path.startsWith('/tasks')) return 'Tasks';
-        if (path.startsWith('/analytics')) return 'Analytics';
-        if (path.startsWith('/users')) return 'Users';
-        if (path.startsWith('/settings')) return 'Settings';
+        if (path === '/') {return 'Dashboard';}
+        if (path.startsWith('/projects')) {return 'Projects';}
+        if (path.startsWith('/tasks')) {return 'Tasks';}
+        if (path.startsWith('/analytics')) {return 'Analytics';}
+        if (path.startsWith('/users')) {return 'Users';}
+        if (path.startsWith('/settings')) {return 'Settings';}
         return 'Dashboard';
     };
 
     const getGreeting = () => {
         const hour = new Date().getHours();
-        if (hour < 12) return 'Good morning';
-        if (hour < 18) return 'Good afternoon';
+        if (hour < 12) {return 'Good morning';}
+        if (hour < 18) {return 'Good afternoon';}
         return 'Good evening';
     };
 

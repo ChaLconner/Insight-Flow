@@ -2,7 +2,7 @@
 Dashboard Pydantic schemas for type-safe API responses.
 """
 from typing import List, Optional, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 
@@ -27,25 +27,24 @@ class DashboardStatsResponse(BaseModel):
     teamVelocityChange: str = Field(default="+0%", description="Change percentage")
     teamVelocityTrend: Literal["up", "down"] = Field(default="up", description="Trend direction")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "totalProjects": 5,
-                "totalProjectsChange": "+20%",
-                "totalProjectsTrend": "up",
-                "totalTasks": 50,
-                "completedTasks": 30,
-                "inProgressTasks": 15,
-                "inProgressTasksChange": "+10%",
-                "inProgressTasksTrend": "up",
-                "pendingReviewTasks": 5,
-                "pendingReviewTasksChange": "-5%",
-                "pendingReviewTasksTrend": "down",
-                "teamVelocity": 12,
-                "teamVelocityChange": "+8%",
-                "teamVelocityTrend": "up"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "totalProjects": 5,
+            "totalProjectsChange": "+20%",
+            "totalProjectsTrend": "up",
+            "totalTasks": 50,
+            "completedTasks": 30,
+            "inProgressTasks": 15,
+            "inProgressTasksChange": "+10%",
+            "inProgressTasksTrend": "up",
+            "pendingReviewTasks": 5,
+            "pendingReviewTasksChange": "-5%",
+            "pendingReviewTasksTrend": "down",
+            "teamVelocity": 12,
+            "teamVelocityChange": "+8%",
+            "teamVelocityTrend": "up"
         }
+    })
 
 
 class DashboardProjectResponse(BaseModel):
@@ -57,17 +56,16 @@ class DashboardProjectResponse(BaseModel):
     color: str = Field(default="#6366f1", description="Project color hex code")
     updated_at: Optional[str] = Field(default=None, description="Last updated timestamp")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "123e4567-e89b-12d3-a456-426614174000",
-                "name": "Project Alpha",
-                "description": "Main development project",
-                "progress": 75,
-                "color": "#6366f1",
-                "updated_at": "2024-01-15T10:30:00Z"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "123e4567-e89b-12d3-a456-426614174000",
+            "name": "Project Alpha",
+            "description": "Main development project",
+            "progress": 75,
+            "color": "#6366f1",
+            "updated_at": "2024-01-15T10:30:00Z"
         }
+    })
 
 
 class ActivityUserResponse(BaseModel):
@@ -92,24 +90,23 @@ class DashboardActivityResponse(BaseModel):
     time: Optional[str] = Field(default=None, description="Activity timestamp")
     project: Optional[ActivityProjectResponse] = Field(default=None, description="Related project")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "act-123",
-                "user": {
-                    "id": "user-456",
-                    "name": "John Doe",
-                    "avatar": "/avatars/john.jpg"
-                },
-                "action": "completed task",
-                "target": "Implement login feature",
-                "time": "2024-01-15T10:30:00Z",
-                "project": {
-                    "id": "proj-789",
-                    "name": "Project Alpha"
-                }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "act-123",
+            "user": {
+                "id": "user-456",
+                "name": "John Doe",
+                "avatar": "/avatars/john.jpg"
+            },
+            "action": "completed task",
+            "target": "Implement login feature",
+            "time": "2024-01-15T10:30:00Z",
+            "project": {
+                "id": "proj-789",
+                "name": "Project Alpha"
             }
         }
+    })
 
 
 class DashboardOverviewResponse(BaseModel):
@@ -124,29 +121,28 @@ class DashboardOverviewResponse(BaseModel):
         description="List of recent activities"
     )
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "stats": {
-                    "totalProjects": 5,
-                    "totalProjectsChange": "+20%",
-                    "totalProjectsTrend": "up",
-                    "totalTasks": 50,
-                    "completedTasks": 30,
-                    "inProgressTasks": 15,
-                    "inProgressTasksChange": "+10%",
-                    "inProgressTasksTrend": "up",
-                    "pendingReviewTasks": 5,
-                    "pendingReviewTasksChange": "-5%",
-                    "pendingReviewTasksTrend": "down",
-                    "teamVelocity": 12,
-                    "teamVelocityChange": "+8%",
-                    "teamVelocityTrend": "up"
-                },
-                "recentProjects": [],
-                "recentActivities": []
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "stats": {
+                "totalProjects": 5,
+                "totalProjectsChange": "+20%",
+                "totalProjectsTrend": "up",
+                "totalTasks": 50,
+                "completedTasks": 30,
+                "inProgressTasks": 15,
+                "inProgressTasksChange": "+10%",
+                "inProgressTasksTrend": "up",
+                "pendingReviewTasks": 5,
+                "pendingReviewTasksChange": "-5%",
+                "pendingReviewTasksTrend": "down",
+                "teamVelocity": 12,
+                "teamVelocityChange": "+8%",
+                "teamVelocityTrend": "up"
+            },
+            "recentProjects": [],
+            "recentActivities": []
         }
+    })
 
 
 class TodayTaskResponse(BaseModel):

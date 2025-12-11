@@ -321,7 +321,7 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                   >
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div className="h-8 w-8 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                      <div className="relative h-8 w-8 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                         {user.avatar ? (
                           <Image
                             src={getAvatarUrl(user.avatar)}

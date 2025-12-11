@@ -1,6 +1,7 @@
 "use client";
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
+import React, { Component } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, RefreshCw } from "lucide-react";
@@ -34,7 +35,7 @@ export class ChartErrorBoundary extends Component<Props, State> {
         console.error('Component Stack:', errorInfo.componentStack);
     }
 
-    private handleRetry = () => {
+    private readonly handleRetry = () => {
         this.setState({ hasError: false, error: null });
     };
 

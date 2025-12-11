@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useCallback } from "react";
+import React, { memo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,47 +19,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface DashboardHeaderProps {
-    onRefresh?: () => void;
-    isRefetching?: boolean;
-    lastUpdated?: Date | null;
+    // Props kept for future use
 }
 
-const DashboardHeader = memo(function DashboardHeader({
-    onRefresh,
-    isRefetching = false,
-    lastUpdated,
-}: DashboardHeaderProps) {
-    const handleRefresh = useCallback(() => {
-        if (onRefresh && !isRefetching) {
-            onRefresh();
-        }
-    }, [onRefresh, isRefetching]);
-
-    // Format last updated time
-    const formatLastUpdated = (date: Date | null | undefined): string => {
-        if (!date) return '';
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-
-        if (diffMins < 1) return 'Just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        const diffHours = Math.floor(diffMins / 60);
-        if (diffHours < 24) return `${diffHours}h ago`;
-        return date.toLocaleDateString();
-    };
-
+const DashboardHeader = memo(function DashboardHeader(_props: DashboardHeaderProps) {
     return (
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
                 <h2 className="text-3xl font-bold tracking-tight text-white">Dashboard</h2>
                 <p className="text-zinc-400">
                     Here's an overview of your projects and tasks.
-                    {lastUpdated && (
-                        <span className="ml-2 text-zinc-500 text-sm">
-                            Updated {formatLastUpdated(lastUpdated)}
-                        </span>
-                    )}
                 </p>
             </div>
 
@@ -72,8 +41,6 @@ const DashboardHeader = memo(function DashboardHeader({
                     <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
                     System Online
                 </Badge>
-
-
 
                 {/* Quick Actions Dropdown */}
                 <DropdownMenu>

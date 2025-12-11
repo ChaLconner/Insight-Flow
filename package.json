@@ -5,7 +5,16 @@
   "main": "index.js",
   "scripts": {
     "dev": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn main:app --reload",
     "build": "cd frontend && npm run build",
-    "start": "cd backend && python start.py"
+    "start": "cd backend && python start.py",
+    "lint": "cd frontend && npm run lint",
+    "lint:fix": "cd frontend && npm run lint:fix",
+    "lint:check": "cd frontend && npm run lint:check",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm test",
+    "test:backend": "cd backend && pytest",
+    "type-check": "cd frontend && npm run type-check",
+    "check:all": "npm run type-check && npm run lint:check && npm run test"
   }
 }

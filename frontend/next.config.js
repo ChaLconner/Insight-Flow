@@ -34,6 +34,9 @@ const nextConfig = {
             'clsx',
             'tailwind-merge'
         ],
+        // CSS optimizations for faster critical path
+        inlineCss: true, // Inline critical CSS to avoid render-blocking requests
+        cssChunking: 'loose', // More aggressive CSS code-splitting
     },
 
     // Performance optimizations

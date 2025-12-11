@@ -40,6 +40,7 @@ const DeleteTaskModal = dynamic(() => import('@/components/modals/DeleteTaskModa
 
 export interface TaskListRef {
     refresh: () => void;
+    openNewTaskModal: () => void;
 }
 
 interface TaskListProps {
@@ -105,14 +106,14 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
 
-        if (searchQuery) params.set("search", searchQuery);
-        else params.delete("search");
+        if (searchQuery) { params.set("search", searchQuery); }
+        else { params.delete("search"); }
 
-        if (statusFilter !== "all") params.set("status", statusFilter);
-        else params.delete("status");
+        if (statusFilter !== "all") { params.set("status", statusFilter); }
+        else { params.delete("status"); }
 
-        if (page > 1) params.set("page", page.toString());
-        else params.delete("page");
+        if (page > 1) { params.set("page", page.toString()); }
+        else { params.delete("page"); }
 
         // Use string comparison to avoid unnecessary updates
         const currentString = searchParams.toString();
@@ -154,6 +155,10 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
     useImperativeHandle(ref, () => ({
         refresh: () => {
             refetch();
+        },
+        openNewTaskModal: () => {
+            setEditingTask(null);
+            setIsNewTaskModalOpen(true);
         }
     }));
 
@@ -183,7 +188,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                     setOpenMenuId(null);
                     setIsDeleteModalOpen(false);
                     setTaskToDelete(null);
-                    if (onTaskChange) onTaskChange();
+                    if (onTaskChange) { onTaskChange(); }
                 }
             });
         }
@@ -197,7 +202,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
     // Close menu when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (!openMenuId) return;
+            if (!openMenuId) { return; }
 
             // Handle text nodes (e.g. clicking text inside button)
             let target = event.target as Node;
@@ -404,7 +409,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(({
                     queryClient.invalidateQueries({ queryKey: ['tasks'] });
                     setIsNewTaskModalOpen(false);
                     setEditingTask(null);
-                    if (onTaskChange) onTaskChange();
+                    if (onTaskChange) { onTaskChange(); }
                 }}
                 defaultProjectId={projectId}
                 task={editingTask}

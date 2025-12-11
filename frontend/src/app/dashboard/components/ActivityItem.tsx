@@ -29,9 +29,9 @@ interface ActivityItemProps {
 }
 
 const ActivityItem = memo(function ActivityItem({ activity, isLast }: ActivityItemProps) {
-    const userName = activity.user?.name || 'Unknown User';
+    const userName = activity.user?.name ?? 'Unknown User';
     const userAvatar = activity.user?.avatar;
-    const activityTime = activity.time || activity.timestamp;
+    const activityTime = activity.time ?? activity.timestamp;
 
     // Get initials from name
     const userInitials = userName
@@ -46,7 +46,7 @@ const ActivityItem = memo(function ActivityItem({ activity, isLast }: ActivityIt
         : activity.project?.name;
 
     // Target to display
-    const displayTarget = activity.target || projectName || '';
+    const displayTarget = activity.target ?? projectName ?? '';
 
     // Format time
     const formattedTime = activityTime
@@ -78,7 +78,9 @@ const ActivityItem = memo(function ActivityItem({ activity, isLast }: ActivityIt
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = 'none';
                                     const next = target.parentElement?.nextElementSibling;
-                                    if (next) next.classList.remove('hidden');
+                                    if (next) {
+                                        next.classList.remove('hidden');
+                                    }
                                 }}
                             />
                         </div>

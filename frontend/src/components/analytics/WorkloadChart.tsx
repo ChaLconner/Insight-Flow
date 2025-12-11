@@ -6,7 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight, Search, Users, SortAsc, SortDesc } from 'lucide-react';
-import { TeamWorkloadPaginatedResponse, TeamWorkloadParams } from '@/app/analytics/types';
+import type { TeamWorkloadPaginatedResponse, TeamWorkloadParams } from '@/app/analytics/types';
 
 interface WorkloadChartProps {
     data: { name: string; avatar?: string; tasks: number }[];

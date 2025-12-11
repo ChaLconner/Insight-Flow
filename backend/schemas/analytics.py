@@ -1,5 +1,5 @@
 from typing import List, Optional, Any, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from enum import Enum
 
@@ -85,8 +85,7 @@ class TeamWorkloadPaginatedResponse(BaseModel):
     has_next: bool = Field(default=False, description="Whether there are more pages")
     has_prev: bool = Field(default=False, description="Whether there are previous pages")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class DailyTrend(BaseModel):
     """Daily task creation/completion trend"""
@@ -119,5 +118,4 @@ class AnalyticsOverviewResponse(BaseModel):
     teamWorkload: List[TeamWorkload] = []
     dailyTrends: List[DailyTrend] = []
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

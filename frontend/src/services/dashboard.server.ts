@@ -20,7 +20,7 @@ export async function getDashboardData() {
         });
 
         if (!res.ok) {
-            if (res.status === 401) return null;
+            if (res.status === 401) {return null;}
             throw new Error('Failed to fetch dashboard data');
         }
 

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { AnalyticsPeriod } from "@/types";
 import { useAnalytics, useTeamWorkload } from "@/hooks/use-analytics";
-import { TeamWorkloadParams } from "@/app/analytics/types";
+import type { TeamWorkloadParams } from "@/app/analytics/types";
 
 // Components
 import { AnalyticsHeader } from "@/components/analytics/AnalyticsHeader";

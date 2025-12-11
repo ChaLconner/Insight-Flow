@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, BarChart3 } from "lucide-react";
-import { AnalyticsProject } from "@/app/analytics/types";
+import type { AnalyticsProject } from "@/app/analytics/types";
 import { getVelocityBadge } from "@/utils/analytics-helpers";
 
 interface ProjectListProps {

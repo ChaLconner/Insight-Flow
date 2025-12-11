@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Search, Plus, UserPlus } from "lucide-react";
-import { UserRole } from "@/types";
+import type { UserRole } from "@/types";
 
 interface EmptyStateProps {
     searchQuery: string;

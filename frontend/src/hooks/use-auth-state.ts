@@ -267,7 +267,7 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
 
     const checkSession = () => {
       // Don't check if hidden (optimization)
-      if (document.hidden) return;
+      if (document.hidden) {return;}
 
       if (!checkAuthStatus()) {
         // Session expired

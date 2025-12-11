@@ -30,14 +30,17 @@ const DashboardSkeleton = memo(function DashboardSkeleton() {
 // Sub-components for better organization and potential selective rendering
 const WelcomeSectionSkeleton = memo(function WelcomeSectionSkeleton() {
     return (
-        <div className="flex items-center justify-between">
-            <div className="space-y-2">
-                <Skeleton className="h-8 w-48" />
-                <Skeleton className="h-4 w-64" />
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+                {/* Show actual text immediately for LCP optimization */}
+                <h2 className="text-3xl font-bold tracking-tight text-white">Dashboard</h2>
+                <p className="text-zinc-400">
+                    Here's an overview of your projects and tasks.
+                </p>
             </div>
-            <div className="flex gap-3">
-                <Skeleton className="h-10 w-28" />
-                <Skeleton className="h-10 w-32" />
+            <div className="flex items-center gap-2 flex-wrap">
+                <Skeleton className="h-7 w-28" />
+                <Skeleton className="h-9 w-32" />
             </div>
         </div>
     );

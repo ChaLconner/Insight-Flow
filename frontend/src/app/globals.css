@@ -246,9 +246,6 @@ body {
 
 .btn-glass:hover {
   background: rgba(255, 255, 255, 0.2);
-}
-
-.btn-glass:hover {
   transform: translateY(-1px);
   box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.5);
 }

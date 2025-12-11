@@ -4,7 +4,7 @@ import { Search, Loader2, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { usersApi } from "@/lib/api-endpoints";
-import { User as UserType } from "@/types";
+import type { User as UserType } from "@/types";
 import { getAvatarUrl } from "@/lib/utils";
 
 interface UserSearchSelectProps {
@@ -101,7 +101,7 @@ export function UserSearchSelect({ value, onChange, onUserSelect, className, pla
                             onClick={() => handleSelect(user)}
                             className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-white/10 transition-colors cursor-pointer"
                         >
-                            <div className="h-8 w-8 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center shrink-0">
+                            <div className="relative h-8 w-8 rounded-full bg-zinc-800 overflow-hidden flex items-center justify-center shrink-0">
                                 {user.avatar ? (
                                     <Image
                                         src={getAvatarUrl(user.avatar)}

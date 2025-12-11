@@ -18,7 +18,7 @@ const DashboardError = memo(function DashboardError({
 }: DashboardErrorProps) {
     const errorMessage = typeof error === 'string'
         ? error
-        : error?.message || 'An unexpected error occurred';
+        : error?.message ?? 'An unexpected error occurred';
 
     return (
         <div

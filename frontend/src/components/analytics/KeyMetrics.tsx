@@ -1,9 +1,10 @@
 
 import React, { memo, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Target, Activity, Clock, BarChart3, LucideIcon } from "lucide-react";
-import { AnalyticsPeriod } from "@/types";
-import { AnalyticsOverview, AnalyticsTrend } from "@/app/analytics/types";
+import type { LucideIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Activity, Clock, BarChart3 } from "lucide-react";
+import type { AnalyticsPeriod } from "@/types";
+import type { AnalyticsOverview, AnalyticsTrend } from "@/app/analytics/types";
 import { getPeriodLabel } from "@/utils/analytics-helpers";
 
 interface KeyMetricsProps {

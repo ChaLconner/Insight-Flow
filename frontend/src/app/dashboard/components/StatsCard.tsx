@@ -2,7 +2,8 @@
 
 import React, { memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowUpRight, ArrowDownRight, LucideIcon } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // Static class names extracted for better performance
 const CARD_CLASSES = "border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors cursor-pointer";
@@ -47,7 +48,7 @@ const StatsCard = memo(function StatsCard({
                         ) : (
                             <ArrowDownRight className="h-3 w-3 mr-1" />
                         )}
-                        {change || '0%'}
+                        {change ?? '0%'}
                     </span>
                     <span className="text-xs text-zinc-500">from last month</span>
                 </div>

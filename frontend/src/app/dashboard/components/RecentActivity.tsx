@@ -2,7 +2,8 @@
 
 import React, { memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ActivityItem, ActivityItemData } from "./ActivityItem";
+import { ActivityItem } from "./ActivityItem";
+import type { ActivityItemData } from "./ActivityItem";
 
 interface RecentActivityProps {
     activities: ActivityItemData[];

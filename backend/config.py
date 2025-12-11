@@ -2,7 +2,7 @@
 Application configuration management using Pydantic Settings.
 Provides type-safe, validated configuration with environment variable support.
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
 from typing import List, Optional
 from functools import lru_cache
@@ -17,9 +17,7 @@ class DatabaseSettings(BaseSettings):
     pool_recycle: int = Field(default=300, alias="DB_POOL_RECYCLE")
     echo: bool = Field(default=False, alias="DB_ECHO")
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 class AuthSettings(BaseSettings):
@@ -44,9 +42,7 @@ class AuthSettings(BaseSettings):
             raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 class CORSSettings(BaseSettings):
@@ -65,9 +61,7 @@ class CORSSettings(BaseSettings):
     def origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.origins.split(",")]
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 class CacheSettings(BaseSettings):
@@ -76,9 +70,7 @@ class CacheSettings(BaseSettings):
     default_timeout: int = Field(default=60, alias="CACHE_DEFAULT_TIMEOUT")
     redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 class LoggingSettings(BaseSettings):
@@ -102,9 +94,7 @@ class LoggingSettings(BaseSettings):
             raise ValueError("LOG_FORMAT must be 'text' or 'json'")
         return v.lower()
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 class AppSettings(BaseSettings):
@@ -147,9 +137,7 @@ class AppSettings(BaseSettings):
     def allowed_hosts_list(self) -> List[str]:
         return [host.strip() for host in self.allowed_hosts.split(",")]
     
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 @lru_cache()

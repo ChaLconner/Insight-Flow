@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { User } from "@/types";
-import { UserRole } from "@/types";
+import type { UserRole } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
 import { usersApi } from "@/lib/api-endpoints";
 import { toast } from "sonner";
@@ -92,14 +92,14 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
 
     // Load users
     const loadUsers = useCallback(async (forceRefresh = false) => {
-        if (!isAuthenticated) return;
+        if (!isAuthenticated) {return;}
 
         const now = Date.now();
         if (!forceRefresh && now - lastLoadTime.current < 500 && dataFetched) {
             return;
         }
 
-        if (isLoadingRef.current) return;
+        if (isLoadingRef.current) {return;}
 
         try {
             isLoadingRef.current = true;
@@ -148,7 +148,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
 
     // Initial load
     useEffect(() => {
-        if (isLoading) return;
+        if (isLoading) {return;}
         if (isAuthenticated) {
             loadUsers();
         }

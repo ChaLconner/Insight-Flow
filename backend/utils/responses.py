@@ -3,7 +3,7 @@ Standardized API response utilities.
 Provides consistent response format across all API endpoints.
 """
 from typing import Any, Optional, List, Dict, TypeVar, Generic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 from fastapi.responses import JSONResponse
 from fastapi import status
@@ -22,11 +22,6 @@ class APIResponse(BaseModel, Generic[T]):
     errors: Optional[List[Dict[str, Any]]] = Field(default=None, description="Validation or error details")
     meta: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
 
 
 class PaginatedResponse(APIResponse[T], Generic[T]):

@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -35,20 +37,31 @@ const buttonVariants = cva(
   }
 )
 
+import { motion, HTMLMotionProps } from "framer-motion"
+
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends Omit<HTMLMotionProps<"button">, "ref" | "children">,
   VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  children?: React.ReactNode
 }
+
+
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
+    const Comp = asChild ? Slot : motion.button
+    const motionProps = !asChild ? {
+      whileTap: { scale: 0.95 },
+      whileHover: { scale: 1.02, transition: { duration: 0.1 } }
+    } : {}
+
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        {...props}
+        {...motionProps}
+        {...(props as any)}
       />
     )
   }

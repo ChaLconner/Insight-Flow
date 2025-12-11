@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksApi } from '@/lib/api-endpoints';
-import { Task, TaskListResponse } from '@/types';
+import type { Task, TaskListResponse } from '@/types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
 import { useAuthStore } from '@/stores/auth-store';
@@ -122,7 +122,7 @@ export const useTasks = ({
 
             if (previousData) {
                 queryClient.setQueryData<TaskListResponse>(queryKey, (old) => {
-                    if (!old) return old;
+                    if (!old) {return old;}
                     return {
                         ...old,
                         items: old.items.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t)
@@ -157,7 +157,7 @@ export const useTasks = ({
 
             if (previousData) {
                 queryClient.setQueryData<TaskListResponse>(queryKey, (old) => {
-                    if (!old) return old;
+                    if (!old) {return old;}
                     return {
                         ...old,
                         items: old.items.filter(t => t.id !== deletedTask.id),

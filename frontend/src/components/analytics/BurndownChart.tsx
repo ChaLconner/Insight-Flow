@@ -4,7 +4,7 @@
 import React, { useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { BurndownDataPoint } from "@/app/analytics/types";
+import type { BurndownDataPoint } from "@/app/analytics/types";
 
 import { AnalyticsPeriod } from "@/types";
 

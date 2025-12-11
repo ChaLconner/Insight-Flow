@@ -1,5 +1,5 @@
 import type { User } from "@/types";
-import { UserRole } from "@/types";
+import type { UserRole } from "@/types";
 
 /**
  * User statistics data structure

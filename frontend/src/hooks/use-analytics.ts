@@ -1,9 +1,9 @@
 
 // React Query automatically handles window focus and background refetching optimizations.
 import { useQuery } from '@tanstack/react-query';
-import { AnalyticsPeriod } from "@/types";
+import type { AnalyticsPeriod } from "@/types";
 import { analyticsApi } from "@/lib/api-endpoints";
-import { AnalyticsResponse, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from '@/app/analytics/types';
+import type { AnalyticsResponse, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from '@/app/analytics/types';
 
 export function useAnalytics(period: AnalyticsPeriod) {
     return useQuery<AnalyticsResponse>({

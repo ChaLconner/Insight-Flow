@@ -1,10 +1,8 @@
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Skeleton } from "@/components/ui/skeleton";
 import { serverApi } from "@/lib/api-server";
-import { ProjectDetailsClient } from "@/components/projects/ProjectDetailsClient";
 import type { Metadata } from 'next';
+import { TaskDetails } from "@/components/tasks/TaskDetails";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -13,29 +11,33 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
     try {
         const { id } = await params;
-        const project = await serverApi.getProject(id);
+        const task = await serverApi.getTask(id);
         return {
-            title: `${project.name} | Insight Flow`,
-            description: project.description,
+            title: `${task.title} | Insight Flow`,
+            description: task.description,
         };
-    } catch (e) {
+    } catch (_e) {
         return {
-            title: 'Project Not Found | Insight Flow',
+            title: 'Task Not Found | Insight Flow',
         };
     }
 }
 
-export default async function ProjectDetailsPage({ params }: PageProps) {
+export default async function TaskDetailsPage({ params }: PageProps) {
     try {
         const { id } = await params;
-        const project = await serverApi.getProject(id);
+        const task = await serverApi.getTask(id);
 
         return (
             <DashboardLayout>
-                <ProjectDetailsClient project={project} />
+                <TaskDetails
+                    task={task}
+                    backLink="/tasks"
+                    backLabel="Back to Tasks"
+                />
             </DashboardLayout>
         );
-    } catch (error) {
+    } catch (_error) {
         notFound();
     }
 }

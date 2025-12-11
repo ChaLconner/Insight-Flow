@@ -4,7 +4,8 @@ import React, { memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Briefcase } from "lucide-react";
-import { ProjectCard, ProjectCardProject } from "./ProjectCard";
+import { ProjectCard } from "./ProjectCard";
+import type { ProjectCardProject } from "./ProjectCard";
 import Link from "next/link";
 
 interface RecentProjectsProps {

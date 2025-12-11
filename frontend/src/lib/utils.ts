@@ -533,7 +533,7 @@ export function memoize<T extends (...args: Parameters<T>) => ReturnType<T>>(
  * @returns Full URL ที่พร้อมใช้งาน
  */
 export function getAvatarUrl(avatarUrl?: string): string {
-  if (!avatarUrl) return '';
+  if (!avatarUrl) {return '';}
 
   // ถ้าเป็น full URL อยู่แล้ว ให้ใช้เลย
   if (avatarUrl.startsWith('http') || avatarUrl.startsWith('blob:')) {

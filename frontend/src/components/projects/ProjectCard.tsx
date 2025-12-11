@@ -13,7 +13,8 @@ import {
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Project, ProjectStatus } from "@/types";
+import type { Project} from "@/types";
+import { ProjectStatus } from "@/types";
 import { motion } from "framer-motion";
 
 interface ProjectCardProps {
@@ -38,7 +39,7 @@ const getStatusBadge = (status: ProjectStatus) => {
 };
 
 const getProgressPercentage = (stats?: Project["stats"]) => {
-    if (!stats?.totalTasks) return 0;
+    if (!stats?.totalTasks) {return 0;}
     return Math.round((stats.completedTasks / stats.totalTasks) * 100);
 };
 

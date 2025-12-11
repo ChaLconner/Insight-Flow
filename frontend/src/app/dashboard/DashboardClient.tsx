@@ -114,7 +114,7 @@ export default function DashboardClient() {
     }, [data?.stats]);
 
     const projectsData = useMemo<ProjectCardProject[]>(() => {
-        if (!data?.recentProjects) return EMPTY_ARRAY;
+        if (!data?.recentProjects) { return EMPTY_ARRAY; }
         // Limit to 6 projects to prevent hydration blocking
         return data.recentProjects.slice(0, 6).map((project) => ({
             id: project.id,
@@ -127,7 +127,7 @@ export default function DashboardClient() {
     }, [data?.recentProjects]);
 
     const activitiesData = useMemo<ActivityItemData[]>(() => {
-        if (!data?.recentActivities) return EMPTY_ARRAY;
+        if (!data?.recentActivities) { return EMPTY_ARRAY; }
         // Limit to 10 activities to prevent hydration blocking
         return data.recentActivities.slice(0, 10);
     }, [data?.recentActivities]);
@@ -183,11 +183,7 @@ export default function DashboardClient() {
 
                 <main id="main-content" className="space-y-8">
                     {/* Welcome Section with Refresh and Quick Actions */}
-                    <DashboardHeader
-                        onRefresh={handleRefresh}
-                        isRefetching={isFetching}
-                        lastUpdated={lastUpdated}
-                    />
+                    <DashboardHeader />
 
                     {/* Background refetch indicator */}
                     {isFetching && data && (
