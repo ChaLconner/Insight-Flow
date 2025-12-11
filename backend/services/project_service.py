@@ -12,6 +12,12 @@ from schemas.project import ProjectCreate, ProjectUpdate, ProjectMemberCreate, P
 from schemas.user import UserResponse
 import uuid
 from utils.logger import logger
+from models.analytics import (
+    ProjectAnalytics, UserProductivity, TaskTimeTracking, 
+    ProjectMilestone, TaskDependency, TaskComment, 
+    TaskAttachment, ProjectTagAssociation
+)
+from models.task_history import TaskHistory
 
 class ProjectService:
     """Service class for project operations."""
@@ -445,18 +451,42 @@ class ProjectService:
         if not project:
             raise ValueError("Project not found")
         
-        # Only owner can delete project
-        if project.owner_id != user_id:
+        # Only owner OR system admin can delete project
+        is_system_admin = False
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if user and user.role == 'admin':
+            is_system_admin = True
+
+        if project.owner_id != user_id and not is_system_admin:
+            logger.error(f"User {user_id} is not owner or system admin of project {project_id}")
             raise ValueError("Only project owners can delete projects")
         
         try:
-            # First delete all project members
+            # 1. Delete direct project children
             self.db.query(ProjectMember).filter(ProjectMember.project_id == project_id).delete()
+            self.db.query(TaskHistory).filter(TaskHistory.project_id == project_id).delete()
+            self.db.query(ProjectAnalytics).filter(ProjectAnalytics.project_id == project_id).delete()
+            self.db.query(UserProductivity).filter(UserProductivity.project_id == project_id).delete()
+            self.db.query(ProjectMilestone).filter(ProjectMilestone.project_id == project_id).delete()
+            self.db.query(ProjectTagAssociation).filter(ProjectTagAssociation.project_id == project_id).delete()
             
-            # Then delete all tasks associated with project
-            self.db.query(Task).filter(Task.project_id == project_id).delete()
+            # 2. Delete task children (Comments, Attachments, TimeTracking, Dependencies)
+            subquery_tasks = self.db.query(Task.id).filter(Task.project_id == project_id)
+
+            self.db.query(TaskComment).filter(TaskComment.task_id.in_(subquery_tasks)).delete(synchronize_session=False)
+            self.db.query(TaskAttachment).filter(TaskAttachment.task_id.in_(subquery_tasks)).delete(synchronize_session=False)
+            self.db.query(TaskTimeTracking).filter(TaskTimeTracking.task_id.in_(subquery_tasks)).delete(synchronize_session=False)
+
+            # Dependencies: check both task_id and depends_on_task_id
+            self.db.query(TaskDependency).filter(
+                (TaskDependency.task_id.in_(subquery_tasks)) | 
+                (TaskDependency.depends_on_task_id.in_(subquery_tasks))
+            ).delete(synchronize_session=False)
             
-            # Finally delete project
+            # 3. Delete tasks
+            self.db.query(Task).filter(Task.project_id == project_id).delete(synchronize_session=False)
+            
+            # 4. Finally delete project
             self.db.delete(project)
             self.db.commit()
             return True
@@ -703,7 +733,16 @@ class ProjectService:
     
     def is_project_member(self, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Check if user is a member of project."""
-        # Optimized: Check directly in ProjectMember table. 
+        # Check if user is owner
+        is_owner = self.db.query(Project.id).filter(
+            Project.id == project_id,
+            Project.owner_id == user_id
+        ).first() is not None
+        
+        if is_owner:
+            return True
+
+        # Check directly in ProjectMember table. 
         # This covers both regular members and owners (as owners are added as members)
         return self.db.query(ProjectMember.id).filter(
             ProjectMember.project_id == project_id,
@@ -712,7 +751,21 @@ class ProjectService:
     
     def is_project_admin(self, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Check if user is owner or admin of project."""
-        # Optimized: Check directly in ProjectMember table for OWNER or ADMIN role
+        # Check system admin role
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if user and user.role == 'admin':
+            return True
+
+        # Check if user is owner
+        is_owner = self.db.query(Project.id).filter(
+            Project.id == project_id,
+            Project.owner_id == user_id
+        ).first() is not None
+        
+        if is_owner:
+            return True
+
+        # Check directly in ProjectMember table for OWNER or ADMIN role
         return self.db.query(ProjectMember.id).filter(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user_id,

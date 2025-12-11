@@ -16,6 +16,8 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 import { ArrowLeft, Save, Trash2 } from "lucide-react";
 
+import { DeleteProjectModal } from "@/components/modals/DeleteProjectModal";
+
 export default function ProjectSettingsPage() {
     const params = useParams();
     const router = useRouter();
@@ -28,6 +30,9 @@ export default function ProjectSettingsPage() {
     // Form state
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
+
+    // Modal state
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
     useEffect(() => {
         const fetchProject = async () => {
@@ -70,9 +75,12 @@ export default function ProjectSettingsPage() {
         }
     };
 
-    const handleDelete = async () => {
+    const handleDeleteClick = () => {
+        setIsDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
         if (!project) { return; }
-        if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) { return; }
 
         try {
             setSaving(true);
@@ -81,9 +89,9 @@ export default function ProjectSettingsPage() {
             router.push("/projects");
         } catch (err) {
             console.error("Failed to delete project:", err);
-            setError("Failed to delete project");
             toast.error("Failed to delete project", { description: getErrorMessage(err) });
             setSaving(false);
+            setIsDeleteModalOpen(false);
         }
     };
 
@@ -190,7 +198,7 @@ export default function ProjectSettingsPage() {
                             </div>
                             <Button
                                 variant="destructive"
-                                onClick={handleDelete}
+                                onClick={handleDeleteClick}
                                 disabled={saving}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -200,6 +208,14 @@ export default function ProjectSettingsPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <DeleteProjectModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                project={project}
+                isDeleting={saving}
+            />
         </DashboardLayout>
     );
 }

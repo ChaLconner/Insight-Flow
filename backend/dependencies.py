@@ -29,6 +29,10 @@ class ProjectPermission:
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        # Check system admin role
+        if current_user.role == "admin":
+            return project
+
         if project.owner_id == current_user.id:
             return project # Owners always have access
 
