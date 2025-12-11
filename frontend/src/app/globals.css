@@ -1,0 +1,628 @@
+
+@import "tailwindcss";
+
+/* Tell Tailwind v4 where to look for classes */
+@source "../**/*.{ts,tsx}";
+@source "../../components/**/*.{ts,tsx}";
+
+/* Tailwind v4 Theme Configuration */
+@theme {
+  /* Colors */
+  --color-primary: hsl(239 84% 67%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(215 28% 17%);
+  --color-secondary-foreground: hsl(210 40% 98%);
+  --color-background: hsl(222.2 84% 4.9%);
+  --color-foreground: hsl(210 40% 98%);
+  --color-card: hsl(222.2 84% 4.9%);
+  --color-card-foreground: hsl(210 40% 98%);
+  --color-popover: hsl(222.2 84% 4.9%);
+  --color-popover-foreground: hsl(210 40% 98%);
+  --color-muted: hsl(215 28% 17%);
+  --color-muted-foreground: hsl(215 20.2% 65.1%);
+  --color-accent: hsl(215 28% 17%);
+  --color-accent-foreground: hsl(210 40% 98%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(215 28% 17%);
+  --color-input: hsl(215 28% 17%);
+  --color-ring: hsl(239 84% 67%);
+
+  /* Additional colors for success, warning, info */
+  --color-success: hsl(142 76% 36%);
+  --color-warning: hsl(38 92% 50%);
+  --color-error: hsl(0 84% 60%);
+  --color-info: hsl(199 89% 48%);
+
+  /* Border radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius: 0.75rem;
+
+  /* Fonts */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* CSS Variables for Insight Flow Theme */
+:root {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 215 28% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 215 28% 17%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 215 28% 17%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 215 28% 17%;
+  --input: 215 28% 17%;
+  --ring: 239 84% 67%;
+  --radius: 0.75rem;
+
+  /* Glass morphism colors (Dark Mode Default) */
+  --glass-light: 0 0% 100% / 3%;
+  --glass-medium: 0 0% 100% / 7%;
+  --glass-dark: 0 0% 0% / 20%;
+  --glass-border: 0 0% 100% / 8%;
+  --glass-border-light: 0 0% 100% / 4%;
+
+  /* Insight Flow specific colors */
+  --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --secondary-gradient: linear-gradient(135deg, #3b82f6 0%, #2dd4bf 100%);
+  --success-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  --error-gradient: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+}
+
+.light {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 243 75% 59%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 84% 4.9%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222.2 84% 4.9%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 243 75% 59%;
+
+  /* Light mode glass colors */
+  --glass-light: 0 0% 100% / 5%;
+  --glass-medium: 0 0% 100% / 10%;
+  --glass-dark: 0 0% 0% / 5%;
+  --glass-border: 0 0% 100% / 20%;
+  --glass-border-light: 0 0% 100% / 10%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  font-feature-settings: "rlig" 1, "calt" 1;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Override browser autofill styling for dark theme */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus,
+select:-webkit-autofill:active {
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: white !important;
+  background-color: rgba(39, 39, 42, 0.5) !important;
+  box-shadow: inset 0 0 20px 20px rgba(39, 39, 42, 0.5) !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+  caret-color: white !important;
+}
+
+/* Glass morphism base styles */
+.glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+.dark .glass {
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Global Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Firefox support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+/* Utility class for specific containers if needed */
+.custom-scrollbar {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Smooth transitions */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 300ms;
+}
+
+/* Focus styles */
+.focus-ring {
+  outline: none;
+}
+
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+/* Glass morphism variants */
+.glass-nav {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.2);
+}
+
+.dark .glass-nav {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-card {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+.glass-modal {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 16px 40px 0 rgba(31, 38, 135, 0.5);
+}
+
+.glass-strong {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  background: rgba(15, 23, 42, 0.95);
+  /* High opacity for visibility */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px 0 rgba(0, 0, 0, 0.6);
+}
+
+.light .glass-strong {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 20px 40px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Button hover effects */
+.btn-glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  transition: all 300ms;
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.5);
+}
+
+/* Card hover animations */
+.card-hover {
+  transition: all 300ms;
+}
+
+.card-hover:hover {
+  transform: scale(1.05);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.card-glass {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 300ms;
+}
+
+.card-glass:hover {
+  transform: scale(1.05);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* Loading shimmer effect */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Text gradient */
+.text-gradient {
+  background: var(--primary-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Background pattern */
+.bg-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(59, 130, 246, 0.15) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Form styles */
+.form-input {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: hsl(var(--foreground));
+}
+
+.form-input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.form-input:focus {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.5);
+  outline: none;
+}
+
+/* Button variants */
+.btn-primary {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: all 200ms;
+}
+
+.btn-primary:hover {
+  background-color: hsl(var(--primary) / 0.9);
+}
+
+.btn-primary:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+.btn-secondary {
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: all 200ms;
+}
+
+.btn-secondary:hover {
+  background-color: hsl(var(--secondary) / 0.8);
+}
+
+.btn-secondary:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+.btn-ghost {
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  transition: all 200ms;
+}
+
+.btn-ghost:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.btn-ghost:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+.btn-glass-primary {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.3);
+  transition: all 300ms;
+}
+
+.btn-glass-primary:hover {
+  background: hsl(var(--primary) / 0.3);
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+/* Status indicators */
+.status-online {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: hsl(142 76% 36%);
+  border-radius: 9999px;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.status-offline {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: hsl(var(--muted-foreground));
+  border-radius: 9999px;
+}
+
+.status-busy {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: hsl(var(--destructive));
+  border-radius: 9999px;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Priority indicators */
+.priority-high {
+  color: hsl(var(--destructive));
+  background-color: hsl(var(--destructive) / 0.1);
+  border-color: hsl(var(--destructive) / 0.2);
+}
+
+.priority-medium {
+  color: hsl(38 92% 50%);
+  background-color: hsl(38 92% 50% / 0.1);
+  border-color: hsl(38 92% 50% / 0.2);
+}
+
+.priority-low {
+  color: hsl(142 76% 36%);
+  background-color: hsl(142 76% 36% / 0.1);
+  border-color: hsl(142 76% 36% / 0.2);
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Animation utilities */
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+
+.text-muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.text-primary-gradient {
+  background: var(--primary-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Responsive utilities */
+@media (max-width: 640px) {
+  .glass-card {
+    padding: 1rem;
+  }
+
+  .glass-nav {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+}
+
+/* Clickable elements cursor pointer */
+.clickable {
+  cursor: pointer;
+}
+
+/* Specific clickable elements */
+button {
+  cursor: pointer;
+}
+
+a {
+  cursor: pointer;
+}
+
+input[type="button"] {
+  cursor: pointer;
+}
+
+input[type="submit"] {
+  cursor: pointer;
+}
+
+input[type="radio"] {
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+select {
+  cursor: pointer;
+}
+
+label {
+  cursor: pointer;
+}
+
+/* Elements with click handlers */
+[role="button"] {
+  cursor: pointer;
+}
+
+[onclick] {
+  cursor: pointer;
+}

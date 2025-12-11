@@ -1,7 +1,7 @@
 """
 Base model with common fields for all database models.
 """
-from sqlalchemy import Column, DateTime, UUID
+from sqlalchemy import Column, DateTime, String, UUID
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 import uuid

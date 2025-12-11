@@ -1,34 +1,45 @@
 """
 Pydantic schemas for Insight-Flow application.
 """
-from .user import UserBase, UserCreate, UserUpdate, UserResponse, UserLogin, GoogleAuth
-from .project import ProjectBase, ProjectCreate, ProjectUpdate, ProjectResponse, ProjectMemberBase, ProjectMemberCreate, ProjectMemberResponse, ProjectWithMembers
-from .task import TaskBase, TaskCreate, TaskUpdate, TaskStatusUpdate, TaskAssign, TaskResponse, TaskWithDetails
-from .notification import NotificationBase, NotificationCreate, NotificationResponse
+from .user import UserCreate, UserLogin, UserResponse, Token, GoogleAuth
+from .project import ProjectCreate, ProjectUpdate, ProjectResponse, ProjectMemberResponse
+from .task import TaskCreate, TaskUpdate, TaskResponse
+from .notification import NotificationCreate, NotificationResponse
+from .password_reset import ForgotPasswordRequest, ForgotPasswordResponse, ResetPasswordRequest, ResetPasswordResponse
+from .dashboard import (
+    DashboardStatsResponse,
+    DashboardProjectResponse,
+    DashboardActivityResponse,
+    DashboardOverviewResponse,
+    TodayTaskResponse,
+    ActivityUserResponse,
+    ActivityProjectResponse,
+)
 
 __all__ = [
-    "UserBase",
-    "UserCreate", 
-    "UserUpdate",
+    "UserCreate",
+    "UserLogin", 
     "UserResponse",
-    "UserLogin",
+    "Token",
     "GoogleAuth",
-    "ProjectBase",
     "ProjectCreate",
     "ProjectUpdate",
     "ProjectResponse",
-    "ProjectMemberBase",
-    "ProjectMemberCreate",
     "ProjectMemberResponse",
-    "ProjectWithMembers",
-    "TaskBase",
     "TaskCreate",
     "TaskUpdate",
-    "TaskStatusUpdate",
-    "TaskAssign",
     "TaskResponse",
-    "TaskWithDetails",
-    "NotificationBase",
     "NotificationCreate",
     "NotificationResponse",
+    "ForgotPasswordRequest",
+    "ForgotPasswordResponse",
+    "ResetPasswordRequest",
+    "ResetPasswordResponse",
+    "DashboardStatsResponse",
+    "DashboardProjectResponse",
+    "DashboardActivityResponse",
+    "DashboardOverviewResponse",
+    "TodayTaskResponse",
+    "ActivityUserResponse",
+    "ActivityProjectResponse",
 ]

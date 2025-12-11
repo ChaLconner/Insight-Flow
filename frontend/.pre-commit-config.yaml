@@ -1,0 +1,76 @@
+# Pre-commit configuration for Insight Flow Frontend
+# See https://pre-commit.com for more information
+
+repos:
+  # TypeScript/JavaScript linter
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.9.0
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: npm run lint
+        language: node
+        types: [javascript, jsx, ts, tsx]
+        files: src/
+        pass_filenames: false
+        args: [--fix, --ext, .ts,.tsx]
+
+  # TypeScript type checking
+  - repo: https://github.com/pre-commit/mirrors-typescript
+    rev: v5.6.3
+    hooks:
+      - id: type-check
+        name: TypeScript Type Check
+        entry: npm run type-check
+        language: node
+        files: src/
+        pass_filenames: false
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        name: Remove trailing whitespace
+      - id: end-of-file-fixer
+        name: Fix end of files
+      - id: check-yaml
+        name: Check YAML files
+      - id: check-json
+        name: Check JSON files
+      - id: check-added-large-files
+        name: Check for large files
+        args: ['--maxkb=1000']
+
+  # Check package.json dependencies
+  - repo: local
+    hooks:
+      - id: check-package-json
+        name: Check package.json
+        entry: node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const deps = Object.keys({...pkg.dependencies, ...pkg.devDependencies});
+          if (deps.some(dep => dep.includes('deprecated'))) {
+            process.exit(1);
+          }
+        "
+        language: node
+        pass_filenames: false
+
+# Configuration
+fail_fast: false
+minimum_pre_commit_version: '3.0.0'
+
+# CI settings
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+    
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

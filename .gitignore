@@ -20,7 +20,7 @@ build/
 dist/
 
 # Environment files
-.env*
+.env
 .env.local
 .env.development.local
 .env.test.local
@@ -150,6 +150,13 @@ QUICK_START_GUIDE.md
 .roo/
 *_MCP_GUIDE.md
 
+# Additional temporary files to ignore
+DASHBOARD_ANALYTICS_IMPLEMENTATION.md
+PROJECT_ACCESS_FIX.md
+backend/create_test_user.py
+backend/utils/project_fix.py
+frontend/examples/
+
 # Temporary folders
 tmp/
 temp/
@@ -188,3 +195,29 @@ public
 # Storybook build outputs
 .out
 .storybook-out
+
+# Markdown files
+*.md
+!QA_REPORT.md
+
+# Specific markdown files to ensure they are ignored
+API_SPECIFICATION.md
+DASHBOARD_ANALYTICS_IMPLEMENTATION.md
+ARCHITECTURE.md
+
+# Kilo Code configuration
+.kilocode/
+
+# Test and debug files
+
+*debug_*.py
+test_*.html
+debug_*.html
+errors.txt
+
+# Backup files
+*.backup
+
+# Migration and utility scripts
+migrate_*.py
+reset_*.py

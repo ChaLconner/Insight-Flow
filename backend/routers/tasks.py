@@ -1,133 +1,32 @@
 """
 Task management router for CRUD operations.
 """
-from typing import List, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import List, Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from schemas.task import TaskResponse, TaskCreate, TaskUpdate, TaskWithDetails, TaskStatusUpdate, TaskAssign
-from models.task import Task
+from sqlalchemy import asc, desc
+from schemas.task import TaskResponse, TaskCreate, TaskUpdate, TaskWithDetails, TaskStatusUpdate, TaskAssign, TaskListResponse
+from models.task import Task, TaskStatus
 from models.user import User
 from services.task_service import TaskService
-from services.project_service import ProjectService
+
 from database import get_db
+from dependencies import get_authorized_task
 from routers.auth import get_current_active_user
+from utils.logger import setup_logger
+import uuid
 
-router = APIRouter(prefix="/tasks", tags=["task management"])
-
-@router.get("/", response_model=List[TaskResponse])
-def read_tasks(
-    skip: int = 0,
-    limit: int = 100,
-    project_id: str = Query(None, description="Filter by project ID"),
-    assignee_id: str = Query(None, description="Filter by assignee ID"),
-    status: str = Query(None, description="Filter by status"),
-    my_tasks: bool = Query(False, description="Filter to show only user's tasks"),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """
-    Retrieve tasks with pagination and optional filters.
-    """
-    import uuid
-    task_service = TaskService(db)
-    
-    # Convert string parameters to UUID if provided
-    project_uuid = uuid.UUID(project_id) if project_id else None
-    assignee_uuid = uuid.UUID(assignee_id) if assignee_id else None
-    status_enum = None
-    
-    if status:
-        try:
-            from models.task import TaskStatus
-            status_enum = TaskStatus(status)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid task status"
-            )
-    
-    # Get user's tasks if requested
-    if my_tasks:
-        tasks = task_service.get_user_tasks(current_user.id, skip=skip, limit=limit)
-    else:
-        tasks = task_service.get_tasks(
-            skip=skip, 
-            limit=limit, 
-            project_id=project_uuid, 
-            assignee_id=assignee_uuid, 
-            status=status_enum
-        )
-    
-    return tasks
-
-@router.post("/", response_model=TaskResponse)
-def create_task(
-    task_data: TaskCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """
-    Create a new task.
-    """
-    import uuid
-    task_service = TaskService(db)
-    project_service = ProjectService(db)
-    
-    # Check if user is a member of the project
-    if not project_service.is_project_member(task_data.project_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
-    
-    try:
-        task = task_service.create_task(task_data, current_user.id)
-        return task
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
-@router.get("/{task_id}", response_model=TaskWithDetails)
-def read_task(
-    task_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """
-    Get task by ID with full details.
-    """
-    import uuid
-    task_service = TaskService(db)
-    project_service = ProjectService(db)
-    
-    try:
-        task = task_service.get_task_by_id(uuid.UUID(task_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid task ID format"
-        )
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Task not found"
-        )
-    
-    # Check if user is a member of the project
-    if not project_service.is_project_member(task.project_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
-    
-    # Create response with full details
-    task_response = TaskWithDetails(
+def map_task_to_response(task: Task) -> TaskWithDetails:
+    """Helper to map Task model to TaskWithDetails schema with normalized status."""
+    # Properly handle TaskStatus enum conversion and ensure lowercase
+    status_value = str(task.status.value if hasattr(task.status, 'value') else task.status).lower()
+    status_value = status_value if status_value else 'todo'
+        
+    return TaskWithDetails(
         id=task.id,
         title=task.title,
         description=task.description,
-        status=task.status.value,
+        status=status_value,
         project_id=task.project_id,
         assignee_id=task.assignee_id,
         created_by=task.created_by,
@@ -136,41 +35,143 @@ def read_task(
         updated_at=task.updated_at,
         assignee=task.assignee,
         creator=task.creator,
-        project=task.project
+        project=task.project,
+        priority=task.priority.value if hasattr(task.priority, 'value') else task.priority,
+        type=task.type.value if hasattr(task.type, 'value') else task.type
+    )
+
+# The logger sends the logs to the root logger
+logger = setup_logger("tasks_router")
+router = APIRouter()
+
+# IMPORTANT: This route must be defined BEFORE /{task_id} to prevent "my" being captured as task_id
+@router.get("/my/tasks", response_model=TaskListResponse)
+def get_my_tasks(
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get tasks assigned to or created by current user.
+    """
+    task_service = TaskService(db)
+    tasks, total = task_service.get_user_tasks(
+        current_user.id,
+        skip=skip,
+        limit=limit,
+        search=search,
+        status=status
     )
     
-    return task_response
+    # Calculate pagination metadata
+    page = (skip // limit) + 1 if limit > 0 else 1
+    has_more = total > (skip + limit)
+    
+    # Convert tasks to response format with full details
+    items = [map_task_to_response(task) for task in tasks]
+    
+    return TaskListResponse(
+        items=items,
+        total=total,
+        page=page,
+        size=limit,
+        has_more=has_more
+    )
+
+@router.post("/", response_model=TaskResponse)
+def create_task(
+    task_data: TaskCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Create a new task.
+    """
+    task_service = TaskService(db)
+    
+    try:
+        task = task_service.create_task(task_data, current_user.id, background_tasks)
+        return task
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.get("/", response_model=TaskListResponse)
+def get_all_tasks(
+    skip: int = 0,
+    limit: int = 100,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+) -> Any:
+    """
+    Get all tasks the user has access to with optional filtering.
+    """
+    task_service = TaskService(db)
+    tasks, total = task_service.get_user_tasks(
+        current_user.id, 
+        skip=skip, 
+        limit=limit,
+        search=search,
+        status=status
+    )
+    
+    # Calculate pagination metadata
+    page = (skip // limit) + 1 if limit > 0 else 1
+    has_more = total > (skip + limit)
+    
+    # Convert tasks to response format with full details
+    items = [map_task_to_response(task) for task in tasks]
+    
+    return TaskListResponse(
+        items=items,
+        total=total,
+        page=page,
+        size=limit,
+        has_more=has_more
+    )
+
+@router.get("/{task_id}", response_model=TaskWithDetails)
+def read_task(
+    task: Task = Depends(get_authorized_task),
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Get task by ID with full details.
+    """
+    # The dependency already checked permissions, but we fetch again 
+    # with eager loading for performance (2 queries total vs 1 + 3 lazy loads)
+    task_service = TaskService(db)
+    detailed_task = task_service.get_task_with_details(task.id)
+    
+    if not detailed_task:
+        # Should not happen given dependency check
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    return TaskWithDetails.model_validate(detailed_task)
 
 @router.put("/{task_id}", response_model=TaskResponse)
 def update_task(
-    task_id: str,
     task_data: TaskUpdate,
+    task: Task = Depends(get_authorized_task),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """
     Update task information.
     """
-    import uuid
     task_service = TaskService(db)
-    project_service = ProjectService(db)
-    
-    # Check if user is a member of the project
-    try:
-        task = task_service.get_task_by_id(uuid.UUID(task_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid task ID format"
-        )
-    if task and not project_service.is_project_member(task.project_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
     
     try:
-        updated_task = task_service.update_task(uuid.UUID(task_id), task_data, current_user.id)
+        # Note: task is already fetched and checked for basic membership access by dependency
+        updated_task = task_service.update_task(task.id, task_data, current_user.id)
         return updated_task
     except ValueError as e:
         raise HTTPException(
@@ -180,33 +181,17 @@ def update_task(
 
 @router.delete("/{task_id}")
 def delete_task(
-    task_id: str,
+    task: Task = Depends(get_authorized_task),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """
     Delete a task.
     """
-    import uuid
     task_service = TaskService(db)
-    project_service = ProjectService(db)
-    
-    # Check if user is a member of the project
-    try:
-        task = task_service.get_task_by_id(uuid.UUID(task_id))
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid task ID format"
-        )
-    if task and not project_service.is_project_member(task.project_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
     
     try:
-        task_service.delete_task(uuid.UUID(task_id), current_user.id)
+        task_service.delete_task(task.id, current_user.id)
         return {"message": "Task deleted successfully"}
     except ValueError as e:
         raise HTTPException(
@@ -216,40 +201,29 @@ def delete_task(
 
 @router.put("/{task_id}/status", response_model=TaskResponse)
 def update_task_status(
-    task_id: str,
-    status_update: TaskStatusUpdate,
+    status_data: dict,
+    task: Task = Depends(get_authorized_task),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """
     Update task status.
     """
-    import uuid
     task_service = TaskService(db)
-    project_service = ProjectService(db)
     
-    # Check if user is a member of the project
-    try:
-        try:
-            task = task_service.get_task_by_id(uuid.UUID(task_id))
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid task ID format"
-            )
-    except ValueError:
+    # Extract status from request body
+    status = status_data.get("status")
+    if not status:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid task ID format"
-        )
-    if task and not project_service.is_project_member(task.project_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status is required"
         )
     
+    # Create TaskStatusUpdate object
+    status_update = TaskStatusUpdate(status=status)
+    
     try:
-        updated_task = task_service.update_task_status(uuid.UUID(task_id), status_update, current_user.id)
+        updated_task = task_service.update_task_status(task.id, status_update, current_user.id)
         return updated_task
     except ValueError as e:
         raise HTTPException(
@@ -259,28 +233,37 @@ def update_task_status(
 
 @router.put("/{task_id}/assign", response_model=TaskResponse)
 def assign_task(
-    task_id: str,
-    assign_data: TaskAssign,
+    assign_data: dict,
+    task: Task = Depends(get_authorized_task),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
     """
     Assign task to a user.
     """
-    import uuid
     task_service = TaskService(db)
-    project_service = ProjectService(db)
     
-    # Check if user is a member of the project
-    task = task_service.get_task_by_id(uuid.UUID(task_id))
-    if task and not project_service.is_project_member(task.project_id, current_user.id):
+    # Extract assignee_id from request body
+    assignee_id = assign_data.get("assignee_id")
+    if not assignee_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Assignee ID is required"
         )
     
+    # Create TaskAssign object
     try:
-        updated_task = task_service.assign_task(uuid.UUID(task_id), assign_data, current_user.id)
+        assignee_uuid = uuid.UUID(assignee_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid assignee ID format"
+        )
+    
+    task_assign = TaskAssign(assignee_id=assignee_uuid)
+    
+    try:
+        updated_task = task_service.assign_task(task.id, task_assign, current_user.id)
         return updated_task
     except ValueError as e:
         raise HTTPException(
@@ -288,49 +271,10 @@ def assign_task(
             detail=str(e)
         )
 
-@router.get("/project/{project_id}", response_model=List[TaskResponse])
-def get_project_tasks(
-    project_id: str,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """
-    Get all tasks for a specific project.
-    """
-    import uuid
-    task_service = TaskService(db)
-    project_service = ProjectService(db)
-    
-    # Check if user is a member of the project
-    try:
-        project_uuid = uuid.UUID(project_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid project ID format"
-        )
-    
-    if not project_service.is_project_member(project_uuid, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not a member of this project"
-        )
-    
-    tasks = task_service.get_project_tasks(project_uuid, skip=skip, limit=limit)
-    return tasks
 
-@router.get("/my/tasks", response_model=List[TaskResponse])
-def get_my_tasks(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-) -> Any:
-    """
-    Get tasks assigned to or created by the current user.
-    """
-    task_service = TaskService(db)
-    tasks = task_service.get_user_tasks(current_user.id, skip=skip, limit=limit)
-    return tasks
+
+
+
+
+
+

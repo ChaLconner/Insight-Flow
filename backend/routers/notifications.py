@@ -1,105 +1,161 @@
-"""
-Notifications router for managing user notifications.
-"""
-from typing import List, Any
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from schemas.notification import NotificationResponse, NotificationCreate
-from services.notification_service import NotificationService
+from typing import List
+import uuid
+
 from database import get_db
 from routers.auth import get_current_active_user
+from models.notification import Notification
 from models.user import User
+from schemas.notification import NotificationResponse
 
-router = APIRouter(prefix="/notifications", tags=["notifications"])
+router = APIRouter(
+    prefix="/notifications",
+    tags=["notifications"],
+    responses={404: {"description": "Not found"}},
+)
 
 @router.get("/", response_model=List[NotificationResponse])
-def get_notifications(
+async def get_notifications(
     skip: int = 0,
-    limit: int = 100,
-    unread_only: bool = Query(False, description="Filter to show only unread notifications"),
+    limit: int = 50,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+):
     """
-    Get notifications for the current user.
+    Get all notifications for the current user.
     """
-    notification_service = NotificationService(db)
-    notifications = notification_service.get_user_notifications(
-        current_user.id, skip=skip, limit=limit, unread_only=unread_only
-    )
-    return notifications
+    notifications = db.query(Notification)\
+        .filter(Notification.user_id == current_user.id)\
+        .order_by(Notification.created_at.desc())\
+        .offset(skip)\
+        .limit(limit)\
+        .all()
+    
+    # Convert to response format to handle schema properly
+    result = []
+    for notif in notifications:
+        result.append(NotificationResponse(
+            id=notif.id,
+            user_id=notif.user_id,
+            type=notif.type,
+            title=notif.title,
+            message=notif.message,
+            data=notif.data,
+            is_read=notif.is_read,
+            created_at=notif.created_at
+        ))
+    return result
 
-@router.post("/", response_model=NotificationResponse)
-def create_notification(
-    notification_data: NotificationCreate,
+@router.get("/unread-count", response_model=int)
+async def get_unread_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+):
     """
-    Create a new notification.
+    Get count of unread notifications.
     """
-    notification_service = NotificationService(db)
-    
-    # Only allow creating notifications for the current user
-    if notification_data.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot create notifications for other users"
-        )
-    
-    try:
-        notification = notification_service.create_notification(notification_data)
-        return notification
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+    count = db.query(Notification)\
+        .filter(Notification.user_id == current_user.id, Notification.is_read == False)\
+        .count()
+    return count
 
-@router.put("/{notification_id}/read")
-def mark_notification_read(
+@router.put("/{notification_id}/read", response_model=NotificationResponse)
+async def mark_notification_read(
     notification_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+):
     """
     Mark a notification as read.
     """
-    import uuid
-    notification_service = NotificationService(db)
-    
     try:
-        notification_uuid = uuid.UUID(notification_id)
+        notif_uuid = uuid.UUID(notification_id)
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid notification ID format"
-        )
-    
-    try:
-        notification_service.mark_notification_read(notification_uuid, current_user.id)
-        return {"message": "Notification marked as read"}
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=400, detail="Invalid notification ID")
 
-@router.put("/read-all")
-def mark_all_notifications_read(
+    notification = db.query(Notification)\
+        .filter(Notification.id == notif_uuid, Notification.user_id == current_user.id)\
+        .first()
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    notification.is_read = True
+    db.commit()
+    db.refresh(notification)
+    
+    # Convert to response format to handle schema properly
+    return NotificationResponse(
+        id=notification.id,
+        user_id=notification.user_id,
+        type=notification.type,
+        title=notification.title,
+        message=notification.message,
+        data=notification.data,
+        is_read=notification.is_read,
+        created_at=notification.created_at
+    )
+
+@router.put("/read-all", response_model=List[NotificationResponse])
+async def mark_all_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
-) -> Any:
+):
     """
-    Mark all notifications as read for the current user.
+    Mark all notifications as read.
     """
-    notification_service = NotificationService(db)
+    notifications = db.query(Notification)\
+        .filter(Notification.user_id == current_user.id, Notification.is_read == False)\
+        .all()
     
+    for notification in notifications:
+        notification.is_read = True
+    
+    db.commit()
+    
+    # Return updated list (recent 50)
+    updated_notifications = db.query(Notification)\
+        .filter(Notification.user_id == current_user.id)\
+        .order_by(Notification.created_at.desc())\
+        .limit(50)\
+        .all()
+    
+    # Convert to response format to handle schema properly
+    result = []
+    for notif in updated_notifications:
+        result.append(NotificationResponse(
+            id=notif.id,
+            user_id=notif.user_id,
+            type=notif.type,
+            title=notif.title,
+            message=notif.message,
+            data=notif.data,
+            is_read=notif.is_read,
+            created_at=notif.created_at
+        ))
+    return result
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notification(
+    notification_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Delete a notification.
+    """
     try:
-        notification_service.mark_all_notifications_read(current_user.id)
-        return {"message": "All notifications marked as read"}
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        notif_uuid = uuid.UUID(notification_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid notification ID")
+
+    notification = db.query(Notification)\
+        .filter(Notification.id == notif_uuid, Notification.user_id == current_user.id)\
+        .first()
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    db.delete(notification)
+    db.commit()

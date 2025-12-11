@@ -1,0 +1,24 @@
+{
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ],
+    "package.json": [
+      "npm run check:package-json"
+    ]
+  },
+  "eslintConfig": {
+    "rules": {
+      "no-console": "off",
+      "no-debugger": "off"
+    }
+  }
+}

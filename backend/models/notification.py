@@ -30,3 +30,8 @@ class Notification(BaseModel):
     
     # Relationships
     user = relationship("User", back_populates="notifications")
+
+    from sqlalchemy import Index
+    __table_args__ = (
+        Index('ix_notifications_user_read_created', 'user_id', 'is_read', 'created_at'),
+    )
