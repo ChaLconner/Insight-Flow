@@ -3,7 +3,7 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.6
 sqlalchemy==2.0.44
 pg8000==1.31.1
-pydantic==2.8.2
+pydantic[email]==2.8.2
 pydantic-settings==2.1.0
 python-jose[cryptography]==3.4.0
 PyJWT[crypto]==2.10.1

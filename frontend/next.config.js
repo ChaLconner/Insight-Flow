@@ -36,7 +36,7 @@ const nextConfig = {
         ],
         // CSS optimizations for faster critical path
         inlineCss: true, // Inline critical CSS to avoid render-blocking requests
-        cssChunking: 'loose', // More aggressive CSS code-splitting
+        cssChunking: 'strict', // More aggressive CSS code-splitting
     },
 
     // Performance optimizations
