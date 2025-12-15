@@ -1,10 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
-    <rect width="32" height="32" rx="8" fill="url(#paint0_linear)"/>
-    <path d="M7 16C7 16 11.5 10 16 16C20.5 22 25 16 25 16" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect width="32" height="32" rx="8" fill="url(#grad1)"/>
+    <g transform="translate(4, 4)">
+        <polygon points="12 2 2 7 12 12 22 7 12 2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="2 17 12 22 22 17" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="2 12 12 17 22 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
     <defs>
-        <linearGradient id="paint0_linear" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+        <linearGradient id="grad1" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
             <stop stop-color="#6366F1"/>
-            <stop offset="1" stop-color="#A855F7"/>
+            <stop offset="1" stop-color="#7C3AED"/>
         </linearGradient>
     </defs>
 </svg>

@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-    title: 'Projects',
-    description: 'Manage your projects, track progress, and collaborate with your team.',
+    title: 'Dashboard',
+    description: 'Overview of your projects and tasks.',
 };
 
-export default function ProjectsLayout({
+export default function DashboardLayout({
     children,
 }: {
     children: React.ReactNode;

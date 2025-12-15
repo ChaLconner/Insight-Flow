@@ -16,7 +16,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Insight Flow",
+  title: {
+    template: "%s | Insight Flow",
+    default: "Insight Flow",
+  },
   description: "Modern project management platform with glassmorphism design",
   keywords: ["project management", "task management", "team collaboration", "productivity"],
   authors: [{ name: "Insight Flow Team" }],

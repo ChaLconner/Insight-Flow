@@ -24,18 +24,11 @@ export function formatDate(dateString?: string): string {
  * @returns Relative time string (e.g., "2h ago", "Yesterday")
  */
 export function formatLastLogin(dateString?: string): string {
-    let targetDate: Date;
-    let effectiveDateString = dateString;
-
-    if (!effectiveDateString) {
-        // If no data in database, mimic creation by generating a random date within last 7 days
-        const now = new Date();
-        const randomMs = Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000);
-        targetDate = new Date(now.getTime() - randomMs);
-        effectiveDateString = targetDate.toISOString();
-    } else {
-        targetDate = new Date(effectiveDateString);
+    if (!dateString) {
+        return "Never";
     }
+
+    const targetDate = new Date(dateString);
 
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60));
@@ -55,7 +48,7 @@ export function formatLastLogin(dateString?: string): string {
         return `${diffInDays}d ago`;
     }
 
-    return formatDate(effectiveDateString);
+    return formatDate(dateString);
 }
 
 /**

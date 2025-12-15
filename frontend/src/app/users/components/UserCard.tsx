@@ -3,10 +3,10 @@
 import React, { memo, useCallback } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Mail, User, Activity, Edit, UserX, UserCheck, MoreVertical } from "lucide-react";
+import { Mail, User, Activity } from "lucide-react";
 import { RoleBadge, StatusBadge } from "./UserBadges";
 import { getAvatarUrl } from "@/lib/utils";
-import { toast } from "sonner";
+
 import type { User as UserType } from "@/types";
 
 interface UserCardProps {
@@ -15,17 +15,7 @@ interface UserCardProps {
 }
 
 function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
-    const handleEdit = useCallback(() => {
-        toast.info("Edit user feature coming soon");
-    }, []);
 
-    const handleToggleActive = useCallback(() => {
-        if (user.isActive) {
-            toast.info("Deactivate user feature coming soon");
-        } else {
-            toast.info("Activate user feature coming soon");
-        }
-    }, [user.isActive]);
 
     const fullName = `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || 'Unknown User';
     const initials = `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase();
@@ -69,8 +59,8 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
 
                         <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
                             <div className="flex items-center gap-1">
-                                <Mail className="h-3 w-3" aria-hidden="true" />
-                                <span className="truncate">{user.email}</span>
+                                <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                <span className="truncate max-w-[150px] sm:max-w-[220px]" title={user.email}>{user.email}</span>
                             </div>
                             {user.username && (
                                 <div className="flex items-center gap-1">
@@ -84,51 +74,6 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
                             </div>
                         </div>
                     </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 self-end sm:self-auto" role="group" aria-label="User actions">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-zinc-400 hover:text-white"
-                        onClick={handleEdit}
-                        aria-label={`Edit ${fullName}`}
-                    >
-                        <Edit className="h-4 w-4 mr-1" aria-hidden="true" />
-                        Edit
-                    </Button>
-                    {user.isActive ? (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-zinc-400 hover:text-red-400"
-                            onClick={handleToggleActive}
-                            aria-label={`Deactivate ${fullName}`}
-                        >
-                            <UserX className="h-4 w-4 mr-1" aria-hidden="true" />
-                            Deactivate
-                        </Button>
-                    ) : (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-zinc-400 hover:text-emerald-400"
-                            onClick={handleToggleActive}
-                            aria-label={`Activate ${fullName}`}
-                        >
-                            <UserCheck className="h-4 w-4 mr-1" aria-hidden="true" />
-                            Activate
-                        </Button>
-                    )}
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-zinc-400 hover:text-white"
-                        aria-label={`More options for ${fullName}`}
-                    >
-                        <MoreVertical className="h-4 w-4" aria-hidden="true" />
-                    </Button>
                 </div>
             </div>
         </div>

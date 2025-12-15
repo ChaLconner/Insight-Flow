@@ -2,9 +2,9 @@
 
 import { forwardRef } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+
 import { CustomSelect } from "@/components/ui/custom-select";
-import { Search, Filter, RefreshCw, X } from "lucide-react";
+import { Search, RefreshCw, X } from "lucide-react";
 import { UserRole } from "@/types";
 
 interface UserFiltersProps {
@@ -118,14 +118,7 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
                         className="w-full sm:w-[140px]"
                         aria-label="Filter by status"
                     />
-                    <Button
-                        variant="outline"
-                        className="glass border-white/10 text-white hover:bg-white/5"
-                        aria-label="More filters"
-                    >
-                        <Filter className="h-4 w-4 mr-2" aria-hidden="true" />
-                        More
-                    </Button>
+
                 </div>
             </div>
         );

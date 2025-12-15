@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-    title: 'Analytics | Insight Flow',
+    title: 'Analytics',
     description: 'View detailed analytics, team workload, and performance trends.',
 };
 

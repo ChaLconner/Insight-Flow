@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-    title: 'User Management | Insight Flow',
+    title: 'Users',
     description: 'Manage users, roles, and permissions.',
 };
 

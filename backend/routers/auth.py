@@ -28,7 +28,8 @@ logger = setup_logger("auth_router")
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 # Configuration
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Configuration
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 ACCESS_TOKEN_KEY = "access_token"
 REFRESH_TOKEN_KEY = "refresh_token"
@@ -164,7 +165,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)) -> Any:
         )
 
 @router.post("/login", response_model=Any)
-def login(
+async def login(
     login_data: UserLogin, 
     response: Response, 
     db: Session = Depends(get_db),
@@ -194,6 +195,9 @@ def login(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inactive user"
             )
+
+        # Update last login time
+        user_service.update_last_login(user.id)
         
         # Create tokens for authenticated user
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -214,6 +218,7 @@ def login(
             httponly=True,
             secure=COOKIE_SECURE,
             samesite="lax",
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             path="/"
         )
         
@@ -251,8 +256,11 @@ def login(
         logger.error(f"HTTP error during login: {http_err.detail}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during login: {str(e)}")
-        raise
+        logger.error(f"Unexpected error during login: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during login. Please try again."
+        )
 
 @router.get("/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_active_user)) -> Any:
@@ -312,6 +320,9 @@ def google_login(response: Response, google_data: GoogleAuth, db: Session = Depe
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inactive user"
             )
+        
+        # Update last login time
+        user_service.update_last_login(user.id)
         
         # Create access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -420,6 +431,9 @@ def github_login(response: Response, github_data: GithubAuth, db: Session = Depe
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Inactive user"
             )
+        
+        # Update last login time
+        user_service.update_last_login(user.id)
         
         # Create access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

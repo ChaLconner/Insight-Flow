@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-    title: 'Projects',
-    description: 'Manage your projects, track progress, and collaborate with your team.',
+    title: 'Settings',
+    description: 'Manage your account settings and preferences.',
 };
 
-export default function ProjectsLayout({
+export default function SettingsLayout({
     children,
 }: {
     children: React.ReactNode;

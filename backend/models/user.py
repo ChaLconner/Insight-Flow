@@ -1,7 +1,7 @@
 """
 User model for Insight-Flow application.
 """
-from sqlalchemy import Column, String, Boolean, Text
+from sqlalchemy import Column, String, Boolean, Text, DateTime
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 
@@ -21,6 +21,8 @@ class User(BaseModel):
     google_id = Column(String(255), unique=True, index=True)
     github_id = Column(String(255), unique=True, index=True, nullable=True)
     is_active = Column(Boolean, default=True)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
     # role field is optional to support existing databases without the field
     # will be set to default value "user" if not present
     role = Column(String(50), nullable=True)

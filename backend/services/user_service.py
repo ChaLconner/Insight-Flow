@@ -11,12 +11,24 @@ from utils.validators import validate_password_strength
 from utils.logger import logger
 import uuid
 import time
+from datetime import datetime
 
 class UserService:
     """Service class for user operations."""
     
     def __init__(self, db: Session):
         self.db = db
+    
+    def update_last_login(self, user_id: uuid.UUID) -> None:
+        """Update last login timestamp."""
+        user = self.get_user_by_id(user_id)
+        if user:
+            user.last_login_at = datetime.utcnow()
+            try:
+                self.db.commit()
+            except Exception as e:
+                logger.error(f"Failed to update last login time: {e}")
+                self.db.rollback()
     
     def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email with retry logic for connection errors."""
