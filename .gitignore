@@ -205,8 +205,22 @@ API_SPECIFICATION.md
 DASHBOARD_ANALYTICS_IMPLEMENTATION.md
 ARCHITECTURE.md
 
-# Kilo Code configuration
+# AI Coding Assistants
 .kilocode/
+kilocode/
+*kilocode*
+.kilo/
+.roo/
+.cursor/
+.codeium/
+.tabnine/
+.copilot/
+.agent/
+
+# User uploaded files
+backend/static/uploads/
+uploads/
+*.uploaded
 
 # Test and debug files
 
@@ -214,6 +228,8 @@ ARCHITECTURE.md
 test_*.html
 debug_*.html
 errors.txt
+lint_*.txt
+analysis_*.json
 
 # Backup files
 *.backup
