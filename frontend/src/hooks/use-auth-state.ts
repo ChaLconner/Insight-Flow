@@ -2,13 +2,11 @@
 // useAuthState Hook
 // ===========================================
 
-import { useEffect, useRef } from 'react';
-import { useAuthStore, authSelectors } from '@/stores/auth-store';
-import { authActions } from '@/stores/auth-actions';
+import { useEffect, useRef } from "react";
+import { useAuthStore, authSelectors } from "@/stores/auth-store";
+import { authActions } from "@/stores/auth-actions";
 
-import { User } from '@/types';
-
-
+// import { User } from "@/types";
 
 // Hook for auth state management with React Query integration
 export const useAuthState = () => {
@@ -25,10 +23,10 @@ export const useAuthState = () => {
   const isUserActive = useAuthStore(authSelectors.isUserActive);
 
   // Actions - stable references
-  const checkAuthStatus = useAuthStore(state => state.checkAuthStatus);
-  const updateActivity = useAuthStore(state => state.updateActivity);
-  const setUser = useAuthStore(state => state.setUser);
-  const setLoading = useAuthStore(state => state.setLoading);
+  const checkAuthStatus = useAuthStore((state) => state.checkAuthStatus);
+  const updateActivity = useAuthStore((state) => state.updateActivity);
+  const setUser = useAuthStore((state) => state.setUser);
+  const setLoading = useAuthStore((state) => state.setLoading);
 
   const initializationRef = useRef(false);
 
@@ -38,15 +36,16 @@ export const useAuthState = () => {
 
     const init = async () => {
       // Prevent multiple initializations
-      if (initializationRef.current) { return; }
+      if (initializationRef.current) {
+        return;
+      }
       initializationRef.current = true;
 
       // Initialize auth checks for session via cookie
       try {
-
         await authActions.initializeAuth();
       } catch (error) {
-        console.error('❌ Failed to initialize auth:', error);
+        console.error("❌ Failed to initialize auth:", error);
         if (mounted && isLoading) {
           setLoading(false);
         }
@@ -58,13 +57,13 @@ export const useAuthState = () => {
     return () => {
       mounted = false;
     };
-  }, []); // Empty deps - run only once on mount
+  }, [isLoading, setLoading]);
 
   // Safety timeout to prevent infinite loading state
   useEffect(() => {
     if (isLoading) {
       const safetyTimeout = setTimeout(() => {
-        console.warn('⚠️ Auth check timed out, forcing loading to false');
+        console.warn("⚠️ Auth check timed out, forcing loading to false");
         setLoading(false);
       }, 7000);
 
@@ -126,12 +125,7 @@ export const useAuth = () => {
 // ===========================================
 
 export const useRequireAuth = () => {
-  const {
-    user,
-    isAuthenticated,
-    isLoading,
-    logout,
-  } = useAuthState();
+  const { user, isAuthenticated, isLoading } = useAuthState();
 
   // Use ref for timeout to avoid sharing state between hook instances
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -146,19 +140,29 @@ export const useRequireAuth = () => {
         }
 
         // If not authenticated and not loading, redirect to login immediately
-        if ((!isAuthenticated || !user) && !isLoading && typeof window !== 'undefined') {
+        if (
+          (!isAuthenticated || !user) &&
+          !isLoading &&
+          typeof window !== "undefined"
+        ) {
           // Check if we are already on the login page to prevent loops
           const path = window.location.pathname;
-          if (path.startsWith('/auth/login') || path.startsWith('/auth/register')) {
+          if (
+            path.startsWith("/auth/login") ||
+            path.startsWith("/auth/register")
+          ) {
             return;
           }
 
           // Prevent infinite redirect loops
-          const isAuthPage = path.startsWith('/auth/login') || path.startsWith('/auth/register');
+          const isAuthPage =
+            path.startsWith("/auth/login") || path.startsWith("/auth/register");
           if (!isAuthPage) {
             // Use replace to avoid history stack issues
-            console.warn('🔒 useRequireAuth: Redirecting to login (missing auth)');
-            window.location.replace('/auth/login');
+            console.warn(
+              "🔒 useRequireAuth: Redirecting to login (missing auth)",
+            );
+            window.location.replace("/auth/login");
           }
         }
 
@@ -215,31 +219,31 @@ export const usePermissions = () => {
 
   const permissions = {
     // User Management
-    canCreateUsers: user?.role === 'admin',
-    canEditUsers: user?.role === 'admin',
-    canDeleteUsers: user?.role === 'admin',
-    canManageUserRoles: user?.role === 'admin',
+    canCreateUsers: user?.role === "admin",
+    canEditUsers: user?.role === "admin",
+    canDeleteUsers: user?.role === "admin",
+    canManageUserRoles: user?.role === "admin",
 
     // Project Management
-    canCreateProjects: ['admin', 'manager'].includes(user?.role ?? ''),
-    canEditProjects: ['admin', 'manager'].includes(user?.role ?? ''),
-    canDeleteProjects: user?.role === 'admin',
-    canManageProjectMembers: ['admin', 'manager'].includes(user?.role ?? ''),
+    canCreateProjects: ["admin", "manager"].includes(user?.role ?? ""),
+    canEditProjects: ["admin", "manager"].includes(user?.role ?? ""),
+    canDeleteProjects: user?.role === "admin",
+    canManageProjectMembers: ["admin", "manager"].includes(user?.role ?? ""),
 
     // Task Management
     canCreateTasks: true, // All authenticated users
     canEditOwnTasks: true, // Users can edit tasks they created or assigned to
-    canEditAllTasks: ['admin', 'manager'].includes(user?.role ?? ''),
-    canDeleteTasks: ['admin', 'manager'].includes(user?.role ?? ''),
-    canAssignTasks: ['admin', 'manager'].includes(user?.role ?? ''),
+    canEditAllTasks: ["admin", "manager"].includes(user?.role ?? ""),
+    canDeleteTasks: ["admin", "manager"].includes(user?.role ?? ""),
+    canAssignTasks: ["admin", "manager"].includes(user?.role ?? ""),
 
     // Analytics & Reports
-    canViewAnalytics: ['admin', 'manager'].includes(user?.role ?? ''),
-    canExportReports: ['admin', 'manager'].includes(user?.role ?? ''),
+    canViewAnalytics: ["admin", "manager"].includes(user?.role ?? ""),
+    canExportReports: ["admin", "manager"].includes(user?.role ?? ""),
 
     // Settings
-    canManageSettings: user?.role === 'admin',
-    canManageSystemSettings: user?.role === 'admin',
+    canManageSettings: user?.role === "admin",
+    canManageSystemSettings: user?.role === "admin",
   };
 
   const checkPermission = (permission: keyof typeof permissions): boolean => {
@@ -267,12 +271,14 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
 
     const checkSession = () => {
       // Don't check if hidden (optimization)
-      if (document.hidden) { return; }
+      if (document.hidden) {
+        return;
+      }
 
       if (!checkAuthStatus()) {
         // Session expired
         useAuthStore.getState().logout();
-        window.location.href = '/auth/login?expired=true';
+        window.location.href = "/auth/login?expired=true";
       }
     };
 
@@ -289,7 +295,7 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
 
     // Handle visibility
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === "visible") {
         // Perform an immediate check when becoming visible to catch expired sessions
         checkSession();
         startChecking();
@@ -308,12 +314,21 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // Activity listeners
-    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    activityEvents.forEach(event => {
-      document.addEventListener(event, handleActivity, { capture: true, passive: true });
+    const activityEvents = [
+      "mousedown",
+      "mousemove",
+      "keypress",
+      "scroll",
+      "touchstart",
+    ];
+    activityEvents.forEach((event) => {
+      document.addEventListener(event, handleActivity, {
+        capture: true,
+        passive: true,
+      });
     });
 
     // Start initial check
@@ -321,9 +336,12 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
 
     return () => {
       stopChecking();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      activityEvents.forEach(event => {
-        document.removeEventListener(event, handleActivity, { capture: true } as any);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      activityEvents.forEach((event) => {
+        document.removeEventListener(event, handleActivity, {
+          capture: true,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
       });
     };
   }, [updateActivity, checkAuthStatus, timeoutMinutes]);

@@ -2,11 +2,14 @@
 // useAppState Hook
 // ===========================================
 
-import { useCallback, useEffect } from 'react';
-import { useAppStore, appSelectors, appActions } from '@/stores/app-store';
-import { toast } from 'sonner';
+import { useCallback } from "react";
+import { useAppStore, appSelectors } from "@/stores/app-store";
+import { toast } from "sonner";
 
 // Hook for app global state management
+// Hook for app global state management
+const EMPTY_OBJECT = {};
+
 export const useAppState = () => {
   // Zustand store state
   const store = useAppStore();
@@ -56,110 +59,131 @@ export const useAppState = () => {
   const resetAppState = store.resetAppState;
 
   // Convenience functions for toast notifications
-  const showSuccess = useCallback((message: string, description?: string) => {
-    toast.success(message, {
-      description,
-      action: {
-        label: "Undo",
-        onClick: () => { },
-      },
-    });
-    addAlert({
-      type: 'success',
-      title: message,
-      message: description ?? ''
-    });
-  }, [addAlert]);
+  const showSuccess = useCallback(
+    (message: string, description?: string) => {
+      toast.success(message, {
+        description,
+        action: {
+          label: "Undo",
+          onClick: () => {},
+        },
+      });
+      addAlert({
+        type: "success",
+        title: message,
+        message: description ?? "",
+      });
+    },
+    [addAlert],
+  );
 
-  const showError = useCallback((message: string, description?: string) => {
-    toast.error(message, {
-      description,
-      action: {
-        label: "Retry",
-        onClick: () => { },
-      },
-    });
-    addAlert({
-      type: 'error',
-      title: message,
-      message: description ?? ''
-    });
-  }, [addAlert]);
+  const showError = useCallback(
+    (message: string, description?: string) => {
+      toast.error(message, {
+        description,
+        action: {
+          label: "Retry",
+          onClick: () => {},
+        },
+      });
+      addAlert({
+        type: "error",
+        title: message,
+        message: description ?? "",
+      });
+    },
+    [addAlert],
+  );
 
-  const showWarning = useCallback((message: string, description?: string) => {
-    toast.warning(message, {
-      description,
-    });
-    addAlert({
-      type: 'warning',
-      title: message,
-      message: description ?? ''
-    });
-  }, [addAlert]);
+  const showWarning = useCallback(
+    (message: string, description?: string) => {
+      toast.warning(message, {
+        description,
+      });
+      addAlert({
+        type: "warning",
+        title: message,
+        message: description ?? "",
+      });
+    },
+    [addAlert],
+  );
 
-  const showInfo = useCallback((message: string, description?: string) => {
-    toast.info(message, {
-      description,
-    });
-    addAlert({
-      type: 'info',
-      title: message,
-      message: description ?? ''
-    });
-  }, [addAlert]);
+  const showInfo = useCallback(
+    (message: string, description?: string) => {
+      toast.info(message, {
+        description,
+      });
+      addAlert({
+        type: "info",
+        title: message,
+        message: description ?? "",
+      });
+    },
+    [addAlert],
+  );
 
   // Modal management helpers
-  const showConfirmDialog = useCallback((
-    id: string,
-    title: string,
-    message: string,
-    onConfirm: () => void,
-    options?: {
-      description?: string;
-      confirmText?: string;
-      cancelText?: string;
-      variant?: 'default' | 'destructive';
-    }
-  ) => {
-    showModal(id, {
-      type: 'confirm',
-      title,
-      message,
-      data: {
-        onConfirm,
-        description: options?.description,
-        confirmText: options?.confirmText ?? 'Confirm',
-        cancelText: options?.cancelText ?? 'Cancel',
-        variant: options?.variant ?? 'default',
+  const showConfirmDialog = useCallback(
+    (
+      id: string,
+      title: string,
+      message: string,
+      onConfirm: () => void,
+      options?: {
+        description?: string;
+        confirmText?: string;
+        cancelText?: string;
+        variant?: "default" | "destructive";
       },
-    });
-  }, [showModal]);
+    ) => {
+      showModal(id, {
+        type: "confirm",
+        title,
+        message,
+        data: {
+          onConfirm,
+          description: options?.description,
+          confirmText: options?.confirmText ?? "Confirm",
+          cancelText: options?.cancelText ?? "Cancel",
+          variant: options?.variant ?? "default",
+        },
+      });
+    },
+    [showModal],
+  );
 
-  const showFormDialog = useCallback((
-    id: string,
-    title: string,
-    fields: any[],
-    onSubmit: (data: any) => void,
-    options?: {
-      description?: string;
-      submitText?: string;
-      cancelText?: string;
-      initialData?: any;
-    }
-  ) => {
-    showModal(id, {
-      type: 'form',
-      title,
-      message: options?.description,
-      data: {
-        fields,
-        onSubmit,
-        submitText: options?.submitText ?? 'Submit',
-        cancelText: options?.cancelText ?? 'Cancel',
-        initialData: options?.initialData,
+  const showFormDialog = useCallback(
+    (
+      id: string,
+      title: string,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      fields: any[],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      onSubmit: (data: any) => void,
+      options?: {
+        description?: string;
+        submitText?: string;
+        cancelText?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        initialData?: any;
       },
-    });
-  }, [showModal]);
+    ) => {
+      showModal(id, {
+        type: "form",
+        title,
+        message: options?.description,
+        data: {
+          fields,
+          onSubmit,
+          submitText: options?.submitText ?? "Submit",
+          cancelText: options?.cancelText ?? "Cancel",
+          initialData: options?.initialData,
+        },
+      });
+    },
+    [showModal],
+  );
 
   return {
     // Core state
@@ -236,34 +260,40 @@ export const useAppState = () => {
 export const useLoading = () => {
   const { isLoading, setLoading } = useAppState();
 
-  const startLoading = useCallback((message?: string) => {
-    setLoading({
-      isLoading: true,
-      message: message ?? 'Loading...'
-    });
-  }, [setLoading]);
+  const startLoading = useCallback(
+    (message?: string) => {
+      setLoading({
+        isLoading: true,
+        message: message ?? "Loading...",
+      });
+    },
+    [setLoading],
+  );
 
   const stopLoading = useCallback(() => {
     setLoading({
       isLoading: false,
-      message: ''
+      message: "",
     });
   }, [setLoading]);
 
-  const withLoading = useCallback(async <T>(
-    asyncFunction: () => Promise<T>,
-    loadingMessage?: string
-  ): Promise<T> => {
-    try {
-      startLoading(loadingMessage);
-      const result = await asyncFunction();
-      stopLoading();
-      return result;
-    } catch (error) {
-      stopLoading();
-      throw error;
-    }
-  }, [startLoading, stopLoading]);
+  const withLoading = useCallback(
+    async <T>(
+      asyncFunction: () => Promise<T>,
+      loadingMessage?: string,
+    ): Promise<T> => {
+      try {
+        startLoading(loadingMessage);
+        const result = await asyncFunction();
+        stopLoading();
+        return result;
+      } catch (error) {
+        stopLoading();
+        throw error;
+      }
+    },
+    [startLoading, stopLoading],
+  );
 
   return {
     isLoading,
@@ -284,16 +314,22 @@ export const useModal = () => {
     hideModal,
     closeAllModals,
     showConfirmDialog,
-    showFormDialog
+    showFormDialog,
   } = useAppState();
 
-  const isModalOpen = useCallback((id: string): boolean => {
-    return modals.some(modal => modal.id === id);
-  }, [modals]);
+  const isModalOpen = useCallback(
+    (id: string): boolean => {
+      return modals.some((modal) => modal.id === id);
+    },
+    [modals],
+  );
 
-  const getModalData = useCallback((id: string) => {
-    return modals.find(modal => modal.id === id);
-  }, [modals]);
+  const getModalData = useCallback(
+    (id: string) => {
+      return modals.find((modal) => modal.id === id);
+    },
+    [modals],
+  );
 
   return {
     modals,
@@ -314,13 +350,20 @@ export const useModal = () => {
 export const useSearch = () => {
   const { search, setSearch, clearSearch } = useAppState();
 
-  const updateSearchQuery = useCallback((query: string) => {
-    setSearch({ query, filters: {}, isActive: query.length > 0 });
-  }, [setSearch]);
+  const updateSearchQuery = useCallback(
+    (query: string) => {
+      setSearch({ query, filters: {}, isActive: query.length > 0 });
+    },
+    [setSearch],
+  );
 
-  const updateSearchFilters = useCallback((filters: Record<string, any>) => {
-    setSearch({ filters, isActive: true });
-  }, [setSearch]);
+  const updateSearchFilters = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (filters: Record<string, any>) => {
+      setSearch({ filters, isActive: true });
+    },
+    [setSearch],
+  );
 
   const resetSearch = useCallback(() => {
     clearSearch();
@@ -344,38 +387,48 @@ export const useSearch = () => {
 export const useBreadcrumbs = () => {
   const { breadcrumbs, setBreadcrumbs, navigateWithBreadcrumb } = useAppState();
 
-  const addBreadcrumb = useCallback((item: {
-    label: string;
-    href?: string;
-    icon?: any;
-  }) => {
-    const newBreadcrumbs = [...breadcrumbs, item];
-    setBreadcrumbs(newBreadcrumbs);
-    return navigateWithBreadcrumb(item);
-  }, [breadcrumbs, setBreadcrumbs, navigateWithBreadcrumb]);
+  const addBreadcrumb = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (item: { label: string; href?: string; icon?: any }) => {
+      const newBreadcrumbs = [...breadcrumbs, item];
+      setBreadcrumbs(newBreadcrumbs);
+      return navigateWithBreadcrumb(item);
+    },
+    [breadcrumbs, setBreadcrumbs, navigateWithBreadcrumb],
+  );
 
-  const removeBreadcrumb = useCallback((index: number) => {
-    const newBreadcrumbs = breadcrumbs.slice(0, index + 1);
-    setBreadcrumbs(newBreadcrumbs);
-  }, [breadcrumbs, setBreadcrumbs]);
+  const removeBreadcrumb = useCallback(
+    (index: number) => {
+      const newBreadcrumbs = breadcrumbs.slice(0, index + 1);
+      setBreadcrumbs(newBreadcrumbs);
+    },
+    [breadcrumbs, setBreadcrumbs],
+  );
 
-  const resetBreadcrumbs = useCallback((home: {
-    label: string;
-    href: string;
-    icon?: any;
-  }) => {
-    setBreadcrumbs([home]);
-  }, [setBreadcrumbs]);
+  const resetBreadcrumbs = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (home: { label: string; href: string; icon?: any }) => {
+      setBreadcrumbs([home]);
+    },
+    [setBreadcrumbs],
+  );
 
-  const updateBreadcrumb = useCallback((index: number, item: {
-    label: string;
-    href?: string;
-    icon?: any;
-  }) => {
-    const newBreadcrumbs = [...breadcrumbs];
-    newBreadcrumbs[index] = item;
-    setBreadcrumbs(newBreadcrumbs);
-  }, [breadcrumbs, setBreadcrumbs]);
+  const updateBreadcrumb = useCallback(
+    (
+      index: number,
+      item: {
+        label: string;
+        href?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        icon?: any;
+      },
+    ) => {
+      const newBreadcrumbs = [...breadcrumbs];
+      newBreadcrumbs[index] = item;
+      setBreadcrumbs(newBreadcrumbs);
+    },
+    [breadcrumbs, setBreadcrumbs],
+  );
 
   return {
     breadcrumbs,
@@ -394,51 +447,71 @@ export const useBreadcrumbs = () => {
 export const useForm = (formId: string) => {
   const { forms, updateForm, clearForm } = useAppState();
 
-  const formData = forms[formId]?.data ?? {};
-  const formErrors = forms[formId]?.errors ?? {};
-  const formTouched = forms[formId]?.touched ?? {};
+  const formData = forms[formId]?.data ?? EMPTY_OBJECT;
+  const formErrors = forms[formId]?.errors ?? EMPTY_OBJECT;
+  const formTouched = forms[formId]?.touched ?? EMPTY_OBJECT;
 
-  const updateField = useCallback((field: string, value: any) => {
-    updateForm(formId, {
-      data: { ...formData, [field]: value },
-      errors: { ...formErrors, [field]: undefined },
-      touched: { ...formTouched, [field]: true },
-    });
-  }, [formId, formData, formErrors, formTouched, updateForm]);
+  const updateField = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (field: string, value: any) => {
+      updateForm(formId, {
+        data: { ...formData, [field]: value },
+        errors: { ...formErrors, [field]: undefined },
+        touched: { ...formTouched, [field]: true },
+      });
+    },
+    [formId, formData, formErrors, formTouched, updateForm],
+  );
 
-  const setFieldError = useCallback((field: string, error: string) => {
-    updateForm(formId, {
-      data: formData,
-      errors: { ...formErrors, [field]: error },
-      touched: { ...formTouched, [field]: true },
-    });
-  }, [formId, formData, formErrors, formTouched, updateForm]);
+  const setFieldError = useCallback(
+    (field: string, error: string) => {
+      updateForm(formId, {
+        data: formData,
+        errors: { ...formErrors, [field]: error },
+        touched: { ...formTouched, [field]: true },
+      });
+    },
+    [formId, formData, formErrors, formTouched, updateForm],
+  );
 
-  const touchField = useCallback((field: string) => {
-    updateForm(formId, {
-      data: formData,
-      errors: formErrors,
-      touched: { ...formTouched, [field]: true },
-    });
-  }, [formId, formData, formErrors, formTouched, updateForm]);
+  const touchField = useCallback(
+    (field: string) => {
+      updateForm(formId, {
+        data: formData,
+        errors: formErrors,
+        touched: { ...formTouched, [field]: true },
+      });
+    },
+    [formId, formData, formErrors, formTouched, updateForm],
+  );
 
-  const validateField = useCallback((field: string, validator: (value: any) => string | null) => {
-    const error = validator(formData[field]);
-    setFieldError(field, error ?? '');
-    return !error;
-  }, [formData, setFieldError]);
+  const validateField = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (field: string, validator: (value: any) => string | null) => {
+      const error = validator(formData[field]);
+      setFieldError(field, error ?? "");
+      return !error;
+    },
+    [formData, setFieldError],
+  );
 
   const clearFormData = useCallback(() => {
     clearForm(formId);
   }, [clearForm, formId]);
 
-  const isFieldTouched = useCallback((field: string) => {
-    return formTouched[field] ?? false;
-  }, [formTouched]);
+  const isFieldTouched = useCallback(
+    (field: string) => {
+      return formTouched[field] ?? false;
+    },
+    [formTouched],
+  );
 
-  const getFieldError = useCallback((field: string) => {
-    return formErrors[field];
-  }, [formErrors]);
+  const getFieldError = useCallback(
+    (field: string) => {
+      return formErrors[field];
+    },
+    [formErrors],
+  );
 
   return {
     formData,

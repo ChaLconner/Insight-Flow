@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
@@ -19,12 +25,11 @@ export default function ResetPasswordPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState("");
   const [tokenError, setTokenError] = useState("");
-  const router = useRouter();
+  /* const router = useRouter(); */ // unused
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const tokenFromUrl = searchParams.get("token");
-
 
     if (!tokenFromUrl) {
       console.error("No token found in URL");
@@ -38,17 +43,20 @@ export default function ResetPasswordPage() {
 
   const validateToken = async (token: string) => {
     try {
-
-
-      const response = await apiClient.post("/auth/validate-reset-token", { token });
+      const response = await apiClient.post("/auth/validate-reset-token", {
+        token,
+      });
 
       if (!response.data.valid) {
-        setTokenError(response.data.message || "Invalid or expired reset token.");
+        setTokenError(
+          response.data.message ?? "Invalid or expired reset token.",
+        );
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Token validation error:", err);
       // If validation endpoint doesn't exist, continue anyway
-      if (err.response?.status !== 404) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((err as any).response?.status !== 404) {
         setTokenError("Failed to validate reset token. Please try again.");
       }
     }
@@ -80,26 +88,25 @@ export default function ResetPasswordPage() {
       return;
     }
 
-
     setIsLoading(true);
     setError("");
 
     try {
       const response = await apiClient.post("/auth/reset-password", {
         token,
-        new_password: newPassword
+        new_password: newPassword,
       });
-
-
 
       if (response.data.success) {
         setIsSuccess(true);
-        toast.success("Password reset successful", { description: "You can now login with your new password" });
+        toast.success("Password reset successful", {
+          description: "You can now login with your new password",
+        });
       } else {
         setError("Failed to reset password. Please try again.");
         toast.error("Failed to reset password");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Reset password error:", err);
       const errorMsg = getErrorMessage(err);
       setError(errorMsg);
@@ -135,15 +142,11 @@ export default function ResetPasswordPage() {
                   <h3 className="text-lg font-medium text-gray-900">
                     Invalid Reset Link
                   </h3>
-                  <p className="mt-2 text-sm text-gray-600">
-                    {tokenError}
-                  </p>
+                  <p className="mt-2 text-sm text-gray-600">{tokenError}</p>
                 </div>
                 <div className="space-y-2">
                   <Link href="/auth/forgot-password">
-                    <Button className="w-full">
-                      Request New Reset Link
-                    </Button>
+                    <Button className="w-full">Request New Reset Link</Button>
                   </Link>
                   <Link href="/auth/login">
                     <Button variant="outline" className="w-full">
@@ -186,13 +189,12 @@ export default function ResetPasswordPage() {
                     Password Reset Successful
                   </h3>
                   <p className="mt-2 text-sm text-gray-600">
-                    Your password has been reset successfully. You can now login with your new password.
+                    Your password has been reset successfully. You can now login
+                    with your new password.
                   </p>
                 </div>
                 <Link href="/auth/login">
-                  <Button className="w-full">
-                    Go to Login
-                  </Button>
+                  <Button className="w-full">Go to Login</Button>
                 </Link>
               </div>
             </CardContent>
@@ -253,15 +255,9 @@ export default function ResetPasswordPage() {
                 />
               </div>
 
-              {error && (
-                <div className="text-red-600 text-sm">{error}</div>
-              )}
+              {error && <div className="text-red-600 text-sm">{error}</div>}
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isLoading}
-              >
+              <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Resetting..." : "Reset Password"}
               </Button>
             </form>

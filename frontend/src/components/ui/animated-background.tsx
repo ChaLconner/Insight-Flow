@@ -16,7 +16,9 @@ interface AnimatedBackgroundProps {
   className?: string;
 }
 
-export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) {
+export function AnimatedBackground({
+  className = "",
+}: AnimatedBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const particlesRef = useRef<Particle[]>([]);
@@ -51,7 +53,12 @@ export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) 
           vy: (Math.random() - 0.5) * 0.5,
           size: Math.random() * 3 + 1,
           opacity: Math.random() * 0.5 + 0.2,
-          color: Math.random() > 0.7 ? "#6366f1" : Math.random() > 0.5 ? "#8b5cf6" : "#64748b"
+          color:
+            Math.random() > 0.7
+              ? "#6366f1"
+              : Math.random() > 0.5
+                ? "#8b5cf6"
+                : "#64748b",
         });
       }
     };
@@ -116,14 +123,14 @@ export function AnimatedBackground({ className = "" }: AnimatedBackgroundProps) 
         ctx.restore();
 
         // Draw connections
-        particlesRef.current.slice(index + 1).forEach(otherParticle => {
+        particlesRef.current.slice(index + 1).forEach((otherParticle) => {
           const dx = particle.x - otherParticle.x;
           const dy = particle.y - otherParticle.y;
           const distance = Math.sqrt(dx * dx + dy * dy);
 
           if (distance < 120) {
             ctx.save();
-            ctx.globalAlpha = (120 - distance) / 120 * 0.1;
+            ctx.globalAlpha = ((120 - distance) / 120) * 0.1;
             ctx.strokeStyle = "#6366f1";
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -199,7 +206,7 @@ export function FloatingShapes() {
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
               animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${2 + Math.random() * 10}s`
+              animationDuration: `${2 + Math.random() * 10}s`,
             }}
           />
         ))}

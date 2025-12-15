@@ -24,7 +24,7 @@ import { KEYBOARD_SHORTCUTS } from "./types";
 
 /**
  * UsersPage - Main page component for user management
- * 
+ *
  * Features:
  * - Server-side pagination and filtering
  * - Debounced search
@@ -70,21 +70,34 @@ export default function UsersPage() {
   // Announce user list updates
   useEffect(() => {
     if (!loading && dataFetched) {
-      const message = users.length > 0
-        ? `Showing ${users.length} users. Page ${page} of ${Math.ceil(stats.total / pageSize) || 1}.`
-        : "No users found with current filters.";
+      const message =
+        users.length > 0
+          ? `Showing ${users.length} users. Page ${page} of ${Math.ceil(stats.total / pageSize) || 1}.`
+          : "No users found with current filters.";
       announce(message);
     }
-  }, [users.length, loading, dataFetched, page, stats.total, pageSize, announce]);
+  }, [
+    users.length,
+    loading,
+    dataFetched,
+    page,
+    stats.total,
+    pageSize,
+    announce,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if user is typing in an input
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
         // Allow Escape to blur
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           target.blur();
         }
         return;
@@ -117,8 +130,8 @@ export default function UsersPage() {
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [hasMore, loading, page, refresh, setPage, announce]);
 
   const handleInviteClick = useCallback(() => {
@@ -188,10 +201,8 @@ export default function UsersPage() {
 
       {/* Keyboard shortcuts help (hidden, for screen readers) */}
       <div className="sr-only" aria-label="Keyboard shortcuts available">
-        Press forward slash to focus search.
-        Press R to refresh.
-        Press left or right arrow keys to navigate pages.
-        Press Escape to leave search field.
+        Press forward slash to focus search. Press R to refresh. Press left or
+        right arrow keys to navigate pages. Press Escape to leave search field.
       </div>
 
       <main className="space-y-8">
@@ -223,21 +234,14 @@ export default function UsersPage() {
         </section>
 
         {/* Users List */}
-        <section
-          id="users-list"
-          aria-label="Users list"
-          aria-busy={loading}
-        >
+        <section id="users-list" aria-label="Users list" aria-busy={loading}>
           {users.length > 0 ? (
             <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
               <CardContent className="p-0">
                 <ul className="divide-y divide-white/10" role="list">
                   {users.map((user) => (
                     <li key={user.id}>
-                      <UserCard
-                        user={user}
-                        formatLastLogin={formatLastLogin}
-                      />
+                      <UserCard user={user} formatLastLogin={formatLastLogin} />
                     </li>
                   ))}
                 </ul>

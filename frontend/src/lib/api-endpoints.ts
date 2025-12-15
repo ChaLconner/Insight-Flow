@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===========================================
 // API Endpoints Mapping - Simplified
 // ===========================================
 
-import { apiClient, createDeduplicatedRequest } from './api-client';
+import { apiClient, createDeduplicatedRequest } from "./api-client";
 import type {
   User,
   Project,
@@ -17,9 +18,13 @@ import type {
   UpdateTaskRequest,
   Notification,
   RecentActivity,
-  InviteUserRequest
-} from '@/types';
-import type { AnalyticsResponse, TeamWorkloadPaginatedResponse, TeamWorkloadParams } from '@/app/analytics/types';
+  InviteUserRequest,
+} from "@/types";
+import type {
+  AnalyticsResponse,
+  TeamWorkloadPaginatedResponse,
+  TeamWorkloadParams,
+} from "@/app/analytics/types";
 
 // ===========================================
 // Authentication Endpoints
@@ -28,70 +33,74 @@ import type { AnalyticsResponse, TeamWorkloadPaginatedResponse, TeamWorkloadPara
 export const authApi = {
   // Login
   login: async (credentials: LoginRequest): Promise<AuthResponse> => {
-    const { data } = await apiClient.post('/auth/login', credentials);
+    const { data } = await apiClient.post("/auth/login", credentials);
     return data;
   },
 
   // Register
   register: async (userData: RegisterRequest): Promise<AuthResponse> => {
-    const { data } = await apiClient.post('/auth/register', userData);
+    const { data } = await apiClient.post("/auth/register", userData);
     return data;
   },
 
   // Logout
   logout: async (): Promise<void> => {
-    await apiClient.post('/auth/logout');
+    await apiClient.post("/auth/logout");
   },
 
   // Refresh token
   refreshToken: async (refreshToken: string): Promise<AuthResponse> => {
-    const { data } = await apiClient.post('/auth/refresh', {}, {
-      headers: {
-        'Authorization': `Bearer ${refreshToken}`,
+    const { data } = await apiClient.post(
+      "/auth/refresh",
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${refreshToken}`,
+        },
       },
-    });
+    );
     return data;
   },
 
   // Get current user profile with deduplication
   getCurrentUser: async (): Promise<User> => {
     // Log entry and stack to help find duplicate callers
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       // Empty block intentionally - used for debugging when needed
     }
 
-    const cacheKey = 'auth-getCurrentUser';
+    const cacheKey = "auth-getCurrentUser";
 
     return createDeduplicatedRequest(async () => {
       try {
-        const { data } = await apiClient.get('/auth/me');
+        const { data } = await apiClient.get("/auth/me");
         return data;
       } catch (err: unknown) {
         // If cookie-based request fails (401), try Authorization header fallback using stored token
         const status = (err as any)?.response?.status;
         if (status === 401) {
           // Check if we have a token before retrying
-          const token = typeof window !== 'undefined'
-            ? (localStorage.getItem('access_token') ?? localStorage.getItem('accessToken'))
-            : null;
+          const token =
+            typeof window !== "undefined"
+              ? (localStorage.getItem("access_token") ??
+                localStorage.getItem("accessToken"))
+              : null;
 
           if (!token) {
-
             throw err; // No token, don't retry
           }
 
           try {
-            const { API_CONFIG } = await import('@/lib/constants');
+            const { API_CONFIG } = await import("@/lib/constants");
 
             // Use direct axios call to avoid interceptor side effects
-            const axios = (await import('axios')).default;
+            const axios = (await import("axios")).default;
             const resp = await axios.get(`${API_CONFIG.BASE_URL}/auth/me`, {
               headers: { Authorization: `Bearer ${token}` },
               withCredentials: false, // Bearer token flow, not cookies
             });
             return resp.data;
           } catch (_fallbackErr) {
-
             // fall through to throw original error
           }
         }
@@ -101,10 +110,12 @@ export const authApi = {
   },
 
   // Change password
-  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
-
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> => {
     try {
-      const response = await apiClient.post('/auth/change-password', {
+      const response = await apiClient.post("/auth/change-password", {
         currentPassword,
         newPassword,
       });
@@ -118,9 +129,8 @@ export const authApi = {
 
   // Forgot password
   forgotPassword: async (email: string): Promise<any> => {
-
     try {
-      const response = await apiClient.post('/auth/forgot-password', { email });
+      const response = await apiClient.post("/auth/forgot-password", { email });
 
       return response.data;
     } catch (error: any) {
@@ -131,9 +141,8 @@ export const authApi = {
 
   // Reset password
   resetPassword: async (token: string, newPassword: string): Promise<any> => {
-
     try {
-      const response = await apiClient.post('/auth/reset-password', {
+      const response = await apiClient.post("/auth/reset-password", {
         token,
         new_password: newPassword,
       });
@@ -147,9 +156,10 @@ export const authApi = {
 
   // Validate reset token
   validateResetToken: async (token: string): Promise<any> => {
-
     try {
-      const response = await apiClient.post('/auth/validate-reset-token', { token });
+      const response = await apiClient.post("/auth/validate-reset-token", {
+        token,
+      });
 
       return response.data;
     } catch (error: any) {
@@ -157,8 +167,7 @@ export const authApi = {
       throw error;
     }
   },
-
-}
+};
 
 // ===========================================
 // File Management Endpoints
@@ -167,20 +176,20 @@ export const authApi = {
 export const fileApi = {
   // Upload file
   uploadFile: async (formData: FormData): Promise<unknown> => {
-    const { data } = await apiClient.post('/files/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const { data } = await apiClient.post("/files/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return data;
   },
 
   // Delete file
   deleteFile: async (url: string): Promise<void> => {
-    await apiClient.delete('/files/delete', { data: { url } });
+    await apiClient.delete("/files/delete", { data: { url } });
   },
 
   // Get file info
   getFileInfo: async (url: string): Promise<unknown> => {
-    const { data } = await apiClient.get('/files/info', { params: { url } });
+    const { data } = await apiClient.get("/files/info", { params: { url } });
     return data;
   },
 };
@@ -191,22 +200,38 @@ export const fileApi = {
 
 export const tasksApi = {
   // Get all tasks for user
-  getTasks: async (skip = 0, limit = 100, search?: string, status?: string): Promise<Task[]> => {
+  getTasks: async (
+    skip = 0,
+    limit = 100,
+    search?: string,
+    status?: string,
+  ): Promise<Task[]> => {
     const cacheKey = `tasks-getTasks-${skip}-${limit}-${search}-${status}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/tasks/', { params: { skip, limit, search, status } });
+      const { data } = await apiClient.get("/tasks/", {
+        params: { skip, limit, search, status },
+      });
       return data;
     }, cacheKey);
   },
 
   // Get user's tasks
-  getMyTasks: async (skip = 0, limit = 100, search?: string, status?: string): Promise<Task[]> => {
+  getMyTasks: async (
+    skip = 0,
+    limit = 100,
+    search?: string,
+    status?: string,
+  ): Promise<Task[]> => {
     const cacheKey = `tasks-getMyTasks-${skip}-${limit}-${search}-${status}`;
     return createDeduplicatedRequest(async () => {
       const params: any = { skip, limit };
-      if (search) { params.search = search; }
-      if (status && status !== 'all') { params.status = status; }
-      const { data } = await apiClient.get('/tasks/my/tasks', { params });
+      if (search) {
+        params.search = search;
+      }
+      if (status && status !== "all") {
+        params.status = status;
+      }
+      const { data } = await apiClient.get("/tasks/my/tasks", { params });
       return data;
     }, cacheKey);
   },
@@ -228,7 +253,7 @@ export const tasksApi = {
     sortBy?: string,
     sortOrder?: string,
     search?: string,
-    statusFilter?: string
+    statusFilter?: string,
   ): Promise<Task[]> => {
     const cacheKey = `tasks-getProjectTasks-${projectId}-${skip}-${limit}-${sortBy}-${sortOrder}-${search}-${statusFilter}`;
     return createDeduplicatedRequest(async () => {
@@ -239,21 +264,30 @@ export const tasksApi = {
           sort_by: sortBy,
           sort_order: sortOrder,
           search,
-          status: statusFilter
-        }
+          status: statusFilter,
+        },
       });
       return data;
     }, cacheKey);
   },
 
   // Create task for a project
-  createTask: async (projectId: string, taskData: CreateTaskRequest): Promise<Task> => {
-    const { data } = await apiClient.post(`/projects/${projectId}/tasks`, taskData);
+  createTask: async (
+    projectId: string,
+    taskData: CreateTaskRequest,
+  ): Promise<Task> => {
+    const { data } = await apiClient.post(
+      `/projects/${projectId}/tasks`,
+      taskData,
+    );
     return data;
   },
 
   // Update task
-  updateTask: async (taskId: string, taskData: UpdateTaskRequest): Promise<Task> => {
+  updateTask: async (
+    taskId: string,
+    taskData: UpdateTaskRequest,
+  ): Promise<Task> => {
     const { data } = await apiClient.put(`/tasks/${taskId}`, taskData);
     return data;
   },
@@ -262,9 +296,12 @@ export const tasksApi = {
   updateProjectTask: async (
     projectId: string,
     taskId: string,
-    taskData: UpdateTaskRequest
+    taskData: UpdateTaskRequest,
   ): Promise<Task> => {
-    const { data } = await apiClient.put(`/projects/${projectId}/tasks/${taskId}`, taskData);
+    const { data } = await apiClient.put(
+      `/projects/${projectId}/tasks/${taskId}`,
+      taskData,
+    );
     return data;
   },
 
@@ -274,7 +311,10 @@ export const tasksApi = {
   },
 
   // Delete project task
-  deleteProjectTask: async (projectId: string, taskId: string): Promise<void> => {
+  deleteProjectTask: async (
+    projectId: string,
+    taskId: string,
+  ): Promise<void> => {
     await apiClient.delete(`/projects/${projectId}/tasks/${taskId}`);
   },
 
@@ -288,15 +328,20 @@ export const tasksApi = {
   updateProjectTaskStatus: async (
     projectId: string,
     taskId: string,
-    status: string
+    status: string,
   ): Promise<Task> => {
-    const { data } = await apiClient.put(`/projects/${projectId}/tasks/${taskId}/status`, { status });
+    const { data } = await apiClient.put(
+      `/projects/${projectId}/tasks/${taskId}/status`,
+      { status },
+    );
     return data;
   },
 
   // Assign task
   assignTask: async (taskId: string, assigneeId: string): Promise<Task> => {
-    const { data } = await apiClient.put(`/tasks/${taskId}/assign`, { assignee_id: assigneeId });
+    const { data } = await apiClient.put(`/tasks/${taskId}/assign`, {
+      assignee_id: assigneeId,
+    });
     return data;
   },
 
@@ -304,9 +349,12 @@ export const tasksApi = {
   assignProjectTask: async (
     projectId: string,
     taskId: string,
-    assigneeId: string
+    assigneeId: string,
   ): Promise<Task> => {
-    const { data } = await apiClient.put(`/projects/${projectId}/tasks/${taskId}/assign`, { assignee_id: assigneeId });
+    const { data } = await apiClient.put(
+      `/projects/${projectId}/tasks/${taskId}/assign`,
+      { assignee_id: assigneeId },
+    );
     return data;
   },
 };
@@ -317,13 +365,16 @@ export const tasksApi = {
 
 export const projectsApi = {
   // Get all projects with deduplication
-  getProjects: async (skip = 0, limit = 100, userProjectsOnly = false): Promise<Project[]> => {
+  getProjects: async (
+    skip = 0,
+    limit = 100,
+    userProjectsOnly = false,
+  ): Promise<Project[]> => {
     const cacheKey = `projects-getProjects-${skip}-${limit}-${userProjectsOnly}`;
 
     return createDeduplicatedRequest(async () => {
-
-      const { data } = await apiClient.get('/projects', {
-        params: { skip, limit, user_projects_only: userProjectsOnly }
+      const { data } = await apiClient.get("/projects", {
+        params: { skip, limit, user_projects_only: userProjectsOnly },
       });
 
       return data;
@@ -340,13 +391,18 @@ export const projectsApi = {
   },
 
   // Create project
-  createProject: async (projectData: CreateProjectRequest): Promise<Project> => {
-    const { data } = await apiClient.post('/projects', projectData);
+  createProject: async (
+    projectData: CreateProjectRequest,
+  ): Promise<Project> => {
+    const { data } = await apiClient.post("/projects", projectData);
     return data;
   },
 
   // Update project
-  updateProject: async (projectId: string, projectData: UpdateProjectRequest): Promise<Project> => {
+  updateProject: async (
+    projectId: string,
+    projectData: UpdateProjectRequest,
+  ): Promise<Project> => {
     const { data } = await apiClient.put(`/projects/${projectId}`, projectData);
     return data;
   },
@@ -366,19 +422,35 @@ export const projectsApi = {
   },
 
   // Add project member
-  addProjectMember: async (projectId: string, memberData: unknown): Promise<unknown> => {
-    const { data } = await apiClient.post(`/projects/${projectId}/members`, memberData);
+  addProjectMember: async (
+    projectId: string,
+    memberData: unknown,
+  ): Promise<unknown> => {
+    const { data } = await apiClient.post(
+      `/projects/${projectId}/members`,
+      memberData,
+    );
     return data;
   },
 
   // Remove project member
-  removeProjectMember: async (projectId: string, memberUserId: string): Promise<void> => {
+  removeProjectMember: async (
+    projectId: string,
+    memberUserId: string,
+  ): Promise<void> => {
     await apiClient.delete(`/projects/${projectId}/members/${memberUserId}`);
   },
 
   // Update member role
-  updateMemberRole: async (projectId: string, memberUserId: string, role: string): Promise<unknown> => {
-    const { data } = await apiClient.put(`/projects/${projectId}/members/${memberUserId}/role`, { role });
+  updateMemberRole: async (
+    projectId: string,
+    memberUserId: string,
+    role: string,
+  ): Promise<unknown> => {
+    const { data } = await apiClient.put(
+      `/projects/${projectId}/members/${memberUserId}/role`,
+      { role },
+    );
     return data;
   },
 };
@@ -390,23 +462,23 @@ export const projectsApi = {
 export const usersApi = {
   // Get current user profile
   getCurrentUser: async (): Promise<User> => {
-    const cacheKey = 'users-getCurrentUser';
+    const cacheKey = "users-getCurrentUser";
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/users/me');
+      const { data } = await apiClient.get("/users/me");
       return data;
     }, cacheKey);
   },
 
   // Update current user profile
   updateCurrentUser: async (userData: UpdateUserRequest): Promise<User> => {
-    const { data } = await apiClient.put('/users/me', userData);
+    const { data } = await apiClient.put("/users/me", userData);
     return data;
   },
 
   // Upload user avatar
   uploadAvatar: async (formData: FormData): Promise<User> => {
-    const { data } = await apiClient.post('/users/me/avatar', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const { data } = await apiClient.post("/users/me/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
     return data;
   },
@@ -421,44 +493,54 @@ export const usersApi = {
   },
 
   // Search users
-  searchUsers: async (query: string, skip = 0, limit = 20, role?: string, status?: string): Promise<User[]> => {
+  searchUsers: async (
+    query: string,
+    skip = 0,
+    limit = 20,
+    role?: string,
+    status?: string,
+  ): Promise<User[]> => {
     const cacheKey = `users-searchUsers-${query}-${skip}-${limit}-${role}-${status}`;
     return createDeduplicatedRequest(async () => {
       const params: any = { q: query, skip, limit };
-      if (role && role !== 'all') { params.role = role; }
-      if (status && status !== 'all') { params.status = status; }
+      if (role && role !== "all") {
+        params.role = role;
+      }
+      if (status && status !== "all") {
+        params.status = status;
+      }
 
-      const { data } = await apiClient.get('/users/search', { params });
+      const { data } = await apiClient.get("/users/search", { params });
       return data;
     }, cacheKey);
   },
 
   // Get user settings
   getSettings: async (): Promise<any> => {
-    const cacheKey = 'users-getSettings';
+    const cacheKey = "users-getSettings";
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/users/me/settings');
+      const { data } = await apiClient.get("/users/me/settings");
       return data;
     }, cacheKey);
   },
 
   // Update user settings
   updateSettings: async (settingsData: any): Promise<any> => {
-    const { data } = await apiClient.patch('/users/me/settings', settingsData);
+    const { data } = await apiClient.patch("/users/me/settings", settingsData);
     return data;
   },
 
   // Invite user
   inviteUser: async (userData: InviteUserRequest): Promise<User> => {
-    const { data } = await apiClient.post('/users/invite', userData);
+    const { data } = await apiClient.post("/users/invite", userData);
     return data;
   },
 
   // Get user stats
   getStats: async (): Promise<any> => {
-    const cacheKey = 'users-getStats';
+    const cacheKey = "users-getStats";
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/users/stats');
+      const { data } = await apiClient.get("/users/stats");
       return data;
     }, cacheKey);
   },
@@ -474,54 +556,53 @@ export const dashboardApi = {
     stats: {
       totalProjects: number;
       totalProjectsChange?: string;
-      totalProjectsTrend?: 'up' | 'down';
+      totalProjectsTrend?: "up" | "down";
       totalTasks: number;
       completedTasks: number;
       pendingTasks: number;
       teamMembers: number;
       inProgressTasks?: number;
       inProgressTasksChange?: string;
-      inProgressTasksTrend?: 'up' | 'down';
+      inProgressTasksTrend?: "up" | "down";
       pendingReviewTasks?: number;
       pendingReviewTasksChange?: string;
-      pendingReviewTasksTrend?: 'up' | 'down';
+      pendingReviewTasksTrend?: "up" | "down";
       teamVelocity?: number;
       teamVelocityChange?: string;
-      teamVelocityTrend?: 'up' | 'down';
+      teamVelocityTrend?: "up" | "down";
     };
     recentProjects: Project[];
     recentActivities: RecentActivity[];
     upcomingDeadlines: unknown[];
     charts: unknown[];
   }> => {
-    const { data } = await apiClient.get('/dashboard/overview');
+    const { data } = await apiClient.get("/dashboard/overview");
     return data;
-
   },
 
   // Get user's tasks for today
   getTodayTasks: async (): Promise<Task[]> => {
-    const cacheKey = 'dashboard-getTodayTasks';
+    const cacheKey = "dashboard-getTodayTasks";
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/dashboard/today-tasks');
+      const { data } = await apiClient.get("/dashboard/today-tasks");
       return data;
     }, cacheKey);
   },
 
   // Get recent projects
   getRecentProjects: async (): Promise<Project[]> => {
-    const cacheKey = 'dashboard-getRecentProjects';
+    const cacheKey = "dashboard-getRecentProjects";
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/dashboard/recent-projects');
+      const { data } = await apiClient.get("/dashboard/recent-projects");
       return data;
     }, cacheKey);
   },
 
   // Get team activity
   getTeamActivity: async (): Promise<unknown[]> => {
-    const cacheKey = 'dashboard-getTeamActivity';
+    const cacheKey = "dashboard-getTeamActivity";
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/dashboard/team-activity');
+      const { data } = await apiClient.get("/dashboard/team-activity");
       return data;
     }, cacheKey);
   },
@@ -536,21 +617,25 @@ export const analyticsApi = {
   getAnalytics: async (period: string): Promise<AnalyticsResponse> => {
     const cacheKey = `analytics-getAnalytics-${period}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/analytics/overview', { params: { period } });
+      const { data } = await apiClient.get("/analytics/overview", {
+        params: { period },
+      });
       return data;
     }, cacheKey);
   },
 
   // Get paginated team workload (scalable for 1K-100K users)
-  getTeamWorkload: async (params: TeamWorkloadParams): Promise<TeamWorkloadPaginatedResponse> => {
-    const { data } = await apiClient.get('/analytics/team-workload', {
+  getTeamWorkload: async (
+    params: TeamWorkloadParams,
+  ): Promise<TeamWorkloadPaginatedResponse> => {
+    const { data } = await apiClient.get("/analytics/team-workload", {
       params: {
         page: params.page ?? 1,
         page_size: params.pageSize ?? 10,
         search: params.search ?? undefined,
-        sort_by: params.sortBy ?? 'tasks',
-        sort_order: params.sortOrder ?? 'desc'
-      }
+        sort_by: params.sortBy ?? "tasks",
+        sort_order: params.sortOrder ?? "desc",
+      },
     });
     return data;
   },
@@ -565,29 +650,37 @@ export const notificationsApi = {
   getNotifications: async (skip = 0, limit = 50): Promise<Notification[]> => {
     const cacheKey = `notifications-getNotifications-${skip}-${limit}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/notifications', { params: { skip, limit } });
+      const { data } = await apiClient.get("/notifications", {
+        params: { skip, limit },
+      });
       return data;
     }, cacheKey);
   },
 
   // Get unread count
   getUnreadCount: async (): Promise<number> => {
-    const cacheKey = 'notifications-getUnreadCount';
-    return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get('/notifications/unread-count');
-      return data;
-    }, cacheKey, 5000000); // เพิ่มเวลาเป็น 5 นาที (300,000ms)
+    const cacheKey = "notifications-getUnreadCount";
+    return createDeduplicatedRequest(
+      async () => {
+        const { data } = await apiClient.get("/notifications/unread-count");
+        return data;
+      },
+      cacheKey,
+      5000000,
+    ); // เพิ่มเวลาเป็น 5 นาที (300,000ms)
   },
 
   // Mark as read
   markAsRead: async (notificationId: string): Promise<Notification> => {
-    const { data } = await apiClient.put(`/notifications/${notificationId}/read`);
+    const { data } = await apiClient.put(
+      `/notifications/${notificationId}/read`,
+    );
     return data;
   },
 
   // Mark all as read
   markAllAsRead: async (): Promise<Notification[]> => {
-    const { data } = await apiClient.put('/notifications/read-all');
+    const { data } = await apiClient.put("/notifications/read-all");
     return data;
   },
 

@@ -2,9 +2,9 @@
 // Zustand App Store
 // ===========================================
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { toast } from 'sonner';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { toast } from "sonner";
 
 interface AppState {
   // UI State
@@ -26,7 +26,7 @@ interface AppState {
   // Alert/Toast State
   alerts: Array<{
     id: string;
-    type: 'success' | 'error' | 'warning' | 'info';
+    type: "success" | "error" | "warning" | "info";
     title: string;
     message: string;
     duration?: number;
@@ -68,7 +68,9 @@ interface AppState {
   toggleSidebar: () => void;
   toggleSideNav: () => void; // Alias
   setCurrentPage: (page: string) => void;
-  setBreadcrumbs: (breadcrumbs: Array<{ label: string; href?: string }>) => void;
+  setBreadcrumbs: (
+    breadcrumbs: Array<{ label: string; href?: string }>,
+  ) => void;
 
   // Modal Actions
   openModal: (modalId: string, data?: any) => void;
@@ -84,7 +86,7 @@ interface AppState {
   setLoading: (loading: { isLoading: boolean; message?: string }) => void; // Enhanced
 
   // Alert Actions
-  addAlert: (alert: Omit<AppState['alerts'][0], 'id'>) => string;
+  addAlert: (alert: Omit<AppState["alerts"][0], "id">) => string;
   removeAlert: (id: string) => void;
   clearAlerts: () => void;
 
@@ -133,8 +135,8 @@ export const useAppStore = create<AppState>()(
       // Initial state
       sidebarCollapsed: false,
       isSideNavOpen: false, // Alias for sidebarCollapsed
-      currentPage: '/dashboard',
-      breadcrumbs: [{ label: 'Dashboard', href: '/dashboard' }],
+      currentPage: "/dashboard",
+      breadcrumbs: [{ label: "Dashboard", href: "/dashboard" }],
 
       activeModal: null,
       modalData: {},
@@ -153,7 +155,7 @@ export const useAppStore = create<AppState>()(
       forms: {}, // For backward compatibility
 
       globalSearch: {
-        query: '',
+        query: "",
         isOpen: false,
         results: [],
         isLoading: false,
@@ -161,7 +163,7 @@ export const useAppStore = create<AppState>()(
         isActive: false,
         isSearching: false,
       },
-      search: { query: '', filters: {}, isActive: false, isSearching: false }, // For backward compatibility
+      search: { query: "", filters: {}, isActive: false, isSearching: false }, // For backward compatibility
 
       userPreferences: {},
       currentProjectId: null,
@@ -170,81 +172,93 @@ export const useAppStore = create<AppState>()(
       isDarkMode: false, // For theme integration
 
       // UI Actions
-      setSidebarCollapsed: (collapsed) => set({
-        sidebarCollapsed: collapsed,
-        isSideNavOpen: collapsed // Keep aliases in sync
-      }),
+      setSidebarCollapsed: (collapsed) =>
+        set({
+          sidebarCollapsed: collapsed,
+          isSideNavOpen: collapsed, // Keep aliases in sync
+        }),
 
-      toggleSidebar: () => set((state) => ({
-        sidebarCollapsed: !state.sidebarCollapsed,
-        isSideNavOpen: !state.isSideNavOpen // Keep aliases in sync
-      })),
+      toggleSidebar: () =>
+        set((state) => ({
+          sidebarCollapsed: !state.sidebarCollapsed,
+          isSideNavOpen: !state.isSideNavOpen, // Keep aliases in sync
+        })),
 
-      toggleSideNav: () => set((state) => ({
-        sidebarCollapsed: !state.sidebarCollapsed,
-        isSideNavOpen: !state.isSideNavOpen // Keep aliases in sync
-      })),
+      toggleSideNav: () =>
+        set((state) => ({
+          sidebarCollapsed: !state.sidebarCollapsed,
+          isSideNavOpen: !state.isSideNavOpen, // Keep aliases in sync
+        })),
 
       setCurrentPage: (page) => set({ currentPage: page }),
 
       setBreadcrumbs: (breadcrumbs) => set({ breadcrumbs }),
 
       // Modal Actions
-      openModal: (modalId, data) => set({
-        activeModal: modalId,
-        modalData: data || {}
-      }),
+      openModal: (modalId, data) =>
+        set({
+          activeModal: modalId,
+          modalData: data || {},
+        }),
 
-      closeModal: () => set({
-        activeModal: null,
-        modalData: {}
-      }),
+      closeModal: () =>
+        set({
+          activeModal: null,
+          modalData: {},
+        }),
 
-      setModalData: (data) => set((state) => ({
-        modalData: { ...state.modalData, ...data }
-      })),
+      setModalData: (data) =>
+        set((state) => ({
+          modalData: { ...state.modalData, ...data },
+        })),
 
       // Modal Actions (add aliases)
-      showModal: (id, data) => set({
-        activeModal: id,
-        modalData: data || {},
-        modals: [...(get().modals || []), { id, data }] // Add to modals array
-      }),
+      showModal: (id, data) =>
+        set({
+          activeModal: id,
+          modalData: data || {},
+          modals: [...(get().modals || []), { id, data }], // Add to modals array
+        }),
 
-      hideModal: (id) => set((state) => ({
-        activeModal: null,
-        modals: state.modals.filter(m => m.id !== id)
-      })),
+      hideModal: (id) =>
+        set((state) => ({
+          activeModal: null,
+          modals: state.modals.filter((m) => m.id !== id),
+        })),
 
-      closeAllModals: () => set({
-        activeModal: null,
-        modals: []
-      }),
+      closeAllModals: () =>
+        set({
+          activeModal: null,
+          modals: [],
+        }),
 
       // Loading Actions
-      setGlobalLoading: (loading) => set({
-        globalLoading: loading,
-        isLoading: loading // Keep aliases in sync
-      }),
+      setGlobalLoading: (loading) =>
+        set({
+          globalLoading: loading,
+          isLoading: loading, // Keep aliases in sync
+        }),
 
-      setPageLoading: (page, loading) => set((state) => ({
-        pageLoading: {
-          ...state.pageLoading,
-          [page]: loading,
-        }
-      })),
+      setPageLoading: (page, loading) =>
+        set((state) => ({
+          pageLoading: {
+            ...state.pageLoading,
+            [page]: loading,
+          },
+        })),
 
-      setLoading: (loading) => set({
-        globalLoading: loading.isLoading,
-        isLoading: loading.isLoading // Keep aliases in sync
-      }),
+      setLoading: (loading) =>
+        set({
+          globalLoading: loading.isLoading,
+          isLoading: loading.isLoading, // Keep aliases in sync
+        }),
 
       // Alert Actions
       addAlert: (alert) => {
         const id = `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         set((state) => ({
-          alerts: [...state.alerts, { ...alert, id }]
+          alerts: [...state.alerts, { ...alert, id }],
         }));
 
         // Auto-remove alert after duration
@@ -257,120 +271,135 @@ export const useAppStore = create<AppState>()(
         return id;
       },
 
-      removeAlert: (id) => set((state) => ({
-        alerts: state.alerts.filter(alert => alert.id !== id)
-      })),
+      removeAlert: (id) =>
+        set((state) => ({
+          alerts: state.alerts.filter((alert) => alert.id !== id),
+        })),
 
       clearAlerts: () => set({ alerts: [] }),
 
       // Form Actions
       setActiveForm: (formId) => set({ activeForm: formId }),
 
-      updateFormData: (data) => set((state) => ({
-        formData: { ...state.formData, ...data }
-      })),
+      updateFormData: (data) =>
+        set((state) => ({
+          formData: { ...state.formData, ...data },
+        })),
 
       setFormErrors: (errors) => set({ formErrors: errors }),
 
-      clearFormData: (formId) => set((state) => {
-        if (formId && state.activeForm === formId) {
-          return {
-            activeForm: null,
-            formData: {},
-            formErrors: {},
-          };
-        }
-        return state;
-      }),
+      clearFormData: (formId) =>
+        set((state) => {
+          if (formId && state.activeForm === formId) {
+            return {
+              activeForm: null,
+              formData: {},
+              formErrors: {},
+            };
+          }
+          return state;
+        }),
 
       // Form Actions (add aliases)
-      updateForm: (formId, data) => set((state) => ({
-        forms: { ...state.forms, [formId]: data },
-        formData: data.data || {},
-        formErrors: data.errors || {},
-      })),
+      updateForm: (formId, data) =>
+        set((state) => ({
+          forms: { ...state.forms, [formId]: data },
+          formData: data.data || {},
+          formErrors: data.errors || {},
+        })),
 
-      clearForm: (formId) => set((state) => {
-        const { [formId]: _removed, ...remainingForms } = state.forms;
-        if (state.activeForm === formId) {
-          return {
-            activeForm: null,
-            formData: {},
-            formErrors: {},
-            forms: remainingForms,
-          };
-        }
-        return { forms: remainingForms };
-      }),
+      clearForm: (formId) =>
+        set((state) => {
+          const { [formId]: _removed, ...remainingForms } = state.forms;
+          if (state.activeForm === formId) {
+            return {
+              activeForm: null,
+              formData: {},
+              formErrors: {},
+              forms: remainingForms,
+            };
+          }
+          return { forms: remainingForms };
+        }),
 
       // Search Actions
-      setGlobalSearchQuery: (query) => set((state) => ({
-        globalSearch: { ...state.globalSearch, query }
-      })),
+      setGlobalSearchQuery: (query) =>
+        set((state) => ({
+          globalSearch: { ...state.globalSearch, query },
+        })),
 
-      setGlobalSearchOpen: (open) => set((state) => ({
-        globalSearch: { ...state.globalSearch, isOpen: open }
-      })),
+      setGlobalSearchOpen: (open) =>
+        set((state) => ({
+          globalSearch: { ...state.globalSearch, isOpen: open },
+        })),
 
-      setGlobalSearchResults: (results) => set((state) => ({
-        globalSearch: { ...state.globalSearch, results }
-      })),
+      setGlobalSearchResults: (results) =>
+        set((state) => ({
+          globalSearch: { ...state.globalSearch, results },
+        })),
 
-      setGlobalSearchLoading: (loading) => set((state) => ({
-        globalSearch: { ...state.globalSearch, isLoading: loading }
-      })),
+      setGlobalSearchLoading: (loading) =>
+        set((state) => ({
+          globalSearch: { ...state.globalSearch, isLoading: loading },
+        })),
 
-      clearGlobalSearch: () => set((state) => ({
-        globalSearch: {
-          query: '',
-          isOpen: state.globalSearch.isOpen,
-          results: [],
-          isLoading: false,
-          filters: {},
-          isActive: false,
-          isSearching: false,
-        }
-      })),
+      clearGlobalSearch: () =>
+        set((state) => ({
+          globalSearch: {
+            query: "",
+            isOpen: state.globalSearch.isOpen,
+            results: [],
+            isLoading: false,
+            filters: {},
+            isActive: false,
+            isSearching: false,
+          },
+        })),
 
       // Search Actions (add aliases)
-      setSearch: (search) => set((state) => ({
-        globalSearch: { ...state.globalSearch, ...search },
-        search: { ...state.search, ...search }
-      })),
+      setSearch: (search) =>
+        set((state) => ({
+          globalSearch: { ...state.globalSearch, ...search },
+          search: { ...state.search, ...search },
+        })),
 
-      clearSearch: () => set((state) => ({
-        globalSearch: {
-          query: '',
-          isOpen: state.globalSearch.isOpen,
-          results: [],
-          isLoading: false,
-          filters: {},
-          isActive: false,
-          isSearching: false,
-        },
-        search: {
-          query: '',
-          filters: {},
-          isActive: false,
-          isSearching: false,
-        }
-      })),
+      clearSearch: () =>
+        set((state) => ({
+          globalSearch: {
+            query: "",
+            isOpen: state.globalSearch.isOpen,
+            results: [],
+            isLoading: false,
+            filters: {},
+            isActive: false,
+            isSearching: false,
+          },
+          search: {
+            query: "",
+            filters: {},
+            isActive: false,
+            isSearching: false,
+          },
+        })),
 
       // User Preferences Actions
       setCurrentProjectId: (id) => set({ currentProjectId: id }),
 
-      updateUserPreferences: (preferences) => set((state) => ({
-        userPreferences: { ...state.userPreferences, ...preferences }
-      })),
+      updateUserPreferences: (preferences) =>
+        set((state) => ({
+          userPreferences: { ...state.userPreferences, ...preferences },
+        })),
 
-      setUserPreferences: (preferences) => set((state) => ({
-        userPreferences: { ...state.userPreferences, ...preferences }
-      })),
+      setUserPreferences: (preferences) =>
+        set((state) => ({
+          userPreferences: { ...state.userPreferences, ...preferences },
+        })),
 
       // UI Actions
       setFullscreen: (fullscreen) => set({ isFullscreen: fullscreen }),
 
-      toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
+      toggleFullscreen: () =>
+        set((state) => ({ isFullscreen: !state.isFullscreen })),
 
       setDarkMode: (dark) => set({ isDarkMode: dark }),
 
@@ -378,25 +407,27 @@ export const useAppStore = create<AppState>()(
 
       // Advanced Actions
       setPageTitle: (title) => {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           document.title = title;
         }
       },
 
-      showToast: (toast) => set((state) => ({
-        toasts: [...state.toasts, { ...toast, id: `toast-${Date.now()}` }]
-      })),
+      showToast: (toast) =>
+        set((state) => ({
+          toasts: [...state.toasts, { ...toast, id: `toast-${Date.now()}` }],
+        })),
 
-      hideToast: (id) => set((state) => ({
-        toasts: state.toasts.filter(t => t.id !== id)
-      })),
+      hideToast: (id) =>
+        set((state) => ({
+          toasts: state.toasts.filter((t) => t.id !== id),
+        })),
 
       addNotification: (notification) => {
         // Add to alerts for compatibility
         get().addAlert({
-          type: 'info',
-          title: notification.title || 'Notification',
-          message: notification.message || '',
+          type: "info",
+          title: notification.title || "Notification",
+          message: notification.message || "",
           duration: 5000,
         });
       },
@@ -411,7 +442,7 @@ export const useAppStore = create<AppState>()(
       },
 
       navigateWithBreadcrumb: (item) => {
-        if (item.href && typeof window !== 'undefined') {
+        if (item.href && typeof window !== "undefined") {
           window.location.href = item.href;
         }
       },
@@ -420,8 +451,8 @@ export const useAppStore = create<AppState>()(
         set({
           sidebarCollapsed: false,
           isSideNavOpen: false,
-          currentPage: '/dashboard',
-          breadcrumbs: [{ label: 'Dashboard', href: '/dashboard' }],
+          currentPage: "/dashboard",
+          breadcrumbs: [{ label: "Dashboard", href: "/dashboard" }],
           activeModal: null,
           modalData: {},
           modals: [],
@@ -435,7 +466,7 @@ export const useAppStore = create<AppState>()(
           formErrors: {},
           forms: {},
           globalSearch: {
-            query: '',
+            query: "",
             isOpen: false,
             results: [],
             isLoading: false,
@@ -444,7 +475,7 @@ export const useAppStore = create<AppState>()(
             isSearching: false,
           },
           search: {
-            query: '',
+            query: "",
             filters: {},
             isActive: false,
             isSearching: false,
@@ -457,15 +488,15 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'insight-flow-app',
+      name: "insight-flow-app",
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
         currentPage: state.currentPage,
         formData: state.formData,
         formErrors: state.formErrors,
       }),
-    }
-  )
+    },
+  ),
 );
 
 // ===========================================
@@ -482,18 +513,20 @@ export const appSelectors = {
   // Modal Selectors
   getActiveModal: (state: AppState) => state.activeModal,
   getModalData: (state: AppState) => state.modalData,
-  isModalOpen: (state: AppState) => (modalId: string) => state.activeModal === modalId,
+  isModalOpen: (state: AppState) => (modalId: string) =>
+    state.activeModal === modalId,
   getModals: (state: AppState) => state.modals, // For compatibility
 
   // Loading Selectors
   isGlobalLoading: (state: AppState) => state.globalLoading,
-  isPageLoading: (state: AppState) => (page: string) => state.pageLoading[page] || false,
+  isPageLoading: (state: AppState) => (page: string) =>
+    state.pageLoading[page] || false,
   isLoading: (state: AppState) => state.isLoading, // Alias
 
   // Alert Selectors
   getAlerts: (state: AppState) => state.alerts,
-  getAlertsByType: (state: AppState) => (type: AppState['alerts'][0]['type']) =>
-    state.alerts.filter(alert => alert.type === type),
+  getAlertsByType: (state: AppState) => (type: AppState["alerts"][0]["type"]) =>
+    state.alerts.filter((alert) => alert.type === type),
 
   // Form Selectors
   getActiveForm: (state: AppState) => state.activeForm,
@@ -521,7 +554,8 @@ export const appSelectors = {
 
 export const appActions = {
   // Utility functions
-  generateId: () => `id-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  generateId: () =>
+    `id-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
 
   // Show success message
   showSuccess: (title: string, message: string, duration?: number) => {
@@ -561,7 +595,10 @@ export const appActions = {
   },
 
   // Navigation helpers
-  navigateTo: (path: string, breadcrumbs?: Array<{ label: string; href?: string }>) => {
+  navigateTo: (
+    path: string,
+    breadcrumbs?: Array<{ label: string; href?: string }>,
+  ) => {
     const { setCurrentPage, setBreadcrumbs } = useAppStore.getState();
     setCurrentPage(path);
     if (breadcrumbs) {
@@ -572,7 +609,7 @@ export const appActions = {
   // Modal helpers
   openFormModal: (formId: string, initialData?: Record<string, any>) => {
     const { openModal, setActiveForm, updateFormData } = useAppStore.getState();
-    openModal('form-modal', { formId });
+    openModal("form-modal", { formId });
     setActiveForm(formId);
     if (initialData) {
       updateFormData(initialData);
@@ -588,9 +625,9 @@ export const appActions = {
 };
 
 // Auto-cleanup alerts on unmount
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   // Cleanup alerts when page is hidden
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       const { clearAlerts } = useAppStore.getState();
       clearAlerts();

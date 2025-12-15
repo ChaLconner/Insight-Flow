@@ -11,7 +11,7 @@ export default function GitHubCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(true);
+  /* const [isProcessing, setIsProcessing] = useState(true); */ // unused
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -20,16 +20,20 @@ export default function GitHubCallbackPage() {
       const errorDescription = searchParams.get("error_description");
 
       if (errorParam) {
-        setError(errorDescription || errorParam);
-        setIsProcessing(false);
-        toast.error("GitHub login failed", { description: errorDescription || errorParam });
+        setError(errorDescription ?? errorParam);
+        // setIsProcessing(false);
+        toast.error("GitHub login failed", {
+          description: errorDescription ?? errorParam,
+        });
         return;
       }
 
       if (!code) {
         setError("No authorization code received from GitHub");
-        setIsProcessing(false);
-        toast.error("GitHub login failed", { description: "No authorization code received" });
+        // setIsProcessing(false);
+        toast.error("GitHub login failed", {
+          description: "No authorization code received",
+        });
         return;
       }
 
@@ -46,7 +50,7 @@ export default function GitHubCallbackPage() {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData?.detail || "GitHub authentication failed");
+          throw new Error(errorData?.detail ?? "GitHub authentication failed");
         }
 
         const data = await response.json();
@@ -86,11 +90,12 @@ export default function GitHubCallbackPage() {
         window.location.href = redirectUrl;
       } catch (err) {
         console.error("❌ GitHub callback error:", err);
-        const errorMessage = err instanceof Error ? err.message : "GitHub authentication failed";
+        const errorMessage =
+          err instanceof Error ? err.message : "GitHub authentication failed";
         setError(errorMessage);
         toast.error("GitHub login failed", { description: errorMessage });
       } finally {
-        setIsProcessing(false);
+        // setIsProcessing(false);
       }
     };
 
@@ -104,7 +109,9 @@ export default function GitHubCallbackPage() {
           <div className="mx-auto h-12 w-12 rounded-xl bg-red-600 flex items-center justify-center mb-4">
             <span className="text-2xl">✕</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Authentication Failed</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            Authentication Failed
+          </h1>
           <p className="text-zinc-400 mb-6">{error}</p>
           <button
             onClick={() => router.push("/auth/login")}
@@ -123,8 +130,12 @@ export default function GitHubCallbackPage() {
         <div className="mx-auto h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center mb-4">
           <Loader2 className="h-6 w-6 text-white animate-spin" />
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">Signing in with GitHub</h1>
-        <p className="text-zinc-400">Please wait while we complete your authentication...</p>
+        <h1 className="text-2xl font-bold text-white mb-2">
+          Signing in with GitHub
+        </h1>
+        <p className="text-zinc-400">
+          Please wait while we complete your authentication...
+        </p>
       </div>
     </div>
   );

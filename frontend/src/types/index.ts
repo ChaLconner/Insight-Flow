@@ -42,7 +42,7 @@ export interface User {
   website?: string;
   timezone?: string;
   language?: string;
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   notifications?: {
     email: boolean;
     push: boolean;
@@ -56,10 +56,10 @@ export interface User {
 }
 
 export enum UserRole {
-  ADMIN = 'admin',
-  MANAGER = 'manager',
-  MEMBER = 'member',
-  VIEWER = 'viewer'
+  ADMIN = "admin",
+  MANAGER = "manager",
+  MEMBER = "member",
+  VIEWER = "viewer",
 }
 
 export interface CreateUserRequest {
@@ -92,7 +92,7 @@ export interface UpdateUserRequest {
   website?: string;
   timezone?: string;
   language?: string;
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   notifications?: {
     email: boolean;
     push: boolean;
@@ -110,7 +110,7 @@ export interface UserProfile {
   location?: string;
   timezone?: string;
   language: string;
-  theme: 'light' | 'dark' | 'auto';
+  theme: "light" | "dark" | "auto";
   notifications: {
     email: boolean;
     push: boolean;
@@ -180,9 +180,9 @@ export interface Project {
 }
 
 export enum ProjectStatus {
-  ACTIVE = 'active',
-  ARCHIVED = 'archived',
-  SUSPENDED = 'suspended'
+  ACTIVE = "active",
+  ARCHIVED = "archived",
+  SUSPENDED = "suspended",
 }
 
 export interface ProjectMember {
@@ -195,10 +195,10 @@ export interface ProjectMember {
 }
 
 export enum ProjectRole {
-  OWNER = 'owner',
-  ADMIN = 'admin',
-  MEMBER = 'member',
-  VIEWER = 'viewer'
+  OWNER = "owner",
+  ADMIN = "admin",
+  MEMBER = "member",
+  VIEWER = "viewer",
 }
 
 export interface ProjectMemberSummary {
@@ -222,7 +222,7 @@ export interface ProjectStats {
 export interface ProjectSettings {
   allowPublicAccess: boolean;
   requireApproval: boolean;
-  defaultTaskVisibility: 'private' | 'team' | 'public';
+  defaultTaskVisibility: "private" | "team" | "public";
   notificationSettings: {
     taskAssigned: boolean;
     statusChanged: boolean;
@@ -290,27 +290,27 @@ export interface TaskListResponse {
 }
 
 export enum TaskStatus {
-  TODO = 'todo',
-  IN_PROGRESS = 'in_progress',
-  IN_REVIEW = 'in_review',
-  DONE = 'done',
-  CANCELLED = 'cancelled'
+  TODO = "todo",
+  IN_PROGRESS = "in_progress",
+  IN_REVIEW = "in_review",
+  DONE = "done",
+  CANCELLED = "cancelled",
 }
 
 export enum TaskPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  URGENT = 'urgent'
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+  URGENT = "urgent",
 }
 
 export enum TaskType {
-  FEATURE = 'feature',
-  BUG = 'bug',
-  IMPROVEMENT = 'improvement',
-  DOCUMENTATION = 'documentation',
-  RESEARCH = 'research',
-  OTHER = 'other'
+  FEATURE = "feature",
+  BUG = "bug",
+  IMPROVEMENT = "improvement",
+  DOCUMENTATION = "documentation",
+  RESEARCH = "research",
+  OTHER = "other",
 }
 
 export interface TaskAttachment {
@@ -391,10 +391,10 @@ export interface ProjectAnalytics {
 }
 
 export enum AnalyticsPeriod {
-  WEEK = 'week',
-  MONTH = 'month',
-  QUARTER = 'quarter',
-  YEAR = 'year'
+  WEEK = "week",
+  MONTH = "month",
+  QUARTER = "quarter",
+  YEAR = "year",
 }
 
 export interface TaskMetrics {
@@ -443,7 +443,7 @@ export interface AnalyticsTrend {
   previous: number;
   change: number;
   changePercentage: number;
-  trend: 'up' | 'down' | 'stable';
+  trend: "up" | "down" | "stable";
 }
 
 // ===========================================
@@ -466,21 +466,21 @@ export interface Notification {
 }
 
 export enum NotificationType {
-  TASK_ASSIGNED = 'task_assigned',
-  TASK_STATUS_CHANGED = 'task_status_changed',
-  TASK_DUE_DATE = 'task_due_date',
-  PROJECT_INVITATION = 'project_invitation',
-  PROJECT_UPDATE = 'project_update',
-  MENTION = 'mention',
-  COMMENT = 'comment',
-  SYSTEM = 'system'
+  TASK_ASSIGNED = "task_assigned",
+  TASK_STATUS_CHANGED = "task_status_changed",
+  TASK_DUE_DATE = "task_due_date",
+  PROJECT_INVITATION = "project_invitation",
+  PROJECT_UPDATE = "project_update",
+  MENTION = "mention",
+  COMMENT = "comment",
+  SYSTEM = "system",
 }
 
 export enum NotificationPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  URGENT = 'urgent'
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+  URGENT = "urgent",
 }
 
 export interface NotificationPreferences {
@@ -532,7 +532,7 @@ export interface TableColumn<T = any> {
   label: string;
   sortable?: boolean;
   width?: string;
-  align?: 'left' | 'center' | 'right';
+  align?: "left" | "center" | "right";
   render?: (value: T[keyof T], item: T) => React.ReactNode;
 }
 
@@ -544,7 +544,7 @@ export interface FilterOption {
 
 export interface SortOption {
   field: string;
-  direction: 'asc' | 'desc';
+  direction: "asc" | "desc";
 }
 
 // ===========================================
@@ -554,7 +554,7 @@ export interface SortOption {
 export interface BaseComponentProps {
   className?: string;
   children?: React.ReactNode;
-  'data-testid'?: string;
+  "data-testid"?: string;
 }
 
 export interface LoadingState {

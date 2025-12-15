@@ -1,1 +1,6 @@
-export { formatDate, formatLastLogin, getUserInitials, getFullName } from "./formatters";
+export {
+  formatDate,
+  formatLastLogin,
+  getUserInitials,
+  getFullName,
+} from "./formatters";

@@ -6,8 +6,6 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   FolderKanban,
-
-  Users,
   Settings,
   LogOut,
   Layers,
@@ -45,7 +43,13 @@ const sidebarItems = [
   },
 ];
 
-export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function Sidebar({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const pathname = usePathname();
 
   return (
@@ -62,13 +66,17 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
       <aside
         className={cn(
           "fixed left-0 top-0 z-50 h-screen w-72 border-r border-white/10 bg-black/90 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0 lg:bg-black/40 [content-visibility:auto]",
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-full flex-col px-4 py-6">
           {/* Logo */}
           <div className="mb-10 flex items-center justify-between px-2">
-            <Link href="/dashboard" onClick={() => onClose()} className="flex items-center gap-3">
+            <Link
+              href="/dashboard"
+              onClick={() => onClose()}
+              className="flex items-center gap-3"
+            >
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20">
                 <Layers className="h-6 w-6 text-white" />
               </div>
@@ -101,13 +109,15 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
                     "group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                     isActive
                       ? "bg-white/10 text-white shadow-inner shadow-white/5"
-                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white",
                   )}
                 >
                   <Icon
                     className={cn(
                       "h-5 w-5 transition-colors",
-                      isActive ? "text-indigo-400" : "text-zinc-500 group-hover:text-indigo-400"
+                      isActive
+                        ? "text-indigo-400"
+                        : "text-zinc-500 group-hover:text-indigo-400",
                     )}
                   />
                   {item.title}
@@ -123,7 +133,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => v
               aria-label="Sign out"
               onClick={() => {
                 const { logoutAndRedirect } = authActions;
-                logoutAndRedirect('/auth/login');
+                logoutAndRedirect("/auth/login");
               }}
               className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-zinc-400 transition-all hover:bg-white/5 hover:text-white cursor-pointer"
             >

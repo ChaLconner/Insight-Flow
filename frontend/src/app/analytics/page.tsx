@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, lazy } from "react";
+import { useState, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { AnalyticsPeriod } from "@/types";
@@ -16,42 +16,54 @@ import {
   AnalyticsPageSkeleton,
   PerformanceTrendsSkeleton,
   ListSkeleton,
-  ChartCarouselSkeleton
+  ChartCarouselSkeleton,
 } from "@/components/analytics/AnalyticsSkeletons";
 
 // ============================================
 // Lazy loaded components (below the fold)
 // ============================================
 const PerformanceTrends = dynamic(
-  () => import("@/components/analytics/PerformanceTrends").then(mod => ({ default: mod.PerformanceTrends })),
+  () =>
+    import("@/components/analytics/PerformanceTrends").then((mod) => ({
+      default: mod.PerformanceTrends,
+    })),
   {
     loading: () => <PerformanceTrendsSkeleton />,
-    ssr: false
-  }
+    ssr: false,
+  },
 );
 
 const ChartCarousel = dynamic(
-  () => import("@/components/analytics/ChartCarousel").then(mod => ({ default: mod.ChartCarousel })),
+  () =>
+    import("@/components/analytics/ChartCarousel").then((mod) => ({
+      default: mod.ChartCarousel,
+    })),
   {
     loading: () => <ChartCarouselSkeleton />,
-    ssr: false
-  }
+    ssr: false,
+  },
 );
 
 const ProjectList = dynamic(
-  () => import("@/components/analytics/ProjectList").then(mod => ({ default: mod.ProjectList })),
+  () =>
+    import("@/components/analytics/ProjectList").then((mod) => ({
+      default: mod.ProjectList,
+    })),
   {
     loading: () => <ListSkeleton title="Project Performance" />,
-    ssr: false
-  }
+    ssr: false,
+  },
 );
 
 const TeamList = dynamic(
-  () => import("@/components/analytics/TeamList").then(mod => ({ default: mod.TeamList })),
+  () =>
+    import("@/components/analytics/TeamList").then((mod) => ({
+      default: mod.TeamList,
+    })),
   {
     loading: () => <ListSkeleton title="Team Performance" />,
-    ssr: false
-  }
+    ssr: false,
+  },
 );
 
 // ============================================
@@ -60,8 +72,8 @@ const TeamList = dynamic(
 const INITIAL_WORKLOAD_PARAMS: TeamWorkloadParams = {
   page: 1,
   pageSize: 10,
-  sortBy: 'tasks',
-  sortOrder: 'desc'
+  sortBy: "tasks",
+  sortOrder: "desc",
 } as const;
 
 const PAGINATION_THRESHOLD = 10;
@@ -72,22 +84,21 @@ const EMPTY_ARRAY: never[] = [];
 // ============================================
 export default function AnalyticsPage() {
   // State
-  const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(AnalyticsPeriod.MONTH);
-  const [workloadParams, setWorkloadParams] = useState<TeamWorkloadParams>(INITIAL_WORKLOAD_PARAMS);
+  const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(
+    AnalyticsPeriod.MONTH,
+  );
+  const [workloadParams, setWorkloadParams] = useState<TeamWorkloadParams>(
+    INITIAL_WORKLOAD_PARAMS,
+  );
 
   // Data fetching hooks
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-    isRefetching
-  } = useAnalytics(selectedPeriod);
+  const { data, isLoading, error, refetch, isRefetching } =
+    useAnalytics(selectedPeriod);
 
   const {
     data: paginatedWorkload,
     isLoading: isWorkloadLoading,
-    isFetching: isWorkloadFetching
+    isFetching: isWorkloadFetching,
   } = useTeamWorkload(workloadParams);
 
   // ============================================
@@ -98,7 +109,10 @@ export default function AnalyticsPage() {
   const usePaginatedWorkload = useMemo(() => {
     const teamWorkloadCount = data?.teamWorkload?.length ?? 0;
     const paginatedTotal = paginatedWorkload?.total ?? 0;
-    return teamWorkloadCount >= PAGINATION_THRESHOLD || paginatedTotal > PAGINATION_THRESHOLD;
+    return (
+      teamWorkloadCount >= PAGINATION_THRESHOLD ||
+      paginatedTotal > PAGINATION_THRESHOLD
+    );
   }, [data?.teamWorkload?.length, paginatedWorkload?.total]);
 
   // Combined loading state for workload
@@ -130,6 +144,7 @@ export default function AnalyticsPage() {
   }
 
   // Error state
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
   if (error || !data) {
     return <AnalyticsError error={error} onRetry={handleRetry} />;
   }

@@ -33,20 +33,22 @@ export const TrendItemSkeleton = memo(function TrendItemSkeleton() {
   );
 });
 
-export const PerformanceCardItemSkeleton = memo(function PerformanceCardItemSkeleton() {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-      <div className="flex-1 space-y-2">
-        <div className="flex justify-between">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-16" />
+export const PerformanceCardItemSkeleton = memo(
+  function PerformanceCardItemSkeleton() {
+    return (
+      <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
+        <div className="flex-1 space-y-2">
+          <div className="flex justify-between">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-2 w-full rounded-full" />
         </div>
-        <Skeleton className="h-3 w-48" />
-        <Skeleton className="h-2 w-full rounded-full" />
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
 export const PerformanceCardSkeleton = memo(function PerformanceCardSkeleton() {
   return (
@@ -65,24 +67,30 @@ export const PerformanceCardSkeleton = memo(function PerformanceCardSkeleton() {
   );
 });
 
-export const PerformanceTrendsSkeleton = memo(function PerformanceTrendsSkeleton() {
-  return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
-      <CardHeader>
-        <Skeleton className="h-6 w-48" />
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }, (_, i) => (
-            <TrendItemSkeleton key={i} />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
+export const PerformanceTrendsSkeleton = memo(
+  function PerformanceTrendsSkeleton() {
+    return (
+      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+        <CardHeader>
+          <Skeleton className="h-6 w-48" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => (
+              <TrendItemSkeleton key={i} />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  },
+);
 
-export const ListSkeleton = memo(function ListSkeleton({ title }: { title: string }) {
+export const ListSkeleton = memo(function ListSkeleton({
+  title: _title,
+}: {
+  title: string;
+}) {
   return (
     <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
       <CardHeader>

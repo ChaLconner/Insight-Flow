@@ -5,14 +5,14 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { HydrationWrapper } from "@/components/providers/ssr-safe-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { GoogleAuthProvider } from "@/providers/google-auth-provider";
+
 import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "sonner";
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
-  display: 'swap',
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -21,7 +21,12 @@ export const metadata: Metadata = {
     default: "Insight Flow",
   },
   description: "Modern project management platform with glassmorphism design",
-  keywords: ["project management", "task management", "team collaboration", "productivity"],
+  keywords: [
+    "project management",
+    "task management",
+    "team collaboration",
+    "productivity",
+  ],
   authors: [{ name: "Insight Flow Team" }],
   creator: "Insight Flow",
   publisher: "Insight Flow",
@@ -30,11 +35,13 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  ),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+    url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
     title: "Insight Flow",
     description: "Modern project management platform with glassmorphism design",
     siteName: "Insight Flow",
@@ -59,12 +66,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
   maximumScale: 5,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+    { media: "(prefers-color-scheme: light)", color: "white" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
 };
 
@@ -97,17 +104,17 @@ export default function RootLayout({
                   className="font-sans"
                   toastOptions={{
                     classNames: {
-                      title: 'text-sm font-semibold',
-                      description: 'text-xs text-muted-foreground',
-                      actionButton: 'bg-primary text-primary-foreground',
-                      cancelButton: 'bg-muted text-muted-foreground',
+                      title: "text-sm font-semibold",
+                      description: "text-xs text-muted-foreground",
+                      actionButton: "bg-primary text-primary-foreground",
+                      cancelButton: "bg-muted text-muted-foreground",
                     },
                     style: {
-                      background: 'rgba(23, 23, 23, 0.8)', // Glassmorphism base
-                      backdropFilter: 'blur(12px)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      color: 'white',
-                    }
+                      background: "rgba(23, 23, 23, 0.8)", // Glassmorphism base
+                      backdropFilter: "blur(12px)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      color: "white",
+                    },
                   }}
                 />
               </ErrorBoundary>

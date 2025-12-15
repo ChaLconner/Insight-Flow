@@ -1,14 +1,15 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: 'Analytics',
-    description: 'View detailed analytics, team workload, and performance trends.',
+  title: "Analytics",
+  description:
+    "View detailed analytics, team workload, and performance trends.",
 };
 
 export default function AnalyticsLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-    return <>{children}</>;
+  return <>{children}</>;
 }

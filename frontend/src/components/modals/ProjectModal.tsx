@@ -4,15 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { X, Users, Settings, Save, Loader2 } from "lucide-react";
 import {
-  X,
-  Users,
-  Settings,
-  Save,
-  Loader2
-} from "lucide-react";
-import { type Project, ProjectStatus, type CreateProjectRequest, type UpdateProjectRequest, type User } from "@/types";
-import { apiClient } from "@/lib/api-client";
+  type Project,
+  ProjectStatus,
+  type CreateProjectRequest,
+  type UpdateProjectRequest,
+  type User,
+} from "@/types";
+// import { apiClient } from "@/lib/api-client";
 import { getAvatarUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
@@ -24,7 +24,9 @@ interface ProjectModalProps {
   onClose: () => void;
   project?: Project | null;
   mode: "create" | "edit";
-  onSubmit: (data: CreateProjectRequest | UpdateProjectRequest) => Promise<void>;
+  onSubmit: (
+    data: CreateProjectRequest | UpdateProjectRequest,
+  ) => Promise<void>;
 }
 
 const projectColors = [
@@ -38,7 +40,13 @@ const projectColors = [
   "#f97316", // orange
 ];
 
-export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: ProjectModalProps) {
+export function ProjectModal({
+  isOpen,
+  onClose,
+  project,
+  mode,
+  onSubmit,
+}: ProjectModalProps) {
   // No longer fetching all users on mount
 
   // Fetch users when component mounts
@@ -50,18 +58,22 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
     description: project?.description ?? "",
     color: project?.color ?? projectColors[0],
     status: project?.status ?? ProjectStatus.ACTIVE,
-    memberIds: project?.members?.map(m => m.userId) ?? [],
+    memberIds: project?.members?.map((m) => m.userId) ?? [],
     settings: {
       allowPublicAccess: project?.settings?.allowPublicAccess ?? false,
       requireApproval: project?.settings?.requireApproval ?? true,
       defaultTaskVisibility: project?.settings?.defaultTaskVisibility ?? "team",
       notificationSettings: {
-        taskAssigned: project?.settings?.notificationSettings?.taskAssigned ?? true,
-        statusChanged: project?.settings?.notificationSettings?.statusChanged ?? true,
-        deadlineApproaching: project?.settings?.notificationSettings?.deadlineApproaching ?? true,
-        commentAdded: project?.settings?.notificationSettings?.commentAdded ?? true,
-      }
-    }
+        taskAssigned:
+          project?.settings?.notificationSettings?.taskAssigned ?? true,
+        statusChanged:
+          project?.settings?.notificationSettings?.statusChanged ?? true,
+        deadlineApproaching:
+          project?.settings?.notificationSettings?.deadlineApproaching ?? true,
+        commentAdded:
+          project?.settings?.notificationSettings?.commentAdded ?? true,
+      },
+    },
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,18 +87,24 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
         description: project.description ?? "",
         color: project.color ?? projectColors[0],
         status: project.status ?? ProjectStatus.ACTIVE,
-        memberIds: project.members?.map(m => m.userId) ?? [],
+        memberIds: project.members?.map((m) => m.userId) ?? [],
         settings: {
           allowPublicAccess: project.settings?.allowPublicAccess ?? false,
           requireApproval: project.settings?.requireApproval ?? true,
-          defaultTaskVisibility: project.settings?.defaultTaskVisibility ?? "team",
+          defaultTaskVisibility:
+            project.settings?.defaultTaskVisibility ?? "team",
           notificationSettings: {
-            taskAssigned: project.settings?.notificationSettings?.taskAssigned ?? true,
-            statusChanged: project.settings?.notificationSettings?.statusChanged ?? true,
-            deadlineApproaching: project.settings?.notificationSettings?.deadlineApproaching ?? true,
-            commentAdded: project.settings?.notificationSettings?.commentAdded ?? true,
-          }
-        }
+            taskAssigned:
+              project.settings?.notificationSettings?.taskAssigned ?? true,
+            statusChanged:
+              project.settings?.notificationSettings?.statusChanged ?? true,
+            deadlineApproaching:
+              project.settings?.notificationSettings?.deadlineApproaching ??
+              true,
+            commentAdded:
+              project.settings?.notificationSettings?.commentAdded ?? true,
+          },
+        },
       });
 
       // Populate selected users from project members
@@ -94,24 +112,26 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
       // We need to map it back to User type.
       // Based on ProjectsPage, member has a .user property with full user details.
       const members = project.members || [];
-      const users: User[] = members.map(m => {
+      const users: User[] = members.map((m) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const member = m as any;
-        return member.user ?? {
-          id: member.userId,
-          firstName: member.name?.split(' ')[0] ?? 'Unknown',
-          lastName: member.name?.split(' ').slice(1).join(' ') ?? 'User',
-          email: member.email ?? '',
-          username: 'unknown',
-          role: 'user',
-          avatar: member.avatar,
-          isActive: true,
-          emailVerified: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
+        return (
+          member.user ?? {
+            id: member.userId,
+            firstName: member.name?.split(" ")[0] ?? "Unknown",
+            lastName: member.name?.split(" ").slice(1).join(" ") ?? "User",
+            email: member.email ?? "",
+            username: "unknown",
+            role: "user",
+            avatar: member.avatar,
+            isActive: true,
+            emailVerified: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        );
       });
       setSelectedUsers(users);
-
     } else if (mode === "create") {
       // Reset form for create mode
       setFormData({
@@ -129,8 +149,8 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
             statusChanged: true,
             deadlineApproaching: true,
             commentAdded: true,
-          }
-        }
+          },
+        },
       });
       setSelectedUsers([]);
     }
@@ -143,7 +163,9 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!formData.name.trim()) { newErrors.name = "Project name is required"; }
+    if (!formData.name.trim()) {
+      newErrors.name = "Project name is required";
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -152,58 +174,66 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
     }
 
     try {
-      const submitData = mode === "create"
-        ? {
-          name: formData.name,
-          description: formData.description,
-          color: formData.color,
-          memberIds: formData.memberIds,
-          settings: formData.settings
-        }
-        : {
-          name: formData.name,
-          description: formData.description,
-          color: formData.color,
-          status: formData.status,
-          memberIds: formData.memberIds,
-          settings: formData.settings
-        };
+      const submitData =
+        mode === "create"
+          ? {
+              name: formData.name,
+              description: formData.description,
+              color: formData.color,
+              memberIds: formData.memberIds,
+              settings: formData.settings,
+            }
+          : {
+              name: formData.name,
+              description: formData.description,
+              color: formData.color,
+              status: formData.status,
+              memberIds: formData.memberIds,
+              settings: formData.settings,
+            };
 
       await onSubmit(submitData);
 
       const action = mode === "create" ? "created" : "updated";
       toast.success(`Project ${action} successfully`, {
-        description: `Project "${formData.name}" has been ${action}.`
+        description: `Project "${formData.name}" has been ${action}.`,
       });
 
       onClose();
     } catch (error) {
       console.error("Error submitting project:", error);
-      toast.error(mode === "create" ? "Failed to create project" : "Failed to update project", {
-        description: getErrorMessage(error)
-      });
+      toast.error(
+        mode === "create"
+          ? "Failed to create project"
+          : "Failed to update project",
+        {
+          description: getErrorMessage(error),
+        },
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleInputChange = (field: string, value: unknown) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
   const handleMemberToggle = (userId: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       memberIds: prev.memberIds.includes(userId)
-        ? prev.memberIds.filter(id => id !== userId)
-        : [...prev.memberIds, userId]
+        ? prev.memberIds.filter((id) => id !== userId)
+        : [...prev.memberIds, userId],
     }));
   };
 
-  if (!isOpen) { return null; }
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -234,14 +264,17 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
             {/* Basic Information */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-zinc-300">Project Name *</Label>
+                <Label htmlFor="name" className="text-zinc-300">
+                  Project Name *
+                </Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   placeholder="Enter project name"
-                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.name ? "border-red-500" : ""
-                    }`}
+                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                    errors.name ? "border-red-500" : ""
+                  }`}
                   disabled={isSubmitting}
                 />
                 {errors.name && (
@@ -250,16 +283,20 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-zinc-300">Description</Label>
+                <Label htmlFor="description" className="text-zinc-300">
+                  Description
+                </Label>
                 <textarea
                   id="description"
                   rows={3}
                   value={formData.description}
-                  onChange={(e) => handleInputChange("description", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("description", e.target.value)
+                  }
                   placeholder="Describe your project..."
                   className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder:text-zinc-400"
                   disabled={isSubmitting}
-                  style={{ resize: 'vertical' }}
+                  style={{ resize: "vertical" }}
                 />
               </div>
 
@@ -271,10 +308,11 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                       key={color}
                       type="button"
                       onClick={() => handleInputChange("color", color)}
-                      className={`h-8 w-8 rounded-lg border-2 transition-all cursor-pointer ${formData.color === color
-                        ? "border-white scale-110"
-                        : "border-white/20 hover:border-white/40"
-                        }`}
+                      className={`h-8 w-8 rounded-lg border-2 transition-all cursor-pointer ${
+                        formData.color === color
+                          ? "border-white scale-110"
+                          : "border-white/20 hover:border-white/40"
+                      }`}
                       style={{ backgroundColor: color }}
                       disabled={isSubmitting}
                     />
@@ -294,13 +332,13 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
               <div className="relative">
                 <UserSearchSelect
                   value=""
-                  onChange={() => { }} // Controlled by onUserSelect
+                  onChange={() => {}} // Controlled by onUserSelect
                   onUserSelect={(user) => {
                     if (!formData.memberIds.includes(user.id)) {
                       handleMemberToggle(user.id);
-                      // Add to selectedUsers if not present (logic handled in toggle or separate effect, 
+                      // Add to selectedUsers if not present (logic handled in toggle or separate effect,
                       // but simpler to just add here locally since we have the full user object)
-                      setSelectedUsers(prev => [...prev, user]);
+                      setSelectedUsers((prev) => [...prev, user]);
                     } else {
                       toast.info("User already added");
                     }
@@ -312,7 +350,9 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
               {/* Selected Users List */}
               <div className="space-y-2 mt-2">
                 {selectedUsers.length === 0 && (
-                  <p className="text-sm text-zinc-500 italic">No members added yet.</p>
+                  <p className="text-sm text-zinc-500 italic">
+                    No members added yet.
+                  </p>
                 )}
                 {selectedUsers.map((user) => (
                   <div
@@ -331,13 +371,21 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                             sizes="32px"
                           />
                         ) : null}
-                        <span className={`text-xs font-medium text-zinc-300 ${user.avatar ? 'hidden' : ''}`}>
-                          {(user.firstName && typeof user.firstName === 'string' ? user.firstName[0] : '')}
-                          {(user.lastName && typeof user.lastName === 'string' ? user.lastName[0] : '')}
+                        <span
+                          className={`text-xs font-medium text-zinc-300 ${user.avatar ? "hidden" : ""}`}
+                        >
+                          {user.firstName && typeof user.firstName === "string"
+                            ? user.firstName[0]
+                            : ""}
+                          {user.lastName && typeof user.lastName === "string"
+                            ? user.lastName[0]
+                            : ""}
                         </span>
                       </div>
                       <div>
-                        <p className="text-white text-sm font-medium">{user.firstName} {user.lastName}</p>
+                        <p className="text-white text-sm font-medium">
+                          {user.firstName} {user.lastName}
+                        </p>
                         <p className="text-zinc-400 text-xs">{user.email}</p>
                       </div>
                     </div>
@@ -347,7 +395,9 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                       size="sm"
                       onClick={() => {
                         handleMemberToggle(user.id);
-                        setSelectedUsers(prev => prev.filter(u => u.id !== user.id));
+                        setSelectedUsers((prev) =>
+                          prev.filter((u) => u.id !== user.id),
+                        );
                       }}
                       className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400 hover:bg-red-400/10"
                     >
@@ -368,17 +418,23 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
               <div className="space-y-3 pl-4 border-l border-white/10">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-white text-sm font-medium">Allow Public Access</p>
-                    <p className="text-zinc-400 text-xs">Anyone with the link can view</p>
+                    <p className="text-white text-sm font-medium">
+                      Allow Public Access
+                    </p>
+                    <p className="text-zinc-400 text-xs">
+                      Anyone with the link can view
+                    </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.allowPublicAccess}
-                      onChange={(e) => handleInputChange("settings", {
-                        ...formData.settings,
-                        allowPublicAccess: e.target.checked
-                      })}
+                      onChange={(e) =>
+                        handleInputChange("settings", {
+                          ...formData.settings,
+                          allowPublicAccess: e.target.checked,
+                        })
+                      }
                       className="sr-only peer"
                       disabled={isSubmitting}
                     />
@@ -388,17 +444,23 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-white text-sm font-medium">Require Approval</p>
-                    <p className="text-zinc-400 text-xs">Members need approval to join</p>
+                    <p className="text-white text-sm font-medium">
+                      Require Approval
+                    </p>
+                    <p className="text-zinc-400 text-xs">
+                      Members need approval to join
+                    </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={formData.settings.requireApproval}
-                      onChange={(e) => handleInputChange("settings", {
-                        ...formData.settings,
-                        requireApproval: e.target.checked
-                      })}
+                      onChange={(e) =>
+                        handleInputChange("settings", {
+                          ...formData.settings,
+                          requireApproval: e.target.checked,
+                        })
+                      }
                       className="sr-only peer"
                       disabled={isSubmitting}
                     />
@@ -407,17 +469,33 @@ export function ProjectModal({ isOpen, onClose, project, mode, onSubmit }: Proje
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-zinc-400 text-xs">Default Task Visibility</Label>
+                  <Label className="text-zinc-400 text-xs">
+                    Default Task Visibility
+                  </Label>
                   <CustomSelect
                     value={formData.settings.defaultTaskVisibility}
-                    onChange={(value) => handleInputChange("settings", {
-                      ...formData.settings,
-                      defaultTaskVisibility: value
-                    })}
+                    onChange={(value) =>
+                      handleInputChange("settings", {
+                        ...formData.settings,
+                        defaultTaskVisibility: value,
+                      })
+                    }
                     options={[
-                      { value: "private", label: "Private", description: "Only members can see tasks" },
-                      { value: "team", label: "Team", description: "All team members can see tasks" },
-                      { value: "public", label: "Public", description: "Anyone with link can see tasks" }
+                      {
+                        value: "private",
+                        label: "Private",
+                        description: "Only members can see tasks",
+                      },
+                      {
+                        value: "team",
+                        label: "Team",
+                        description: "All team members can see tasks",
+                      },
+                      {
+                        value: "public",
+                        label: "Public",
+                        description: "Anyone with link can see tasks",
+                      },
                     ]}
                     className="w-full"
                   />

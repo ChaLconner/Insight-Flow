@@ -8,14 +8,14 @@
  * @returns Formatted date string (e.g., "Dec 10, 2024")
  */
 export function formatDate(dateString?: string): string {
-    if (!dateString) {
-        return "Never";
-    }
-    return new Date(dateString).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric"
-    });
+  if (!dateString) {
+    return "Never";
+  }
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 /**
@@ -24,31 +24,33 @@ export function formatDate(dateString?: string): string {
  * @returns Relative time string (e.g., "2h ago", "Yesterday")
  */
 export function formatLastLogin(dateString?: string): string {
-    if (!dateString) {
-        return "Never";
-    }
+  if (!dateString) {
+    return "Never";
+  }
 
-    const targetDate = new Date(dateString);
+  const targetDate = new Date(dateString);
 
-    const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60));
+  const now = new Date();
+  const diffInHours = Math.floor(
+    (now.getTime() - targetDate.getTime()) / (1000 * 60 * 60),
+  );
 
-    if (diffInHours < 1) {
-        return "Just now";
-    }
-    if (diffInHours < 24) {
-        return `${diffInHours}h ago`;
-    }
+  if (diffInHours < 1) {
+    return "Just now";
+  }
+  if (diffInHours < 24) {
+    return `${diffInHours}h ago`;
+  }
 
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays === 1) {
-        return "Yesterday";
-    }
-    if (diffInDays < 7) {
-        return `${diffInDays}d ago`;
-    }
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays === 1) {
+    return "Yesterday";
+  }
+  if (diffInDays < 7) {
+    return `${diffInDays}d ago`;
+  }
 
-    return formatDate(dateString);
+  return formatDate(dateString);
 }
 
 /**
@@ -58,9 +60,9 @@ export function formatLastLogin(dateString?: string): string {
  * @returns Initials string (e.g., "JD")
  */
 export function getUserInitials(firstName?: string, lastName?: string): string {
-    const first = firstName && typeof firstName === 'string' ? firstName[0] : '';
-    const last = lastName && typeof lastName === 'string' ? lastName[0] : '';
-    return `${first}${last}`.toUpperCase();
+  const first = firstName && typeof firstName === "string" ? firstName[0] : "";
+  const last = lastName && typeof lastName === "string" ? lastName[0] : "";
+  return `${first}${last}`.toUpperCase();
 }
 
 /**
@@ -70,5 +72,5 @@ export function getUserInitials(firstName?: string, lastName?: string): string {
  * @returns Full name string
  */
 export function getFullName(firstName?: string, lastName?: string): string {
-    return `${firstName ?? ''} ${lastName ?? ''}`.trim() || 'Unknown User';
+  return `${firstName ?? ""} ${lastName ?? ""}`.trim() || "Unknown User";
 }

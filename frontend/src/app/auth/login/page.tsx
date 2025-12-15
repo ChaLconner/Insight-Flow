@@ -2,16 +2,19 @@
 
 import { useGoogleLogin } from "@react-oauth/google";
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AnimatedBackground, FloatingShapes } from "@/components/ui/animated-background";
+import {
+  AnimatedBackground,
+  FloatingShapes,
+} from "@/components/ui/animated-background";
 import { API_CONFIG } from "@/lib/constants";
 import { authActions } from "@/stores/auth-actions";
-import { User } from "@/types";
+
 import {
   Mail,
   Lock,
@@ -20,17 +23,17 @@ import {
   Github,
   ArrowRight,
   Loader2,
-  Layers
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 
 export default function LoginPage() {
-  const router = useRouter();
+  /* const router = useRouter(); */ // unused
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
     email: "",
-    password: ""
+    password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -50,8 +53,12 @@ export default function LoginPage() {
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!formData.email) { newErrors.email = "Email is required"; }
-    if (!formData.password) { newErrors.password = "Password is required"; }
+    if (!formData.email) {
+      newErrors.email = "Email is required";
+    }
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -60,16 +67,14 @@ export default function LoginPage() {
     }
 
     try {
-
       // Call backend API
 
-
       const response = await fetch(`${API_CONFIG.BASE_URL}/auth/login`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
-        credentials: 'include',
+        credentials: "include",
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
@@ -80,14 +85,14 @@ export default function LoginPage() {
         let errorData;
         try {
           errorData = await response.json();
-          console.error('❌ Login response error data:', errorData);
+          console.error("❌ Login response error data:", errorData);
         } catch (parseError) {
-          console.error('❌ Failed to parse error response:', parseError);
+          console.error("❌ Failed to parse error response:", parseError);
           // If JSON parsing fails, use default error
-          errorData = { detail: 'Login failed' };
+          errorData = { detail: "Login failed" };
         }
-        console.error('❌ Login failed:', errorData);
-        throw new Error(errorData?.detail ?? 'Login failed');
+        console.error("❌ Login failed:", errorData);
+        throw new Error(errorData?.detail ?? "Login failed");
       }
 
       const data = await response.json();
@@ -98,51 +103,47 @@ export default function LoginPage() {
       // Get the user data from the store after login
       const user = data.user;
 
-
-
       // Determine redirect URL based on user role with better fallbacks
       let redirectUrl = "/dashboard"; // Default redirect to dashboard
 
       if (user?.role) {
         switch (user.role) {
-          case 'admin':
+          case "admin":
             redirectUrl = "/dashboard"; // Admins go to main dashboard
             break;
-          case 'manager':
+          case "manager":
             redirectUrl = "/projects"; // Managers go to projects page
             break;
-          case 'member':
-          case 'user':
+          case "member":
+          case "user":
             redirectUrl = "/projects?tab=tasks"; // Regular users go to tasks page
             break;
-          case 'viewer':
+          case "viewer":
             redirectUrl = "/projects"; // Viewers go to projects page
             break;
           default:
             redirectUrl = "/dashboard"; // Default to dashboard
         }
       } else {
-
         redirectUrl = "/dashboard"; // Default for users without role
       }
 
       // Redirect to appropriate page based on user role
       // Add small delay to allow state to settle and prevent routing conflicts
       setTimeout(() => {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           // Use router.push for client-side navigation with delay
           window.location.href = redirectUrl;
         }
       }, 100);
-
     } catch (error) {
-      console.error('❌ Login error:', error);
-      console.error('❌ Login error details:', {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : 'No stack trace',
-        name: error instanceof Error ? error.name : 'Unknown'
+      console.error("❌ Login error:", error);
+      console.error("❌ Login error details:", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : "No stack trace",
+        name: error instanceof Error ? error.name : "Unknown",
       });
-      console.error('❌ Login error:', error);
+      console.error("❌ Login error:", error);
       const errorMessage = getErrorMessage(error);
       toast.error("Login failed", { description: errorMessage });
       setErrors({ password: "Invalid email or password" });
@@ -158,22 +159,22 @@ export default function LoginPage() {
 
         // Call backend API with Google token
         const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
-          credentials: 'include',
+          credentials: "include",
           body: JSON.stringify({
             access_token: tokenResponse.access_token,
           }),
         });
 
         if (!response.ok) {
-          throw new Error('Google login failed');
+          throw new Error("Google login failed");
         }
 
         const data = await response.json();
-        console.log('✅ Google login successful');
+        console.log("✅ Google login successful");
 
         await authActions.loginWithResponse(data);
 
@@ -182,37 +183,48 @@ export default function LoginPage() {
 
         if (user?.role) {
           switch (user.role) {
-            case 'admin': redirectUrl = "/dashboard"; break;
-            case 'manager': redirectUrl = "/projects"; break;
-            case 'member':
-            case 'user': redirectUrl = "/projects?tab=tasks"; break;
-            case 'viewer': redirectUrl = "/projects"; break;
-            default: redirectUrl = "/dashboard";
+            case "admin":
+              redirectUrl = "/dashboard";
+              break;
+            case "manager":
+              redirectUrl = "/projects";
+              break;
+            case "member":
+            case "user":
+              redirectUrl = "/projects?tab=tasks";
+              break;
+            case "viewer":
+              redirectUrl = "/projects";
+              break;
+            default:
+              redirectUrl = "/dashboard";
           }
         }
 
         // Use window.location.href for consistency
         window.location.href = redirectUrl;
       } catch (error) {
-        console.error('❌ Google login error:', error);
-        toast.error("Google login failed", { description: getErrorMessage(error) });
-        setErrors({ submit: 'Google login failed. Please try again.' });
+        console.error("❌ Google login error:", error);
+        toast.error("Google login failed", {
+          description: getErrorMessage(error),
+        });
+        setErrors({ submit: "Google login failed. Please try again." });
       } finally {
         setIsLoading(false);
       }
     },
     onError: () => {
-      console.error('❌ Google login failed');
-      setErrors({ submit: 'Google login failed. Please try again.' });
+      console.error("❌ Google login failed");
+      setErrors({ submit: "Google login failed. Please try again." });
       setIsLoading(false);
     },
-    flow: 'implicit',
+    flow: "implicit",
   });
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
   };
 
@@ -234,7 +246,9 @@ export default function LoginPage() {
 
         <Card className="bg-white/5 backdrop-blur-xl shadow-2xl border-0">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-xl text-white text-center">Sign in</CardTitle>
+            <CardTitle className="text-xl text-white text-center">
+              Sign in
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Social Login */}
@@ -243,16 +257,39 @@ export default function LoginPage() {
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
                 onClick={() => handleGoogleLogin()}
-                disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
-                title={!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? "Google Client ID is missing" : "Sign in with Google"}
+                disabled={
+                  isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+                }
+                title={
+                  !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+                    ? "Google Client ID is missing"
+                    : "Sign in with Google"
+                }
               >
                 <div className="mr-3 h-4 w-4 flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="100%"
+                    height="100%"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
                     <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                      <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-                      <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-                      <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-                      <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+                      <path
+                        fill="#4285F4"
+                        d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"
+                      />
                     </g>
                   </svg>
                 </div>
@@ -268,13 +305,17 @@ export default function LoginPage() {
                     return;
                   }
                   const redirectUri = encodeURIComponent(
-                    `${window.location.origin}/auth/callback/github`
+                    `${window.location.origin}/auth/callback/github`,
                   );
                   const scope = "read:user user:email";
                   window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
                 }}
                 disabled={isLoading}
-                title={!process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID ? "GitHub Client ID is missing" : "Sign in with GitHub"}
+                title={
+                  !process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
+                    ? "GitHub Client ID is missing"
+                    : "Sign in with GitHub"
+                }
               >
                 <Github className="h-4 w-4 mr-3" />
                 Continue with GitHub
@@ -287,14 +328,18 @@ export default function LoginPage() {
                 <div className="w-full border-t border-white/10" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-zinc-900 px-2 text-zinc-400">Or continue with</span>
+                <span className="bg-zinc-900 px-2 text-zinc-400">
+                  Or continue with
+                </span>
               </div>
             </div>
 
             {/* Login Form */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-zinc-300">Email</Label>
+                <Label htmlFor="email" className="text-zinc-300">
+                  Email
+                </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
@@ -303,8 +348,9 @@ export default function LoginPage() {
                     placeholder="Enter your email"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.email ? "border-red-500" : ""
-                      }`}
+                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.email ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                 </div>
@@ -314,7 +360,9 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-zinc-300">Password</Label>
+                <Label htmlFor="password" className="text-zinc-300">
+                  Password
+                </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
@@ -322,9 +370,12 @@ export default function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     value={formData.password}
-                    onChange={(e) => handleInputChange("password", e.target.value)}
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.password ? "border-red-500" : ""
-                      }`}
+                    onChange={(e) =>
+                      handleInputChange("password", e.target.value)
+                    }
+                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.password ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                   <button
@@ -333,7 +384,11 @@ export default function LoginPage() {
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-400 hover:text-white"
                     disabled={isLoading}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
                 {errors.password && (
@@ -347,7 +402,9 @@ export default function LoginPage() {
                     type="checkbox"
                     className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
                   />
-                  <span className="ml-2 text-sm text-zinc-400">Remember me</span>
+                  <span className="ml-2 text-sm text-zinc-400">
+                    Remember me
+                  </span>
                 </label>
                 <Link
                   href="/auth/forgot-password"

@@ -2,9 +2,9 @@
 // Zustand Auth Store
 // ===========================================
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { User, AuthResponse } from '@/types';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { User } from "@/types";
 
 interface AuthState {
   // State
@@ -57,7 +57,10 @@ export const useAuthStore = create<AuthState>()(
           user,
           isAuthenticated: !!user,
           // Only update lastActivity if it hasn't been updated recently (prevent frequent updates)
-          lastActivity: state.lastActivity && (Date.now() - state.lastActivity) < 5000 ? state.lastActivity : Date.now(),
+          lastActivity:
+            state.lastActivity && Date.now() - state.lastActivity < 5000
+              ? state.lastActivity
+              : Date.now(),
         }));
       },
 
@@ -69,7 +72,7 @@ export const useAuthStore = create<AuthState>()(
 
           const updatedUser = {
             ...state.user,
-            avatar
+            avatar,
           };
 
           return {
@@ -81,7 +84,6 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // setTokens action removed
-
 
       setLoading: (loading) => {
         set({ isLoading: loading });
@@ -101,7 +103,7 @@ export const useAuthStore = create<AuthState>()(
         // Clear localStorage user data
         // Clear localStorage user data - Removed as we use Zustand persist which handles this
         // and we want to rely on state management not manual API
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           // We explicitly DO NOT want to manually clear 'user' from localStorage
           // because Zustand persist middleware manages the 'insight-flow-auth' key.
           // Clearing 'user' (if it existed from old code) is fine, but we should strictly rely on the store.
@@ -149,14 +151,15 @@ export const useAuthStore = create<AuthState>()(
 
       // refreshAuthToken action removed
 
-
       initializeAuth: async () => {
         const { setLoading, setUser, logout, isInitialized } = get();
         const state = get();
 
         // 1. If already initialized, ensure loading is false and return
         if (isInitialized) {
-          if (state.isLoading) { setLoading(false); }
+          if (state.isLoading) {
+            setLoading(false);
+          }
           return;
         }
 
@@ -166,11 +169,11 @@ export const useAuthStore = create<AuthState>()(
           setLoading(true);
 
           // Check environment
-          if (typeof window === 'undefined') {
+          if (typeof window === "undefined") {
             return;
           }
 
-          const apiUrl = (await import('@/lib/constants')).API_CONFIG.BASE_URL;
+          const apiUrl = (await import("@/lib/constants")).API_CONFIG.BASE_URL;
 
           // Verify session via cookie using /auth/me endpoint
           try {
@@ -179,11 +182,11 @@ export const useAuthStore = create<AuthState>()(
 
             // Fetch with credentials (cookies)
             const resp = await fetch(`${apiUrl}/auth/me`, {
-              method: 'GET',
-              // headers: { 'Authorization': ... }, // No header needed, cookies sent automatically? 
+              method: "GET",
+              // headers: { 'Authorization': ... }, // No header needed, cookies sent automatically?
               // Wait, native fetch needs credentials: 'include'
-              credentials: 'include',
-              signal: controller.signal
+              credentials: "include",
+              signal: controller.signal,
             });
             clearTimeout(timeoutId);
 
@@ -196,15 +199,18 @@ export const useAuthStore = create<AuthState>()(
                 logout();
               }
             }
-          } catch (fetchError: any) {
-            if (fetchError.name !== 'AbortError') {
+          } catch (error) {
+            const fetchError = error as Error;
+            if (fetchError.name !== "AbortError") {
               // Network error or other
-              console.warn('Auth check network error, assuming not authenticated');
+              console.warn(
+                "Auth check network error, assuming not authenticated",
+              );
               logout();
             }
           }
         } catch (error) {
-          console.error('🏪 AuthStore: Error initializing auth:', error);
+          console.error("🏪 AuthStore: Error initializing auth:", error);
           logout();
         } finally {
           setLoading(false);
@@ -216,12 +222,12 @@ export const useAuthStore = create<AuthState>()(
         const { setUser } = get();
         try {
           // Dynamic import to avoid circular dependencies if any
-          const { usersApi } = await import('@/lib/api-endpoints');
+          const { usersApi } = await import("@/lib/api-endpoints");
           const user = await usersApi.getCurrentUser();
           setUser(user);
           return user;
         } catch (error) {
-          console.error('Failed to fetch user profile:', error);
+          console.error("Failed to fetch user profile:", error);
           throw error;
         }
       },
@@ -229,33 +235,44 @@ export const useAuthStore = create<AuthState>()(
       updateUserProfile: async (data: Partial<User>) => {
         const { setUser, user } = get();
         try {
-          const { usersApi } = await import('@/lib/api-endpoints');
+          const { usersApi } = await import("@/lib/api-endpoints");
           // Assuming the API takes the update object directly
           const updatedUser = await usersApi.updateCurrentUser(data as any);
           setUser({ ...user, ...updatedUser });
           return updatedUser;
         } catch (error) {
-          console.error('Failed to update user profile:', error);
+          console.error("Failed to update user profile:", error);
           throw error;
         }
       },
-
     }),
     {
-      name: 'insight-flow-auth',
+      name: "insight-flow-auth",
       partialize: (state: AuthState): PersistedAuthState => {
         // Validate user object before persisting to avoid corrupted data
         let validatedUser = state.user;
-        if (state.user && typeof state.user === 'object') {
+        if (state.user && typeof state.user === "object") {
           // Create a safe copy ensuring required fields are properly typed
           validatedUser = {
             ...state.user,
             // Ensure required string fields are actually strings or fallback to empty string
-            email: typeof state.user.email === 'string' ? state.user.email : (state.user.email || ''),
-            username: typeof state.user.username === 'string' ? state.user.username : (state.user.username || ''),
+            email:
+              typeof state.user.email === "string"
+                ? state.user.email
+                : "",
+            username:
+              typeof state.user.username === "string"
+                ? state.user.username
+                : "",
             // Optional fields can remain as they are or be undefined
-            firstName: typeof state.user.firstName === 'string' ? state.user.firstName : (state.user.firstName || undefined),
-            lastName: typeof state.user.lastName === 'string' ? state.user.lastName : (state.user.lastName || undefined),
+            firstName:
+              typeof state.user.firstName === "string"
+                ? state.user.firstName
+                : undefined,
+            lastName:
+              typeof state.user.lastName === "string"
+                ? state.user.lastName
+                : undefined,
           };
         }
 
@@ -265,8 +282,8 @@ export const useAuthStore = create<AuthState>()(
           lastActivity: state.lastActivity,
         };
       },
-    }
-  )
+    },
+  ),
 );
 
 // ===========================================
@@ -283,25 +300,22 @@ export const authSelectors = {
   // Get loading state
   isLoading: (state: AuthState) => state.isLoading,
 
-
   // Check if user has specific role
-  hasRole: (role: string) => (state: AuthState) =>
-    state.user?.role === role,
+  hasRole: (role: string) => (state: AuthState) => state.user?.role === role,
 
   // Check if user has admin role
-  isAdmin: (state: AuthState) =>
-    state.user?.role === 'admin',
+  isAdmin: (state: AuthState) => state.user?.role === "admin",
 
   // Check if user has manager role or higher
   isManagerOrHigher: (state: AuthState) => {
     const role = state.user?.role;
-    return role === 'admin' || role === 'manager';
+    return role === "admin" || role === "manager";
   },
 
   // Get user initials
   getUserInitials: (state: AuthState): string => {
     if (!state.user) {
-      return 'U';
+      return "U";
     }
 
     const { firstName, lastName, username, email } = state.user;
@@ -331,7 +345,7 @@ export const authSelectors = {
       return email.charAt(0).toUpperCase();
     }
 
-    return 'U';
+    return "U";
   },
 
   isUserActive: (state: AuthState) => state.user?.isActive ?? false,
@@ -339,10 +353,10 @@ export const authSelectors = {
 
 // Register the logout handler to avoid circular dependencies
 // We can do this safely now that api-client doesn't import auth-store directly
-import { registerLogoutHandler } from '@/lib/api-client';
+import { registerLogoutHandler } from "@/lib/api-client";
 
 // Register the logout action
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   registerLogoutHandler(() => {
     useAuthStore.getState().logout();
   });

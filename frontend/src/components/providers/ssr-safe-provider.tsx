@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
 // ===========================================
 // SSR-Safe Provider Components
 // ===========================================
 
-import { useState, useEffect } from 'react';
-import type { ReactNode } from 'react';
-import { useTheme } from '@/hooks/use-theme';
+import { useState, useEffect } from "react";
+import type { ReactNode } from "react";
+import { useTheme } from "@/hooks/use-theme";
 
 // ===========================================
 // Hydration Wrapper - Prevents mismatches
@@ -39,16 +39,16 @@ interface DevtoolsWrapperProps {
 }
 
 export function DevtoolsWrapper({ children }: DevtoolsWrapperProps) {
-  const [isDevelopment, setIsDevelopment] = useState(false);
-  const [isClient, setIsClient] = useState(false);
+  const [_isDevelopment, setIsDevelopment] = useState(false);
+  const [_isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
     setIsDevelopment(
-      typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || 
-       window.location.hostname === '127.0.0.1' ||
-       process.env.NODE_ENV === 'development')
+      typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1" ||
+          process.env.NODE_ENV === "development"),
     );
   }, []);
 
@@ -63,14 +63,14 @@ export function DevtoolsWrapper({ children }: DevtoolsWrapperProps) {
 
 interface ThemeAwareProviderProps {
   children: ReactNode;
-  defaultTheme?: 'light' | 'dark' | 'system';
+  defaultTheme?: "light" | "dark" | "system";
   storageKey?: string;
 }
 
-export function ThemeAwareProvider({ 
-  children, 
-  defaultTheme = 'system',
-  storageKey = 'insight-flow-theme'
+export function ThemeAwareProvider({
+  children,
+  // defaultTheme = "system",
+  // storageKey = "insight-flow-theme",
 }: ThemeAwareProviderProps) {
   const [isHydrated, setIsHydrated] = useState(false);
   const { syncWithStorage, initializeTheme } = useTheme();
@@ -106,7 +106,10 @@ interface SafeClientOnlyProps {
   fallback?: ReactNode;
 }
 
-export function SafeClientOnly({ children, fallback = null }: SafeClientOnlyProps) {
+export function SafeClientOnly({
+  children,
+  fallback = null,
+}: SafeClientOnlyProps) {
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -131,9 +134,7 @@ interface SSRQueryProviderProps {
 export function SSRQueryProvider({ children }: SSRQueryProviderProps) {
   return (
     <HydrationWrapper>
-      <DevtoolsWrapper>
-        {children}
-      </DevtoolsWrapper>
+      <DevtoolsWrapper>{children}</DevtoolsWrapper>
     </HydrationWrapper>
   );
 }

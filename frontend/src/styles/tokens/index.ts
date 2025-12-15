@@ -4,18 +4,18 @@
  */
 
 // Import all token modules
-export * from './colors';
-export * from './typography';
-export * from './spacing';
-export * from './shadows';
-export * from './animations';
+export * from "./colors";
+export * from "./typography";
+export * from "./spacing";
+export * from "./shadows";
+export * from "./animations";
 
 // Import individual token modules for re-export
-import { colors } from './colors';
-import { typography } from './typography';
-import { spacingTokens } from './spacing';
-import { shadows } from './shadows';
-import { animations } from './animations';
+import { colors } from "./colors";
+import { typography } from "./typography";
+import { spacingTokens } from "./spacing";
+import { shadows } from "./shadows";
+import { animations } from "./animations";
 
 // Main design tokens object
 export const designTokens = {
@@ -32,42 +32,42 @@ export const generateCSSVariables = () => {
 
   // Color variables
   Object.entries(colors.primary).forEach(([key, value]) => {
-    if (key !== 'DEFAULT') {
+    if (key !== "DEFAULT") {
       cssVars[`--color-primary-${key}`] = value;
     } else {
-      cssVars['--color-primary'] = value;
+      cssVars["--color-primary"] = value;
     }
   });
 
   Object.entries(colors.secondary).forEach(([key, value]) => {
-    if (key !== 'DEFAULT') {
+    if (key !== "DEFAULT") {
       cssVars[`--color-secondary-${key}`] = value;
     } else {
-      cssVars['--color-secondary'] = value;
+      cssVars["--color-secondary"] = value;
     }
   });
 
   Object.entries(colors.success).forEach(([key, value]) => {
-    if (key !== 'DEFAULT') {
+    if (key !== "DEFAULT") {
       cssVars[`--color-success-${key}`] = value;
     } else {
-      cssVars['--color-success'] = value;
+      cssVars["--color-success"] = value;
     }
   });
 
   Object.entries(colors.warning).forEach(([key, value]) => {
-    if (key !== 'DEFAULT') {
+    if (key !== "DEFAULT") {
       cssVars[`--color-warning-${key}`] = value;
     } else {
-      cssVars['--color-warning'] = value;
+      cssVars["--color-warning"] = value;
     }
   });
 
   Object.entries(colors.error).forEach(([key, value]) => {
-    if (key !== 'DEFAULT') {
+    if (key !== "DEFAULT") {
       cssVars[`--color-error-${key}`] = value;
     } else {
-      cssVars['--color-error'] = value;
+      cssVars["--color-error"] = value;
     }
   });
 
@@ -155,7 +155,7 @@ export const generateCSSString = () => {
   const cssVars = generateCSSVariables();
   const cssString = Object.entries(cssVars)
     .map(([key, value]) => `  ${key}: ${value};`)
-    .join('\n');
+    .join("\n");
 
   return `:root {\n${cssString}\n}`;
 };
@@ -188,25 +188,25 @@ export const generateThemeVariants = () => {
     },
     dark: {
       colors: {
-        background: 'hsl(222.2 84% 4.9%)',
-        foreground: 'hsl(210 40% 98%)',
-        card: 'hsl(222.2 84% 4.9%)',
-        cardForeground: 'hsl(210 40% 98%)',
-        popover: 'hsl(222.2 84% 4.9%)',
-        popoverForeground: 'hsl(210 40% 98%)',
-        primary: 'hsl(239 84% 67%)', // Indigo 500
-        primaryForeground: 'hsl(210 40% 98%)',
-        secondary: 'hsl(215 28% 17%)', // Slate 900ish
-        secondaryForeground: 'hsl(210 40% 98%)',
-        muted: 'hsl(215 28% 17%)',
-        mutedForeground: 'hsl(215 20.2% 65.1%)',
-        accent: 'hsl(215 28% 17%)',
-        accentForeground: 'hsl(210 40% 98%)',
-        destructive: 'hsl(0 84% 60%)',
-        destructiveForeground: 'hsl(210 40% 98%)',
-        border: 'hsl(215 28% 17%)',
-        input: 'hsl(215 28% 17%)',
-        ring: 'hsl(239 84% 67%)',
+        background: "hsl(222.2 84% 4.9%)",
+        foreground: "hsl(210 40% 98%)",
+        card: "hsl(222.2 84% 4.9%)",
+        cardForeground: "hsl(210 40% 98%)",
+        popover: "hsl(222.2 84% 4.9%)",
+        popoverForeground: "hsl(210 40% 98%)",
+        primary: "hsl(239 84% 67%)", // Indigo 500
+        primaryForeground: "hsl(210 40% 98%)",
+        secondary: "hsl(215 28% 17%)", // Slate 900ish
+        secondaryForeground: "hsl(210 40% 98%)",
+        muted: "hsl(215 28% 17%)",
+        mutedForeground: "hsl(215 20.2% 65.1%)",
+        accent: "hsl(215 28% 17%)",
+        accentForeground: "hsl(210 40% 98%)",
+        destructive: "hsl(0 84% 60%)",
+        destructiveForeground: "hsl(210 40% 98%)",
+        border: "hsl(215 28% 17%)",
+        input: "hsl(215 28% 17%)",
+        ring: "hsl(239 84% 67%)",
       },
     },
   } as const;
@@ -216,7 +216,8 @@ export const generateThemeVariants = () => {
 export const tokenUtils = {
   // Get color value
   getColor: (path: string) => {
-    const keys = path.split('.');
+    const keys = path.split(".");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let value: any = colors;
 
     for (const key of keys) {
@@ -233,7 +234,8 @@ export const tokenUtils = {
 
   // Get typography value
   getTypography: (path: string) => {
-    const keys = path.split('.');
+    const keys = path.split(".");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let value: any = typography;
 
     for (const key of keys) {
@@ -245,7 +247,8 @@ export const tokenUtils = {
 
   // Get shadow value
   getShadow: (path: string) => {
-    const keys = path.split('.');
+    const keys = path.split(".");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let value: any = shadows;
 
     for (const key of keys) {
@@ -257,7 +260,8 @@ export const tokenUtils = {
 
   // Get animation value
   getAnimation: (path: string) => {
-    const keys = path.split('.');
+    const keys = path.split(".");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let value: any = animations;
 
     for (const key of keys) {
@@ -268,13 +272,27 @@ export const tokenUtils = {
   },
 
   // Generate responsive spacing
-  getResponsiveSpacing: (base: string, sm?: string, md?: string, lg?: string, xl?: string) => {
+  getResponsiveSpacing: (
+    base: string,
+    sm?: string,
+    md?: string,
+    lg?: string,
+    xl?: string,
+  ) => {
     return {
       base: spacingTokens.spacing[base as keyof typeof spacingTokens.spacing],
-      sm: sm ? spacingTokens.spacing[sm as keyof typeof spacingTokens.spacing] : undefined,
-      md: md ? spacingTokens.spacing[md as keyof typeof spacingTokens.spacing] : undefined,
-      lg: lg ? spacingTokens.spacing[lg as keyof typeof spacingTokens.spacing] : undefined,
-      xl: xl ? spacingTokens.spacing[xl as keyof typeof spacingTokens.spacing] : undefined,
+      sm: sm
+        ? spacingTokens.spacing[sm as keyof typeof spacingTokens.spacing]
+        : undefined,
+      md: md
+        ? spacingTokens.spacing[md as keyof typeof spacingTokens.spacing]
+        : undefined,
+      lg: lg
+        ? spacingTokens.spacing[lg as keyof typeof spacingTokens.spacing]
+        : undefined,
+      xl: xl
+        ? spacingTokens.spacing[xl as keyof typeof spacingTokens.spacing]
+        : undefined,
     };
   },
 

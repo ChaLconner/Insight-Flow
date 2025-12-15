@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -34,39 +34,41 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
-)
+  },
+);
 
 import type { HTMLMotionProps } from "framer-motion";
-import { motion } from "framer-motion"
+import { motion } from "framer-motion";
 
 export interface ButtonProps
-  extends Omit<HTMLMotionProps<"button">, "ref" | "children">,
-  VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-  children?: React.ReactNode
+  extends
+    Omit<HTMLMotionProps<"button">, "ref" | "children">,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+  children?: React.ReactNode;
 }
-
-
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : motion.button
-    const motionProps = !asChild ? {
-      whileTap: { scale: 0.95 },
-      whileHover: { scale: 1.02, transition: { duration: 0.1 } }
-    } : {}
+    const Comp = asChild ? Slot : motion.button;
+    const motionProps = !asChild
+      ? {
+          whileTap: { scale: 0.95 },
+          whileHover: { scale: 1.02, transition: { duration: 0.1 } },
+        }
+      : {};
 
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...motionProps}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         {...(props as any)}
       />
-    )
-  }
-)
-Button.displayName = "Button"
+    );
+  },
+);
+Button.displayName = "Button";
 
-export { Button, buttonVariants }
+export { Button, buttonVariants };

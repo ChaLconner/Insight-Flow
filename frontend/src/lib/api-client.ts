@@ -2,10 +2,15 @@
 // API Client Configuration
 // ===========================================
 
-import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
-import axiosRetry from 'axios-retry';
-import { API_CONFIG, ERROR_MESSAGES } from '@/lib/constants';
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+} from "axios";
+import axiosRetry from "axios-retry";
+import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
 // useAuthStore import removed to prevent circular dependency
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { toast } from "sonner";
 
 // Request deduplication cache removed for simplicity
@@ -17,7 +22,7 @@ export const apiClient: AxiosInstance = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   // Use HttpOnly cookies
   withCredentials: true,
@@ -32,17 +37,24 @@ axiosRetry(apiClient, {
   retryCondition: (error: AxiosError) => {
     // Retry on network errors and 5xx server errors
     if (!error.response) {
-      console.warn(`🔄 Retrying network error (attempt ${(error.config?.['axios-retry']?.retryCount ?? 0) + 1})`);
+      console.warn(
+        `🔄 Retrying network error (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
+      );
       return true;
     }
     if (error.response?.status >= 500) {
-      console.warn(`🔄 Retrying server error ${error.response.status} (attempt ${(error.config?.['axios-retry']?.retryCount ?? 0) + 1})`);
+      console.warn(
+        `🔄 Retrying server error ${error.response.status} (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
+      );
       return true;
     }
     return false;
   },
   onRetry: (retryCount, error, requestConfig) => {
-    console.warn(`🔄 Retry attempt ${retryCount} for ${requestConfig.url}`, error.message);
+    console.warn(
+      `🔄 Retry attempt ${retryCount} for ${requestConfig.url}`,
+      error.message,
+    );
   },
 });
 
@@ -53,7 +65,7 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response interceptor for error handling
@@ -62,7 +74,9 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as AxiosRequestConfig & {
+      _retry?: boolean;
+    };
 
     // Handle 401 Unauthorized - attempt refresh using cookies
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -70,9 +84,13 @@ apiClient.interceptors.response.use(
 
       try {
         // Call refresh endpoint with cookies
-        await axios.post(`${API_CONFIG.BASE_URL}/auth/refresh`, {}, {
-          withCredentials: true,
-        });
+        await axios.post(
+          `${API_CONFIG.BASE_URL}/auth/refresh`,
+          {},
+          {
+            withCredentials: true,
+          },
+        );
 
         // Retry original request
         return apiClient(originalRequest);
@@ -89,7 +107,7 @@ apiClient.interceptors.response.use(
       ...error,
       message: errorMessage,
     });
-  }
+  },
 );
 
 // Callback storage
@@ -101,13 +119,19 @@ export const registerLogoutHandler = (fn: () => void) => {
 
 // Helper function to clear all authentication tokens
 async function clearAuthTokens(): Promise<void> {
-  if (typeof window === 'undefined') { return; }
+  if (typeof window === "undefined") {
+    return;
+  }
 
   // Attempt server-side logout to clear HttpOnly cookies
   try {
     toast.error("Session expired", { description: "Please log in again." });
-    await axios.post(`${API_CONFIG.BASE_URL}/auth/logout`, {}, { withCredentials: true });
-  } catch (e) {
+    await axios.post(
+      `${API_CONFIG.BASE_URL}/auth/logout`,
+      {},
+      { withCredentials: true },
+    );
+  } catch (_) {
     // ignore
   }
 
@@ -118,11 +142,11 @@ async function clearAuthTokens(): Promise<void> {
 
   // Use Next.js router for navigation instead of window.location
   try {
-    const nav = await import('next/navigation');
-    nav.redirect('/auth/login');
-  } catch (err) {
+    const nav = await import("next/navigation");
+    nav.redirect("/auth/login");
+  } catch (_) {
     // Fallback to window.location if Next.js redirect fails
-    window.location.href = '/auth/login';
+    window.location.href = "/auth/login";
   }
 }
 
@@ -130,21 +154,21 @@ async function clearAuthTokens(): Promise<void> {
 function getErrorMessage(error: AxiosError): string {
   // Enhanced network error handling
   if (!error.response) {
-    if (error.code === 'ECONNABORTED') {
-      return 'Request timeout. Please check your connection and try again.';
+    if (error.code === "ECONNABORTED") {
+      return "Request timeout. Please check your connection and try again.";
     }
-    if (error.code === 'ECONNREFUSED') {
-      return 'Cannot connect to server. Please ensure the backend is running.';
+    if (error.code === "ECONNREFUSED") {
+      return "Cannot connect to server. Please ensure the backend is running.";
     }
-    if (error.code === 'ENOTFOUND') {
-      return 'Server not found. Please check the API URL.';
+    if (error.code === "ENOTFOUND") {
+      return "Server not found. Please check the API URL.";
     }
-    if (error.code === 'ETIMEDOUT') {
-      return 'Connection timed out. Please check your connection.';
+    if (error.code === "ETIMEDOUT") {
+      return "Connection timed out. Please check your connection.";
     }
 
     // Generic network error with retry info
-    const retryCount = error.config?.['axios-retry']?.retryCount ?? 0;
+    const retryCount = error.config?.["axios-retry"]?.retryCount ?? 0;
     if (retryCount > 0) {
       return `Network error after ${retryCount} retry attempts. Please check your connection.`;
     }
@@ -219,7 +243,7 @@ export function createFormData(data: Record<string, any>): FormData {
         formData.append(key, value);
       } else if (Array.isArray(value)) {
         value.forEach((item, index) => {
-          if (typeof item === 'object' && item != null) {
+          if (typeof item === "object" && item != null) {
             Object.entries(item).forEach(([subKey, subValue]) => {
               formData.append(`${key}[${index}][${subKey}]`, String(subValue));
             });
@@ -227,7 +251,7 @@ export function createFormData(data: Record<string, any>): FormData {
             formData.append(`${key}[${index}]`, String(item));
           }
         });
-      } else if (typeof value === 'object') {
+      } else if (typeof value === "object") {
         formData.append(key, JSON.stringify(value));
       } else {
         formData.append(key, String(value));
@@ -239,39 +263,45 @@ export function createFormData(data: Record<string, any>): FormData {
 }
 
 // Download file helper with improved error handling
-export async function downloadFile(url: string, filename?: string): Promise<void> {
+export async function downloadFile(
+  url: string,
+  filename?: string,
+): Promise<void> {
   try {
     const response = await apiClient.get(url, {
-      responseType: 'blob',
+      responseType: "blob",
     });
 
     const blob = new Blob([response.data]);
     const downloadUrl = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = downloadUrl;
-    link.download = filename ?? 'download';
+    link.download = filename ?? "download";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(downloadUrl);
   } catch (error) {
-    console.error('Download failed:', error);
+    console.error("Download failed:", error);
     throw error;
   }
 }
 
 // Utility function to check if we're in a browser environment
 export function isBrowser(): boolean {
-  return typeof window !== 'undefined';
+  return typeof window !== "undefined";
 }
 
 // Factory function to create custom axios instances
-export function createCustomApiClient(baseURL: string, timeout: number = 10000): AxiosInstance {
+export function createCustomApiClient(
+  baseURL: string,
+  timeout: number = 10000,
+): AxiosInstance {
   return axios.create({
     baseURL,
     timeout,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   });
 }
@@ -280,7 +310,7 @@ export function createCustomApiClient(baseURL: string, timeout: number = 10000):
 export function createDeduplicatedRequest<T = any>(
   requestFn: () => Promise<T>,
   cacheKey: string,
-  ttl: number = 500
+  _ttl: number = 500,
 ): Promise<T> {
   // Pass-through implementation to remove complexity
   return requestFn();
@@ -293,35 +323,34 @@ export function createDeduplicatedRequest<T = any>(
 // Backend health check with retry
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-
-    const response = await apiClient.get('/minimal-test', {
-      timeout: 5000 // Shorter timeout for health check
+    const _response = await apiClient.get("/minimal-test", {
+      timeout: 5000, // Shorter timeout for health check
     });
 
     return true;
   } catch (error: any) {
-    console.error('❌ Backend health check failed:', error.message);
+    console.error("❌ Backend health check failed:", error.message);
     return false;
   }
 }
 
 // Wait for backend to be ready with timeout
-export async function waitForBackend(maxAttempts: number = 10, delay: number = 1000): Promise<boolean> {
+export async function waitForBackend(
+  maxAttempts: number = 10,
+  delay: number = 1000,
+): Promise<boolean> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-
-
     const isHealthy = await checkBackendHealth();
     if (isHealthy) {
-
       return true;
     }
 
     if (attempt < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
-  console.error('❌ Backend failed to start after maximum attempts');
+  console.error("❌ Backend failed to start after maximum attempts");
   return false;
 }
 
@@ -329,7 +358,7 @@ export async function waitForBackend(maxAttempts: number = 10, delay: number = 1
 export function createRateLimitedRequest<T = any>(
   requestFn: () => Promise<T>,
   cacheKey: string,
-  ttl: number = 2000
+  _ttl: number = 2000,
 ): Promise<T> {
   // Pass-through implementation to remove complexity
   return requestFn();

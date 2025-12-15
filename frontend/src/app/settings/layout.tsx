@@ -1,14 +1,14 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: 'Settings',
-    description: 'Manage your account settings and preferences.',
+  title: "Settings",
+  description: "Manage your account settings and preferences.",
 };
 
 export default function SettingsLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-    return <>{children}</>;
+  return <>{children}</>;
 }

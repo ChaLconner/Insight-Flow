@@ -1,14 +1,14 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: 'Users',
-    description: 'Manage users, roles, and permissions.',
+  title: "Users",
+  description: "Manage users, roles, and permissions.",
 };
 
 export default function UsersLayout({
-    children,
+  children,
 }: {
-    children: React.ReactNode;
+  children: React.ReactNode;
 }) {
-    return <>{children}</>;
+  return <>{children}</>;
 }

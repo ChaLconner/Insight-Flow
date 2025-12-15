@@ -2,7 +2,7 @@
 // useIsHydrated Hook - Hydration Detection
 // ===========================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * Custom hook to detect if the component has been hydrated on the client
@@ -26,10 +26,10 @@ export function useIsDevelopment(): boolean {
 
   useEffect(() => {
     setIsDev(
-      typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || 
-       window.location.hostname === '127.0.0.1' ||
-       process.env.NODE_ENV === 'development')
+      typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1" ||
+          process.env.NODE_ENV === "development"),
     );
   }, []);
 

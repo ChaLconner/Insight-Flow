@@ -8,7 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AnimatedBackground, FloatingShapes } from "@/components/ui/animated-background";
+import {
+  AnimatedBackground,
+  FloatingShapes,
+} from "@/components/ui/animated-background";
 import { apiClient } from "@/lib/api-client";
 import { API_CONFIG } from "@/lib/constants";
 import { authActions } from "@/stores/auth-actions";
@@ -23,7 +26,7 @@ import {
   Loader2,
   Check,
   X,
-  Layers
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
@@ -36,7 +39,7 @@ export default function RegisterPage() {
     email: "",
     username: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -47,28 +50,57 @@ export default function RegisterPage() {
 
   const passwordRequirements = [
     { label: "At least 8 characters", test: (pwd: string) => pwd.length >= 8 },
-    { label: "Contains uppercase letter", test: (pwd: string) => /[A-Z]/.test(pwd) },
-    { label: "Contains lowercase letter", test: (pwd: string) => /[a-z]/.test(pwd) },
+    {
+      label: "Contains uppercase letter",
+      test: (pwd: string) => /[A-Z]/.test(pwd),
+    },
+    {
+      label: "Contains lowercase letter",
+      test: (pwd: string) => /[a-z]/.test(pwd),
+    },
     { label: "Contains number", test: (pwd: string) => /\d/.test(pwd) },
-    { label: "Contains special character", test: (pwd: string) => /[!@#$%^&*(),.?":{}|<>]/.test(pwd) },
+    {
+      label: "Contains special character",
+      test: (pwd: string) => /[!@#$%^&*(),.?":{}|<>]/.test(pwd),
+    },
   ];
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.firstName.trim()) { newErrors.firstName = "First name is required"; }
-    if (!formData.lastName.trim()) { newErrors.lastName = "Last name is required"; }
-    if (!formData.email.trim()) { newErrors.email = "Email is required"; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { newErrors.email = "Invalid email format"; }
-    if (!formData.username.trim()) { newErrors.username = "Username is required"; }
-    if (formData.username.length < 3) { newErrors.username = "Username must be at least 3 characters"; }
-    if (!formData.password) { newErrors.password = "Password is required"; }
-    if (!passwordRequirements.every(req => req.test(formData.password))) {
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = "First name is required";
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = "Last name is required";
+    }
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Invalid email format";
+    }
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required";
+    }
+    if (formData.username.length < 3) {
+      newErrors.username = "Username must be at least 3 characters";
+    }
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    }
+    if (!passwordRequirements.every((req) => req.test(formData.password))) {
       newErrors.password = "Password doesn't meet requirements";
     }
-    if (!formData.confirmPassword) { newErrors.confirmPassword = "Please confirm your password"; }
-    if (formData.password !== formData.confirmPassword) { newErrors.confirmPassword = "Passwords don't match"; }
-    if (!acceptTerms) { newErrors.terms = "You must accept terms and conditions"; }
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = "Please confirm your password";
+    }
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = "Passwords don't match";
+    }
+    if (!acceptTerms) {
+      newErrors.terms = "You must accept terms and conditions";
+    }
 
     return newErrors;
   };
@@ -95,16 +127,17 @@ export default function RegisterPage() {
       const backendUserData = {
         email: formData.email.trim(),
         name: name,
-        password: formData.password
+        password: formData.password,
       };
 
-      const { data } = await apiClient.post('/auth/register', backendUserData);
+      await apiClient.post("/auth/register", backendUserData);
 
       // Registration successful - redirect to login
       toast.success("Account created successfully", {
         description: "Please sign in with your new account.",
       });
       router.push("/auth/login");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error("Registration error:", error);
 
@@ -132,12 +165,11 @@ export default function RegisterPage() {
         setIsLoading(true);
         setApiError("");
 
-
         // Call backend API with Google token
         const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             access_token: tokenResponse.access_token,
@@ -145,13 +177,12 @@ export default function RegisterPage() {
         });
 
         if (!response.ok) {
-          throw new Error('Google login failed');
+          throw new Error("Google login failed");
         }
 
         const data = await response.json();
 
-
-        toast.success(`Welcome ${data.user.firstName || 'User'}!`, {
+        toast.success(`Welcome ${data.user.firstName ?? "User"}!`, {
           description: "Successfully signed in with Google.",
         });
 
@@ -162,37 +193,48 @@ export default function RegisterPage() {
 
         if (user?.role) {
           switch (user.role) {
-            case 'admin': redirectUrl = "/dashboard"; break;
-            case 'manager': redirectUrl = "/projects"; break;
-            case 'member':
-            case 'user': redirectUrl = "/projects?tab=tasks"; break;
-            case 'viewer': redirectUrl = "/projects"; break;
-            default: redirectUrl = "/dashboard";
+            case "admin":
+              redirectUrl = "/dashboard";
+              break;
+            case "manager":
+              redirectUrl = "/projects";
+              break;
+            case "member":
+            case "user":
+              redirectUrl = "/projects?tab=tasks";
+              break;
+            case "viewer":
+              redirectUrl = "/projects";
+              break;
+            default:
+              redirectUrl = "/dashboard";
           }
         }
 
         router.push(redirectUrl);
       } catch (error) {
-        console.error('❌ Google login error:', error);
-        setApiError('Google login failed. Please try again.');
-        toast.error("Google login failed", { description: getErrorMessage(error) });
+        console.error("❌ Google login error:", error);
+        setApiError("Google login failed. Please try again.");
+        toast.error("Google login failed", {
+          description: getErrorMessage(error),
+        });
       } finally {
         setIsLoading(false);
       }
     },
     onError: () => {
-      console.error('❌ Google login failed');
-      setApiError('Google login failed. Please try again.');
+      console.error("❌ Google login failed");
+      setApiError("Google login failed. Please try again.");
       setIsLoading(false);
       toast.error("Google login failed");
     },
-    flow: 'implicit',
+    flow: "implicit",
   });
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: "" }));
+      setErrors((prev) => ({ ...prev, [field]: "" }));
     }
     // Clear API error when user makes changes
     if (apiError) {
@@ -200,7 +242,9 @@ export default function RegisterPage() {
     }
   };
 
-  const isPasswordValid = (requirement: any) => requirement.test(formData.password);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isPasswordValid = (requirement: any) =>
+    requirement.test(formData.password);
   const isFormValid = Object.keys(validateForm()).length === 0;
 
   return (
@@ -215,13 +259,19 @@ export default function RegisterPage() {
           <div className="mx-auto h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/25">
             <Layers className="h-7 w-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Create your account</h1>
-          <p className="text-zinc-400">Join Insight Flow and start managing projects</p>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            Create your account
+          </h1>
+          <p className="text-zinc-400">
+            Join Insight Flow and start managing projects
+          </p>
         </div>
 
         <Card className="border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-xl text-white text-center">Sign up</CardTitle>
+            <CardTitle className="text-xl text-white text-center">
+              Sign up
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* API Error Display */}
@@ -237,16 +287,39 @@ export default function RegisterPage() {
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
                 onClick={() => handleGoogleLogin()}
-                disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
-                title={!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? "Google Client ID is missing" : "Sign up with Google"}
+                disabled={
+                  isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+                }
+                title={
+                  !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+                    ? "Google Client ID is missing"
+                    : "Sign up with Google"
+                }
               >
                 <div className="mr-3 h-4 w-4 flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="100%"
+                    height="100%"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
                     <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                      <path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-                      <path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-                      <path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-                      <path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
+                      <path
+                        fill="#4285F4"
+                        d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"
+                      />
                     </g>
                   </svg>
                 </div>
@@ -262,13 +335,17 @@ export default function RegisterPage() {
                     return;
                   }
                   const redirectUri = encodeURIComponent(
-                    `${window.location.origin}/auth/callback/github`
+                    `${window.location.origin}/auth/callback/github`,
                   );
                   const scope = "read:user user:email";
                   window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
                 }}
                 disabled={isLoading}
-                title={!process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID ? "GitHub Client ID is missing" : "Sign up with GitHub"}
+                title={
+                  !process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
+                    ? "GitHub Client ID is missing"
+                    : "Sign up with GitHub"
+                }
               >
                 <Github className="h-4 w-4 mr-3" />
                 Continue with GitHub
@@ -281,7 +358,9 @@ export default function RegisterPage() {
                 <div className="w-full border-t border-white/10" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-zinc-900 px-2 text-zinc-400">Or continue with</span>
+                <span className="bg-zinc-900 px-2 text-zinc-400">
+                  Or continue with
+                </span>
               </div>
             </div>
 
@@ -290,14 +369,19 @@ export default function RegisterPage() {
               {/* Name Fields */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-zinc-300">First Name</Label>
+                  <Label htmlFor="firstName" className="text-zinc-300">
+                    First Name
+                  </Label>
                   <Input
                     id="firstName"
                     placeholder="John"
                     value={formData.firstName}
-                    onChange={(e) => handleInputChange("firstName", e.target.value)}
-                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.firstName ? "border-red-500" : ""
-                      }`}
+                    onChange={(e) =>
+                      handleInputChange("firstName", e.target.value)
+                    }
+                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.firstName ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                   {errors.firstName && (
@@ -305,14 +389,19 @@ export default function RegisterPage() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-zinc-300">Last Name</Label>
+                  <Label htmlFor="lastName" className="text-zinc-300">
+                    Last Name
+                  </Label>
                   <Input
                     id="lastName"
                     placeholder="Doe"
                     value={formData.lastName}
-                    onChange={(e) => handleInputChange("lastName", e.target.value)}
-                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.lastName ? "border-red-500" : ""
-                      }`}
+                    onChange={(e) =>
+                      handleInputChange("lastName", e.target.value)
+                    }
+                    className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.lastName ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                   {errors.lastName && (
@@ -323,7 +412,9 @@ export default function RegisterPage() {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-zinc-300">Email</Label>
+                <Label htmlFor="email" className="text-zinc-300">
+                  Email
+                </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
@@ -332,8 +423,9 @@ export default function RegisterPage() {
                     placeholder="john@example.com"
                     value={formData.email}
                     onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.email ? "border-red-500" : ""
-                      }`}
+                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.email ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                 </div>
@@ -344,16 +436,21 @@ export default function RegisterPage() {
 
               {/* Username */}
               <div className="space-y-2">
-                <Label htmlFor="username" className="text-zinc-300">Username</Label>
+                <Label htmlFor="username" className="text-zinc-300">
+                  Username
+                </Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
                     id="username"
                     placeholder="johndoe"
                     value={formData.username}
-                    onChange={(e) => handleInputChange("username", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.username ? "border-red-500" : ""
-                      }`}
+                    onChange={(e) =>
+                      handleInputChange("username", e.target.value)
+                    }
+                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.username ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                 </div>
@@ -364,7 +461,9 @@ export default function RegisterPage() {
 
               {/* Password */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-zinc-300">Password</Label>
+                <Label htmlFor="password" className="text-zinc-300">
+                  Password
+                </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
@@ -372,9 +471,12 @@ export default function RegisterPage() {
                     type={showPassword ? "text" : "password"}
                     placeholder="Create a strong password"
                     value={formData.password}
-                    onChange={(e) => handleInputChange("password", e.target.value)}
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.password ? "border-red-500" : ""
-                      }`}
+                    onChange={(e) =>
+                      handleInputChange("password", e.target.value)
+                    }
+                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.password ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                   <button
@@ -383,7 +485,11 @@ export default function RegisterPage() {
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-400 hover:text-white"
                     disabled={isLoading}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
 
@@ -391,13 +497,22 @@ export default function RegisterPage() {
                 {formData.password && (
                   <div className="mt-2 space-y-1">
                     {passwordRequirements.map((req, index) => (
-                      <div key={index} className="flex items-center gap-2 text-xs">
+                      <div
+                        key={index}
+                        className="flex items-center gap-2 text-xs"
+                      >
                         {isPasswordValid(req) ? (
                           <Check className="h-3 w-3 text-emerald-400" />
                         ) : (
                           <X className="h-3 w-3 text-zinc-500" />
                         )}
-                        <span className={isPasswordValid(req) ? "text-emerald-400" : "text-zinc-500"}>
+                        <span
+                          className={
+                            isPasswordValid(req)
+                              ? "text-emerald-400"
+                              : "text-zinc-500"
+                          }
+                        >
                           {req.label}
                         </span>
                       </div>
@@ -412,7 +527,9 @@ export default function RegisterPage() {
 
               {/* Confirm Password */}
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-zinc-300">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-zinc-300">
+                  Confirm Password
+                </Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
                   <Input
@@ -420,9 +537,12 @@ export default function RegisterPage() {
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm your password"
                     value={formData.confirmPassword}
-                    onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${errors.confirmPassword ? "border-red-500" : ""
-                      }`}
+                    onChange={(e) =>
+                      handleInputChange("confirmPassword", e.target.value)
+                    }
+                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                      errors.confirmPassword ? "border-red-500" : ""
+                    }`}
                     disabled={isLoading}
                   />
                   <button
@@ -431,11 +551,17 @@ export default function RegisterPage() {
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-400 hover:text-white"
                     disabled={isLoading}
                   >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
                 {errors.confirmPassword && (
-                  <p className="text-xs text-red-400">{errors.confirmPassword}</p>
+                  <p className="text-xs text-red-400">
+                    {errors.confirmPassword}
+                  </p>
                 )}
               </div>
 
@@ -451,11 +577,17 @@ export default function RegisterPage() {
                   />
                   <span className="text-sm text-zinc-400">
                     I agree to{" "}
-                    <Link href="/terms" className="text-indigo-400 hover:text-indigo-300">
+                    <Link
+                      href="/terms"
+                      className="text-indigo-400 hover:text-indigo-300"
+                    >
                       Terms of Service
                     </Link>{" "}
                     and{" "}
-                    <Link href="/privacy" className="text-indigo-400 hover:text-indigo-300">
+                    <Link
+                      href="/privacy"
+                      className="text-indigo-400 hover:text-indigo-300"
+                    >
                       Privacy Policy
                     </Link>
                   </span>

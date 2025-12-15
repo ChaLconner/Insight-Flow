@@ -2,22 +2,22 @@
 // Theme Provider Component
 // ===========================================
 
-'use client';
+"use client";
 
-import { useEffect, type ReactNode } from 'react';
-import { useTheme } from '@/hooks/use-theme';
-import { useIsHydrated } from '@/hooks/use-hydration';
+import { useEffect, type ReactNode } from "react";
+import { useTheme } from "@/hooks/use-theme";
+import { useIsHydrated } from "@/hooks/use-hydration";
 
 interface ThemeProviderProps {
   children: ReactNode;
-  defaultTheme?: 'light' | 'dark' | 'system';
+  defaultTheme?: "light" | "dark" | "system";
   storageKey?: string;
 }
 
 export function ThemeProvider({
   children,
-  defaultTheme = 'system',
-  storageKey = 'insight-flow-theme',
+  // defaultTheme = "system",
+  // storageKey = "insight-flow-theme",
 }: ThemeProviderProps) {
   const { initializeTheme, syncWithStorage } = useTheme();
   const isHydrated = useIsHydrated();

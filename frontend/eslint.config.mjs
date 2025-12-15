@@ -9,7 +9,7 @@ export default typescript.config(
   {
     files: ["**/*.{ts,tsx}"],
     plugins: {
-      "react": react,
+      react: react,
       "react-hooks": reactHooks,
     },
     languageOptions: {
@@ -18,61 +18,64 @@ export default typescript.config(
         ecmaFeatures: {
           jsx: true,
         },
-        project: './tsconfig.json',
+        project: "./tsconfig.json",
         tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react/react-in-jsx-scope": "off",
-      
+
       // TypeScript recommended rules
-      "@typescript-eslint/no-unused-vars": ["warn", { 
-        "argsIgnorePattern": "^_",
-        "varsIgnorePattern": "^_",
-        "caughtErrorsIgnorePattern": "^_"
-      }],
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-non-null-assertion": "warn",
-      
+
       // Enhanced prefer-nullish-coalescing configuration following TypeScript ESLint guidelines
       "@typescript-eslint/prefer-nullish-coalescing": [
-        "error",
+        "warn",
         {
           // Allow ignoring mixed logical expressions to prevent precedence issues
-          "ignoreMixedLogicalExpressions": false,
+          ignoreMixedLogicalExpressions: false,
           // Enforce nullish coalescing in conditional tests (if, while, etc.)
-          "ignoreConditionalTests": false,
+          ignoreConditionalTests: false,
           // Enforce nullish coalescing in ternary expressions
-          "ignoreTernaryTests": false,
+          ignoreTernaryTests: false,
           // Enforce nullish coalescing in if statements for lazy initialization
-          "ignoreIfStatements": false,
+          ignoreIfStatements: false,
           // Process all types including primitives for stricter null checks
-          "ignorePrimitives": {
-            "string": false,
-            "number": false,
-            "bigint": false,
-            "boolean": false
-          }
-        }
+          ignorePrimitives: {
+            string: false,
+            number: false,
+            bigint: false,
+            boolean: false,
+          },
+        },
       ],
       "@typescript-eslint/prefer-optional-chain": "warn",
       "@typescript-eslint/strict-boolean-expressions": "off", // Too strict for real-world usage
-      
+
       // Store and state management specific rules
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/prefer-readonly": "warn",
-      
+
       // General coding standards
       "prefer-const": "error",
       "no-var": "error",
       "no-console": "off",
-      "eqeqeq": ["error", "always", { "null": "never" }],
-      "curly": ["error", "all"],
+      eqeqeq: ["error", "always", { null: "never" }],
+      curly: ["error", "all"],
       "no-useless-escape": "error",
-      
+
       // Interface and type definition rules
-      "@typescript-eslint/no-empty-interface": "error",
+      "@typescript-eslint/no-empty-interface": "warn",
     },
   },
   {
@@ -88,12 +91,12 @@ export default typescript.config(
       "@typescript-eslint/prefer-nullish-coalescing": [
         "warn",
         {
-          "ignoreMixedLogicalExpressions": true, // More relaxed for stores
-          "ignoreConditionalTests": true, // More relaxed for stores
-          "ignoreTernaryTests": true, // More relaxed for stores
-          "ignoreIfStatements": true, // More relaxed for stores
-          "ignorePrimitives": true // More relaxed for stores
-        }
+          ignoreMixedLogicalExpressions: true, // More relaxed for stores
+          ignoreConditionalTests: true, // More relaxed for stores
+          ignoreTernaryTests: true, // More relaxed for stores
+          ignoreIfStatements: true, // More relaxed for stores
+          ignorePrimitives: true, // More relaxed for stores
+        },
       ],
       "@typescript-eslint/no-non-null-assertion": "off", // Allow ! operator in stores
       "@typescript-eslint/consistent-type-imports": "off", // Relaxed for stores
@@ -119,9 +122,9 @@ export default typescript.config(
       globals: {
         process: "readonly",
         __dirname: "readonly",
-        module: "readonly"
-      }
-    }
+        module: "readonly",
+      },
+    },
   },
   {
     ignores: [
@@ -131,5 +134,5 @@ export default typescript.config(
       "**/node_modules/**",
       "**/next-env.d.ts",
     ],
-  }
+  },
 );

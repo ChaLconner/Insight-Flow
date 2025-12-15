@@ -2,9 +2,9 @@
 // Zustand Notification Store
 // ===========================================
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { Notification } from '@/types';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { Notification } from "@/types";
 
 // Use the type from types/index.ts directly to ensure consistency
 type CustomNotification = Notification;
@@ -20,22 +20,27 @@ interface NotificationState {
   isLoading: boolean;
   isConnected: boolean;
   filters: {
-    type: string | 'all';
-    priority: string | 'all';
-    readStatus: 'all' | 'read' | 'unread';
+    type: string | "all";
+    priority: string | "all";
+    readStatus: "all" | "read" | "unread";
     search: string;
     dateRange?: { start?: Date; end?: Date };
   };
 
   // Actions
-  addNotification: (notification: Omit<CustomNotification, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addNotification: (
+    notification: Omit<CustomNotification, "id" | "createdAt" | "updatedAt">,
+  ) => void;
   setNotifications: (notifications: CustomNotification[]) => void; // New action
   setUnreadCount: (count: number) => void; // New action
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   removeNotification: (id: string) => void;
   clearAllNotifications: () => void;
-  updateNotification: (id: string, updates: Partial<CustomNotification>) => void;
+  updateNotification: (
+    id: string,
+    updates: Partial<CustomNotification>,
+  ) => void;
 
   // Settings Actions
   setPermissionGranted: (granted: boolean) => void;
@@ -48,7 +53,7 @@ interface NotificationState {
   setConnectionStatus: (connected: boolean) => void;
 
   // Filter Actions
-  updateFilters: (filters: Partial<NotificationState['filters']>) => void;
+  updateFilters: (filters: Partial<NotificationState["filters"]>) => void;
   resetFilters: () => void;
 
   // Real-time Actions
@@ -86,10 +91,10 @@ export const useNotificationStore = create<NotificationState>()(
       isLoading: false,
       isConnected: false,
       filters: {
-        type: 'all',
-        priority: 'all',
-        readStatus: 'all',
-        search: '',
+        type: "all",
+        priority: "all",
+        readStatus: "all",
+        search: "",
         dateRange: undefined,
       },
 
@@ -108,7 +113,9 @@ export const useNotificationStore = create<NotificationState>()(
 
         set((state) => ({
           notifications: [notification, ...state.notifications].slice(0, 100), // Keep only last 100
-          unreadCount: notificationData.read ? state.unreadCount : state.unreadCount + 1,
+          unreadCount: notificationData.read
+            ? state.unreadCount
+            : state.unreadCount + 1,
         }));
 
         // Show browser notification if permission granted
@@ -120,7 +127,11 @@ export const useNotificationStore = create<NotificationState>()(
         }
 
         // Vibrate if enabled and on mobile
-        if (get().vibrationEnabled && typeof navigator !== 'undefined' && navigator.vibrate) {
+        if (
+          get().vibrationEnabled &&
+          typeof navigator !== "undefined" &&
+          navigator.vibrate
+        ) {
           navigator.vibrate([200, 100, 200]);
         }
       },
@@ -135,14 +146,16 @@ export const useNotificationStore = create<NotificationState>()(
 
       markAsRead: (id) => {
         set((state) => {
-          const notification = state.notifications.find(n => n.id === id);
+          const notification = state.notifications.find((n) => n.id === id);
           if (!notification || notification.read) {
             return state;
           }
 
           return {
-            notifications: state.notifications.map(n =>
-              n.id === id ? { ...n, read: true, updatedAt: new Date().toISOString() } : n
+            notifications: state.notifications.map((n) =>
+              n.id === id
+                ? { ...n, read: true, updatedAt: new Date().toISOString() }
+                : n,
             ),
             unreadCount: Math.max(0, state.unreadCount - 1),
           };
@@ -151,7 +164,7 @@ export const useNotificationStore = create<NotificationState>()(
 
       markAllAsRead: () => {
         set((state) => ({
-          notifications: state.notifications.map(n => ({
+          notifications: state.notifications.map((n) => ({
             ...n,
             read: true,
             updatedAt: new Date().toISOString(),
@@ -162,12 +175,14 @@ export const useNotificationStore = create<NotificationState>()(
 
       removeNotification: (id) => {
         set((state) => {
-          const notification = state.notifications.find(n => n.id === id);
+          const notification = state.notifications.find((n) => n.id === id);
           const wasUnread = notification && !notification.read;
 
           return {
-            notifications: state.notifications.filter(n => n.id !== id),
-            unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+            notifications: state.notifications.filter((n) => n.id !== id),
+            unreadCount: wasUnread
+              ? Math.max(0, state.unreadCount - 1)
+              : state.unreadCount,
           };
         });
       },
@@ -181,8 +196,10 @@ export const useNotificationStore = create<NotificationState>()(
 
       updateNotification: (id, updates) => {
         set((state) => ({
-          notifications: state.notifications.map(n =>
-            n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n
+          notifications: state.notifications.map((n) =>
+            n.id === id
+              ? { ...n, ...updates, updatedAt: new Date().toISOString() }
+              : n,
           ),
         }));
       },
@@ -216,19 +233,19 @@ export const useNotificationStore = create<NotificationState>()(
       // Filter Actions
       updateFilters: (newFilters) => {
         set((state) => ({
-          filters: { ...state.filters, ...newFilters }
+          filters: { ...state.filters, ...newFilters },
         }));
       },
 
       resetFilters: () => {
         set({
           filters: {
-            type: 'all',
-            priority: 'all',
-            readStatus: 'all',
-            search: '',
+            type: "all",
+            priority: "all",
+            readStatus: "all",
+            search: "",
             dateRange: undefined,
-          }
+          },
         });
       },
 
@@ -250,11 +267,11 @@ export const useNotificationStore = create<NotificationState>()(
 
       // Utility Actions
       getNotificationsByType: (type) => {
-        return get().notifications.filter(n => n.type === type);
+        return get().notifications.filter((n) => n.type === type);
       },
 
       getUnreadNotifications: () => {
-        return get().notifications.filter(n => !n.read);
+        return get().notifications.filter((n) => !n.read);
       },
 
       getRecentNotifications: (limit = 10) => {
@@ -262,13 +279,13 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       hasNotification: (id) => {
-        return get().notifications.some(n => n.id === id);
+        return get().notifications.some((n) => n.id === id);
       },
 
       // Additional CRUD actions
       clearReadNotifications: () => {
         set((state) => ({
-          notifications: state.notifications.filter(n => !n.read),
+          notifications: state.notifications.filter((n) => !n.read),
           unreadCount: state.unreadCount, // Keep unread count unchanged
         }));
       },
@@ -284,13 +301,13 @@ export const useNotificationStore = create<NotificationState>()(
           return;
         }
 
-        if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (typeof window !== "undefined" && "Notification" in window) {
           const browserNotification = new Notification(notification.title, {
             body: notification.message,
-            icon: '/favicon.ico',
-            badge: '/favicon.ico',
+            icon: "/favicon.ico",
+            badge: "/favicon.ico",
             tag: notification.id,
-            requireInteraction: notification.priority === 'urgent',
+            requireInteraction: notification.priority === "urgent",
           });
 
           browserNotification.onclick = () => {
@@ -309,7 +326,7 @@ export const useNotificationStore = create<NotificationState>()(
           };
 
           // Auto-close after 5 seconds unless urgent
-          if (notification.priority !== 'urgent') {
+          if (notification.priority !== "urgent") {
             setTimeout(() => {
               browserNotification.close();
             }, 5000);
@@ -318,29 +335,29 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       playNotificationSound: () => {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== "undefined") {
           try {
-            const audio = new Audio('/sounds/notification.mp3');
+            const audio = new Audio("/sounds/notification.mp3");
             audio.volume = 0.5;
-            audio.play().catch(error => {
-              console.error('Could not play notification sound:', error);
+            audio.play().catch((error) => {
+              console.error("Could not play notification sound:", error);
             });
           } catch (error) {
-            console.error('Notification sound not available:', error);
+            console.error("Notification sound not available:", error);
           }
         }
       },
     }),
     {
-      name: 'insight-flow-notifications',
+      name: "insight-flow-notifications",
       partialize: (state) => ({
         notifications: state.notifications.slice(0, 50), // Persist only last 50
         soundEnabled: state.soundEnabled,
         vibrationEnabled: state.vibrationEnabled,
         pushEnabled: state.pushEnabled,
       }),
-    }
-  )
+    },
+  ),
 );
 
 // ===========================================
@@ -359,21 +376,48 @@ export const notificationSelectors = {
   getFilters: (state: NotificationState) => state.filters,
 
   // Filtered views
-  getUnreadNotifications: (state: NotificationState) => state.notifications.filter(n => !n.read),
-  getReadNotifications: (state: NotificationState) => state.notifications.filter(n => n.read),
+  getUnreadNotifications: (state: NotificationState) =>
+    state.notifications.filter((n) => !n.read),
+  getReadNotifications: (state: NotificationState) =>
+    state.notifications.filter((n) => n.read),
   getFilteredNotifications: (state: NotificationState) => {
     // Apply current filters to notifications
     const { filters } = state;
-    return state.notifications.filter(notification => {
-      if (filters.type !== 'all' && notification.type !== filters.type) { return false; }
-      if (filters.priority !== 'all' && notification.priority !== filters.priority) { return false; }
-      if (filters.readStatus === 'read' && notification.read) { return false; }
-      if (filters.readStatus === 'unread' && !notification.read) { return false; }
-      if (filters.search && !notification.message.toLowerCase().includes(filters.search.toLowerCase())) { return false; }
+    return state.notifications.filter((notification) => {
+      if (filters.type !== "all" && notification.type !== filters.type) {
+        return false;
+      }
+      if (
+        filters.priority !== "all" &&
+        notification.priority !== filters.priority
+      ) {
+        return false;
+      }
+      if (filters.readStatus === "read" && notification.read) {
+        return false;
+      }
+      if (filters.readStatus === "unread" && !notification.read) {
+        return false;
+      }
+      if (
+        filters.search &&
+        !notification.message
+          .toLowerCase()
+          .includes(filters.search.toLowerCase())
+      ) {
+        return false;
+      }
       if (filters.dateRange) {
         const notificationDate = new Date(notification.createdAt);
-        if (filters.dateRange.start && notificationDate < filters.dateRange.start) { return false; }
-        if (filters.dateRange.end && notificationDate > filters.dateRange.end) { return false; }
+        if (
+          filters.dateRange.start &&
+          notificationDate < filters.dateRange.start
+        ) {
+          return false;
+        }
+        if (filters.dateRange.end && notificationDate > filters.dateRange.end) {
+          return false;
+        }
       }
       return true;
     });
@@ -382,7 +426,7 @@ export const notificationSelectors = {
   // Grouped views
   getNotificationsByPriority: (state: NotificationState) => {
     const grouped = {} as Record<string, CustomNotification[]>;
-    state.notifications.forEach(notification => {
+    state.notifications.forEach((notification) => {
       if (!grouped[notification.priority]) {
         grouped[notification.priority] = [];
       }
@@ -392,7 +436,7 @@ export const notificationSelectors = {
   },
   getNotificationsByType: (state: NotificationState) => {
     const grouped = {} as Record<string, CustomNotification[]>;
-    state.notifications.forEach(notification => {
+    state.notifications.forEach((notification) => {
       if (!grouped[notification.type]) {
         grouped[notification.type] = [];
       }
@@ -402,8 +446,10 @@ export const notificationSelectors = {
   },
 
   // Latest notifications
-  getLatestNotifications: (state: NotificationState) => (limit = 10) =>
-    state.notifications.slice(0, limit) as CustomNotification[],
+  getLatestNotifications:
+    (state: NotificationState) =>
+    (limit = 10) =>
+      state.notifications.slice(0, limit) as CustomNotification[],
 
   // Settings
   getSettings: (state: NotificationState) => ({
@@ -415,17 +461,20 @@ export const notificationSelectors = {
 
   // Utility selectors
   hasUnread: (state: NotificationState) => state.unreadCount > 0,
-  getUnread: (state: NotificationState) => state.notifications.filter(n => !n.read) as CustomNotification[], // Alias
+  getUnread: (state: NotificationState) =>
+    state.notifications.filter((n) => !n.read) as CustomNotification[], // Alias
   getRecent: (state: NotificationState) => {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return state.notifications.filter(n =>
-      new Date(n.createdAt) > twentyFourHoursAgo
+    return state.notifications.filter(
+      (n) => new Date(n.createdAt) > twentyFourHoursAgo,
     );
   },
   getByType: (state: NotificationState) => (type: string) =>
-    state.notifications.filter(n => n.type === type),
+    state.notifications.filter((n) => n.type === type),
   getHighPriority: (state: NotificationState) =>
-    state.notifications.filter(n => n.priority === 'urgent' || n.priority === 'high'),
+    state.notifications.filter(
+      (n) => n.priority === "urgent" || n.priority === "high",
+    ),
 } as const;
 
 // ===========================================
@@ -435,18 +484,18 @@ export const notificationSelectors = {
 export const notificationActions = {
   // Request notification permission
   requestPermission: async (): Promise<boolean> => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
+    if (typeof window === "undefined" || !("Notification" in window)) {
       return false;
     }
 
     try {
       const permission = await Notification.requestPermission();
-      const granted = permission === 'granted';
+      const granted = permission === "granted";
 
       useNotificationStore.getState().setPermissionGranted(granted);
       return granted;
     } catch (error) {
-      console.error('Failed to request notification permission:', error);
+      console.error("Failed to request notification permission:", error);
       return false;
     }
   },
@@ -456,13 +505,13 @@ export const notificationActions = {
     const { addNotification } = useNotificationStore.getState();
 
     addNotification({
-      userId: 'test',
-      type: 'system', // Cast to any if needed, or ensure 'system' is in NotificationType enum
-      title: 'Test Notification',
-      message: 'This is a test notification from Insight Flow',
+      userId: "test",
+      type: "system", // Cast to any if needed, or ensure 'system' is in NotificationType enum
+      title: "Test Notification",
+      message: "This is a test notification from Insight Flow",
       data: { test: true },
       read: false,
-      priority: 'medium', // Cast if needed
+      priority: "medium", // Cast if needed
     } as any);
   },
 
@@ -485,7 +534,7 @@ export const notificationActions = {
   }) => {
     const { notifications } = useNotificationStore.getState();
 
-    return notifications.filter(notification => {
+    return notifications.filter((notification) => {
       if (filters.type && notification.type !== filters.type) {
         return false;
       }
@@ -497,7 +546,10 @@ export const notificationActions = {
       }
       if (filters.dateRange) {
         const notificationDate = new Date(notification.createdAt);
-        if (notificationDate < filters.dateRange.start || notificationDate > filters.dateRange.end) {
+        if (
+          notificationDate < filters.dateRange.start ||
+          notificationDate > filters.dateRange.end
+        ) {
           return false;
         }
       }
@@ -508,12 +560,12 @@ export const notificationActions = {
   // Bulk operations
   markMultipleAsRead: (ids: string[]) => {
     const { markAsRead } = useNotificationStore.getState();
-    ids.forEach(id => markAsRead(id));
+    ids.forEach((id) => markAsRead(id));
   },
 
   removeMultiple: (ids: string[]) => {
     const { removeNotification } = useNotificationStore.getState();
-    ids.forEach(id => removeNotification(id));
+    ids.forEach((id) => removeNotification(id));
   },
 };
 
