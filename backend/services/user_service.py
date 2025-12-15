@@ -49,6 +49,10 @@ class UserService:
     def get_user_by_google_id(self, google_id: str) -> Optional[User]:
         """Get user by Google ID."""
         return self.db.query(User).filter(User.google_id == google_id).first()
+    
+    def get_user_by_github_id(self, github_id: str) -> Optional[User]:
+        """Get user by GitHub ID."""
+        return self.db.query(User).filter(User.github_id == github_id).first()
     def get_users(self, skip: int = 0, limit: int = 100) -> List[User]:
         """Get users with pagination."""
         return self.db.query(User).offset(skip).limit(limit).all()
@@ -73,6 +77,7 @@ class UserService:
                 last_name=user_data.last_name,
                 avatar_url=user_data.avatar_url,
                 google_id=user_data.google_id,
+                github_id=getattr(user_data, 'github_id', None),
                 role="user",  # Set default role
                 username=user_data.username,
                 phone=user_data.phone,
@@ -219,6 +224,42 @@ class UserService:
             name=name,
             avatar_url=avatar_url,
             google_id=google_id
+        )
+        return self.create_user(user_data)
+
+    def create_or_update_github_user(self, github_id: str, email: str, name: str, avatar_url: Optional[str] = None) -> User:
+        """Create or update user from GitHub authentication."""
+        # Check if user exists by GitHub ID
+        user = self.get_user_by_github_id(github_id)
+        if user:
+            # Update existing user
+            user.email = email
+            user.name = name
+            if avatar_url:
+                user.avatar_url = avatar_url
+            self.db.commit()
+            self.db.refresh(user)
+            return user
+        
+        # Check if user exists by email (to merge accounts)
+        user = self.get_user_by_email(email)
+        if user:
+            # Link GitHub account to existing user
+            user.github_id = github_id
+            if not user.name:
+                user.name = name
+            if avatar_url and not user.avatar_url:
+                user.avatar_url = avatar_url
+            self.db.commit()
+            self.db.refresh(user)
+            return user
+        
+        # Create new user
+        user_data = UserCreate(
+            email=email,
+            name=name,
+            avatar_url=avatar_url,
+            github_id=github_id
         )
         return self.create_user(user_data)
 

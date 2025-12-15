@@ -255,7 +255,22 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => {/* Handle GitHub login */ }}
+                onClick={() => {
+                  const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
+                  if (!clientId) {
+                    toast.error("GitHub login not configured", {
+                      description: "GitHub Client ID is missing",
+                    });
+                    return;
+                  }
+                  const redirectUri = encodeURIComponent(
+                    `${window.location.origin}/auth/callback/github`
+                  );
+                  const scope = "read:user user:email";
+                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+                }}
+                disabled={isLoading || !process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID}
+                title={!process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID ? "GitHub Client ID is missing" : "Sign in with GitHub"}
               >
                 <Github className="h-4 w-4 mr-3" />
                 Continue with GitHub

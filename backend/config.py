@@ -35,6 +35,14 @@ class AuthSettings(BaseSettings):
         alias="GOOGLE_REDIRECT_URI"
     )
     
+    # GitHub OAuth
+    github_client_id: Optional[str] = Field(default=None, alias="GITHUB_CLIENT_ID")
+    github_client_secret: Optional[str] = Field(default=None, alias="GITHUB_CLIENT_SECRET")
+    github_redirect_uri: str = Field(
+        default="http://localhost:3000/auth/callback/github",
+        alias="GITHUB_REDIRECT_URI"
+    )
+    
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:

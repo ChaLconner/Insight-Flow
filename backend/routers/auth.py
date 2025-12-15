@@ -6,7 +6,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from schemas.user import UserCreate, UserLogin, UserResponse, Token, GoogleAuth
+from schemas.user import UserCreate, UserLogin, UserResponse, Token, GoogleAuth, GithubAuth
 from schemas.password_reset import ForgotPasswordRequest, ForgotPasswordResponse, ResetPasswordRequest, ResetPasswordResponse
 from pydantic import BaseModel, Field
 from models.user import User
@@ -16,6 +16,7 @@ from services.password_reset_service import PasswordResetService
 
 from utils.auth import create_access_token, verify_token_with_blacklist, get_token_expiration
 from utils.google_oauth import verify_google_id_token, verify_google_access_token, is_google_oauth_configured
+from utils.github_oauth import exchange_code_for_token, get_github_user_info, is_github_oauth_configured
 from utils.rate_limiter import auth_rate_limiter
 from database import get_db
 from utils.logger import setup_logger
@@ -362,10 +363,119 @@ def google_login(response: Response, google_data: GoogleAuth, db: Session = Depe
     except Exception as e:
         logger.error(f"Unexpected error during Google login: {str(e)}")
         raise
-        
 
-        
 
+@router.post("/github")
+def github_login(response: Response, github_data: GithubAuth, db: Session = Depends(get_db)) -> Any:
+    """
+    Authenticate user with GitHub OAuth.
+    """
+    try:
+        # Check if GitHub OAuth is configured
+        if not is_github_oauth_configured():
+            logger.error("GitHub OAuth is not configured")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="GitHub OAuth is not configured. Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET environment variables."
+            )
+        
+        # Get access token (either from code exchange or directly)
+        access_token = None
+        
+        if github_data.code:
+            # Exchange authorization code for access token
+            access_token = exchange_code_for_token(github_data.code)
+        elif github_data.access_token:
+            # Use provided access token directly
+            access_token = github_data.access_token
+        
+        if not access_token:
+            logger.error("Failed to obtain GitHub access token")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to authenticate with GitHub"
+            )
+        
+        # Get user info from GitHub
+        github_user_info = get_github_user_info(access_token)
+        
+        if not github_user_info:
+            logger.error("Failed to get GitHub user info")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Failed to get user information from GitHub"
+            )
+        
+        # Create or update user from GitHub authentication
+        user_service = UserService(db)
+        user = user_service.create_or_update_github_user(
+            github_id=github_user_info["id"],
+            email=github_user_info["email"],
+            name=github_user_info["name"],
+            avatar_url=github_user_info.get("picture")
+        )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Inactive user"
+            )
+        
+        # Create access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        jwt_access_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=access_token_expires
+        )
+        
+        # Create refresh token with longer expiration
+        refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        refresh_token = create_access_token(
+            data={"sub": str(user.id)}, expires_delta=refresh_token_expires
+        )
+        
+        # Set HttpOnly cookies
+        response.set_cookie(
+            key=ACCESS_TOKEN_KEY,
+            value=jwt_access_token,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            path="/"
+        )
+        
+        response.set_cookie(
+            key=REFRESH_TOKEN_KEY,
+            value=refresh_token,
+            httponly=True,
+            secure=COOKIE_SECURE,
+            samesite="lax",
+            max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            path="/"
+        )
+        
+        logger.info(f"GitHub login successful for user: {user.email}")
+        
+        return {
+            "message": "Login successful",
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "is_active": user.is_active
+            }
+        }
+        
+    except HTTPException as http_err:
+        logger.error(f"HTTP error during GitHub login: {http_err.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during GitHub login: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during GitHub authentication"
+        )
 
 
 @router.post("/logout")

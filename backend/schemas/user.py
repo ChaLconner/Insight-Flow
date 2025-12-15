@@ -30,6 +30,7 @@ class UserCreate(UserBase):
     """Schema for creating a new user."""
     password: Optional[str] = None
     google_id: Optional[str] = None
+    github_id: Optional[str] = None
     
     @field_validator('name')
     @classmethod
@@ -180,6 +181,11 @@ class GoogleAuth(BaseModel):
     """Schema for Google authentication."""
     id_token: Optional[str] = None
     access_token: Optional[str] = None
+
+class GithubAuth(BaseModel):
+    """Schema for GitHub authentication."""
+    code: Optional[str] = None  # Authorization code from GitHub OAuth redirect
+    access_token: Optional[str] = None  # Direct access token (if available)
 
 class Token(BaseModel):
     """Schema for access token response."""

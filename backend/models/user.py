@@ -19,6 +19,7 @@ class User(BaseModel):
     hashed_password = Column(String(255))  # For password authentication
     avatar_url = Column(String(500))
     google_id = Column(String(255), unique=True, index=True)
+    github_id = Column(String(255), unique=True, index=True, nullable=True)
     is_active = Column(Boolean, default=True)
     # role field is optional to support existing databases without the field
     # will be set to default value "user" if not present

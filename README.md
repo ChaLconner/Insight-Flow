@@ -1,75 +1,56 @@
-# Insight-Flow Development Setup
+# Insight-Flow
+
+Project management and team collaboration platform.
+
+## Features
+
+- Project & Task Management
+- Real-time Dashboard & Analytics  
+- Authentication (Email, Google OAuth, GitHub OAuth)
+- File Management & Notifications
 
 ## Quick Start
 
-### Backend Setup
-
-1. **Start the backend server with proper host binding:**
-   ```bash
-   cd backend
-   python start.py
-   ```
-   
-   This will start the server on `http://0.0.0.0:8000` which makes it accessible from the frontend.
-
-2. **Or start manually (alternative method):**
-   ```bash
-   cd backend
-   python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-
-### Frontend Setup
-
-1. **Start the frontend development server:**
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-## Troubleshooting Network Errors
-
-If you encounter "Network Error" when fetching project tasks:
-
-### Most Common Cause: Backend Server Binding
-
-The backend server must bind to `0.0.0.0` instead of `127.0.0.1` to be accessible from the frontend.
-
-**Check if backend is properly bound:**
+### Backend
 ```bash
-netstat -an | findstr :8000
+cd backend
+pip install -r requirements.txt
+python start.py
 ```
 
-You should see:
-```
-TCP    0.0.0.0:8000           0.0.0.0:0              LISTENING
-```
-
-NOT:
-```
-TCP    127.0.0.1:8000         0.0.0.0:0              LISTENING
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-### Solution
-
-Always start the backend using the provided `start.py` script or with the `--host 0.0.0.0` flag.
-
-### Additional Checks
-
-1. **Test API directly:** Open `http://localhost:8000/minimal-test` in your browser
-2. **Check CORS configuration:** Ensure frontend origin is in the allowed origins list
-3. **Verify authentication:** Check that JWT tokens are valid and not expired
-
-## Environment Configuration
+## Environment Variables
 
 ### Backend (.env)
-```
-HOST=0.0.0.0
-PORT=8000
-RELOAD=true
-DATABASE_URL=your-database-url
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/insightflow
 SECRET_KEY=your-secret-key
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GITHUB_CLIENT_ID=your-github-client-id
+GITHUB_CLIENT_SECRET=your-github-client-secret
 ```
 
 ### Frontend (.env.local)
-```
+```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id
+NEXT_PUBLIC_GITHUB_CLIENT_ID=your-github-client-id
+```
+
+## Testing
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+## API Docs
+
+- Swagger: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
