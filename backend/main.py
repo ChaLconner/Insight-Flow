@@ -10,6 +10,7 @@ from utils.logger import app_logger
 from middleware.cache import CacheMiddleware
 from database import init_database
 from contextlib import asynccontextmanager
+from services.scheduler import start_scheduler, shutdown_scheduler
 
 # Load environment variables at startup
 load_dotenv()
@@ -48,6 +49,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         app_logger.warning(f"Database initialization failed: {e}")
         app_logger.info("Continuing with mock authentication...")
+        
+    # Start background scheduler
+    try:
+        start_scheduler()
+        app_logger.info("Background scheduler started")
+    except Exception as e:
+        app_logger.error(f"Failed to start scheduler: {e}")
     
     app_logger.info("="*50)
     app_logger.info(f"Server should be accessible at: http://localhost:8000")
@@ -57,6 +65,7 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown logic
+    shutdown_scheduler()
     app_logger.info("FASTAPI SERVER SHUTTING DOWN")
 
 app = FastAPI(

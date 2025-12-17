@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams, useRouter } from "next/navigation";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 
 // Direct import for LCP optimization (Profile is default tab)
-import { ProfileSettings } from "./components/profile-settings";
+import { ProfileSettings, type ProfileData } from "./components/profile-settings";
 import type { NotificationState } from "./components/notifications-settings";
 
 // Dynamic imports for other tabs to reduce initial bundle size
@@ -60,10 +61,31 @@ const BillingSettings = dynamic(
 );
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("profile");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
+  // Valid tab names
+  const validTabs = ["profile", "notifications", "security", "appearance", "billing"];
+  
+  // Get initial tab from URL or default to profile
+  const getInitialTab = () => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+      return tabFromUrl;
+    }
+    return "profile";
+  };
+  
+  const [activeTab, setActiveTab] = useState(getInitialTab);
+  
+  // Update URL when tab changes
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    router.push(`/settings?tab=${tab}`, { scroll: false });
+  };
 
   // Profile State
-  const [profileData, setProfileData] = useState({
+  const [profileData, setProfileData] = useState<ProfileData>({
     firstName: "",
     lastName: "",
     email: "",
@@ -102,7 +124,6 @@ export default function SettingsPage() {
 
   // Common State
   const [isInitializing, setIsInitializing] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const { isAuthenticated, isLoading, user, fetchUserProfile } = useAuthStore();
@@ -147,8 +168,8 @@ export default function SettingsPage() {
 
       if (isAuthenticated) {
         if (user) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const rawProfile = user as any;
+          // Type-safe extraction of user profile fields
+          const rawProfile = user as unknown as Record<string, string | undefined>;
           const firstName = rawProfile.firstName ?? rawProfile.first_name ?? "";
           const lastName = rawProfile.lastName ?? rawProfile.last_name ?? "";
           const name = rawProfile.name ?? "";
@@ -158,7 +179,7 @@ export default function SettingsPage() {
 
           if (!finalFirst && name) {
             const parts = name.split(" ");
-            finalFirst = parts[0];
+            finalFirst = parts[0] ?? "";
             finalLast = parts.slice(1).join(" ");
           }
 
@@ -216,11 +237,11 @@ export default function SettingsPage() {
 
   const handleUpdatePassword = async () => {
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      toast.error("Passwords do not match");
       return;
     }
     if (passwordStrength < 50) {
-      setError("Password is too weak");
+      toast.error("Password is too weak");
       return;
     }
 
@@ -231,11 +252,10 @@ export default function SettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setError(null);
+      setSaving(true);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       const errorMessage = getErrorMessage(err);
-      setError(errorMessage);
       toast.error("Failed to update password", { description: errorMessage });
     } finally {
       setSaving(false);
@@ -249,7 +269,6 @@ export default function SettingsPage() {
 
     try {
       setSaving(true);
-      setError(null);
 
       const updateData = {
         ...profileData,
@@ -273,7 +292,6 @@ export default function SettingsPage() {
       toast.success("Settings saved successfully!");
     } catch (err) {
       const errorMessage = getErrorMessage(err);
-      setError(errorMessage);
       toast.error("Failed to save settings", { description: errorMessage });
     } finally {
       setSaving(false);
@@ -290,39 +308,56 @@ export default function SettingsPage() {
 
     const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
     if (!validTypes.includes(file.type)) {
-      setError("Invalid file type. Please upload PNG, JPG, or GIF.");
+      toast.error("Invalid file type. Please upload PNG, JPG, or GIF.");
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      setError("File size too large. Maximum size is 2MB.");
+      toast.error("File size too large. Maximum size is 2MB.");
       return;
     }
 
+    // Create preview URL for optimistic UI
     const previewUrl = URL.createObjectURL(file);
     const previousAvatar = profileData.avatar;
+    
+    // Get auth store functions
+    const { updateUserAvatar } = useAuthStore.getState();
 
     try {
       setUploading(true);
-      setError(null);
+      
+      // OPTIMISTIC UI: Show preview immediately in both profile and header
       setProfileData((prev) => ({ ...prev, avatar: previewUrl }));
+      updateUserAvatar(previewUrl); // Update header immediately!
 
       const formData = new FormData();
       formData.append("file", file);
 
+      // Upload in background
       const updatedUser = await usersApi.uploadAvatar(formData);
 
       if (updatedUser) {
-        const { updateUserAvatar } = useAuthStore.getState();
+        // Update with real Cloudinary URL after upload succeeds
         const avatarUrl = updatedUser.avatar ?? "";
         updateUserAvatar(avatarUrl);
         setProfileData((prev) => ({ ...prev, avatar: avatarUrl }));
+        
+        // Clean up blob URL
+        URL.revokeObjectURL(previewUrl);
+        
+        toast.success("Avatar updated successfully!");
       }
     } catch (err) {
       const errorMessage = getErrorMessage(err);
-      setError(errorMessage);
       toast.error("Failed to upload avatar", { description: errorMessage });
+      
+      // Revert to previous avatar on error
       setProfileData((prev) => ({ ...prev, avatar: previousAvatar }));
+      updateUserAvatar(previousAvatar); // Revert header too
+      
+      // Clean up blob URL
+      URL.revokeObjectURL(previewUrl);
     } finally {
       setUploading(false);
       // Reset input value if needed, but we don't have direct ref here.
@@ -363,12 +398,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg">
-            {error}
-          </div>
-        )}
-
         <div className="flex flex-col lg:grid lg:gap-8 lg:grid-cols-4">
           <div className="lg:col-span-1">
             <Card className="glass-card lg:sticky lg:top-8">
@@ -377,7 +406,7 @@ export default function SettingsPage() {
                   {tabs.map((tab) => (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => handleTabChange(tab.id)}
                       className={`flex-shrink-0 lg:flex-shrink lg:w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
                         activeTab === tab.id
                           ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"

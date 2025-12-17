@@ -1,7 +1,7 @@
 """
 Notification schemas for Insight-Flow application.
 """
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Any
 from datetime import datetime
 import uuid
@@ -27,11 +27,12 @@ class NotificationResponse(NotificationBase):
     """Schema for notification response data."""
     id: uuid.UUID
     user_id: uuid.UUID
-    is_read: bool
+    is_read: bool = Field(alias="read", serialization_alias="read")
     created_at: datetime
     
     model_config = ConfigDict(
         from_attributes=True,
         alias_generator=to_camel,
-        populate_by_name=True
+        populate_by_name=True,
+        by_alias=True
     )

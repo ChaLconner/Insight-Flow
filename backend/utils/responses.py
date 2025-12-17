@@ -4,7 +4,7 @@ Provides consistent response format across all API endpoints.
 """
 from typing import Any, Optional, List, Dict, TypeVar, Generic
 from pydantic import BaseModel, Field, ConfigDict
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi.responses import JSONResponse
 from fastapi import status
 
@@ -21,7 +21,7 @@ class APIResponse(BaseModel, Generic[T]):
     data: Optional[T] = Field(default=None, description="Response data payload")
     errors: Optional[List[Dict[str, Any]]] = Field(default=None, description="Validation or error details")
     meta: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Response timestamp")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Response timestamp")
 
 
 class PaginatedResponse(APIResponse[T], Generic[T]):
@@ -86,7 +86,7 @@ def success_response(
         "success": True,
         "message": message,
         "data": data,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     if meta:
@@ -122,7 +122,7 @@ def error_response(
         "success": False,
         "message": message,
         "code": code,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     if errors:

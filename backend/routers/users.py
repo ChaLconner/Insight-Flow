@@ -10,15 +10,26 @@ from models.user_settings import UserSettings
 from services.user_service import UserService
 from database import get_db
 from routers.auth import get_current_active_user
+from utils.cloudinary_upload import upload_avatar as cloudinary_upload_avatar, delete_avatar as cloudinary_delete_avatar, is_cloudinary_configured, init_cloudinary
 import uuid
 import shutil
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["user management"])
 
 UPLOAD_DIR = "static/uploads"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# Initialize Cloudinary on module load
+if is_cloudinary_configured():
+    init_cloudinary()
+    logger.info("Cloudinary initialized for avatar uploads")
+else:
+    logger.warning("Cloudinary not configured, falling back to local storage")
 
 @router.get("/", response_model=List[UserResponse])
 def get_users(
@@ -195,43 +206,84 @@ async def upload_user_avatar(
 ) -> UserResponse:
     """
     Upload and update user avatar.
+    Uses Cloudinary for cloud storage if configured, otherwise falls back to local storage.
     """
     try:
-        # Delete old avatar if exists
-        if current_user.avatar:
-            old_avatar_path = current_user.avatar
-            # Check if it's a local file (starts with /static/uploads/)
-            if old_avatar_path.startswith("/static/uploads/"):
-                filename = os.path.basename(old_avatar_path)
-                file_path = os.path.join(UPLOAD_DIR, filename)
-                if os.path.exists(file_path):
-                    try:
-                        os.remove(file_path)
-                    except Exception as e:
-                        print(f"Error deleting old avatar: {e}")
-
-        # Generate unique filename
-        file_extension = os.path.splitext(file.filename)[1]
-        unique_filename = f"{uuid.uuid4()}{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        # Read file content
+        file_content = await file.read()
+        avatar_url = None
+        old_avatar_url = current_user.avatar_url
         
-        # Save file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Try Cloudinary upload first
+        if is_cloudinary_configured():
+            logger.info(f"Uploading avatar to Cloudinary for user {current_user.id}")
             
-        # Create URL
-        avatar_url = f"/static/uploads/{unique_filename}"
+            # Delete old Cloudinary avatar if exists (to prevent storage bloat)
+            # Note: Since we use overwrite=True with same public_id, this is automatic
+            # But we log it for clarity
+            if old_avatar_url and "res.cloudinary.com" in old_avatar_url:
+                logger.info(f"Old Cloudinary avatar will be replaced: {old_avatar_url}")
+            
+            result = cloudinary_upload_avatar(
+                file_content=file_content,
+                filename=file.filename,
+                user_id=str(current_user.id)
+            )
+            
+            if result and result.get("secure_url"):
+                avatar_url = result["secure_url"]
+                logger.info(f"Avatar uploaded to Cloudinary: {avatar_url}")
+                
+                # Delete old local avatar if user is switching from local to Cloudinary
+                if old_avatar_url and old_avatar_url.startswith("/static/uploads/"):
+                    old_filename = os.path.basename(old_avatar_url)
+                    old_file_path = os.path.join(UPLOAD_DIR, old_filename)
+                    if os.path.exists(old_file_path):
+                        try:
+                            os.remove(old_file_path)
+                            logger.info(f"Deleted old local avatar: {old_file_path}")
+                        except Exception as e:
+                            logger.warning(f"Error deleting old local avatar: {e}")
+            else:
+                logger.warning("Cloudinary upload failed, falling back to local storage")
+        
+        # Fallback to local storage if Cloudinary is not configured or failed
+        if not avatar_url:
+            logger.info("Using local storage for avatar upload")
+            
+            # Delete old local avatar if exists
+            if current_user.avatar_url and current_user.avatar_url.startswith("/static/uploads/"):
+                old_filename = os.path.basename(current_user.avatar_url)
+                old_file_path = os.path.join(UPLOAD_DIR, old_filename)
+                if os.path.exists(old_file_path):
+                    try:
+                        os.remove(old_file_path)
+                    except Exception as e:
+                        logger.warning(f"Error deleting old avatar: {e}")
+
+            # Generate unique filename
+            file_extension = os.path.splitext(file.filename)[1]
+            unique_filename = f"{uuid.uuid4()}{file_extension}"
+            file_path = os.path.join(UPLOAD_DIR, unique_filename)
+            
+            # Save file locally
+            with open(file_path, "wb") as buffer:
+                buffer.write(file_content)
+                
+            avatar_url = f"/static/uploads/{unique_filename}"
         
         # Update user in database
         user_service = UserService(db)
-        # Create a partial update object
-        user_update = UserUpdate(avatar=avatar_url)
+        user_update = UserUpdate(avatar_url=avatar_url)
         updated_user = user_service.update_user(current_user.id, user_update)
         
+        logger.info(f"Avatar updated for user {current_user.id}: {avatar_url}")
         return updated_user
         
     except Exception as e:
+        logger.error(f"Failed to upload avatar: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload avatar: {str(e)}"
         )
+

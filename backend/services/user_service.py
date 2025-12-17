@@ -11,7 +11,7 @@ from utils.validators import validate_password_strength
 from utils.logger import logger
 import uuid
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 class UserService:
     """Service class for user operations."""
@@ -23,7 +23,7 @@ class UserService:
         """Update last login timestamp."""
         user = self.get_user_by_id(user_id)
         if user:
-            user.last_login_at = datetime.utcnow()
+            user.last_login_at = datetime.now(timezone.utc)
             try:
                 self.db.commit()
             except Exception as e:

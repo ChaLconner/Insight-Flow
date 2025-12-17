@@ -14,7 +14,9 @@ from database import get_db
 from dependencies import get_authorized_task
 from routers.auth import get_current_active_user
 from utils.logger import setup_logger
+from services.notification_trigger_service import get_notification_trigger_service
 import uuid
+import asyncio
 
 def map_task_to_response(task: Task) -> TaskWithDetails:
     """Helper to map Task model to TaskWithDetails schema with normalized status."""
@@ -202,6 +204,7 @@ def delete_task(
 @router.put("/{task_id}/status", response_model=TaskResponse)
 def update_task_status(
     status_data: dict,
+    background_tasks: BackgroundTasks,
     task: Task = Depends(get_authorized_task),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -210,20 +213,51 @@ def update_task_status(
     Update task status.
     """
     task_service = TaskService(db)
+    old_status = str(task.status.value if hasattr(task.status, 'value') else task.status)
     
     # Extract status from request body
-    status = status_data.get("status")
-    if not status:
+    new_status = status_data.get("status")
+    if not new_status:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Status is required"
         )
     
     # Create TaskStatusUpdate object
-    status_update = TaskStatusUpdate(status=status)
+    status_update = TaskStatusUpdate(status=new_status)
     
     try:
         updated_task = task_service.update_task_status(task.id, status_update, current_user.id)
+        
+        # Send notification in background if status actually changed
+        if old_status != new_status:
+            notification_service = get_notification_trigger_service(db)
+            
+            async def send_notification():
+                await notification_service.notify_task_status_changed(
+                    task_id=updated_task.id,
+                    task_title=updated_task.title,
+                    project_id=task.project_id,
+                    old_status=old_status,
+                    new_status=new_status,
+                    changer=current_user,
+                    assignee=task.assignee,
+                    creator=task.creator
+                )
+                
+                # Special case: if task is completed
+                if new_status.lower() in ['done', 'completed']:
+                    await notification_service.notify_task_completed(
+                        task_id=updated_task.id,
+                        task_title=updated_task.title,
+                        project_id=task.project_id,
+                        project_name=task.project.name if task.project else "Unknown",
+                        completer=current_user,
+                        creator=task.creator
+                    )
+            
+            background_tasks.add_task(lambda: asyncio.run(send_notification()))
+        
         return updated_task
     except ValueError as e:
         raise HTTPException(
@@ -234,6 +268,7 @@ def update_task_status(
 @router.put("/{task_id}/assign", response_model=TaskResponse)
 def assign_task(
     assign_data: dict,
+    background_tasks: BackgroundTasks,
     task: Task = Depends(get_authorized_task),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -264,6 +299,24 @@ def assign_task(
     
     try:
         updated_task = task_service.assign_task(task.id, task_assign, current_user.id)
+        
+        # Send notification in background
+        notification_service = get_notification_trigger_service(db)
+        assignee = db.query(User).filter(User.id == assignee_uuid).first()
+        
+        if assignee and task.project:
+            async def send_notification():
+                await notification_service.notify_task_assigned(
+                    assignee=assignee,
+                    task_id=updated_task.id,
+                    task_title=updated_task.title,
+                    project_id=task.project_id,
+                    project_name=task.project.name,
+                    assigner=current_user
+                )
+            
+            background_tasks.add_task(lambda: asyncio.run(send_notification()))
+        
         return updated_task
     except ValueError as e:
         raise HTTPException(

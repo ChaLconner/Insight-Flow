@@ -36,7 +36,7 @@ export const TaskItem = memo(
     task,
     showProjectName,
     isOpen,
-    // isDeleting,
+    isDeleting,
     onToggleMenu,
     onEdit,
     onDelete,

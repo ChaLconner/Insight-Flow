@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Trash2, Check } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import { Button } from "@/components/ui/button";
 import type { Notification } from "@/types";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
   useNotifications,
@@ -15,10 +16,10 @@ import {
 
 export function NotificationsPopover() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "unread" | "mentions">("all");
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Use the hook for state and actions
   const {
     notifications,
     unreadCount,
@@ -28,10 +29,8 @@ export function NotificationsPopover() {
     removeNotification,
   } = useNotifications();
 
-  // Enable polling
-  useNotificationPolling(600000); // Poll every 10 minutes (during development)
+  useNotificationPolling(60000);
 
-  // Close on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -56,9 +55,55 @@ export function NotificationsPopover() {
     await markAllAsRead();
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (notification: Notification, e: React.MouseEvent) => {
     e.stopPropagation();
-    await removeNotification(id);
+    await removeNotification(notification.id);
+    toast.success("Notification deleted");
+  };
+
+  // Get dot color based on notification type
+  const getNotificationDotColor = (type: string): string => {
+    switch (type) {
+      case "task_assigned":
+        return "bg-blue-500";
+      case "project_invitation":
+      case "project_member_joined":
+        return "bg-emerald-500";
+      case "task_due_soon":
+        return "bg-amber-500";
+      case "task_overdue":
+        return "bg-red-500";
+      case "task_completed":
+      case "task_updated":
+        return "bg-green-500";
+      case "mention":
+        return "bg-purple-500";
+      case "project_member_left":
+        return "bg-orange-500";
+      default:
+        return "bg-indigo-500";
+    }
+  };
+
+  const getNotificationUrl = (notification: Notification): string | null => {
+    const data = notification.data as Record<string, string | number | boolean | null> | undefined;
+    
+    if (!data) {
+      return null;
+    }
+    
+    const projectId = data.project_id as string;
+    const taskId = data.task_id as string;
+    
+    if (taskId && projectId) {
+      return `/projects/${projectId}?task=${taskId}`;
+    }
+    
+    if (projectId) {
+      return `/projects/${projectId}`;
+    }
+    
+    return null;
   };
 
   const handleNotificationClick = async (notification: Notification) => {
@@ -66,129 +111,229 @@ export function NotificationsPopover() {
       await handleMarkAsRead(notification.id);
     }
 
-    if (notification.actionUrl) {
-      router.push(notification.actionUrl);
+    const url = notification.actionUrl ?? getNotificationUrl(notification);
+    
+    if (url) {
+      router.push(url);
     }
 
     setIsOpen(false);
   };
+
+  const groupedNotifications = useMemo(() => {
+    const filtered = notifications.filter((n) => {
+      if (activeTab === "unread") {
+        return !n.read;
+      }
+      if (activeTab === "mentions") {
+        return n.type === "mention";
+      }
+      return true;
+    });
+
+    const today: Notification[] = [];
+    const yesterday: Notification[] = [];
+    const earlier: Notification[] = [];
+
+    filtered.forEach((n) => {
+      const date = new Date(n.createdAt);
+      if (isToday(date)) {
+        today.push(n);
+      } else if (isYesterday(date)) {
+        yesterday.push(n);
+      } else {
+        earlier.push(n);
+      }
+    });
+
+    const groups = [];
+    if (today.length > 0) {
+      groups.push({ label: "Today", items: today });
+    }
+    if (yesterday.length > 0) {
+      groups.push({ label: "Yesterday", items: yesterday });
+    }
+    if (earlier.length > 0) {
+      groups.push({ label: "Earlier", items: earlier });
+    }
+
+    return groups;
+  }, [notifications, activeTab]);
 
   return (
     <div className="relative" ref={containerRef}>
       <Button
         variant="ghost"
         size="icon"
-        className="relative h-10 w-10 rounded-full text-zinc-400 hover:bg-white/10 hover:text-white"
+        className="relative h-10 w-10 rounded-full text-zinc-400 hover:bg-transparent hover:text-white transition-none"
         onClick={() => setIsOpen(!isOpen)}
+        whileHover={{ scale: 1 }}
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-indigo-500 ring-2 ring-black" />
+          <span className="absolute right-1 top-1 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white transition-none">
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </span>
         )}
       </Button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.2 }}
-            className="absolute -right-16 sm:right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] sm:w-96 origin-top-right rounded-xl border border-white/10 bg-zinc-950/90 backdrop-blur-xl shadow-2xl ring-1 ring-black/5 flex flex-col"
+            className="absolute -right-16 sm:right-0 top-12 z-50 w-80 sm:w-96 origin-top-right rounded-xl border border-white/10 bg-zinc-950/95 backdrop-blur-xl shadow-2xl flex flex-col max-h-[600px]"
           >
-            <div className="flex items-center justify-between border-b border-white/10 p-4 shrink-0">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 shrink-0">
               <h3 className="text-sm font-semibold text-white">
                 Notifications
+                {unreadCount > 0 && (
+                  <span className="ml-2 text-xs font-normal text-zinc-500">
+                    ({unreadCount} unread)
+                  </span>
+                )}
               </h3>
               {unreadCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto px-2 py-1 text-xs text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                <button
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                   onClick={handleMarkAllAsRead}
                 >
-                  Mark all as read
-                </Button>
+                  Mark all read
+                </button>
               )}
             </div>
 
-            <div className="max-h-[60vh] sm:max-h-[400px] overflow-y-auto custom-scrollbar">
+            {/* Tabs */}
+            <div className="flex items-center px-4 pt-3 pb-2 gap-4 border-b border-white/5 shrink-0">
+              {(["all", "unread", "mentions"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "text-xs font-medium pb-2 transition-colors relative",
+                    activeTab === tab
+                      ? "text-white"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  )}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {activeTab === tab && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Content */}
+            <div className="overflow-y-auto flex-1 custom-scrollbar">
               {isLoading && notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-600 border-t-indigo-500 mb-2" />
-                  <p className="text-sm text-zinc-400">Loading...</p>
+                <div className="flex items-center justify-center py-8">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-600 border-t-indigo-500" />
                 </div>
-              ) : notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Bell className="h-8 w-8 text-zinc-600 mb-2" />
-                  <p className="text-sm text-zinc-400">No notifications yet</p>
+              ) : groupedNotifications.length === 0 ? (
+                <div className="py-12 text-center">
+                  <Bell className="h-8 w-8 text-zinc-700 mx-auto mb-3" />
+                  <p className="text-sm text-zinc-500">No notifications found</p>
                 </div>
               ) : (
-                <div className="divide-y divide-white/5">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={cn(
-                        "relative flex gap-3 p-4 transition-colors hover:bg-white/5 cursor-pointer group",
-                        !notification.read && "bg-indigo-500/5",
-                      )}
-                      onClick={() => handleNotificationClick(notification)}
-                    >
-                      <div
-                        className={cn(
-                          "mt-1 h-2 w-2 rounded-full shrink-0",
-                          !notification.read
-                            ? "bg-indigo-500"
-                            : "bg-transparent",
-                        )}
-                      />
-
-                      <div className="flex-1 space-y-1">
-                        <p
-                          className={cn(
-                            "text-sm font-medium leading-none",
-                            !notification.read ? "text-white" : "text-zinc-400",
-                          )}
-                        >
-                          {notification.title}
-                        </p>
-                        <p className="text-xs text-zinc-500 line-clamp-2">
-                          {notification.message}
-                        </p>
-                        <p className="text-[10px] text-zinc-600">
-                          {formatDistanceToNow(
-                            new Date(notification.createdAt),
-                            { addSuffix: true },
-                          )}
-                        </p>
+                <div className="pb-2">
+                  {groupedNotifications.map((group) => (
+                    <div key={group.label}>
+                      <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur-sm px-4 py-2 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-y border-white/5">
+                        {group.label}
                       </div>
-
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {!notification.read && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10"
-                            onClick={(e) =>
-                              handleMarkAsRead(notification.id, e)
-                            }
-                            title="Mark as read"
+                      <AnimatePresence initial={false} mode="popLayout">
+                        {group.items.map((notification) => (
+                          <motion.div
+                            layout
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+                            key={notification.id}
+                            className={cn(
+                              "group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/5 border-b border-white/5 last:border-0",
+                              !notification.read && "bg-indigo-500/5"
+                            )}
+                            onClick={() => handleNotificationClick(notification)}
                           >
-                            <Check className="h-3 w-3" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
-                          onClick={(e) => handleDelete(notification.id, e)}
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
+                            {/* Unread indicator */}
+                            <div className="pt-1.5 shrink-0">
+                              <div
+                                className={cn(
+                                  "h-2 w-2 rounded-full",
+                                  !notification.read ? getNotificationDotColor(notification.type) : "bg-transparent"
+                                )}
+                              />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className={cn(
+                                  "text-sm leading-snug",
+                                  !notification.read
+                                    ? "text-white font-medium"
+                                    : "text-zinc-400"
+                                )}
+                              >
+                                {notification.title}
+                              </p>
+                              <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">
+                                {notification.message}
+                              </p>
+                              <p className="text-[10px] text-zinc-600 mt-1.5 flex items-center gap-1.5">
+                                <span>
+                                  {formatDistanceToNow(new Date(notification.createdAt), {
+                                    addSuffix: true,
+                                  })}
+                                </span>
+                              </p>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity self-center">
+                              {!notification.read && (
+                                <button
+                                  className="p-1.5 rounded-md text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all"
+                                  onClick={(e) => handleMarkAsRead(notification.id, e)}
+                                  title="Mark as read"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              <button
+                                className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                onClick={(e) => handleDelete(notification, e)}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   ))}
+                  
+                  {/* Load More Trigger */}
+                  <div className="p-2 border-t border-white/5">
+                     <Button 
+                        variant="ghost" 
+                        className="w-full text-xs text-zinc-500 hover:text-white h-8"
+                        onClick={() => {
+                          /* Implement Load More logic here */
+                          console.log("Load more clicked");
+                        }}
+                     >
+                        Load Previous Notifications
+                     </Button>
+                  </div>
                 </div>
               )}
             </div>

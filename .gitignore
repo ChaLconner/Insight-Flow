@@ -190,7 +190,8 @@ jspm_packages/
 
 # Gatsby files
 .cache/
-public
+# Note: public is NOT ignored - needed for service worker and static files
+# public
 
 # Storybook build outputs
 .out

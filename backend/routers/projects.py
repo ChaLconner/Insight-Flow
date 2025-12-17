@@ -2,7 +2,7 @@
 Project management router for CRUD operations.
 """
 from typing import List, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, String
 from sqlalchemy.orm import joinedload
@@ -23,6 +23,8 @@ from utils.logger import setup_logger
 from utils.validators import validate_uuid
 from dependencies import require_project_admin, require_project_member, require_project_owner, ProjectPermission
 from models.project import Project
+from services.notification_trigger_service import get_notification_trigger_service
+import asyncio
 
 logger = setup_logger("projects_router")
 
@@ -436,6 +438,7 @@ def read_project_members(
 def add_project_member(
     project_id: str,
     member_data: ProjectMemberCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> Any:
@@ -451,6 +454,25 @@ def add_project_member(
     try:
         member = project_service.add_project_member(uuid.UUID(project_id), member_data, current_user.id)
         logger.info(f"Successfully added member: {member}")
+        
+        # Get project for notification
+        project = db.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        
+        # Send notification in background
+        if project and member.user:
+            notification_service = get_notification_trigger_service(db)
+            
+            async def send_notification():
+                await notification_service.notify_project_member_added(
+                    new_member=member.user,
+                    project_id=uuid.UUID(project_id),
+                    project_name=project.name,
+                    role=member.role,
+                    inviter=current_user
+                )
+            
+            background_tasks.add_task(lambda: asyncio.run(send_notification()))
+        
         # The service already returns member with user data
         return ProjectMemberResponse.model_validate({
             'id': member.id,
