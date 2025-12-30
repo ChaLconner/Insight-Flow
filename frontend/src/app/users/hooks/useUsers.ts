@@ -135,8 +135,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
 
           const userList = Array.isArray(usersData)
             ? usersData
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            : (usersData as any).data ?? [];
+            : ((usersData as Record<string, unknown>).data as User[]) ?? [];
           setUsers(userList);
           setHasMore(userList.length === pageSize);
         } catch (apiError) {

@@ -236,9 +236,9 @@ export default function UsersPage() {
         {/* Users List */}
         <section id="users-list" aria-label="Users list" aria-busy={loading}>
           {users.length > 0 ? (
-            <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+            <Card className="border-border bg-card backdrop-blur-sm">
               <CardContent className="p-0">
-                <ul className="divide-y divide-white/10" role="list">
+                <ul className="divide-y divide-border" role="list">
                   {users.map((user) => (
                     <li key={user.id}>
                       <UserCard user={user} formatLastLogin={formatLastLogin} />

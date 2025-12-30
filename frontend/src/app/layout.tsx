@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { HydrationWrapper } from "@/components/providers/ssr-safe-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
-
 import { QueryProvider } from "@/providers/query-provider";
 import { Toaster } from "sonner";
+import WebVitalsReporter from "@/components/analytics/web-vitals-reporter";
+import ServiceWorkerRegistration from "@/components/providers/service-worker-registration";
+import { AuthInitializer } from "@/components/providers/auth-initializer";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     telephone: false,
   },
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   openGraph: {
     type: "website",
@@ -80,8 +80,89 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_URL &&
+    process.env.NEXT_PUBLIC_API_URL.trim().length > 0
+      ? process.env.NEXT_PUBLIC_API_URL
+      : "http://localhost:8000";
+
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Preload critical resources */}
+        <link
+          rel="preconnect"
+          href="https://fonts.googleapis.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="dns-prefetch"
+          href={apiBaseUrl}
+        />
+        {/* Preconnect to API for faster first request */}
+        <link
+          rel="preconnect"
+          href={apiBaseUrl}
+          crossOrigin="anonymous"
+        />
+        {/* Preconnect to common image sources */}
+        <link
+          rel="preconnect"
+          href="https://res.cloudinary.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preconnect"
+          href="https://ui-avatars.com"
+          crossOrigin="anonymous"
+        />
+
+        {/* Theme initialization script - prevents flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var storageKey = 'insight-flow-theme';
+                  var defaultTheme = 'dark';
+                  var theme = defaultTheme;
+                  var stored = localStorage.getItem(storageKey);
+
+                  if (stored) {
+                    try {
+                      var parsed = JSON.parse(stored);
+                      if (parsed && parsed.state && parsed.state.theme) {
+                        theme = parsed.state.theme;
+                      }
+                    } catch (e) {}
+                  }
+
+                  var shouldBeDark = theme === 'dark';
+
+                  if (theme === 'system') {
+                    shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  }
+
+                  // Apply theme class
+                  document.documentElement.classList.remove('light', 'dark');
+                  if (shouldBeDark) {
+                    document.documentElement.classList.add('dark');
+                    document.documentElement.style.colorScheme = 'dark';
+                  } else {
+                    document.documentElement.classList.add('light');
+                    document.documentElement.style.colorScheme = 'light';
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${inter.variable} font-sans antialiased`}
         suppressHydrationWarning
@@ -93,33 +174,35 @@ export default function RootLayout({
           Skip to content
         </a>
         <QueryProvider>
-          <HydrationWrapper>
-            <ThemeProvider>
-              <ErrorBoundary>
-                {children}
-                <Toaster
-                  position="bottom-right"
-                  richColors
-                  theme="system"
-                  className="font-sans"
-                  toastOptions={{
-                    classNames: {
-                      title: "text-sm font-semibold",
-                      description: "text-xs text-muted-foreground",
-                      actionButton: "bg-primary text-primary-foreground",
-                      cancelButton: "bg-muted text-muted-foreground",
-                    },
-                    style: {
-                      background: "rgba(23, 23, 23, 0.8)", // Glassmorphism base
-                      backdropFilter: "blur(12px)",
-                      border: "1px solid rgba(255, 255, 255, 0.1)",
-                      color: "white",
-                    },
-                  }}
-                />
-              </ErrorBoundary>
-            </ThemeProvider>
-          </HydrationWrapper>
+          {/* HydrationWrapper removed to prevent flash */}
+          <ThemeProvider>
+            <ErrorBoundary>
+              {children}
+              <Toaster
+                position="bottom-right"
+                richColors
+                theme="system"
+                className="font-sans"
+                toastOptions={{
+                  classNames: {
+                    title: "text-sm font-semibold",
+                    description: "text-xs text-muted-foreground",
+                    actionButton: "bg-primary text-primary-foreground",
+                    cancelButton: "bg-muted text-muted-foreground",
+                  },
+                  style: {
+                    background: "rgba(23, 23, 23, 0.8)", // Glassmorphism base
+                    backdropFilter: "blur(12px)",
+                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                    color: "white",
+                  },
+                }}
+              />
+              <AuthInitializer />
+              <WebVitalsReporter />
+              <ServiceWorkerRegistration />
+            </ErrorBoundary>
+          </ThemeProvider>
         </QueryProvider>
       </body>
     </html>

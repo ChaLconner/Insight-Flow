@@ -1,16 +1,17 @@
 import os
+import random
 import sys
 import uuid
-import random
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
+from models.project import MemberRole, Project, ProjectMember
+from models.task import Task, TaskPriority, TaskStatus, TaskType
 from models.user import User
-from models.project import Project, ProjectMember, MemberRole
-from models.task import Task, TaskStatus, TaskPriority, TaskType
+
 
 def seed_varied_tasks():
     print("Seeding varied tasks...")
@@ -21,11 +22,11 @@ def seed_varied_tasks():
         user = db.query(User).filter(User.email == "admin@example.com").first()
         if not user:
             user = db.query(User).first()
-            
+
         if not user:
             print("No users found. Please run regular seed_data.py first.")
             return
-            
+
         print(f"Seeding tasks for user: {user.email}")
 
         # Create 3 Projects with distinct task counts
@@ -45,20 +46,17 @@ def seed_varied_tasks():
                 name=f"{config['name']} {random.randint(100, 999)}",
                 description=f"Auto-generated project with {config['count']} tasks.",
                 owner_id=user.id,
-                is_active=True
+                is_active=True,
             )
             db.add(project)
 
             # Add membership
             member = ProjectMember(
-                id=uuid.uuid4(),
-                project_id=project_id,
-                user_id=user.id,
-                role=MemberRole.OWNER.value
+                id=uuid.uuid4(), project_id=project_id, user_id=user.id, role=MemberRole.OWNER.value
             )
             db.add(member)
-            
-            created_projects.append((project, config['count']))
+
+            created_projects.append((project, config["count"]))
 
         db.commit()
         print(f"Created {len(created_projects)} projects.")
@@ -73,18 +71,18 @@ def seed_varied_tasks():
             for i in range(count):
                 task = Task(
                     id=uuid.uuid4(),
-                    title=f"Task {i+1} - {project.name}",
-                    description=f"Generated task for testing list virtualization and counts.",
+                    title=f"Task {i + 1} - {project.name}",
+                    description="Generated task for testing list virtualization and counts.",
                     status=random.choice(statuses),
                     priority=random.choice(priorities),
                     type=random.choice(types),
                     project_id=project.id,
                     created_by=user.id,
                     assignee_id=user.id,
-                    due_date=datetime.now(timezone.utc) + timedelta(days=random.randint(-10, 30))
+                    due_date=datetime.now(UTC) + timedelta(days=random.randint(-10, 30)),
                 )
                 db.add(task)
-            
+
         db.commit()
         print("Done! Validated task counts.")
 
@@ -93,6 +91,7 @@ def seed_varied_tasks():
         db.rollback()
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed_varied_tasks()

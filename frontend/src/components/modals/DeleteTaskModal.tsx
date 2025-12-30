@@ -35,7 +35,7 @@ export function DeleteTaskModal({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#18181b]/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md rounded-2xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl overflow-hidden"
           >
             <div className="p-6 space-y-6">
               <div className="flex flex-col items-center text-center gap-4">
@@ -43,7 +43,7 @@ export function DeleteTaskModal({
                   <Trash2 className="h-6 w-6" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-semibold text-white">
+                  <h3 className="text-xl font-semibold text-foreground">
                     Delete Task
                   </h3>
                   <p className="text-muted-foreground">
@@ -60,7 +60,7 @@ export function DeleteTaskModal({
                 <Button
                   variant="ghost"
                   onClick={onClose}
-                  className="flex-1 text-muted-foreground hover:text-white hover:bg-white/10"
+                  className="flex-1 text-muted-foreground hover:text-foreground hover:bg-accent"
                   disabled={isDeleting}
                 >
                   Cancel

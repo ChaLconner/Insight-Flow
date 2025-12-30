@@ -9,10 +9,13 @@ import {
   Edit,
   Settings,
   Archive,
+  Star,
+  MoreHorizontal,
 } from "lucide-react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CatPawMenu } from "@/components/ui/cat-paw-menu";
 import type { Project } from "@/types";
 import { ProjectStatus } from "@/types";
 import { motion } from "framer-motion";
@@ -21,6 +24,8 @@ interface ProjectCardProps {
   project: Project;
   onEdit: (project: Project) => void;
   onArchive: (project: Project) => void;
+  onFavorite?: (project: Project) => void;
+  isFavorite?: boolean;
 }
 
 const getStatusBadge = (status: ProjectStatus) => {
@@ -39,7 +44,7 @@ const getStatusBadge = (status: ProjectStatus) => {
     },
   };
 
-  const config = statusConfig[status] || statusConfig[ProjectStatus.ACTIVE];
+  const config = statusConfig[status] ?? statusConfig[ProjectStatus.ACTIVE];
   return <Badge className={config.color}>{config.label}</Badge>;
 };
 
@@ -54,6 +59,8 @@ export const ProjectCard = memo(function ProjectCard({
   project,
   onEdit,
   onArchive,
+  onFavorite,
+  isFavorite = false,
 }: ProjectCardProps) {
   const router = useRouter();
 
@@ -65,11 +72,15 @@ export const ProjectCard = memo(function ProjectCard({
         visible: { opacity: 1, y: 0 },
       }}
       exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ y: -5, transition: { duration: 0.2 } }}
+      whileHover={{ y: -4, transition: { duration: 0.15 } }}
       className="h-full"
     >
       <Card
-        className="h-full border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors group flex flex-col cursor-pointer focus-visible:ring-2 focus-visible:ring-indigo-500/50 outline-none"
+        className="h-full border-border bg-card transition-all duration-200 group flex flex-col cursor-pointer focus-visible:ring-2 focus-visible:ring-primary/50 outline-none hover:bg-muted/50 hover:border-border"
+        style={{
+          // Project-colored shadow on hover using CSS
+          ["--hover-shadow" as string]: `0 20px 40px -15px ${project.color}40`,
+        }}
         onClick={() => router.push(`/projects/${project.id}`)}
         role="button"
         tabIndex={0}
@@ -79,6 +90,16 @@ export const ProjectCard = memo(function ProjectCard({
             e.preventDefault();
             router.push(`/projects/${project.id}`);
           }
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.boxShadow = `0 20px 40px -15px ${project.color}50`;
+          e.currentTarget.style.borderLeftColor = project.color;
+          e.currentTarget.style.borderLeftWidth = "3px";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.boxShadow = "";
+          e.currentTarget.style.borderLeftColor = "";
+          e.currentTarget.style.borderLeftWidth = "";
         }}
       >
         <CardHeader className="pb-3">
@@ -95,11 +116,11 @@ export const ProjectCard = memo(function ProjectCard({
                 </span>
               </div>
               <div className="min-w-0 flex-1">
-                <CardTitle className="text-white text-lg truncate group-hover:text-indigo-400 transition-colors">
+                <CardTitle className="text-foreground text-base font-semibold leading-tight line-clamp-2 group-hover:text-primary transition-colors">
                   {project.name}
                 </CardTitle>
-                <p className="text-sm text-zinc-400 mt-1">
-                  by {project.owner?.firstName} {project.owner?.lastName}
+                <p className="text-xs text-muted-foreground mt-1 truncate">
+                  by {project.owner?.firstName ?? project.owner?.username ?? "Unknown"} {project.owner?.lastName ?? ""}
                 </p>
               </div>
             </div>
@@ -110,21 +131,20 @@ export const ProjectCard = memo(function ProjectCard({
         </CardHeader>
 
         <CardContent className="space-y-4 flex-1 flex flex-col">
-          {project.description && (
-            <p className="text-sm text-zinc-300 line-clamp-2">
-              {project.description}
-            </p>
-          )}
+          {/* Description - always render for consistent height */}
+          <p className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
+            {project.description ?? "No description provided."}
+          </p>
 
           {/* Progress */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-zinc-400">Progress</span>
-              <span className="text-white font-medium">
+              <span className="text-muted-foreground">Progress</span>
+              <span className="text-foreground font-medium">
                 {getProgressPercentage(project.stats)}%
               </span>
             </div>
-            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-500 ease-out"
                 style={{
@@ -138,31 +158,31 @@ export const ProjectCard = memo(function ProjectCard({
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 pt-2">
             <div className="text-center">
-              <div className="flex items-center justify-center text-white mb-1">
-                <Calendar className="h-4 w-4 mr-1 text-indigo-400" />
+              <div className="flex items-center justify-center text-foreground mb-1">
+                <Calendar className="h-4 w-4 mr-1 text-primary" />
               </div>
-              <div className="text-lg font-semibold text-white">
+              <div className="text-lg font-semibold text-foreground">
                 {project.stats?.totalTasks || 0}
               </div>
-              <div className="text-xs text-zinc-400">Tasks</div>
+              <div className="text-xs text-muted-foreground">Tasks</div>
             </div>
             <div className="text-center">
-              <div className="flex items-center justify-center text-white mb-1">
-                <Users className="h-4 w-4 mr-1 text-emerald-400" />
+              <div className="flex items-center justify-center text-foreground mb-1">
+                <Users className="h-4 w-4 mr-1 text-emerald-500" />
               </div>
-              <div className="text-lg font-semibold text-white">
+              <div className="text-lg font-semibold text-foreground">
                 {project.stats?.teamMembers || 0}
               </div>
-              <div className="text-xs text-zinc-400">Members</div>
+              <div className="text-xs text-muted-foreground">Members</div>
             </div>
             <div className="text-center">
-              <div className="flex items-center justify-center text-white mb-1">
-                <TrendingUp className="h-4 w-4 mr-1 text-amber-400" />
+              <div className="flex items-center justify-center text-foreground mb-1">
+                <TrendingUp className="h-4 w-4 mr-1 text-amber-500" />
               </div>
-              <div className="text-lg font-semibold text-white">
+              <div className="text-lg font-semibold text-foreground">
                 {project.stats?.recentActivity || 0}
               </div>
-              <div className="text-xs text-zinc-400">Activity</div>
+              <div className="text-xs text-muted-foreground">Activity</div>
             </div>
           </div>
 
@@ -172,7 +192,7 @@ export const ProjectCard = memo(function ProjectCard({
               variant="ghost"
               size="sm"
               aria-label="Edit Project"
-              className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 cursor-pointer"
+              className="bg-transparent border border-border text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit(project);
@@ -184,7 +204,7 @@ export const ProjectCard = memo(function ProjectCard({
               variant="ghost"
               size="sm"
               aria-label="Project Settings"
-              className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 cursor-pointer"
+              className="bg-transparent border border-border text-muted-foreground hover:text-foreground hover:bg-accent hover:border-border cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation();
                 router.push(`/projects/${project.id}/settings`);
@@ -192,18 +212,33 @@ export const ProjectCard = memo(function ProjectCard({
             >
               <Settings className="h-4 w-4" aria-hidden="true" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Archive Project"
-              className="bg-transparent border border-white/10 text-zinc-400 hover:text-white hover:bg-white/10 hover:border-white/20 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchive(project);
-              }}
-            >
-              <Archive className="h-4 w-4" aria-hidden="true" />
-            </Button>
+            <CatPawMenu
+              trigger={<MoreHorizontal className="h-4 w-4" aria-hidden="true" />}
+              items={[
+                {
+                  icon: (
+                    <Star
+                      className={`h-5 w-5 ${
+                        isFavorite
+                          ? "fill-primary text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    />
+                  ),
+                  label: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                  onClick: () => onFavorite?.(project),
+                  className: isFavorite
+                    ? "!bg-primary/10 !border-primary/50"
+                    : "hover:!border-primary/50",
+                },
+                {
+                  icon: <Archive className="h-5 w-5 text-muted-foreground" />,
+                  label: "Archive Project",
+                  onClick: () => onArchive(project),
+                  className: "hover:!border-destructive/50",
+                },
+              ]}
+            />
           </div>
         </CardContent>
       </Card>

@@ -33,21 +33,21 @@ export function EmptyState({
       }
     >
       <div
-        className="mx-auto h-16 w-16 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center mb-6"
+        className="mx-auto h-16 w-16 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mb-6"
         aria-hidden="true"
       >
         {hasFilters ? (
-          <Search className="h-8 w-8 text-indigo-400" />
+          <Search className="h-8 w-8 text-primary" />
         ) : (
-          <UserPlus className="h-8 w-8 text-indigo-400" />
+          <UserPlus className="h-8 w-8 text-primary" />
         )}
       </div>
 
-      <h3 className="text-xl font-semibold text-white mb-2">
+      <h3 className="text-xl font-semibold text-foreground mb-2">
         {hasFilters ? "No users found" : "No team members yet"}
       </h3>
 
-      <p className="text-zinc-400 mb-6 max-w-md mx-auto">
+      <p className="text-muted-foreground mb-6 max-w-md mx-auto">
         {hasFilters
           ? "Try adjusting your search or filter criteria to find the users you're looking for."
           : "Get started by inviting your first team member to collaborate on projects."}
@@ -55,7 +55,7 @@ export function EmptyState({
 
       {!hasFilters && (
         <Button
-          className="bg-indigo-600 hover:bg-indigo-500 text-white"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground"
           onClick={onInviteClick}
           aria-label="Invite your first team member"
         >
@@ -65,9 +65,9 @@ export function EmptyState({
       )}
 
       {hasFilters && (
-        <p className="text-sm text-zinc-500 mt-4">
+        <p className="text-sm text-muted-foreground/70 mt-4">
           Tip: Press{" "}
-          <kbd className="px-2 py-1 bg-zinc-800 rounded text-zinc-300 text-xs">
+          <kbd className="px-2 py-1 bg-muted rounded text-foreground text-xs">
             /
           </kbd>{" "}
           to focus the search field

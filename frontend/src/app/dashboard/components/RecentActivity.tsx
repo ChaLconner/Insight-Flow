@@ -13,9 +13,9 @@ const RecentActivity = memo(function RecentActivity({
   activities,
 }: RecentActivityProps) {
   return (
-    <Card className="col-span-3 border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="col-span-3 border-border bg-card">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-white">
+        <CardTitle className="text-lg font-semibold text-foreground">
           Recent Activity
         </CardTitle>
       </CardHeader>
@@ -43,7 +43,7 @@ const RecentActivity = memo(function RecentActivity({
 // Separate empty state component - memoized
 const EmptyActivityState = memo(function EmptyActivityState() {
   return (
-    <div className="text-center text-zinc-400 py-8">No recent activity</div>
+    <div className="text-center text-muted-foreground py-8">No recent activity</div>
   );
 });
 

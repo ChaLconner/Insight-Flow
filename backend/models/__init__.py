@@ -1,46 +1,76 @@
 """
 Database models for Insight-Flow application.
 """
-from .base import Base, BaseModel
-from .user import User
-from .project import Project, ProjectMember, MemberRole
-from .task import Task, TaskStatus
-from .notification import Notification, NotificationType
-from .task_history import TaskHistory, ActivityType
+
+from .auth_audit import AuthAudit, AuthStatus
 from .analytics import (
-    ProjectAnalytics, UserProductivity, TaskTimeTracking,
-    ProjectMilestone, TaskDependency, TaskComment,
-    TaskAttachment, ProjectTag, ProjectTagAssociation,
-    AnalyticsPeriod
+    AnalyticsPeriod,
+    ProjectAnalytics,
+    ProjectMilestone,
+    ProjectTag,
+    ProjectTagAssociation,
+    TaskAttachment,
+    TaskComment,
+    TaskDependency,
+    TaskTimeTracking,
+    UserProductivity,
 )
-from .token_blacklist import TokenBlacklist
+from .base import Base, BaseModel
+from .file import File
+from .notification import Notification, NotificationType
 from .password_reset import PasswordReset
+from .payment import (
+    PaymentHistory,
+    PaymentMethod,
+    PaymentStatus,
+    Subscription,
+    SubscriptionPlan,
+    SubscriptionStatus,
+)
+from .project import MemberRole, Project, ProjectMember
+from .task import Task, TaskStatus
+from .task_history import ActivityType, TaskHistory
+from .token_blacklist import TokenBlacklist
+from .user import User
+from .user_favorite import UserFavorite
 from .user_settings import UserSettings
+from .webhook_log import WebhookEventLog
 
 __all__ = [
+    "ActivityType",
+    "AnalyticsPeriod",
+    "AuthAudit",
+    "AuthStatus",
     "Base",
     "BaseModel",
-    "User",
-    "Project",
-    "ProjectMember",
+    "File",
     "MemberRole",
-    "Task",
-    "TaskStatus",
     "Notification",
     "NotificationType",
-    "TaskHistory",
-    "ActivityType",
+    "PasswordReset",
+    "PaymentHistory",
+    "PaymentMethod",
+    "PaymentStatus",
+    "Project",
     "ProjectAnalytics",
-    "UserProductivity",
-    "TaskTimeTracking",
+    "ProjectMember",
     "ProjectMilestone",
-    "TaskDependency",
-    "TaskComment",
-    "TaskAttachment",
     "ProjectTag",
     "ProjectTagAssociation",
-    "AnalyticsPeriod",
+    "Subscription",
+    "SubscriptionPlan",
+    "SubscriptionStatus",
+    "Task",
+    "TaskAttachment",
+    "TaskComment",
+    "TaskDependency",
+    "TaskHistory",
+    "TaskStatus",
+    "TaskTimeTracking",
     "TokenBlacklist",
-    "PasswordReset",
+    "User",
+    "UserFavorite",
+    "UserProductivity",
     "UserSettings",
+    "WebhookEventLog",
 ]

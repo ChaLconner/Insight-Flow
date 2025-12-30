@@ -22,10 +22,10 @@ export const ProjectHeader = memo(function ProjectHeader({
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-white">
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">
             {activeTab === "projects" ? "Projects" : "My Tasks"}
           </h2>
-          <p className="mt-1 text-zinc-400">
+          <p className="mt-1 text-muted-foreground">
             {activeTab === "projects"
               ? "Manage and organize your projects in one place."
               : "Manage and track all your tasks across projects."}
@@ -45,7 +45,7 @@ export const ProjectHeader = memo(function ProjectHeader({
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 rounded-xl bg-white/5 p-1 w-fit">
+      <div className="flex space-x-1 rounded-xl bg-secondary p-1 w-fit">
         <button
           onClick={() => onTabChange("projects")}
           className={`
@@ -53,7 +53,7 @@ export const ProjectHeader = memo(function ProjectHeader({
             ${
               activeTab === "projects"
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                : "text-zinc-400 hover:text-white hover:bg-white/5"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
             }
           `}
         >
@@ -67,7 +67,7 @@ export const ProjectHeader = memo(function ProjectHeader({
             ${
               activeTab === "tasks"
                 ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                : "text-zinc-400 hover:text-white hover:bg-white/5"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent"
             }
           `}
         >

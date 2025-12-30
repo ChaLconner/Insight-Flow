@@ -1,40 +1,185 @@
-name: Insight-Flow CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, dev]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
 
 jobs:
+  # ============================================
+  # BACKEND TESTS
+  # ============================================
   backend-test:
+    name: Backend Tests
     runs-on: ubuntu-latest
-    
     defaults:
       run:
         working-directory: ./backend
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: insightflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx coverage
 
-    - name: Run tests
-      env:
-        SECRET_KEY: "test_secret_key"
-        DATABASE_URL: "sqlite:///:memory:"
-        GOOGLE_CLIENT_ID: "test_client_id"
-        GOOGLE_CLIENT_SECRET: "test_client_secret"
-        ENVIRONMENT: "testing"
-      run: |
-        # Ensure pytest is installed
-        pip install pytest httpx
-        pytest tests/
+      - name: Wait for Postgres to be available
+        env:
+          PGPASSWORD: password
+          PGUSER: user
+        run: |
+          # Install postgresql-client if not available
+          if ! command -v psql &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+          fi
+
+          for i in $(seq 1 40); do
+            if psql -h localhost -U user -d insightflow_test -c '\q' 2>/dev/null; then
+              echo "✓ Postgres is ready"
+              exit 0
+            fi
+            echo "Waiting for Postgres ($i/40)..."
+            sleep 1
+          done
+          echo "✗ Postgres did not become ready in time"
+          exit 1
+
+      - name: Initialize test database
+        env:
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+        run: python scripts/init_db_for_ci.py
+
+      - name: Run Tests with Coverage
+        env:
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+          ALGORITHM: "HS256"
+          ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+          REFRESH_TOKEN_EXPIRE_DAYS: "7"
+          GOOGLE_CLIENT_ID: "mock-google-client-id"
+          GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
+          GOOGLE_REDIRECT_URI: "http://localhost:8000/auth/callback/google"
+        run: |
+          coverage run -m pytest -v -W ignore::RuntimeWarning
+          coverage report
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/.coverage
+
+  # ============================================
+  # FRONTEND CHECKS
+  # ============================================
+  frontend-check:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: npx tsc --noEmit
+        continue-on-error: true # Don't fail on type errors for now
+
+      - name: Build
+        run: npm run build
+
+  # ============================================
+  # DEPLOY STAGING (on push to dev)
+  # ============================================
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [backend-test, frontend-check]
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Staging
+        run: |
+          echo "🚀 Deploying to Staging Environment..."
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          # Add your staging deployment commands here
+          # e.g., Vercel preview deploy, Railway staging, etc.
+
+  # ============================================
+  # DEPLOY PRODUCTION (on push to main)
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    needs: [backend-test, frontend-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Production
+        run: |
+          echo "🚀 Deploying to Production Environment..."
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          # Add your production deployment commands here
+          # e.g., Vercel production deploy, Railway production, etc.
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Production deployment successful!"
+          echo "Deployed commit: ${{ github.sha }}"

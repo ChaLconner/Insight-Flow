@@ -123,8 +123,8 @@ export default function ProjectSettingsPage() {
     return (
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-[60vh] space-y-4">
-          <h2 className="text-2xl font-bold text-white">Error</h2>
-          <p className="text-zinc-400">{error ?? "Project not found"}</p>
+          <h2 className="text-2xl font-bold text-foreground">Error</h2>
+          <p className="text-muted-foreground">{error ?? "Project not found"}</p>
           <Button onClick={() => router.push("/projects")}>
             Back to Projects
           </Button>
@@ -140,7 +140,7 @@ export default function ProjectSettingsPage() {
           <Button
             variant="ghost"
             size="sm"
-            className="p-0 h-auto hover:bg-transparent text-zinc-400 hover:text-white"
+            className="p-0 h-auto hover:bg-transparent text-muted-foreground hover:text-foreground"
             onClick={() => router.push(`/projects/${projectId}`)}
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -149,30 +149,30 @@ export default function ProjectSettingsPage() {
         </div>
 
         <div>
-          <h1 className="text-3xl font-bold text-white">Project Settings</h1>
-          <p className="text-zinc-400">Manage your project configuration.</p>
+          <h1 className="text-3xl font-bold text-foreground">Project Settings</h1>
+          <p className="text-muted-foreground">Manage your project configuration.</p>
         </div>
 
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+        <Card className="border-border bg-card backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-white">General Information</CardTitle>
-            <CardDescription className="text-zinc-400">
+            <CardTitle className="text-foreground">General Information</CardTitle>
+            <CardDescription className="text-muted-foreground">
               Update your project's name and description.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-200">
+              <label className="text-sm font-medium text-foreground">
                 Project Name
               </label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="bg-zinc-900/50 border-white/10 text-white"
+                className="bg-background border-border text-foreground"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-200">
+              <label className="text-sm font-medium text-foreground">
                 Description
               </label>
               <Textarea
@@ -180,14 +180,14 @@ export default function ProjectSettingsPage() {
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setDescription(e.target.value)
                 }
-                className="bg-zinc-900/50 border-white/10 text-white min-h-[100px]"
+                className="bg-background border-border text-foreground min-h-[100px]"
               />
             </div>
             <div className="pt-4 flex justify-end">
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {saving ? (
                   "Saving..."
@@ -202,20 +202,20 @@ export default function ProjectSettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-red-500/10 bg-red-500/5 backdrop-blur-sm">
+        <Card className="border-destructive/50 bg-destructive/10 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-red-400">Danger Zone</CardTitle>
-            <CardDescription className="text-red-400/70">
+            <CardTitle className="text-destructive">Danger Zone</CardTitle>
+            <CardDescription className="text-destructive/80">
               Irreversible actions for this project.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-medium text-red-200">
+                <h4 className="text-sm font-medium text-destructive">
                   Delete Project
                 </h4>
-                <p className="text-xs text-red-200/60">
+                <p className="text-xs text-destructive/80">
                   Once deleted, all data associated with this project will be
                   permanently removed.
                 </p>

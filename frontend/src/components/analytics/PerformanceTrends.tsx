@@ -11,9 +11,9 @@ const PerformanceTrendsComponent: React.FC<PerformanceTrendsProps> = ({
   trends,
 }) => {
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="border-border bg-card backdrop-blur-sm">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-white">
+        <CardTitle className="text-lg font-semibold text-foreground">
           Performance Trends
         </CardTitle>
       </CardHeader>
@@ -22,11 +22,11 @@ const PerformanceTrendsComponent: React.FC<PerformanceTrendsProps> = ({
           {trends.map((trend: AnalyticsTrend, index: number) => (
             <div
               key={index}
-              className="flex items-center justify-between p-4 rounded-lg bg-white/5"
+              className="flex items-center justify-between p-4 rounded-lg bg-secondary"
             >
               <div>
-                <p className="text-sm text-zinc-400">{trend.metric}</p>
-                <p className="text-lg font-semibold text-white">
+                <p className="text-sm text-muted-foreground">{trend.metric}</p>
+                <p className="text-lg font-semibold text-foreground">
                   {trend.current}
                 </p>
               </div>
@@ -37,7 +37,7 @@ const PerformanceTrendsComponent: React.FC<PerformanceTrendsProps> = ({
                     {Math.abs(trend.change)}%
                   </span>
                 </div>
-                <p className="text-xs text-zinc-500">vs last period</p>
+                <p className="text-xs text-muted-foreground">vs last period</p>
               </div>
             </div>
           ))}

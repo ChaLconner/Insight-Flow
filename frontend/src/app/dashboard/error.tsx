@@ -16,7 +16,7 @@ export default function ErrorPage({
   }, [error]);
 
   return (
-    <div className="pt-24 min-h-screen bg-black">
+    <div className="pt-24 min-h-screen bg-background">
       <DashboardError error={error} onRetry={reset} />
     </div>
   );

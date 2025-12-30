@@ -34,15 +34,14 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  },
+  }
 );
 
 import type { HTMLMotionProps } from "framer-motion";
 import { motion } from "framer-motion";
 
 export interface ButtonProps
-  extends
-    Omit<HTMLMotionProps<"button">, "ref" | "children">,
+  extends Omit<HTMLMotionProps<"button">, "ref" | "children">,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   children?: React.ReactNode;
@@ -50,24 +49,26 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : motion.button;
-    const motionProps = !asChild
-      ? {
-          whileTap: { scale: 0.95 },
-          whileHover: { scale: 1.02, transition: { duration: 0.1 } },
-        }
-      : {};
+    if (asChild) {
+      return (
+        <Slot
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          {...(props as unknown as React.ComponentProps<typeof Slot>)}
+        />
+      );
+    }
 
     return (
-      <Comp
+      <motion.button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        {...motionProps}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        {...(props as any)}
+        whileTap={{ scale: 0.95 }}
+        whileHover={{ scale: 1.02, transition: { duration: 0.1 } }}
+        {...props}
       />
     );
-  },
+  }
 );
 Button.displayName = "Button";
 

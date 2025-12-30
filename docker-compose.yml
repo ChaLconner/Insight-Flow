@@ -1,4 +1,10 @@
-version: '3.8'
+version: "3.8"
+
+# ===========================================
+# IMPORTANT: Copy .env.docker.example to .env.docker
+# and configure your environment variables before running.
+# NEVER commit .env.docker to version control!
+# ===========================================
 
 services:
   backend:
@@ -7,16 +13,28 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - .env.docker
     environment:
-      - DATABASE_URL=postgresql+pg8000://insightflow:insightflow_secret@db:5432/insightflow
-      - SECRET_KEY=dev_secret_key_change_in_prod
-      - CORS_ORIGINS=http://localhost:3000
-      - ALLOWED_HOSTS=localhost,127.0.0.1,backend
+      # Override or add environment-specific values
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-insightflow}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-insightflow}
     depends_on:
       db:
         condition: service_healthy
     networks:
       - insight-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build:
@@ -24,9 +42,22 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - API_URL=http://backend:8000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    env_file:
+      - .env.docker
     depends_on:
       - backend
     networks:
@@ -36,15 +67,32 @@ services:
     image: postgres:15-alpine
     restart: always
     environment:
-      - POSTGRES_USER=insightflow
-      - POSTGRES_PASSWORD=insightflow_secret
-      - POSTGRES_DB=insightflow
+      - POSTGRES_USER=${POSTGRES_USER:-insightflow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=${POSTGRES_DB:-insightflow}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U insightflow -d insightflow"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-insightflow} -d ${POSTGRES_DB:-insightflow}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - insight-network
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -1,20 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, Suspense } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { User, Bell, Shield, Palette, Database, Save } from "lucide-react";
-import { useAuthStore } from "@/stores/auth-store";
-import { usersApi, authApi } from "@/lib/api-endpoints";
-import { toast } from "sonner";
-import { getErrorMessage } from "@/lib/error-utils";
+import { User, Bell, Shield, Palette, Database, Loader2, Receipt } from "lucide-react";
 
 // Direct import for LCP optimization (Profile is default tab)
-import { ProfileSettings, type ProfileData } from "./components/profile-settings";
-import type { NotificationState } from "./components/notifications-settings";
+import { ProfileSettings } from "./components/profile-settings";
 
 // Dynamic imports for other tabs to reduce initial bundle size
 const NotificationsSettings = dynamic(
@@ -24,7 +18,7 @@ const NotificationsSettings = dynamic(
     ),
   {
     loading: () => (
-      <div className="h-96 animate-pulse bg-zinc-800/50 rounded-xl" />
+      <div className="h-96 animate-pulse bg-muted rounded-xl" />
     ),
   },
 );
@@ -35,7 +29,7 @@ const SecuritySettings = dynamic(
     ),
   {
     loading: () => (
-      <div className="h-96 animate-pulse bg-zinc-800/50 rounded-xl" />
+      <div className="h-96 animate-pulse bg-muted rounded-xl" />
     ),
   },
 );
@@ -46,7 +40,7 @@ const AppearanceSettings = dynamic(
     ),
   {
     loading: () => (
-      <div className="h-96 animate-pulse bg-zinc-800/50 rounded-xl" />
+      <div className="h-96 animate-pulse bg-muted rounded-xl" />
     ),
   },
 );
@@ -55,18 +49,27 @@ const BillingSettings = dynamic(
     import("./components/billing-settings").then((mod) => mod.BillingSettings),
   {
     loading: () => (
-      <div className="h-96 animate-pulse bg-zinc-800/50 rounded-xl" />
+      <div className="h-96 animate-pulse bg-muted rounded-xl" />
+    ),
+  },
+);
+const PaymentHistorySettings = dynamic(
+  () =>
+    import("./components/payment-history-settings").then((mod) => mod.PaymentHistorySettings),
+  {
+    loading: () => (
+      <div className="h-96 animate-pulse bg-muted rounded-xl" />
     ),
   },
 );
 
-export default function SettingsPage() {
+function SettingsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   // Valid tab names
-  const validTabs = ["profile", "notifications", "security", "appearance", "billing"];
-  
+  const validTabs = ["profile", "notifications", "security", "appearance", "billing", "history"];
+
   // Get initial tab from URL or default to profile
   const getInitialTab = () => {
     const tabFromUrl = searchParams.get("tab");
@@ -75,295 +78,13 @@ export default function SettingsPage() {
     }
     return "profile";
   };
-  
+
   const [activeTab, setActiveTab] = useState(getInitialTab);
-  
+
   // Update URL when tab changes
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     router.push(`/settings?tab=${tab}`, { scroll: false });
-  };
-
-  // Profile State
-  const [profileData, setProfileData] = useState<ProfileData>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    username: "",
-    phone: "",
-    bio: "",
-    avatar: "",
-  });
-  const [uploading, setUploading] = useState(false);
-
-  // Notification State
-  const [notifications, setNotifications] = useState<NotificationState>({
-    email: {
-      tasks: true,
-      projects: true,
-      mentions: true,
-    },
-    inApp: {
-      tasks: true,
-      projects: true,
-      mentions: true,
-      updates: true,
-      system: true,
-    },
-  });
-
-  // Security State
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordStrength, setPasswordStrength] = useState(0);
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Appearance State
-  const [theme, setTheme] = useState("dark");
-
-  // Common State
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  const { isAuthenticated, isLoading, user, fetchUserProfile } = useAuthStore();
-
-  const calculateStrength = (password: string) => {
-    let strength = 0;
-    // Backend requires at least 8 characters
-    if (password.length >= 8) {
-      strength += 25;
-    }
-    // Backend requires uppercase
-    if (password.match(/[A-Z]/)) {
-      strength += 25;
-    }
-    // Backend requires lowercase (implicit in typical valid passwords, but enforced by backend)
-    if (password.match(/[a-z]/)) {
-      strength += 15;
-    }
-    // Backend requires number from 0-9
-    if (password.match(/[0-9]/)) {
-      strength += 25;
-    }
-    // Special chars are good but not strictly required by this backend regex, keeping for good measure
-    if (password.match(/[^A-Za-z0-9]/)) {
-      strength += 10;
-    }
-
-    // Cap at 100
-    return Math.min(strength, 100);
-  };
-
-  useEffect(() => {
-    setPasswordStrength(calculateStrength(newPassword));
-  }, [newPassword]);
-
-  useEffect(() => {
-    const init = async () => {
-      if (!isAuthenticated && !isLoading) {
-        setIsInitializing(false);
-        return;
-      }
-
-      if (isAuthenticated) {
-        if (user) {
-          // Type-safe extraction of user profile fields
-          const rawProfile = user as unknown as Record<string, string | undefined>;
-          const firstName = rawProfile.firstName ?? rawProfile.first_name ?? "";
-          const lastName = rawProfile.lastName ?? rawProfile.last_name ?? "";
-          const name = rawProfile.name ?? "";
-
-          let finalFirst = firstName;
-          let finalLast = lastName;
-
-          if (!finalFirst && name) {
-            const parts = name.split(" ");
-            finalFirst = parts[0] ?? "";
-            finalLast = parts.slice(1).join(" ");
-          }
-
-          setProfileData({
-            firstName: finalFirst,
-            lastName: finalLast,
-            email: rawProfile.email ?? "",
-            username: rawProfile.username ?? "",
-            phone: rawProfile.phone ?? "",
-            bio: rawProfile.bio ?? "",
-            avatar:
-              rawProfile.avatar ??
-              rawProfile.avatar_url ??
-              rawProfile.avatarUrl ??
-              "",
-          });
-
-          await loadSettings();
-        } else {
-          try {
-            await fetchUserProfile();
-          } catch (e) {
-            console.warn("Failed to fetch user profile", e);
-          }
-        }
-        setIsInitializing(false);
-      }
-    };
-
-    init();
-  }, [isAuthenticated, user, isLoading, fetchUserProfile]);
-
-  const loadSettings = async () => {
-    try {
-      const userSettings = await usersApi.getSettings().catch(() => null);
-      if (userSettings) {
-        setTheme(userSettings.theme ?? "dark");
-        if (userSettings.notificationPreferences) {
-          setNotifications((prev) => ({
-            email: {
-              ...prev.email,
-              ...(userSettings.notificationPreferences.email ?? {}),
-            },
-            inApp: {
-              ...prev.inApp,
-              ...(userSettings.notificationPreferences.inApp ?? {}),
-            },
-          }));
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to load user settings", e);
-    }
-  };
-
-  const handleUpdatePassword = async () => {
-    if (newPassword !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    if (passwordStrength < 50) {
-      toast.error("Password is too weak");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await authApi.changePassword(currentPassword, newPassword);
-      toast.success("Password updated successfully");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setSaving(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      const errorMessage = getErrorMessage(err);
-      toast.error("Failed to update password", { description: errorMessage });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    if (!user) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      const updateData = {
-        ...profileData,
-        first_name: profileData.firstName,
-        last_name: profileData.lastName,
-        name: `${profileData.firstName} ${profileData.lastName}`.trim(),
-      };
-
-      const settingsData = {
-        theme,
-        notificationPreferences: notifications,
-      };
-
-      const { updateUserProfile } = useAuthStore.getState();
-
-      await Promise.all([
-        updateUserProfile(updateData),
-        usersApi.updateSettings(settingsData),
-      ]);
-
-      toast.success("Settings saved successfully!");
-    } catch (err) {
-      const errorMessage = getErrorMessage(err);
-      toast.error("Failed to save settings", { description: errorMessage });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    const validTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (!validTypes.includes(file.type)) {
-      toast.error("Invalid file type. Please upload PNG, JPG, or GIF.");
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("File size too large. Maximum size is 2MB.");
-      return;
-    }
-
-    // Create preview URL for optimistic UI
-    const previewUrl = URL.createObjectURL(file);
-    const previousAvatar = profileData.avatar;
-    
-    // Get auth store functions
-    const { updateUserAvatar } = useAuthStore.getState();
-
-    try {
-      setUploading(true);
-      
-      // OPTIMISTIC UI: Show preview immediately in both profile and header
-      setProfileData((prev) => ({ ...prev, avatar: previewUrl }));
-      updateUserAvatar(previewUrl); // Update header immediately!
-
-      const formData = new FormData();
-      formData.append("file", file);
-
-      // Upload in background
-      const updatedUser = await usersApi.uploadAvatar(formData);
-
-      if (updatedUser) {
-        // Update with real Cloudinary URL after upload succeeds
-        const avatarUrl = updatedUser.avatar ?? "";
-        updateUserAvatar(avatarUrl);
-        setProfileData((prev) => ({ ...prev, avatar: avatarUrl }));
-        
-        // Clean up blob URL
-        URL.revokeObjectURL(previewUrl);
-        
-        toast.success("Avatar updated successfully!");
-      }
-    } catch (err) {
-      const errorMessage = getErrorMessage(err);
-      toast.error("Failed to upload avatar", { description: errorMessage });
-      
-      // Revert to previous avatar on error
-      setProfileData((prev) => ({ ...prev, avatar: previousAvatar }));
-      updateUserAvatar(previousAvatar); // Revert header too
-      
-      // Clean up blob URL
-      URL.revokeObjectURL(previewUrl);
-    } finally {
-      setUploading(false);
-      // Reset input value if needed, but we don't have direct ref here.
-      // The ProfileSettings component handles the ref.
-      event.target.value = "";
-    }
   };
 
   const tabs = [
@@ -372,96 +93,79 @@ export default function SettingsPage() {
     { id: "security", label: "Security", icon: Shield },
     { id: "appearance", label: "Appearance", icon: Palette },
     { id: "billing", label: "Billing", icon: Database },
+    { id: "history", label: "Payment History", icon: Receipt },
   ];
 
   return (
-    <ProtectedLayout>
-      <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">
-              Settings
-            </h1>
-            <p className="text-zinc-400 mt-1">
-              Manage your account settings and preferences
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-              onClick={handleSaveSettings}
-              disabled={saving}
-            >
-              <Save className="h-4 w-4 mr-2" />
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
+    <div className="space-y-8">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">
+            Settings
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your account settings and preferences
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:grid lg:gap-8 lg:grid-cols-4">
+        <div className="lg:col-span-1">
+          <Card className="bg-card border-border lg:sticky lg:top-24 overflow-hidden">
+            <CardContent className="p-2">
+              <nav className="flex flex-row lg:flex-col gap-2 lg:gap-0 lg:space-y-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`flex-shrink-0 lg:flex-shrink lg:w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? "bg-primary text-primary-foreground shadow-md"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <tab.icon className="h-4 w-4 flex-shrink-0" />
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="flex flex-col lg:grid lg:gap-8 lg:grid-cols-4">
-          <div className="lg:col-span-1">
-            <Card className="glass-card lg:sticky lg:top-8">
-              <CardContent className="p-2">
-                <nav className="flex flex-row lg:flex-col gap-2 lg:gap-0 lg:space-y-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => handleTabChange(tab.id)}
-                      className={`flex-shrink-0 lg:flex-shrink lg:w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                        activeTab === tab.id
-                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                          : "text-zinc-400 hover:text-white hover:bg-white/5"
-                      }`}
-                    >
-                      <tab.icon className="h-4 w-4" />
-                      {tab.label}
-                    </button>
-                  ))}
-                </nav>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="lg:col-span-3">
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {activeTab === "profile" && (
-                <ProfileSettings
-                  profileData={profileData}
-                  setProfileData={setProfileData}
-                  uploading={uploading}
-                  onFileChange={handleFileChange}
-                  isLoading={isInitializing}
-                />
-              )}
-              {activeTab === "notifications" && (
-                <NotificationsSettings
-                  notifications={notifications}
-                  setNotifications={setNotifications}
-                />
-              )}
-              {activeTab === "security" && (
-                <SecuritySettings
-                  currentPassword={currentPassword}
-                  setCurrentPassword={setCurrentPassword}
-                  newPassword={newPassword}
-                  setNewPassword={setNewPassword}
-                  confirmPassword={confirmPassword}
-                  setConfirmPassword={setConfirmPassword}
-                  passwordStrength={passwordStrength}
-                  showPassword={showPassword}
-                  setShowPassword={setShowPassword}
-                  saving={saving}
-                  onUpdatePassword={handleUpdatePassword}
-                />
-              )}
-              {activeTab === "appearance" && (
-                <AppearanceSettings theme={theme} setTheme={setTheme} />
-              )}
-              {activeTab === "billing" && <BillingSettings />}
-            </div>
+        <div className="lg:col-span-3">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {activeTab === "profile" && (
+              <ProfileSettings />
+            )}
+            {activeTab === "notifications" && (
+              <NotificationsSettings />
+            )}
+            {activeTab === "security" && (
+              <SecuritySettings />
+            )}
+            {activeTab === "appearance" && (
+              <AppearanceSettings />
+            )}
+            {activeTab === "billing" && <BillingSettings />}
+            {activeTab === "history" && <PaymentHistorySettings />}
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <ProtectedLayout>
+      <Suspense fallback={
+        <div className="flex items-center justify-center p-12">
+           <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        </div>
+      }>
+        <SettingsContent />
+      </Suspense>
     </ProtectedLayout>
   );
 }

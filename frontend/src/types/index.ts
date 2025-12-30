@@ -2,7 +2,7 @@
 // API Response Types
 // ===========================================
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
@@ -10,7 +10,7 @@ export interface ApiResponse<T = any> {
   timestamp: string;
 }
 
-export interface PaginatedResponse<T = any> extends ApiResponse<T[]> {
+export interface PaginatedResponse<T = unknown> extends ApiResponse<T[]> {
   pagination: {
     page: number;
     limit: number;
@@ -53,6 +53,16 @@ export interface User {
   lastLoginAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserStats {
+  total: number;
+  active: number;
+  verified: number;
+  admins: number;
+  managers: number;
+  members: number;
+  viewers: number;
 }
 
 export enum UserRole {
@@ -134,10 +144,10 @@ export interface LoginRequest {
 export interface RegisterRequest {
   email: string;
   username: string;
-  inProgressTasks: number;
-  overdueTasks: number;
-  teamMembers: number;
-  recentActivity: number;
+  password: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface AuthResponse {
@@ -456,7 +466,7 @@ export interface Notification {
   type: NotificationType;
   title: string;
   message: string;
-  data?: Record<string, string | number | boolean | null>;
+  data?: Record<string, unknown>;
   read: boolean;
   actionUrl?: string;
   priority: NotificationPriority;
@@ -509,7 +519,7 @@ export interface FormError {
   code: string;
 }
 
-export interface FormState<T = any> {
+export interface FormState<T = unknown> {
   data: T;
   errors: FormError[];
   isSubmitting: boolean;
@@ -524,10 +534,10 @@ export interface FormState<T = any> {
 export interface BreadcrumbItem {
   label: string;
   href?: string;
-  icon?: string;
+  icon?: string | React.ElementType;
 }
 
-export interface TableColumn<T = any> {
+export interface TableColumn<T = unknown> {
   key: keyof T;
   label: string;
   sortable?: boolean;
@@ -588,3 +598,128 @@ export interface RecentActivity {
   timestamp?: string;
   project?: string | { name: string; id: string };
 }
+
+// ===========================================
+// Payment Types
+// ===========================================
+
+export enum SubscriptionPlan {
+  FREE = "free",
+  STARTER = "starter",
+  PRO = "pro",
+  ENTERPRISE = "enterprise",
+}
+
+export enum SubscriptionStatus {
+  ACTIVE = "active",
+  CANCELED = "canceled",
+  PAST_DUE = "past_due",
+  TRIALING = "trialing",
+  UNPAID = "unpaid",
+  INCOMPLETE = "incomplete",
+}
+
+export enum PaymentStatus {
+  PENDING = "pending",
+  SUCCEEDED = "succeeded",
+  FAILED = "failed",
+  REFUNDED = "refunded",
+  CANCELED = "canceled",
+}
+
+export interface BillingAddress {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;  // ISO 3166-1 alpha-2
+}
+
+export interface PaymentMethod {
+  id: string;
+  cardBrand: string;
+  cardLast4: string;
+  cardExpMonth: number;
+  cardExpYear: number;
+  cardFunding?: string;
+  cardCountry?: string;  // Card issuer country
+  isDefault: boolean;
+  isActive: boolean;
+  // Billing contact
+  billingName?: string;
+  billingEmail?: string;
+  billingPhone?: string;
+  // Billing address
+  billingAddressLine1?: string;
+  billingAddressLine2?: string;
+  billingCity?: string;
+  billingState?: string;
+  billingPostalCode?: string;
+  billingCountry?: string;
+  createdAt: string;
+}
+
+export interface PaymentMethodListResponse {
+  payment_methods: PaymentMethod[];
+  total: number;
+}
+
+export interface Subscription {
+  id: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  currentPeriodStart?: string;
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd: boolean;
+  priceAmount?: number;
+  priceCurrency?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlanInfo {
+  plan: SubscriptionPlan;
+  name: string;
+  price_monthly: number;
+  price_yearly: number;
+  currency: string;
+  features: string[];
+  
+  // Limits - Single Source of Truth from Backend
+  project_limit: number;
+  member_limit: number;
+  
+  // Visual/Marketing config from Backend
+  original_price?: number | null;
+  discount_percent: number;
+  badge?: string | null;
+  badge_color?: string | null;
+  color: string;
+  is_limited_offer: boolean;
+}
+
+export interface PlansListResponse {
+  plans: PlanInfo[];
+}
+
+export interface SetupIntentResponse {
+  client_secret: string;
+  customer_id: string;
+}
+
+export interface CreatePaymentMethodRequest {
+  payment_method_id: string;
+  customer_id: string;
+  set_as_default?: boolean;
+  billing_name?: string;
+  billing_email?: string;
+  billing_phone?: string;
+  billing_address?: BillingAddress;
+}
+
+export interface CreateSubscriptionRequest {
+  plan: SubscriptionPlan;
+  payment_method_id?: string;
+}
+

@@ -1,7 +1,5 @@
 "use client";
 
-
-
 /**
  * Root page - Redirects to dashboard if authenticated
  * This page acts as an entry point and handles the initial routing
@@ -12,7 +10,7 @@ export default function Home() {
   return (
     <div
       id="main-content"
-      className="min-h-screen bg-black flex items-center justify-center"
+      className="min-h-screen bg-background flex items-center justify-center"
     >
       <div className="flex flex-col items-center gap-4">
         <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />

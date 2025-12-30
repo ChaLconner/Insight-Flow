@@ -1,19 +1,18 @@
 "use client";
-
 import { useGoogleLogin } from "@react-oauth/google";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  AnimatedBackground,
-  FloatingShapes,
-} from "@/components/ui/animated-background";
-import { API_CONFIG } from "@/lib/constants";
+import { AnimatedBackground, FloatingShapes } from "@/components/ui/animated-background";
 import { authActions } from "@/stores/auth-actions";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { loginSchema, type LoginSchema } from "@/lib/validations/auth";
+import { apiClient } from "@/lib/api-client";
 
 import {
   Mail,
@@ -28,16 +27,19 @@ import {
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 
-export default function LoginPage() {
-  /* const router = useRouter(); */ // unused
+function LoginForm() {
   const searchParams = useSearchParams();
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const form = useForm<LoginSchema>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      rememberMe: false,
+    },
+  });
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -46,107 +48,57 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (values: LoginSchema) => {
     setIsLoading(true);
-    setErrors({});
-
-    // Validation
-    const newErrors: Record<string, string> = {};
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    }
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      setIsLoading(false);
-      return;
-    }
-
     try {
       // Call backend API
-
-      const response = await fetch(`${API_CONFIG.BASE_URL}/auth/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+      const response = await apiClient.post("/auth/login", {
+        email: values.email,
+        password: values.password,
       });
 
-      if (!response.ok) {
-        let errorData;
-        try {
-          errorData = await response.json();
-          console.error("❌ Login response error data:", errorData);
-        } catch (parseError) {
-          console.error("❌ Failed to parse error response:", parseError);
-          // If JSON parsing fails, use default error
-          errorData = { detail: "Login failed" };
-        }
-        console.error("❌ Login failed:", errorData);
-        throw new Error(errorData?.detail ?? "Login failed");
-      }
-
-      const data = await response.json();
-
-      // Use authActions to properly handle login
+      const data = response.data;
+      
+      // Use authActions to properly handle login (this will show the toast)
       await authActions.loginWithResponse(data);
 
-      // Get the user data from the store after login
+      // Construct redirect URL
       const user = data.user;
-
-      // Determine redirect URL based on user role with better fallbacks
-      let redirectUrl = "/dashboard"; // Default redirect to dashboard
+      let redirectUrl = "/dashboard";
 
       if (user?.role) {
         switch (user.role) {
           case "admin":
-            redirectUrl = "/dashboard"; // Admins go to main dashboard
+            redirectUrl = "/dashboard";
             break;
           case "manager":
-            redirectUrl = "/projects"; // Managers go to projects page
+            redirectUrl = "/projects";
             break;
           case "member":
           case "user":
-            redirectUrl = "/projects?tab=tasks"; // Regular users go to tasks page
+            redirectUrl = "/projects?tab=tasks";
             break;
           case "viewer":
-            redirectUrl = "/projects"; // Viewers go to projects page
+            redirectUrl = "/projects";
             break;
           default:
-            redirectUrl = "/dashboard"; // Default to dashboard
+            redirectUrl = "/dashboard";
         }
-      } else {
-        redirectUrl = "/dashboard"; // Default for users without role
       }
 
-      // Redirect to appropriate page based on user role
-      // Add small delay to allow state to settle and prevent routing conflicts
+      // Add small delay to allow state to settle
       setTimeout(() => {
         if (typeof window !== "undefined") {
-          // Use router.push for client-side navigation with delay
           window.location.href = redirectUrl;
         }
       }, 100);
+
     } catch (error) {
-      console.error("❌ Login error:", error);
-      console.error("❌ Login error details:", {
-        message: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : "No stack trace",
-        name: error instanceof Error ? error.name : "Unknown",
-      });
       console.error("❌ Login error:", error);
       const errorMessage = getErrorMessage(error);
       toast.error("Login failed", { description: errorMessage });
-      setErrors({ password: "Invalid email or password" });
+      // Reset password field on error
+      form.setValue("password", "");
     } finally {
       setIsLoading(false);
     }
@@ -157,292 +109,275 @@ export default function LoginPage() {
       try {
         setIsLoading(true);
 
-        // Call backend API with Google token
-        const response = await fetch(`${API_CONFIG.BASE_URL}/auth/google`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            access_token: tokenResponse.access_token,
-          }),
+        const response = await apiClient.post("/auth/google", {
+          access_token: tokenResponse.access_token,
         });
 
-        if (!response.ok) {
-          throw new Error("Google login failed");
-        }
+        const data = response.data;
 
-        const data = await response.json();
-        console.log("✅ Google login successful");
+
+        toast.success(`Welcome ${data.user.name ?? "User"}!`, {
+          description: `Logged in as @${data.user.username}`,
+        });
 
         await authActions.loginWithResponse(data);
 
         const user = data.user;
         let redirectUrl = "/dashboard";
-
-        if (user?.role) {
-          switch (user.role) {
-            case "admin":
-              redirectUrl = "/dashboard";
-              break;
-            case "manager":
-              redirectUrl = "/projects";
-              break;
-            case "member":
-            case "user":
-              redirectUrl = "/projects?tab=tasks";
-              break;
-            case "viewer":
-              redirectUrl = "/projects";
-              break;
-            default:
-              redirectUrl = "/dashboard";
-          }
+        if (user?.role === "member" || user?.role === "user") {
+          redirectUrl = "/projects?tab=tasks";
+        } else if (user?.role === "manager" || user?.role === "viewer") {
+          redirectUrl = "/projects";
         }
 
-        // Use window.location.href for consistency
         window.location.href = redirectUrl;
       } catch (error) {
         console.error("❌ Google login error:", error);
         toast.error("Google login failed", {
           description: getErrorMessage(error),
         });
-        setErrors({ submit: "Google login failed. Please try again." });
       } finally {
         setIsLoading(false);
       }
     },
     onError: () => {
-      console.error("❌ Google login failed");
-      setErrors({ submit: "Google login failed. Please try again." });
+      toast.error("Google login failed");
       setIsLoading(false);
     },
     flow: "implicit",
   });
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
-    }
-  };
+
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-indigo-900 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="w-full max-w-md relative z-20">
+      {/* Logo */}
+      <div className="text-center mb-8">
+        <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-4 shadow-lg shadow-primary/25">
+          <Layers className="h-7 w-7 text-primary-foreground" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground mb-2">Welcome back</h1>
+        <p className="text-muted-foreground">Sign in to your Insight Flow account</p>
+      </div>
+
+      <Card className="bg-white/10 backdrop-blur-xl backdrop-saturate-[1.8] shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] border-white/20 ring-1 ring-white/10">
+        <CardHeader className="space-y-1 pb-6">
+          <CardTitle className="text-xl text-foreground text-center">
+            Sign in
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Social Login */}
+          <div className="space-y-3">
+            <Button
+              variant="outline"
+              className="w-full bg-white/5 hover:bg-white/10 border-white/20 text-white transition-all hover:scale-[1.02] hover:bg-white/20"
+              onClick={() => handleGoogleLogin()}
+              disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+              title={
+                !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+                  ? "Google Client ID is missing"
+                  : "Sign in with Google"
+              }
+            >
+              <div className="mr-3 h-4 w-4 flex items-center justify-center">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="100%"
+                  height="100%"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
+                    <path
+                      fill="#4285F4"
+                      d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"
+                    />
+                  </g>
+                </svg>
+              </div>
+              Continue with Google
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full bg-white/5 hover:bg-white/10 border-white/20 text-white transition-all hover:scale-[1.02] hover:bg-white/20"
+              onClick={() => {
+                const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
+                if (!clientId) {
+                  toast.error("GitHub login not configured");
+                  return;
+                }
+                const redirectUri = encodeURIComponent(
+                  `${window.location.origin}/auth/callback/github`,
+                );
+                const scope = "read:user user:email";
+                window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+              }}
+              disabled={isLoading}
+              title="Sign in with GitHub"
+            >
+              <Github className="h-4 w-4 mr-3" />
+              Continue with GitHub
+            </Button>
+          </div>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-foreground">
+                Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  className={`pl-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                    form.formState.errors.email ? "border-red-500" : ""
+                  }`}
+                  disabled={isLoading}
+                  {...form.register("email")}
+                  aria-invalid={!!form.formState.errors.email}
+                />
+              </div>
+              {form.formState.errors.email && (
+                <p role="alert" className="text-sm text-red-400">
+                  {form.formState.errors.email.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-foreground">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  className={`pl-10 pr-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                    form.formState.errors.password ? "border-red-500" : ""
+                  }`}
+                  disabled={isLoading}
+                  {...form.register("password")}
+                  aria-invalid={!!form.formState.errors.password}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              {form.formState.errors.password && (
+                <p role="alert" className="text-sm text-red-400">
+                  {form.formState.errors.password.message}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-0"
+                  {...form.register("rememberMe")}
+                />
+                <span className="ml-2 text-sm text-muted-foreground">
+                  Remember me
+                </span>
+              </label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </>
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Footer */}
+      <p className="text-center text-sm text-muted-foreground mt-6">
+        Don't have an account?{" "}
+        <Link
+          href="/auth/register"
+          className="text-primary hover:text-primary/80 font-medium transition-colors"
+        >
+          Sign up
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
       {/* Animated Background Components */}
       <AnimatedBackground />
       <FloatingShapes />
 
-      <div className="w-full max-w-md relative z-20">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/25">
-            <Layers className="h-7 w-7 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Welcome back</h1>
-          <p className="text-zinc-400">Sign in to your Insight Flow account</p>
+      <Suspense fallback={
+        <div className="z-20 p-8 rounded-xl bg-white/5 backdrop-blur-md">
+           <Loader2 className="h-8 w-8 text-primary animate-spin" />
         </div>
-
-        <Card className="bg-white/5 backdrop-blur-xl shadow-2xl border-0">
-          <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-xl text-white text-center">
-              Sign in
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Social Login */}
-            <div className="space-y-3">
-              <Button
-                variant="outline"
-                className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => handleGoogleLogin()}
-                disabled={
-                  isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-                }
-                title={
-                  !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
-                    ? "Google Client ID is missing"
-                    : "Sign in with Google"
-                }
-              >
-                <div className="mr-3 h-4 w-4 flex items-center justify-center">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="100%"
-                    height="100%"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                      <path
-                        fill="#4285F4"
-                        d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.734 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"
-                      />
-                    </g>
-                  </svg>
-                </div>
-                Continue with Google
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full border-white/10 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                onClick={() => {
-                  const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
-                  if (!clientId) {
-                    toast.error("GitHub login not configured");
-                    return;
-                  }
-                  const redirectUri = encodeURIComponent(
-                    `${window.location.origin}/auth/callback/github`,
-                  );
-                  const scope = "read:user user:email";
-                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
-                }}
-                disabled={isLoading}
-                title={
-                  !process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
-                    ? "GitHub Client ID is missing"
-                    : "Sign in with GitHub"
-                }
-              >
-                <Github className="h-4 w-4 mr-3" />
-                Continue with GitHub
-              </Button>
-            </div>
-
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-zinc-900 px-2 text-zinc-400">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-zinc-300">
-                  Email
-                </Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    className={`pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.email ? "border-red-500" : ""
-                    }`}
-                    disabled={isLoading}
-                  />
-                </div>
-                {errors.email && (
-                  <p className="text-sm text-red-400">{errors.email}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-zinc-300">
-                  Password
-                </Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) =>
-                      handleInputChange("password", e.target.value)
-                    }
-                    className={`pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
-                      errors.password ? "border-red-500" : ""
-                    }`}
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-400 hover:text-white"
-                    disabled={isLoading}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="text-sm text-red-400">{errors.password}</p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
-                  />
-                  <span className="ml-2 text-sm text-zinc-400">
-                    Remember me
-                  </span>
-                </label>
-                <Link
-                  href="/auth/forgot-password"
-                  className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <>
-                    Sign in
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Footer */}
-        <p className="text-center text-sm text-zinc-400 mt-6">
-          Don't have an account?{" "}
-          <Link
-            href="/auth/register"
-            className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
-          >
-            Sign up
-          </Link>
-        </p>
-      </div>
+      }>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }

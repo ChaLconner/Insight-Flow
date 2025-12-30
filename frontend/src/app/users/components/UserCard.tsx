@@ -20,12 +20,12 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
     `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase();
 
   return (
-    <div className="p-6 hover:bg-white/5 transition-colors">
+    <div className="p-6 hover:bg-accent/50 transition-colors">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {/* Avatar */}
           <div
-            className="h-12 w-12 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center shrink-0 overflow-hidden relative group"
+            className="h-12 w-12 rounded-full bg-secondary border border-border flex items-center justify-center shrink-0 overflow-hidden relative group"
             role="img"
             aria-label={`Avatar of ${fullName}`}
           >
@@ -39,7 +39,7 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
               />
             ) : null}
             <span
-              className={`text-lg font-medium text-zinc-300 absolute ${user.avatar ? "-z-10" : ""}`}
+              className={`text-lg font-medium text-muted-foreground absolute ${user.avatar ? "-z-10" : ""}`}
               aria-hidden="true"
             >
               {initials}
@@ -49,14 +49,14 @@ function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
           {/* User Info */}
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3 mb-1">
-              <h3 className="text-lg font-semibold text-white truncate">
+              <h3 className="text-lg font-semibold text-foreground truncate">
                 {fullName}
               </h3>
               <StatusBadge user={user} />
               <RoleBadge role={user.role} />
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
                 <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
                 <span

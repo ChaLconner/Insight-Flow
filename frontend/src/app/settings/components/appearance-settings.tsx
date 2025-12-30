@@ -1,67 +1,115 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Palette, Sun, Moon, Monitor } from "lucide-react";
+import { useTheme } from "@/hooks/use-theme";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Palette, Sun, Moon, Monitor, Check } from "lucide-react";
 
-interface AppearanceSettingsProps {
-  theme: string;
-  setTheme: (theme: string) => void;
-}
+export function AppearanceSettings() {
+  const { currentTheme, setTheme } = useTheme();
 
-export function AppearanceSettings({
-  theme,
-  setTheme,
-}: AppearanceSettingsProps) {
+  const themes = [
+    {
+      id: "light",
+      label: "Light",
+      icon: Sun,
+      description: "Clean and bright",
+    },
+    {
+      id: "dark",
+      label: "Dark",
+      icon: Moon,
+      description: "Easy on the eyes",
+    },
+    {
+      id: "system",
+      label: "System",
+      icon: Monitor,
+      description: "Syncs with device",
+    },
+  ] as const;
+
   return (
     <div className="space-y-6">
-      <Card className="glass-card">
+      <Card className="border-border bg-card">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <Palette className="h-5 w-5" />
-            Theme
-          </CardTitle>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Palette className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-foreground">Appearance</CardTitle>
+              <CardDescription>
+                Customize how Insight Flow limits looks on your device
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { id: "light", label: "Light", icon: Sun, color: "bg-zinc-100" },
-              { id: "dark", label: "Dark", icon: Moon, color: "bg-zinc-900" },
-              {
-                id: "system",
-                label: "Auto",
-                icon: Monitor,
-                color: "bg-gradient-to-br from-zinc-100 to-zinc-900",
-              },
-            ].map((option) => (
-              <div
-                key={option.id}
-                onClick={() => setTheme(option.id)}
-                className={`group relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-                  theme === option.id
-                    ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10"
-                    : "border-white/10 hover:border-white/20 hover:bg-white/5"
-                }`}
-              >
-                <div
-                  className={`h-16 w-full rounded-lg mb-3 ${option.color} opacity-80 group-hover:opacity-100 transition-opacity`}
-                />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <option.icon
-                      className={`h-4 w-4 ${theme === option.id ? "text-indigo-400" : "text-zinc-400 group-hover:text-white"}`}
-                    />
-                    <span
-                      className={`font-medium ${theme === option.id ? "text-white" : "text-zinc-400 group-hover:text-white"}`}
-                    >
-                      {option.label}
-                    </span>
-                  </div>
-                  {theme === option.id && (
-                    <div className="h-2 w-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
-                  )}
-                </div>
+          <div className="space-y-4">
+            <Label className="text-foreground">Theme Preference</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {themes.map((theme) => {
+                const isActive = currentTheme === theme.id;
+                return (
+                  <button
+                    key={theme.id}
+                    onClick={() => setTheme(theme.id)}
+                    className={`
+                      relative flex flex-col items-center justify-between p-4 rounded-xl border-2 transition-all duration-200 outline-none
+                      ${
+                        isActive
+                          ? "border-primary bg-primary/5 shadow-sm"
+                          : "border-muted hover:border-muted-foreground/50 hover:bg-muted/50 bg-card"
+                      }
+                    `}
+                  >
+                    <div className="flex flex-col items-center gap-3 w-full pt-2">
+                       {/* Preview Icon */}
+                      <div className={`p-3 rounded-full ${isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                        <theme.icon className="h-6 w-6" />
+                      </div>
+
+                      <div className="text-center">
+                        <div className={`font-medium ${isActive ? "text-primary" : "text-foreground"}`}>
+                          {theme.label}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {theme.description}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Active Checkmark */}
+                    {isActive && (
+                      <div className="absolute top-3 right-3 text-primary">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-muted/50 p-4 border border-border">
+            <div className="flex items-start gap-4">
+              <div className="p-2 rounded-full bg-background border border-border">
+                <Sun className="h-4 w-4 text-foreground" />
               </div>
-            ))}
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Theme Info</p>
+                <p className="text-xs text-muted-foreground">
+                  Light mode is now fully supported. Your preference will be saved automatically for this browser.
+                </p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

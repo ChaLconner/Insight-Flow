@@ -217,11 +217,10 @@ export const tokenUtils = {
   // Get color value
   getColor: (path: string) => {
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = colors;
+    let value: unknown = colors;
 
     for (const key of keys) {
-      value = value?.[key];
+      value = (value as Record<string, unknown>)?.[key];
     }
 
     return value;
@@ -235,11 +234,10 @@ export const tokenUtils = {
   // Get typography value
   getTypography: (path: string) => {
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = typography;
+    let value: unknown = typography;
 
     for (const key of keys) {
-      value = value?.[key];
+      value = (value as Record<string, unknown>)?.[key];
     }
 
     return value;
@@ -248,11 +246,10 @@ export const tokenUtils = {
   // Get shadow value
   getShadow: (path: string) => {
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = shadows;
+    let value: unknown = shadows;
 
     for (const key of keys) {
-      value = value?.[key];
+      value = (value as Record<string, unknown>)?.[key];
     }
 
     return value;
@@ -261,11 +258,10 @@ export const tokenUtils = {
   // Get animation value
   getAnimation: (path: string) => {
     const keys = path.split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let value: any = animations;
+    let value: unknown = animations;
 
     for (const key of keys) {
-      value = value?.[key];
+      value = (value as Record<string, unknown>)?.[key];
     }
 
     return value;

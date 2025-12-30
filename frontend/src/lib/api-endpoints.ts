@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // ===========================================
 // API Endpoints Mapping - Simplified
 // ===========================================
@@ -19,6 +18,7 @@ import type {
   Notification,
   RecentActivity,
   InviteUserRequest,
+  UserStats,
 } from "@/types";
 import type {
   AnalyticsResponse,
@@ -64,48 +64,11 @@ export const authApi = {
 
   // Get current user profile with deduplication
   getCurrentUser: async (): Promise<User> => {
-    // Log entry and stack to help find duplicate callers
-    if (process.env.NODE_ENV === "development") {
-      // Empty block intentionally - used for debugging when needed
-    }
-
     const cacheKey = "auth-getCurrentUser";
 
     return createDeduplicatedRequest(async () => {
-      try {
-        const { data } = await apiClient.get("/auth/me");
-        return data;
-      } catch (err: unknown) {
-        // If cookie-based request fails (401), try Authorization header fallback using stored token
-        const status = (err as any)?.response?.status;
-        if (status === 401) {
-          // Check if we have a token before retrying
-          const token =
-            typeof window !== "undefined"
-              ? (localStorage.getItem("access_token") ??
-                localStorage.getItem("accessToken"))
-              : null;
-
-          if (!token) {
-            throw err; // No token, don't retry
-          }
-
-          try {
-            const { API_CONFIG } = await import("@/lib/constants");
-
-            // Use direct axios call to avoid interceptor side effects
-            const axios = (await import("axios")).default;
-            const resp = await axios.get(`${API_CONFIG.BASE_URL}/auth/me`, {
-              headers: { Authorization: `Bearer ${token}` },
-              withCredentials: false, // Bearer token flow, not cookies
-            });
-            return resp.data;
-          } catch (_fallbackErr) {
-            // fall through to throw original error
-          }
-        }
-        throw err;
-      }
+      const { data } = await apiClient.get("/auth/me");
+      return data;
     }, cacheKey);
   },
 
@@ -114,58 +77,34 @@ export const authApi = {
     currentPassword: string,
     newPassword: string,
   ): Promise<void> => {
-    try {
-      const response = await apiClient.post("/auth/change-password", {
-        currentPassword,
-        newPassword,
-      });
-      console.log("API: Change password response:", response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error("API: Change password error:", error);
-      throw error;
-    }
+    const response = await apiClient.post("/auth/change-password", {
+      currentPassword,
+      newPassword,
+    });
+    return response.data;
   },
 
   // Forgot password
-  forgotPassword: async (email: string): Promise<any> => {
-    try {
-      const response = await apiClient.post("/auth/forgot-password", { email });
-
-      return response.data;
-    } catch (error: any) {
-      console.error("API: Forgot password error:", error);
-      throw error;
-    }
+  forgotPassword: async (email: string): Promise<unknown> => {
+    const response = await apiClient.post("/auth/forgot-password", { email });
+    return response.data;
   },
 
   // Reset password
-  resetPassword: async (token: string, newPassword: string): Promise<any> => {
-    try {
-      const response = await apiClient.post("/auth/reset-password", {
-        token,
-        new_password: newPassword,
-      });
-
-      return response.data;
-    } catch (error: any) {
-      console.error("API: Reset password error:", error);
-      throw error;
-    }
+  resetPassword: async (token: string, newPassword: string): Promise<unknown> => {
+    const response = await apiClient.post("/auth/reset-password", {
+      token,
+      new_password: newPassword,
+    });
+    return response.data;
   },
 
   // Validate reset token
-  validateResetToken: async (token: string): Promise<any> => {
-    try {
-      const response = await apiClient.post("/auth/validate-reset-token", {
-        token,
-      });
-
-      return response.data;
-    } catch (error: any) {
-      console.error("API: Validate reset token error:", error);
-      throw error;
-    }
+  validateResetToken: async (token: string): Promise<unknown> => {
+    const response = await apiClient.post("/auth/validate-reset-token", {
+      token,
+    });
+    return response.data;
   },
 };
 
@@ -224,7 +163,7 @@ export const tasksApi = {
   ): Promise<Task[]> => {
     const cacheKey = `tasks-getMyTasks-${skip}-${limit}-${search}-${status}`;
     return createDeduplicatedRequest(async () => {
-      const params: any = { skip, limit };
+      const params: Record<string, unknown> = { skip, limit };
       if (search) {
         params.search = search;
       }
@@ -502,7 +441,7 @@ export const usersApi = {
   ): Promise<User[]> => {
     const cacheKey = `users-searchUsers-${query}-${skip}-${limit}-${role}-${status}`;
     return createDeduplicatedRequest(async () => {
-      const params: any = { q: query, skip, limit };
+      const params: Record<string, unknown> = { q: query, skip, limit };
       if (role && role !== "all") {
         params.role = role;
       }
@@ -516,7 +455,7 @@ export const usersApi = {
   },
 
   // Get user settings
-  getSettings: async (): Promise<any> => {
+  getSettings: async (): Promise<unknown> => {
     const cacheKey = "users-getSettings";
     return createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get("/users/me/settings");
@@ -525,7 +464,7 @@ export const usersApi = {
   },
 
   // Update user settings
-  updateSettings: async (settingsData: any): Promise<any> => {
+  updateSettings: async (settingsData: unknown): Promise<unknown> => {
     const { data } = await apiClient.patch("/users/me/settings", settingsData);
     return data;
   },
@@ -537,7 +476,7 @@ export const usersApi = {
   },
 
   // Get user stats
-  getStats: async (): Promise<any> => {
+  getStats: async (): Promise<UserStats> => {
     const cacheKey = "users-getStats";
     return createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get("/users/stats");
@@ -650,7 +589,7 @@ export const notificationsApi = {
   getNotifications: async (skip = 0, limit = 50): Promise<Notification[]> => {
     const cacheKey = `notifications-getNotifications-${skip}-${limit}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get("/notifications", {
+      const { data } = await apiClient.get("/notifications/", {
         params: { skip, limit },
       });
       return data;
@@ -660,14 +599,10 @@ export const notificationsApi = {
   // Get unread count
   getUnreadCount: async (): Promise<number> => {
     const cacheKey = "notifications-getUnreadCount";
-    return createDeduplicatedRequest(
-      async () => {
-        const { data } = await apiClient.get("/notifications/unread-count");
-        return data;
-      },
-      cacheKey,
-      5000000,
-    ); // เพิ่มเวลาเป็น 5 นาที (300,000ms)
+    return createDeduplicatedRequest(async () => {
+      const { data } = await apiClient.get("/notifications/unread-count");
+      return data;
+    }, cacheKey);
   },
 
   // Mark as read
@@ -687,5 +622,109 @@ export const notificationsApi = {
   // Delete notification
   deleteNotification: async (notificationId: string): Promise<void> => {
     await apiClient.delete(`/notifications/${notificationId}`);
+  },
+};
+
+// ===========================================
+// Payment Endpoints
+// ===========================================
+
+export const paymentApi = {
+  // Get all plans
+  getPlans: async (): Promise<unknown> => {
+    const cacheKey = "payment-getPlans";
+    return createDeduplicatedRequest(async () => {
+      const { data } = await apiClient.get("/payment/plans");
+      return data;
+    }, cacheKey);
+  },
+
+  // Get payment methods
+  getPaymentMethods: async (): Promise<unknown> => {
+    const { data } = await apiClient.get("/payment/methods");
+    return data;
+  },
+
+  // Create setup intent
+  createSetupIntent: async (): Promise<unknown> => {
+    const { data } = await apiClient.post("/payment/setup-intent");
+    return data;
+  },
+
+  // Set default payment method
+  setDefaultPaymentMethod: async (paymentMethodId: string): Promise<void> => {
+    await apiClient.put(`/payment/methods/${paymentMethodId}/default`);
+  },
+
+  // Delete payment method
+  deletePaymentMethod: async (paymentMethodId: string): Promise<void> => {
+    await apiClient.delete(`/payment/methods/${paymentMethodId}`);
+  },
+
+  // Get subscription
+  getSubscription: async (): Promise<unknown> => {
+    const { data } = await apiClient.get("/payment/subscription");
+    return data;
+  },
+
+  // Create or update subscription
+  createSubscription: async (data: unknown): Promise<unknown> => {
+    const response = await apiClient.post("/payment/subscription", data);
+    return response.data;
+  },
+
+  // Cancel subscription
+  cancelSubscription: async (cancelImmediately = false): Promise<unknown> => {
+    const { data } = await apiClient.delete("/payment/subscription", {
+      params: { cancel_immediately: cancelImmediately },
+    });
+    return data;
+  },
+};
+
+// ===========================================
+// Favorites Endpoints
+// ===========================================
+
+export interface ToggleFavoriteResponse {
+  isFavorite: boolean;
+  projectId: string;
+  message: string;
+}
+
+export interface FavoriteIdsResponse {
+  projectIds: string[];
+}
+
+export const favoritesApi = {
+  // Get favorite project IDs
+  getFavoriteIds: async (): Promise<string[]> => {
+    const cacheKey = "favorites-getFavoriteIds";
+    return createDeduplicatedRequest(async () => {
+      const { data } = await apiClient.get<FavoriteIdsResponse>("/favorites");
+      return data.projectIds;
+    }, cacheKey);
+  },
+
+  // Toggle favorite status
+  toggleFavorite: async (projectId: string): Promise<ToggleFavoriteResponse> => {
+    const { data } = await apiClient.post<ToggleFavoriteResponse>(
+      "/favorites/toggle",
+      { projectId }
+    );
+    return data;
+  },
+
+  // Add to favorites
+  addFavorite: async (projectId: string): Promise<ToggleFavoriteResponse> => {
+    const { data } = await apiClient.post<ToggleFavoriteResponse>(
+      `/favorites/${projectId}`
+    );
+    return data;
+  },
+
+  // Remove from favorites
+  removeFavorite: async (projectId: string): Promise<void> => {
+    await apiClient.delete(`/favorites/${projectId}`);
   },
 };

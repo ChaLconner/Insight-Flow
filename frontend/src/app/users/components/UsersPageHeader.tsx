@@ -16,8 +16,8 @@ export function UsersPageHeader({ onInvite }: UsersPageHeaderProps) {
   return (
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Users</h1>
-        <p className="mt-1 text-zinc-400">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Users</h1>
+        <p className="mt-1 text-muted-foreground">
           Manage team members and their permissions.
         </p>
       </div>

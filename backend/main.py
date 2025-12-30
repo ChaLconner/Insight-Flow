@@ -1,75 +1,78 @@
-from fastapi import FastAPI, Request
-from sqlalchemy.exc import IntegrityError
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from routers import auth, users, projects, tasks, analytics, dashboard, notifications, files
+"""
+FastAPI Application Entry Point.
+Refactored for better maintainability - health endpoints and middleware moved to separate modules.
+"""
+
 import os
-from dotenv import load_dotenv
-from utils.logger import app_logger
-from middleware.cache import CacheMiddleware
-from database import init_database
 from contextlib import asynccontextmanager
-from services.scheduler import start_scheduler, shutdown_scheduler
 
-# Load environment variables at startup
-load_dotenv()
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
 
-# Log environment information using proper logger
-app_logger.info("Environment loaded in main.py")
+from config import get_settings
+from core.middleware_config import setup_all_middleware
+from database import init_database
+from exception_handlers import add_exception_handlers
+from rate_limiter import limiter, rate_limit_exceeded_handler
+from routers import (
+    analytics,
+    auth,
+    dashboard,
+    favorites,
+    files,
+    health,
+    notifications,
+    payment,
+    project_tasks,
+    projects,
+    tasks,
+    usage,
+    users,
+)
+from services.scheduler import shutdown_scheduler, start_scheduler
+from utils.logger import app_logger
 
-# Validate critical environment variables
-required_vars = [
-    "DATABASE_URL",
-    "SECRET_KEY",
-    "GOOGLE_CLIENT_ID",
-    "GOOGLE_CLIENT_SECRET"
-]
+settings = get_settings()
 
-missing_vars = [var for var in required_vars if not os.getenv(var)]
-
-if missing_vars:
-    error_msg = f"CRITICAL ERROR: Missing required environment variables: {', '.join(missing_vars)}"
-    app_logger.critical(error_msg)
-    raise RuntimeError(error_msg)
-    
-app_logger.info(f"SECRET_KEY exists: {'YES' if os.getenv('SECRET_KEY') else 'NO'}")
-app_logger.info(f"DATABASE_URL exists: {'YES' if os.getenv('DATABASE_URL') else 'NO'}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup and shutdown."""
     # Startup logic
-    app_logger.info("="*50)
+    app_logger.info("=" * 50)
     app_logger.info("FASTAPI SERVER STARTING UP (LIFESPAN)")
-    
+    app_logger.info(f"Environment: {settings.environment}")
+
     # Initialize database connection
     try:
-        init_database()
+        await init_database()
         app_logger.info("Database initialized successfully")
     except Exception as e:
         app_logger.warning(f"Database initialization failed: {e}")
         app_logger.info("Continuing with mock authentication...")
-        
+
     # Start background scheduler
     try:
         start_scheduler()
         app_logger.info("Background scheduler started")
     except Exception as e:
         app_logger.error(f"Failed to start scheduler: {e}")
-    
-    app_logger.info("="*50)
-    app_logger.info(f"Server should be accessible at: http://localhost:8000")
-    app_logger.info(f"Database URL exists: {'YES' if os.getenv('DATABASE_URL') else 'NO'}")
-    app_logger.info("="*50)
+
+    app_logger.info("=" * 50)
+    app_logger.info(f"Server accessible at: http://{settings.host}:{settings.port}")
+    app_logger.info("=" * 50)
 
     yield
-    
+
     # Shutdown logic
     shutdown_scheduler()
     app_logger.info("FASTAPI SERVER SHUTTING DOWN")
 
+
+# Create FastAPI application
 app = FastAPI(
-    title="Insight-Flow API",
+    title=settings.app_name,
     description="""
 ## Insight-Flow Project Management API
 
@@ -89,7 +92,7 @@ Use `/auth/login` to authenticate and `/auth/logout` to terminate sessions.
 ### Rate Limiting
 API requests are rate-limited. Please contact support for higher limits.
     """,
-    version="1.0.0",
+    version=settings.api_version,
     terms_of_service="https://example.com/terms/",
     contact={
         "name": "Insight-Flow Support",
@@ -132,202 +135,50 @@ API requests are rate-limited. Please contact support for higher limits.
             "name": "files",
             "description": "File upload and management",
         },
+        {
+            "name": "health",
+            "description": "Health checks and metrics for monitoring",
+        },
+        {
+            "name": "favorites",
+            "description": "User favorite projects management",
+        },
     ],
     redirect_slashes=True,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Mount static files
-# Ensure static directory exists
 if not os.path.exists("static"):
     os.makedirs("static")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Add startup event to log server binding information
-# Startup and shutdown events removed in favor of lifespan
+# Setup all middleware (CORS, security, rate limiting, etc.)
+setup_all_middleware(app)
 
-# Add CORS middleware with proper configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
+# Setup rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore
 
-# Custom middleware for CORS debugging removed for performance
+# Register exception handlers
+add_exception_handlers(app)
 
-# Trusted Host Middleware
-# Trusted Host Middleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
+# API Version prefix
+API_V1_PREFIX = "/api/v1"
 
-# Allow strictly configuring allowed hosts in production
-allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0,testserver").split(",")
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=allowed_hosts
-)
+# Include routers with API versioning
+app.include_router(projects.router, prefix=API_V1_PREFIX, tags=["projects"])
+app.include_router(tasks.router, prefix=f"{API_V1_PREFIX}/tasks", tags=["tasks"])
+app.include_router(analytics.router, prefix=f"{API_V1_PREFIX}/analytics", tags=["analytics"])
+app.include_router(users.router, prefix=API_V1_PREFIX, tags=["users"])
+app.include_router(auth.router, prefix=API_V1_PREFIX, tags=["auth"])
+app.include_router(dashboard.router, prefix=API_V1_PREFIX, tags=["dashboard"])
+app.include_router(notifications.router, prefix=API_V1_PREFIX)
+app.include_router(files.router, prefix=API_V1_PREFIX)
+app.include_router(project_tasks.router, prefix=API_V1_PREFIX, tags=["project tasks"])
+app.include_router(payment.router, prefix=API_V1_PREFIX, tags=["payment"])
+app.include_router(usage.router, prefix=API_V1_PREFIX, tags=["usage"])
+app.include_router(favorites.router, prefix=API_V1_PREFIX, tags=["favorites"])
 
-from fastapi.exceptions import RequestValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
-@app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    """
-    Standardize HTTP exceptions to match API response format.
-    """
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "success": False,
-            "message": str(exc.detail),
-            "code": exc.status_code
-        }
-    )
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """
-    Standardize validation errors.
-    """
-    # Get the first error message for the main message
-    error_msg = "Validation Error"
-    formatted_errors = []
-    
-    if exc.errors():
-        try:
-            # Try to get a clean error message
-            e = exc.errors()[0]
-            if "msg" in e:
-                error_msg = e["msg"]
-            if "loc" in e:
-                 error_msg += f" in {' -> '.join(str(l) for l in e['loc'])}"
-            
-            # Format errors to be JSON serializable
-            import json
-            for e in exc.errors():
-                # specific handling for 'ctx' which might contain exception objects
-                error_dict = e.copy()
-                if 'ctx' in error_dict:
-                    # exceptions are not serializable, convert to str
-                    if 'error' in error_dict['ctx']:
-                         error_dict['ctx']['error'] = str(error_dict['ctx']['error'])
-                if 'url' in error_dict:
-                    error_dict.pop('url') # URL objects might cause issues too
-                formatted_errors.append(error_dict)
-                
-        except Exception as e:
-            app_logger.error(f"Error formatting validation exception: {e}")
-            formatted_errors = [{"msg": str(exc)}]
-
-    return JSONResponse(
-        status_code=422,
-        content={
-            "success": False, 
-            "message": error_msg,
-            "errors": formatted_errors
-        }
-    )
-
-from utils.exceptions import AppError
-
-@app.exception_handler(AppError)
-async def app_error_handler(request: Request, exc: AppError):
-    """
-    Handle standardized AppErrors.
-    """
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "success": False,
-            "message": exc.message,
-            "code": exc.code,
-            "details": exc.details
-        }
-    )
-
-@app.exception_handler(ValueError)
-async def value_error_handler(request: Request, exc: ValueError):
-    app_logger.warning(f"ValueError: {exc}")
-    return JSONResponse(
-        status_code=400,
-        content={
-            "success": False,
-            "message": str(exc),
-            "code": "BAD_REQUEST"
-        }
-    )
-
-@app.exception_handler(IntegrityError)
-async def integrity_error_handler(request: Request, exc: IntegrityError):
-    app_logger.warning(f"IntegrityError: {exc}")
-    # Try to extract clearer message
-    msg = "Database constraint violation"
-    if hasattr(exc, 'orig') and str(exc.orig):
-        if 'unique constraint' in str(exc.orig).lower():
-             msg = "Duplicate entry detected"
-    
-    return JSONResponse(
-        status_code=409,
-        content={
-            "success": False,
-            "message": msg,
-            "detail": str(exc)
-        }
-    )
-
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    error_id = os.urandom(4).hex()
-    app_logger.error(f"Unhandled exception {error_id}: {exc}", exc_info=True)
-
-    return JSONResponse(
-        status_code=500,
-        content={
-            "success": False,
-            "message": "Internal Server Error",
-            "error_id": error_id,
-            "detail": str(exc) if os.getenv("ENVIRONMENT") == "development" else None
-        }
-    )
-
-from middleware.monitoring import PerformanceMiddleware
-from middleware.security import SecurityHeadersMiddleware
-from middleware.rate_limit import RateLimitMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(RateLimitMiddleware, calls=200, period=60) # 200 req/min
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(PerformanceMiddleware)
-app.add_middleware(CacheMiddleware, cache_timeout=60)
-
-# Include routers - order matters for overlapping routes!
-app.include_router(projects.router, tags=["projects"])
-app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
-app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
-app.include_router(users.router, tags=["users"])
-app.include_router(auth.router, tags=["auth"])
-app.include_router(dashboard.router, tags=["dashboard"])
-app.include_router(notifications.router)
-app.include_router(files.router)
-
-# Import and include project_tasks router (refactored from projects.py)
-from routers import project_tasks
-app.include_router(project_tasks.router, tags=["project tasks"])
-
-@app.get("/")
-def read_root():
-    return {"message": "Hello from FastAPI"}
-
-@app.get("/minimal-test")
-def minimal_test():
-    """Minimal test endpoint to check if FastAPI is responsive."""
-    return {"status": "success", "message": "Minimal test working"}
-
-@app.get("/test-auth")
-def test_auth():
-    """Test endpoint to check authentication."""
-    return {"message": "Auth test endpoint"}
+# Include health router (no prefix - these are root-level endpoints)
+app.include_router(health.router)

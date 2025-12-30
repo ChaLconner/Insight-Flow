@@ -236,13 +236,14 @@ class TestGoogleOAuth:
 class TestUserServiceGitHubAuth:
     """Test cases for UserService GitHub authentication methods."""
     
-    def test_create_or_update_github_user_new_user(self, db_session):
+    @pytest.mark.asyncio
+    async def test_create_or_update_github_user_new_user(self, async_session):
         """Test creating a new user via GitHub authentication."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
-        user = user_service.create_or_update_github_user(
+        user = await user_service.create_or_update_github_user(
             github_id="gh_12345678",
             email="githubuser@example.com",
             name="GitHub User",
@@ -256,9 +257,10 @@ class TestUserServiceGitHubAuth:
         assert user.avatar_url == "https://avatars.githubusercontent.com/u/12345678"
         assert user.is_active == True
 
-    def test_create_or_update_github_user_existing_by_github_id(self, db_session):
+    @pytest.mark.asyncio
+    async def test_create_or_update_github_user_existing_by_github_id(self, async_session):
         """Test updating an existing user found by GitHub ID."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         from models.user import User
         
         # Create existing user with GitHub ID
@@ -268,13 +270,13 @@ class TestUserServiceGitHubAuth:
             github_id="gh_existing_123",
             is_active=True
         )
-        db_session.add(existing_user)
-        db_session.commit()
+        async_session.add(existing_user)
+        await async_session.commit()
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
         # Update via GitHub auth
-        user = user_service.create_or_update_github_user(
+        user = await user_service.create_or_update_github_user(
             github_id="gh_existing_123",
             email="updated@example.com",
             name="Updated User",
@@ -286,9 +288,10 @@ class TestUserServiceGitHubAuth:
         assert user.name == "Updated User"
         assert user.avatar_url == "https://new-avatar.url"
 
-    def test_create_or_update_github_user_link_to_existing_email(self, db_session):
+    @pytest.mark.asyncio
+    async def test_create_or_update_github_user_link_to_existing_email(self, async_session):
         """Test linking GitHub account to existing user found by email."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         from models.user import User
         from utils.auth import get_password_hash
         
@@ -299,13 +302,13 @@ class TestUserServiceGitHubAuth:
             hashed_password=get_password_hash("Password123!"),
             is_active=True
         )
-        db_session.add(existing_user)
-        db_session.commit()
+        async_session.add(existing_user)
+        await async_session.commit()
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
         # Link GitHub account via same email
-        user = user_service.create_or_update_github_user(
+        user = await user_service.create_or_update_github_user(
             github_id="gh_new_456",
             email="emailuser@example.com",
             name="GitHub Name",
@@ -317,9 +320,10 @@ class TestUserServiceGitHubAuth:
         # Name should not be overwritten if user already has one
         assert user.name == "Email User"
 
-    def test_get_user_by_github_id(self, db_session):
+    @pytest.mark.asyncio
+    async def test_get_user_by_github_id(self, async_session):
         """Test getting user by GitHub ID."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         from models.user import User
         
         # Create user with GitHub ID
@@ -329,31 +333,32 @@ class TestUserServiceGitHubAuth:
             github_id="gh_find_me_123",
             is_active=True
         )
-        db_session.add(github_user)
-        db_session.commit()
+        async_session.add(github_user)
+        await async_session.commit()
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
         # Find by GitHub ID
-        found_user = user_service.get_user_by_github_id("gh_find_me_123")
+        found_user = await user_service.get_user_by_github_id("gh_find_me_123")
         assert found_user is not None
         assert found_user.id == github_user.id
         
         # Not found
-        not_found = user_service.get_user_by_github_id("nonexistent")
+        not_found = await user_service.get_user_by_github_id("nonexistent")
         assert not_found is None
 
 
 class TestUserServiceGoogleAuth:
     """Test cases for UserService Google authentication methods."""
     
-    def test_create_or_update_google_user_new_user(self, db_session):
+    @pytest.mark.asyncio
+    async def test_create_or_update_google_user_new_user(self, async_session):
         """Test creating a new user via Google authentication."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
-        user = user_service.create_or_update_google_user(
+        user = await user_service.create_or_update_google_user(
             google_id="google_12345678",
             email="googleuser@example.com",
             name="Google User",
@@ -366,9 +371,10 @@ class TestUserServiceGoogleAuth:
         assert user.google_id == "google_12345678"
         assert user.avatar_url == "https://lh3.googleusercontent.com/a/test"
 
-    def test_create_or_update_google_user_existing_by_google_id(self, db_session):
+    @pytest.mark.asyncio
+    async def test_create_or_update_google_user_existing_by_google_id(self, async_session):
         """Test updating an existing user found by Google ID."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         from models.user import User
         
         # Create existing user with Google ID
@@ -378,13 +384,13 @@ class TestUserServiceGoogleAuth:
             google_id="google_existing_123",
             is_active=True
         )
-        db_session.add(existing_user)
-        db_session.commit()
+        async_session.add(existing_user)
+        await async_session.commit()
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
         # Update via Google auth
-        user = user_service.create_or_update_google_user(
+        user = await user_service.create_or_update_google_user(
             google_id="google_existing_123",
             email="updated.google@example.com",
             name="Updated Google User",
@@ -395,9 +401,10 @@ class TestUserServiceGoogleAuth:
         assert user.email == "updated.google@example.com"
         assert user.name == "Updated Google User"
 
-    def test_get_user_by_google_id(self, db_session):
+    @pytest.mark.asyncio
+    async def test_get_user_by_google_id(self, async_session):
         """Test getting user by Google ID."""
-        from services.user_service import UserService
+        from services.async_user_service import AsyncUserService
         from models.user import User
         
         # Create user with Google ID
@@ -407,18 +414,18 @@ class TestUserServiceGoogleAuth:
             google_id="google_find_me_456",
             is_active=True
         )
-        db_session.add(google_user)
-        db_session.commit()
+        async_session.add(google_user)
+        await async_session.commit()
         
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_session)
         
         # Find by Google ID
-        found_user = user_service.get_user_by_google_id("google_find_me_456")
+        found_user = await user_service.get_user_by_google_id("google_find_me_456")
         assert found_user is not None
         assert found_user.id == google_user.id
         
         # Not found
-        not_found = user_service.get_user_by_google_id("nonexistent")
+        not_found = await user_service.get_user_by_google_id("nonexistent")
         assert not_found is None
 
 
@@ -430,7 +437,7 @@ class TestGitHubAuthEndpoint:
         # Patch at the routers.auth module where it's imported
         with patch('routers.auth.is_github_oauth_configured', return_value=False):
             
-            response = client.post("/auth/github", json={"code": "test_code"})
+            response = client.post("/api/v1/auth/github", json={"code": "test_code"})
             
             # Server should return 500 when OAuth is not configured
             assert response.status_code == 500
@@ -442,9 +449,9 @@ class TestGitHubAuthEndpoint:
     def test_github_login_code_exchange_failed(self, client):
         """Test GitHub login when code exchange fails."""
         with patch('routers.auth.is_github_oauth_configured', return_value=True), \
-             patch('routers.auth.exchange_code_for_token', return_value=None):
+             patch('routers.auth.async_exchange_code_for_token', return_value=None):
             
-            response = client.post("/auth/github", json={"code": "invalid_code"})
+            response = client.post("/api/v1/auth/github", json={"code": "invalid_code"})
             
             # Should return 401 when authentication fails
             assert response.status_code == 401
@@ -455,25 +462,25 @@ class TestGitHubAuthEndpoint:
     def test_github_login_user_info_failed(self, client):
         """Test GitHub login when getting user info fails."""
         with patch('routers.auth.is_github_oauth_configured', return_value=True), \
-             patch('routers.auth.exchange_code_for_token', return_value="valid_access_token"), \
-             patch('routers.auth.get_github_user_info', return_value=None):
+             patch('routers.auth.async_exchange_code_for_token', return_value="valid_access_token"), \
+             patch('routers.auth.async_get_github_user_info', return_value=None):
             
-            response = client.post("/auth/github", json={"code": "valid_code"})
+            response = client.post("/api/v1/auth/github", json={"code": "valid_code"})
             
             assert response.status_code == 401
 
     def test_github_login_success(self, client):
         """Test successful GitHub login."""
         with patch('routers.auth.is_github_oauth_configured', return_value=True), \
-             patch('routers.auth.exchange_code_for_token', return_value="valid_access_token"), \
-             patch('routers.auth.get_github_user_info', return_value={
+             patch('routers.auth.async_exchange_code_for_token', return_value="valid_access_token"), \
+             patch('routers.auth.async_get_github_user_info', return_value={
                  "id": "gh_12345678",
                  "email": "github.success@example.com",
                  "name": "GitHub Success User",
                  "picture": "https://avatars.githubusercontent.com/u/12345678"
              }):
             
-            response = client.post("/auth/github", json={"code": "valid_code"})
+            response = client.post("/api/v1/auth/github", json={"code": "valid_code"})
             
             assert response.status_code == 200
             data = response.json()
@@ -488,14 +495,14 @@ class TestGitHubAuthEndpoint:
     def test_github_login_with_access_token(self, client):
         """Test GitHub login with direct access token."""
         with patch('routers.auth.is_github_oauth_configured', return_value=True), \
-             patch('routers.auth.get_github_user_info', return_value={
+             patch('routers.auth.async_get_github_user_info', return_value={
                  "id": "gh_direct_token",
                  "email": "direct.token@example.com",
                  "name": "Direct Token User",
                  "picture": "https://avatars.githubusercontent.com/u/99999999"
              }):
             
-            response = client.post("/auth/github", json={"access_token": "direct_access_token"})
+            response = client.post("/api/v1/auth/github", json={"access_token": "direct_access_token"})
             
             assert response.status_code == 200
             data = response.json()
@@ -510,7 +517,7 @@ class TestGoogleAuthEndpoint:
         # Patch at the routers.auth module where it's imported
         with patch('routers.auth.is_google_oauth_configured', return_value=False):
             
-            response = client.post("/auth/google", json={"id_token": "test_token"})
+            response = client.post("/api/v1/auth/google", json={"id_token": "test_token"})
             
             # Server should return 500 when OAuth is not configured
             assert response.status_code == 500
@@ -522,23 +529,23 @@ class TestGoogleAuthEndpoint:
     def test_google_login_invalid_token(self, client):
         """Test Google login with invalid token."""
         with patch('routers.auth.is_google_oauth_configured', return_value=True), \
-             patch('routers.auth.verify_google_id_token', return_value=None):
+             patch('routers.auth.async_verify_google_id_token', return_value=None):
             
-            response = client.post("/auth/google", json={"id_token": "invalid_token"})
+            response = client.post("/api/v1/auth/google", json={"id_token": "invalid_token"})
             
             assert response.status_code == 401
 
     def test_google_login_email_not_verified(self, client):
         """Test Google login when email is not verified."""
         with patch('routers.auth.is_google_oauth_configured', return_value=True), \
-             patch('routers.auth.verify_google_id_token', return_value={
+             patch('routers.auth.async_verify_google_id_token', return_value={
                  "id": "google_123",
                  "email": "unverified@example.com",
                  "name": "Unverified User",
                  "email_verified": False
              }):
             
-            response = client.post("/auth/google", json={"id_token": "valid_token"})
+            response = client.post("/api/v1/auth/google", json={"id_token": "valid_token"})
             
             # Should return 400 when email is not verified
             assert response.status_code == 400
@@ -550,7 +557,7 @@ class TestGoogleAuthEndpoint:
     def test_google_login_success(self, client):
         """Test successful Google login."""
         with patch('routers.auth.is_google_oauth_configured', return_value=True), \
-             patch('routers.auth.verify_google_id_token', return_value={
+             patch('routers.auth.async_verify_google_id_token', return_value={
                  "id": "google_success_123",
                  "email": "google.success@example.com",
                  "name": "Google Success User",
@@ -558,7 +565,7 @@ class TestGoogleAuthEndpoint:
                  "email_verified": True
              }):
             
-            response = client.post("/auth/google", json={"id_token": "valid_token"})
+            response = client.post("/api/v1/auth/google", json={"id_token": "valid_token"})
             
             assert response.status_code == 200
             data = response.json()
@@ -601,11 +608,12 @@ class TestGithubAuthSchema:
 class TestIntegration:
     """Integration tests for OAuth flows."""
     
-    def test_github_oauth_full_flow(self, client):
+    def test_github_oauth_full_flow(self, unauthenticated_client):
         """Test complete GitHub OAuth flow from code to authenticated session."""
+        client = unauthenticated_client
         with patch('routers.auth.is_github_oauth_configured', return_value=True), \
-             patch('routers.auth.exchange_code_for_token', return_value="access_token_from_code"), \
-             patch('routers.auth.get_github_user_info', return_value={
+             patch('routers.auth.async_exchange_code_for_token', return_value="access_token_from_code"), \
+             patch('routers.auth.async_get_github_user_info', return_value={
                  "id": "integration_gh_user",
                  "email": "integration@github.example.com",
                  "name": "Integration Test User",
@@ -613,19 +621,20 @@ class TestIntegration:
              }):
             
             # Step 1: Exchange code for tokens
-            login_response = client.post("/auth/github", json={"code": "integration_test_code"})
+            login_response = client.post("/api/v1/auth/github", json={"code": "integration_test_code"})
             assert login_response.status_code == 200
             
             # Step 2: Access protected endpoint with cookies
-            me_response = client.get("/auth/me")
+            me_response = client.get("/api/v1/auth/me")
             assert me_response.status_code == 200
             user_data = me_response.json()
             assert user_data["email"] == "integration@github.example.com"
 
-    def test_google_oauth_full_flow(self, client):
+    def test_google_oauth_full_flow(self, unauthenticated_client):
         """Test complete Google OAuth flow from token to authenticated session."""
+        client = unauthenticated_client
         with patch('routers.auth.is_google_oauth_configured', return_value=True), \
-             patch('routers.auth.verify_google_id_token', return_value={
+             patch('routers.auth.async_verify_google_id_token', return_value={
                  "id": "integration_google_user",
                  "email": "integration@google.example.com",
                  "name": "Google Integration User",
@@ -634,11 +643,11 @@ class TestIntegration:
              }):
             
             # Step 1: Verify Google token and get session
-            login_response = client.post("/auth/google", json={"id_token": "integration_google_token"})
+            login_response = client.post("/api/v1/auth/google", json={"id_token": "integration_google_token"})
             assert login_response.status_code == 200
             
             # Step 2: Access protected endpoint with cookies
-            me_response = client.get("/auth/me")
+            me_response = client.get("/api/v1/auth/me")
             assert me_response.status_code == 200
             user_data = me_response.json()
             assert user_data["email"] == "integration@google.example.com"

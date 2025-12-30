@@ -9,22 +9,22 @@ import { UserRole } from "@/types";
 const ROLE_CONFIG = {
   [UserRole.ADMIN]: {
     label: "Admin",
-    color: "bg-purple-500/20 text-purple-400",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-400",
     icon: Crown,
   },
   [UserRole.MANAGER]: {
     label: "Manager",
-    color: "bg-blue-500/20 text-blue-400",
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
     icon: Shield,
   },
   [UserRole.MEMBER]: {
     label: "Member",
-    color: "bg-emerald-500/20 text-emerald-400",
+    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
     icon: User,
   },
   [UserRole.VIEWER]: {
     label: "Viewer",
-    color: "bg-zinc-500/20 text-zinc-400",
+    color: "bg-muted text-muted-foreground",
     icon: User,
   },
 } as const;
@@ -38,7 +38,7 @@ export function RoleBadge({ role }: RoleBadgeProps) {
 
   if (!config) {
     return (
-      <Badge className="bg-zinc-500/20 text-zinc-400">
+      <Badge className="bg-muted text-muted-foreground">
         <User className="h-3 w-3 mr-1" />
         {role || "Unknown"}
       </Badge>
@@ -62,7 +62,7 @@ interface StatusBadgeProps {
 export function StatusBadge({ user }: StatusBadgeProps) {
   if (!user.isActive) {
     return (
-      <Badge className="bg-red-500/20 text-red-400">
+      <Badge className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">
         <UserX className="h-3 w-3 mr-1" />
         Inactive
       </Badge>
@@ -71,7 +71,7 @@ export function StatusBadge({ user }: StatusBadgeProps) {
 
   if (!user.emailVerified) {
     return (
-      <Badge className="bg-amber-500/20 text-amber-400">
+      <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
         <MailIcon className="h-3 w-3 mr-1" />
         Unverified
       </Badge>
@@ -79,7 +79,7 @@ export function StatusBadge({ user }: StatusBadgeProps) {
   }
 
   return (
-    <Badge className="bg-emerald-500/20 text-emerald-400">
+    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
       <UserCheck className="h-3 w-3 mr-1" />
       Active
     </Badge>

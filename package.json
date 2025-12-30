@@ -4,8 +4,9 @@
   "description": "A modern project management platform",
   "main": "index.js",
   "scripts": {
-    "dev": "cd frontend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && uvicorn main:app --reload",
+    "dev": "concurrently --names \"BACKEND,FRONTEND\" --colors \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "cd frontend && npm run build",
     "start": "cd backend && python start.py",
     "lint": "cd frontend && npm run lint",
@@ -16,5 +17,8 @@
     "test:backend": "cd backend && pytest",
     "type-check": "cd frontend && npm run type-check",
     "check:all": "npm run type-check && npm run lint:check && npm run test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

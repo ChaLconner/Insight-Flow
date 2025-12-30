@@ -37,7 +37,8 @@ export default async function ProjectDetailsPage({ params }: PageProps) {
         <ProjectDetailsClient project={project} />
       </DashboardLayout>
     );
-  } catch (_error) {
+  } catch (error) {
+    console.error("Error fetching project details:", error);
     notFound();
   }
 }

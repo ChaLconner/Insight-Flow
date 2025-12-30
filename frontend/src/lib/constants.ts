@@ -5,7 +5,7 @@
 // API Configuration
 export const API_CONFIG = {
   BASE_URL: "/api", // Force proxy usage
-  WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000",
+  WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? "ws://127.0.0.1:8000",
   TIMEOUT: 30000,
   RETRY_ATTEMPTS: 3,
   RETRY_DELAY: 1000,

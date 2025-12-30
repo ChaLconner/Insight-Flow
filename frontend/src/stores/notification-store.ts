@@ -6,6 +6,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Notification } from "@/types";
 
+// Re-export selectors from separate file
+export { notificationSelectors } from "./notification-selectors";
+// Note: notificationActions is exported separately to avoid circular dependency
+
 // Use the type from types/index.ts directly to ensure consistency
 type CustomNotification = Notification;
 
@@ -27,20 +31,15 @@ interface NotificationState {
     dateRange?: { start?: Date; end?: Date };
   };
 
-  // Actions
-  addNotification: (
-    notification: Omit<CustomNotification, "id" | "createdAt" | "updatedAt">,
-  ) => void;
-  setNotifications: (notifications: CustomNotification[]) => void; // New action
-  setUnreadCount: (count: number) => void; // New action
+  // Core Actions
+  addNotification: (notification: Omit<CustomNotification, "id" | "createdAt" | "updatedAt">) => void;
+  setNotifications: (notifications: CustomNotification[]) => void;
+  setUnreadCount: (count: number) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   removeNotification: (id: string) => void;
   clearAllNotifications: () => void;
-  updateNotification: (
-    id: string,
-    updates: Partial<CustomNotification>,
-  ) => void;
+  updateNotification: (id: string, updates: Partial<CustomNotification>) => void;
 
   // Settings Actions
   setPermissionGranted: (granted: boolean) => void;
@@ -66,14 +65,10 @@ interface NotificationState {
   getUnreadNotifications: () => CustomNotification[];
   getRecentNotifications: (limit?: number) => CustomNotification[];
   hasNotification: (id: string) => boolean;
-
-  // Additional CRUD actions
   clearReadNotifications: () => void;
+  clearNotifications: () => void;
 
-  // Aliases for compatibility
-  clearNotifications: () => void; // Alias for clearAllNotifications
-
-  // Private methods (must be implemented)
+  // Private methods
   showBrowserNotification: (notification: CustomNotification) => void;
   playNotificationSound: () => void;
 }
@@ -100,38 +95,28 @@ export const useNotificationStore = create<NotificationState>()(
 
       // Core Actions
       addNotification: (notificationData) => {
-        const id = `notification-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const id = `notification-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
         const now = new Date().toISOString();
 
-        // Cast to any to bypass strict type checks for the Omit
         const notification: CustomNotification = {
           ...notificationData,
           id,
           createdAt: now,
           updatedAt: now,
-        } as CustomNotification;
+        };
 
         set((state) => ({
-          notifications: [notification, ...state.notifications].slice(0, 100), // Keep only last 100
-          unreadCount: notificationData.read
-            ? state.unreadCount
-            : state.unreadCount + 1,
+          notifications: [notification, ...state.notifications].slice(0, 100),
+          unreadCount: notificationData.read ? state.unreadCount : state.unreadCount + 1,
         }));
 
-        // Show browser notification if permission granted
         get().showBrowserNotification(notification);
 
-        // Play sound if enabled
         if (get().soundEnabled) {
           get().playNotificationSound();
         }
 
-        // Vibrate if enabled and on mobile
-        if (
-          get().vibrationEnabled &&
-          typeof navigator !== "undefined" &&
-          navigator.vibrate
-        ) {
+        if (get().vibrationEnabled && typeof navigator !== "undefined" && navigator.vibrate) {
           navigator.vibrate([200, 100, 200]);
         }
       },
@@ -147,15 +132,11 @@ export const useNotificationStore = create<NotificationState>()(
       markAsRead: (id) => {
         set((state) => {
           const notification = state.notifications.find((n) => n.id === id);
-          if (!notification || notification.read) {
-            return state;
-          }
+          if (!notification || notification.read) {return state;}
 
           return {
             notifications: state.notifications.map((n) =>
-              n.id === id
-                ? { ...n, read: true, updatedAt: new Date().toISOString() }
-                : n,
+              n.id === id ? { ...n, read: true, updatedAt: new Date().toISOString() } : n,
             ),
             unreadCount: Math.max(0, state.unreadCount - 1),
           };
@@ -180,61 +161,36 @@ export const useNotificationStore = create<NotificationState>()(
 
           return {
             notifications: state.notifications.filter((n) => n.id !== id),
-            unreadCount: wasUnread
-              ? Math.max(0, state.unreadCount - 1)
-              : state.unreadCount,
+            unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
           };
         });
       },
 
       clearAllNotifications: () => {
-        set({
-          notifications: [],
-          unreadCount: 0,
-        });
+        set({ notifications: [], unreadCount: 0 });
       },
 
       updateNotification: (id, updates) => {
         set((state) => ({
           notifications: state.notifications.map((n) =>
-            n.id === id
-              ? { ...n, ...updates, updatedAt: new Date().toISOString() }
-              : n,
+            n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n,
           ),
         }));
       },
 
       // Settings Actions
-      setPermissionGranted: (granted) => {
-        set({ isPermissionGranted: granted });
-      },
-
-      setPushEnabled: (enabled) => {
-        set({ pushEnabled: enabled });
-      },
-
-      setSoundEnabled: (enabled) => {
-        set({ soundEnabled: enabled });
-      },
-
-      setVibrationEnabled: (enabled) => {
-        set({ vibrationEnabled: enabled });
-      },
+      setPermissionGranted: (granted) => set({ isPermissionGranted: granted }),
+      setPushEnabled: (enabled) => set({ pushEnabled: enabled }),
+      setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
+      setVibrationEnabled: (enabled) => set({ vibrationEnabled: enabled }),
 
       // Loading and Connection
-      setLoading: (loading) => {
-        set({ isLoading: loading });
-      },
-
-      setConnectionStatus: (connected) => {
-        set({ isConnected: connected });
-      },
+      setLoading: (loading) => set({ isLoading: loading }),
+      setConnectionStatus: (connected) => set({ isConnected: connected }),
 
       // Filter Actions
       updateFilters: (newFilters) => {
-        set((state) => ({
-          filters: { ...state.filters, ...newFilters },
-        }));
+        set((state) => ({ filters: { ...state.filters, ...newFilters } }));
       },
 
       resetFilters: () => {
@@ -250,56 +206,28 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       // Real-time Actions
-      connect: () => {
-        set({ isConnected: true });
-        // In real implementation, this would establish WebSocket connection
-      },
-
-      disconnect: () => {
-        set({ isConnected: false });
-        // In real implementation, this would close WebSocket connection
-      },
-
+      connect: () => set({ isConnected: true }),
+      disconnect: () => set({ isConnected: false }),
       reconnect: () => {
         get().disconnect();
         setTimeout(() => get().connect(), 1000);
       },
 
       // Utility Actions
-      getNotificationsByType: (type) => {
-        return get().notifications.filter((n) => n.type === type);
-      },
-
-      getUnreadNotifications: () => {
-        return get().notifications.filter((n) => !n.read);
-      },
-
-      getRecentNotifications: (limit = 10) => {
-        return get().notifications.slice(0, limit);
-      },
-
-      hasNotification: (id) => {
-        return get().notifications.some((n) => n.id === id);
-      },
-
-      // Additional CRUD actions
+      getNotificationsByType: (type) => get().notifications.filter((n) => n.type === type),
+      getUnreadNotifications: () => get().notifications.filter((n) => !n.read),
+      getRecentNotifications: (limit = 10) => get().notifications.slice(0, limit),
+      hasNotification: (id) => get().notifications.some((n) => n.id === id),
       clearReadNotifications: () => {
         set((state) => ({
           notifications: state.notifications.filter((n) => !n.read),
-          unreadCount: state.unreadCount, // Keep unread count unchanged
         }));
       },
-
-      // Aliases for compatibility
-      clearNotifications: () => {
-        get().clearAllNotifications();
-      },
+      clearNotifications: () => get().clearAllNotifications(),
 
       // Private methods
       showBrowserNotification: (notification: CustomNotification) => {
-        if (!get().isPermissionGranted || !get().pushEnabled) {
-          return;
-        }
+        if (!get().isPermissionGranted || !get().pushEnabled) {return;}
 
         if (typeof window !== "undefined" && "Notification" in window) {
           const browserNotification = new Notification(notification.title, {
@@ -311,25 +239,16 @@ export const useNotificationStore = create<NotificationState>()(
           });
 
           browserNotification.onclick = () => {
-            // Focus window and handle notification click
             window.focus();
-
             if (notification.actionUrl) {
               window.location.href = notification.actionUrl;
             }
-
-            // Mark as read on click
             get().markAsRead(notification.id);
-
-            // Close notification
             browserNotification.close();
           };
 
-          // Auto-close after 5 seconds unless urgent
           if (notification.priority !== "urgent") {
-            setTimeout(() => {
-              browserNotification.close();
-            }, 5000);
+            setTimeout(() => browserNotification.close(), 5000);
           }
         }
       },
@@ -351,7 +270,7 @@ export const useNotificationStore = create<NotificationState>()(
     {
       name: "insight-flow-notifications",
       partialize: (state) => ({
-        notifications: state.notifications.slice(0, 50), // Persist only last 50
+        notifications: state.notifications.slice(0, 50),
         soundEnabled: state.soundEnabled,
         vibrationEnabled: state.vibrationEnabled,
         pushEnabled: state.pushEnabled,
@@ -359,224 +278,3 @@ export const useNotificationStore = create<NotificationState>()(
     },
   ),
 );
-
-// ===========================================
-// Notification Store Selectors
-// ===========================================
-
-export const notificationSelectors = {
-  // Core selectors
-  getNotifications: (state: NotificationState) => state.notifications,
-  getAllNotifications: (state: NotificationState) => state.notifications, // Alias
-  getUnreadCount: (state: NotificationState) => state.unreadCount,
-
-  // Compatibility selectors
-  isLoading: (state: NotificationState) => state.isLoading,
-  isConnected: (state: NotificationState) => state.isConnected,
-  getFilters: (state: NotificationState) => state.filters,
-
-  // Filtered views
-  getUnreadNotifications: (state: NotificationState) =>
-    state.notifications.filter((n) => !n.read),
-  getReadNotifications: (state: NotificationState) =>
-    state.notifications.filter((n) => n.read),
-  getFilteredNotifications: (state: NotificationState) => {
-    // Apply current filters to notifications
-    const { filters } = state;
-    return state.notifications.filter((notification) => {
-      if (filters.type !== "all" && notification.type !== filters.type) {
-        return false;
-      }
-      if (
-        filters.priority !== "all" &&
-        notification.priority !== filters.priority
-      ) {
-        return false;
-      }
-      if (filters.readStatus === "read" && notification.read) {
-        return false;
-      }
-      if (filters.readStatus === "unread" && !notification.read) {
-        return false;
-      }
-      if (
-        filters.search &&
-        !notification.message
-          .toLowerCase()
-          .includes(filters.search.toLowerCase())
-      ) {
-        return false;
-      }
-      if (filters.dateRange) {
-        const notificationDate = new Date(notification.createdAt);
-        if (
-          filters.dateRange.start &&
-          notificationDate < filters.dateRange.start
-        ) {
-          return false;
-        }
-        if (filters.dateRange.end && notificationDate > filters.dateRange.end) {
-          return false;
-        }
-      }
-      return true;
-    });
-  },
-
-  // Grouped views
-  getNotificationsByPriority: (state: NotificationState) => {
-    const grouped = {} as Record<string, CustomNotification[]>;
-    state.notifications.forEach((notification) => {
-      if (!grouped[notification.priority]) {
-        grouped[notification.priority] = [];
-      }
-      grouped[notification.priority].push(notification);
-    });
-    return grouped;
-  },
-  getNotificationsByType: (state: NotificationState) => {
-    const grouped = {} as Record<string, CustomNotification[]>;
-    state.notifications.forEach((notification) => {
-      if (!grouped[notification.type]) {
-        grouped[notification.type] = [];
-      }
-      grouped[notification.type].push(notification);
-    });
-    return grouped;
-  },
-
-  // Latest notifications
-  getLatestNotifications:
-    (state: NotificationState) =>
-    (limit = 10) =>
-      state.notifications.slice(0, limit) as CustomNotification[],
-
-  // Settings
-  getSettings: (state: NotificationState) => ({
-    isPermissionGranted: state.isPermissionGranted,
-    pushEnabled: state.pushEnabled,
-    soundEnabled: state.soundEnabled,
-    vibrationEnabled: state.vibrationEnabled,
-  }),
-
-  // Utility selectors
-  hasUnread: (state: NotificationState) => state.unreadCount > 0,
-  getUnread: (state: NotificationState) =>
-    state.notifications.filter((n) => !n.read) as CustomNotification[], // Alias
-  getRecent: (state: NotificationState) => {
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return state.notifications.filter(
-      (n) => new Date(n.createdAt) > twentyFourHoursAgo,
-    );
-  },
-  getByType: (state: NotificationState) => (type: string) =>
-    state.notifications.filter((n) => n.type === type),
-  getHighPriority: (state: NotificationState) =>
-    state.notifications.filter(
-      (n) => n.priority === "urgent" || n.priority === "high",
-    ),
-} as const;
-
-// ===========================================
-// Notification Store Actions
-// ===========================================
-
-export const notificationActions = {
-  // Request notification permission
-  requestPermission: async (): Promise<boolean> => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      return false;
-    }
-
-    try {
-      const permission = await Notification.requestPermission();
-      const granted = permission === "granted";
-
-      useNotificationStore.getState().setPermissionGranted(granted);
-      return granted;
-    } catch (error) {
-      console.error("Failed to request notification permission:", error);
-      return false;
-    }
-  },
-
-  // Show test notification
-  showTestNotification: () => {
-    const { addNotification } = useNotificationStore.getState();
-
-    addNotification({
-      userId: "test",
-      type: "system", // Cast to any if needed, or ensure 'system' is in NotificationType enum
-      title: "Test Notification",
-      message: "This is a test notification from Insight Flow",
-      data: { test: true },
-      read: false,
-      priority: "medium", // Cast if needed
-    } as any);
-  },
-
-  // Handle notification click
-  handleNotificationClick: (notification: CustomNotification) => {
-    if (notification.actionUrl) {
-      window.location.href = notification.actionUrl;
-    }
-
-    // Mark as read
-    useNotificationStore.getState().markAsRead(notification.id);
-  },
-
-  // Filter notifications
-  filterNotifications: (filters: {
-    type?: string;
-    priority?: string;
-    read?: boolean;
-    dateRange?: { start: Date; end: Date };
-  }) => {
-    const { notifications } = useNotificationStore.getState();
-
-    return notifications.filter((notification) => {
-      if (filters.type && notification.type !== filters.type) {
-        return false;
-      }
-      if (filters.priority && notification.priority !== filters.priority) {
-        return false;
-      }
-      if (filters.read !== undefined && notification.read !== filters.read) {
-        return false;
-      }
-      if (filters.dateRange) {
-        const notificationDate = new Date(notification.createdAt);
-        if (
-          notificationDate < filters.dateRange.start ||
-          notificationDate > filters.dateRange.end
-        ) {
-          return false;
-        }
-      }
-      return true;
-    });
-  },
-
-  // Bulk operations
-  markMultipleAsRead: (ids: string[]) => {
-    const { markAsRead } = useNotificationStore.getState();
-    ids.forEach((id) => markAsRead(id));
-  },
-
-  removeMultiple: (ids: string[]) => {
-    const { removeNotification } = useNotificationStore.getState();
-    ids.forEach((id) => removeNotification(id));
-  },
-};
-
-// ===========================================
-// Auto-cleanup old notifications
-// ===========================================
-
-// ===========================================
-// Auto-cleanup old notifications
-// ===========================================
-
-// Note: Cleanup logic should be handled by a component hook (e.g., in a high-level layout)
-// rather than a global side effect in the module to avoid issues with bfcache and SSR.
-// See use-notifications.ts for polling/cleanup logic.

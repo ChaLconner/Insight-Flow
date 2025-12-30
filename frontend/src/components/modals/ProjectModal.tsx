@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useId } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ export function ProjectModal({
   mode,
   onSubmit,
 }: ProjectModalProps) {
+  const id = useId();
   // No longer fetching all users on mount
 
   // Fetch users when component mounts
@@ -112,25 +113,7 @@ export function ProjectModal({
       // We need to map it back to User type.
       // Based on ProjectsPage, member has a .user property with full user details.
       const members = project.members || [];
-      const users: User[] = members.map((m) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const member = m as any;
-        return (
-          member.user ?? {
-            id: member.userId,
-            firstName: member.name?.split(" ")[0] ?? "Unknown",
-            lastName: member.name?.split(" ").slice(1).join(" ") ?? "User",
-            email: member.email ?? "",
-            username: "unknown",
-            role: "user",
-            avatar: member.avatar,
-            isActive: true,
-            emailVerified: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-        );
-      });
+      const users: User[] = members.map((m) => m.user);
       setSelectedUsers(users);
     } else if (mode === "create") {
       // Reset form for create mode
@@ -192,12 +175,8 @@ export function ProjectModal({
               settings: formData.settings,
             };
 
-      await onSubmit(submitData);
 
-      const action = mode === "create" ? "created" : "updated";
-      toast.success(`Project ${action} successfully`, {
-        description: `Project "${formData.name}" has been ${action}.`,
-      });
+      await onSubmit(submitData);
 
       onClose();
     } catch (error) {
@@ -244,16 +223,16 @@ export function ProjectModal({
       />
 
       {/* Modal */}
-      <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-2xl">
+      <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto border-border bg-popover/95 backdrop-blur-xl shadow-2xl">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
-          <CardTitle className="text-xl font-semibold text-white">
+          <CardTitle className="text-xl font-semibold text-foreground">
             {mode === "create" ? "Create New Project" : "Edit Project"}
           </CardTitle>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-8 w-8 p-0 text-zinc-400 hover:text-white"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -264,15 +243,17 @@ export function ProjectModal({
             {/* Basic Information */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-zinc-300">
+                <Label htmlFor={`${id}-name`} className="text-foreground">
                   Project Name *
                 </Label>
                 <Input
-                  id="name"
+                  id={`${id}-name`}
+                  name="name"
+                  autoComplete="off"
                   value={formData.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   placeholder="Enter project name"
-                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                  className={`bg-background border-border text-foreground placeholder:text-muted-foreground ${
                     errors.name ? "border-red-500" : ""
                   }`}
                   disabled={isSubmitting}
@@ -283,25 +264,27 @@ export function ProjectModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-zinc-300">
+                <Label htmlFor={`${id}-description`} className="text-foreground">
                   Description
                 </Label>
                 <textarea
-                  id="description"
+                  id={`${id}-description`}
+                  name="description"
+                  autoComplete="off"
                   rows={3}
                   value={formData.description}
                   onChange={(e) =>
                     handleInputChange("description", e.target.value)
                   }
                   placeholder="Describe your project..."
-                  className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder:text-zinc-400"
+                  className="w-full rounded-lg bg-background border border-border px-3 py-2 text-foreground placeholder:text-muted-foreground"
                   disabled={isSubmitting}
                   style={{ resize: "vertical" }}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-zinc-300">Project Color</Label>
+                <Label className="text-foreground">Project Color</Label>
                 <div className="flex gap-2 flex-wrap">
                   {projectColors.map((color) => (
                     <button
@@ -323,7 +306,7 @@ export function ProjectModal({
 
             {/* Team Members */}
             <div className="space-y-3">
-              <Label className="text-zinc-300 flex items-center gap-2">
+              <Label htmlFor={`${id}-add-team-member`} className="text-foreground flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Team Members
               </Label>
@@ -331,6 +314,9 @@ export function ProjectModal({
               {/* Search User Input */}
               <div className="relative">
                 <UserSearchSelect
+                  id={`${id}-add-team-member`}
+                  name="add-team-member"
+                  autoComplete="off"
                   value=""
                   onChange={() => {}} // Controlled by onUserSelect
                   onUserSelect={(user) => {
@@ -350,18 +336,18 @@ export function ProjectModal({
               {/* Selected Users List */}
               <div className="space-y-2 mt-2">
                 {selectedUsers.length === 0 && (
-                  <p className="text-sm text-zinc-500 italic">
+                  <p className="text-sm text-muted-foreground italic">
                     No members added yet.
                   </p>
                 )}
                 {selectedUsers.map((user) => (
                   <div
                     key={user.id}
-                    className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/10"
+                    className="flex items-center justify-between p-2 rounded-lg bg-muted border border-border"
                   >
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div className="relative h-8 w-8 rounded-full bg-zinc-700 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
+                      <div className="relative h-8 w-8 rounded-full bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0">
                         {user.avatar ? (
                           <Image
                             src={getAvatarUrl(user.avatar)}
@@ -383,10 +369,10 @@ export function ProjectModal({
                         </span>
                       </div>
                       <div>
-                        <p className="text-white text-sm font-medium">
+                        <p className="text-foreground text-sm font-medium">
                           {user.firstName} {user.lastName}
                         </p>
-                        <p className="text-zinc-400 text-xs">{user.email}</p>
+                        <p className="text-muted-foreground text-xs">{user.email}</p>
                       </div>
                     </div>
                     <Button
@@ -410,23 +396,26 @@ export function ProjectModal({
 
             {/* Project Settings */}
             <div className="space-y-4">
-              <Label className="text-zinc-300 flex items-center gap-2">
+              <div className="text-sm font-medium leading-none text-foreground flex items-center gap-2">
                 <Settings className="h-4 w-4" />
                 Project Settings
-              </Label>
+              </div>
 
-              <div className="space-y-3 pl-4 border-l border-white/10">
+              <div className="space-y-3 pl-4 border-l border-border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-white text-sm font-medium">
+                    <p className="text-foreground text-sm font-medium">
                       Allow Public Access
                     </p>
-                    <p className="text-zinc-400 text-xs">
+                    <p className="text-muted-foreground text-xs">
                       Anyone with the link can view
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label htmlFor={`${id}-allowPublicAccess`} className="relative inline-flex items-center cursor-pointer">
                     <input
+                      id={`${id}-allowPublicAccess`}
+                      name="allowPublicAccess"
+                      autoComplete="off"
                       type="checkbox"
                       checked={formData.settings.allowPublicAccess}
                       onChange={(e) =>
@@ -444,15 +433,18 @@ export function ProjectModal({
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-white text-sm font-medium">
+                    <p className="text-foreground text-sm font-medium">
                       Require Approval
                     </p>
-                    <p className="text-zinc-400 text-xs">
+                    <p className="text-muted-foreground text-xs">
                       Members need approval to join
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label htmlFor={`${id}-requireApproval`} className="relative inline-flex items-center cursor-pointer">
                     <input
+                      id={`${id}-requireApproval`}
+                      name="requireApproval"
+                      autoComplete="off"
                       type="checkbox"
                       checked={formData.settings.requireApproval}
                       onChange={(e) =>
@@ -469,10 +461,12 @@ export function ProjectModal({
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-zinc-400 text-xs">
+                  <Label htmlFor={`${id}-default-task-visibility`} className="text-muted-foreground text-xs">
                     Default Task Visibility
                   </Label>
                   <CustomSelect
+                    id={`${id}-default-task-visibility`}
+                    name="defaultTaskVisibility"
                     value={formData.settings.defaultTaskVisibility}
                     onChange={(value) =>
                       handleInputChange("settings", {
@@ -504,12 +498,12 @@ export function ProjectModal({
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3 pt-6 border-t border-white/10">
+            <div className="flex gap-3 pt-6 border-t border-border">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
-                className="flex-1 border-white/10 text-white hover:bg-white/5"
+                className="flex-1 border-border text-foreground hover:bg-accent"
                 disabled={isSubmitting}
               >
                 Cancel

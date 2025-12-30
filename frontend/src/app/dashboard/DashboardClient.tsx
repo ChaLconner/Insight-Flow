@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useCallback, useEffect, useRef } from "react";
+import { useMemo, useCallback, useEffect, useRef, Suspense } from "react";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { useAuthStore } from "@/stores/auth-store";
 import { useDashboard } from "@/hooks/use-dashboard";
-import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 import { useQueryClient } from "@tanstack/react-query";
 import { dashboardKeys } from "@/hooks/use-dashboard";
 
@@ -18,6 +18,7 @@ import { DashboardStats } from "./components/DashboardStats";
 import {
   ProjectsListSkeleton,
   ActivityFeedSkeleton,
+  StatsGridSkeleton,
 } from "./components/DashboardSkeleton";
 
 // Lazy load components to reduce initial bundle size
@@ -214,19 +215,25 @@ export default function DashboardClient() {
             </div>
           )}
 
-          {/* Stats Grid */}
+          {/* Stats Grid - wrapped in Suspense for streaming */}
           <section aria-label="Dashboard statistics">
-            <DashboardStats stats={statsData} />
+            <Suspense fallback={<StatsGridSkeleton />}>
+              <DashboardStats stats={statsData} />
+            </Suspense>
           </section>
 
-          {/* Recent Projects & Activity */}
+          {/* Recent Projects & Activity - each wrapped in Suspense for parallel streaming */}
           <section aria-label="Recent projects and activity">
             <div className="grid gap-8 lg:grid-cols-7">
               <div className="col-span-full lg:col-span-4">
-                <RecentProjects projects={projectsData} />
+                <Suspense fallback={<ProjectsListSkeleton />}>
+                  <RecentProjects projects={projectsData} />
+                </Suspense>
               </div>
               <div className="col-span-full lg:col-span-3">
-                <RecentActivity activities={activitiesData} />
+                <Suspense fallback={<ActivityFeedSkeleton />}>
+                  <RecentActivity activities={activitiesData} />
+                </Suspense>
               </div>
             </div>
           </section>

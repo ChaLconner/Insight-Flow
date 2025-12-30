@@ -1,0 +1,132 @@
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+strict_optional = true
+warn_redundant_casts = true
+warn_no_return = true
+warn_unreachable = true
+exclude = ["tests", "alembic", "scripts"]
+plugins = ["sqlalchemy.ext.mypy.plugin", "pydantic.mypy"]
+
+# Ignore missing imports for some packages
+[[tool.mypy.overrides]]
+module = [
+    "cloudinary.*",
+    "passlib.*",
+    "jose.*",
+    "apscheduler.*",
+    "psutil.*",
+    "redis.*",
+    "locust.*",
+    "stripe",
+    "stripe.*",
+    "google.*",
+    "requests",
+    "psycopg2",
+    "psycopg2.*",
+    "models.user_productivity",
+    "models.task_attachment",
+    "models.task_comment",
+    "models.task_dependency",
+    "models.task_time_tracking",
+    "models.project_analytics",
+    "models.project_milestone",
+    "models.project_tag_association",
+]
+ignore_missing_imports = true
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "alembic/versions",
+    "tests",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   # pyupgrade
+    "ARG",  # flake8-unused-arguments
+    "SIM",  # flake8-simplify
+    "TCH",  # flake8-type-checking
+    "PTH",  # flake8-use-pathlib
+    "ERA",  # commented-out code
+    "PL",   # pylint
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument
+    "PLR0913", # too many arguments
+    "PLR2004", # magic values
+    "ERA001", # commented out code
+    "B904",   # raise without from (too many to fix now)
+    "PLC0415", # import outside top level
+    "ARG001", # unused arguments (common in API handlers)
+    "E712",   # comparison to True/False (needed for SQLAlchemy)
+    "E402",   # module level import not at top of file
+    "PTH",    # use pathlib (prefer os.path for now)
+    "PLW",    # pylint warnings (global, loop variable, etc)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # unused imports in __init__
+"tests/*" = ["ARG", "PLR"]  # test files
+
+[tool.ruff.lint.isort]
+known-first-party = ["models", "schemas", "routers", "services", "utils", "middleware"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "tests/*",
+    "alembic/*",
+    "scripts/*",
+    "__pycache__/*",
+    ".venv/*",
+    "venv/*",
+]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+fail_under = 40
+show_missing = true

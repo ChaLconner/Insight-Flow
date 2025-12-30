@@ -7,6 +7,8 @@ import {
   useCallback,
   forwardRef,
   useImperativeHandle,
+  useId,
+  useMemo,
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,17 +20,19 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  // Loader2,
+  X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Task } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
+
 // import { tasksApi } from "@/lib/api-endpoints";
 // import { apiClient } from "@/lib/api-client";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TaskItem } from "./TaskItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTasks } from "@/hooks/use-tasks";
+
 // import { toast } from "sonner";
 // import { getErrorMessage } from "@/lib/error-utils";
 import dynamic from "next/dynamic";
@@ -86,76 +90,54 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
     const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-    const [localSearchQuery, setLocalSearchQuery] = useState("");
 
     const searchParams = useSearchParams();
     const router = useRouter();
     const queryClient = useQueryClient();
 
-    // Initialize state from URL params with memoization
-    const [searchQuery, setSearchQuery] = useState(
+    // Local search state (client-side filtering like ProjectsClient)
+    const [localSearchQuery, setLocalSearchQuery] = useState(
       () => searchParams.get("search") ?? "",
     );
+    // Use local search directly for instant filtering (no debounce needed for client-side)
+
     const [statusFilter, setStatusFilter] = useState<string>(
       () => searchParams.get("status") ?? "all",
     );
-    const [page, setPage] = useState(() => {
-      const pageParam = searchParams.get("page");
-      return pageParam ? parseInt(pageParam, 10) : 1;
-    });
+    const [page, setPage] = useState(1);
 
     const PAGE_SIZE = 10; // Show 10 items per page
+    const searchId = useId();
 
     const { isAuthenticated } = useAuthStore();
 
     // Refs
     const isMounted = useRef(true);
-    const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Debounced search function
-    const debouncedSearch = useCallback((query: string) => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
-      searchTimeoutRef.current = setTimeout(() => {
-        setSearchQuery(query);
-        setPage(1); // Reset to first page when searching
-      }, 500); // 500ms debounce
+    // Focus search with shortcut
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (
+          e.key === "/" &&
+          document.activeElement?.tagName !== "INPUT" &&
+          document.activeElement?.tagName !== "TEXTAREA" &&
+          !(document.activeElement as HTMLElement)?.isContentEditable
+        ) {
+          e.preventDefault();
+          searchInputRef.current?.focus();
+        }
+      };
+
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
     }, []);
 
-    // Update URL when filters change
+    // Reset pagination when filters change
     useEffect(() => {
-      const params = new URLSearchParams(searchParams.toString());
-
-      if (searchQuery) {
-        params.set("search", searchQuery);
-      } else {
-        params.delete("search");
-      }
-
-      if (statusFilter !== "all") {
-        params.set("status", statusFilter);
-      } else {
-        params.delete("status");
-      }
-
-      if (page > 1) {
-        params.set("page", page.toString());
-      } else {
-        params.delete("page");
-      }
-
-      // Use string comparison to avoid unnecessary updates
-      const currentString = searchParams.toString();
-      const newString = params.toString();
-
-      if (currentString !== newString) {
-        router.replace(`${window.location.pathname}?${newString}`, {
-          scroll: false,
-        });
-      }
-    }, [searchQuery, statusFilter, page, router, searchParams]);
+      setPage(1);
+    }, [localSearchQuery, statusFilter]);
 
     useEffect(() => {
       isMounted.current = true;
@@ -165,10 +147,9 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
     }, []);
 
     // Use custom hook for data fetching and operations
+    // Fetch ALL tasks without search/status params (client-side filtering)
     const {
-      tasks,
-      total,
-      hasMore,
+      tasks: allTasks,
       isLoading,
       isFetching: _isFetching,
       error,
@@ -177,12 +158,35 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       isDeleting,
     } = useTasks({
       projectId,
-      page,
-      pageSize: PAGE_SIZE,
-      searchQuery,
-      statusFilter,
+      page: 1,
+      pageSize: 1000, // Fetch all tasks for client-side filtering
+      searchQuery: "", // No server-side search
+      statusFilter: "all", // No server-side filter
       enabled: isAuthenticated,
     });
+
+    // Client-side filtering (like ProjectsClient) for instant UX
+    const filteredTasks = useMemo(() => {
+      return allTasks.filter((task) => {
+        const searchLower = localSearchQuery.toLowerCase();
+        const matchesSearch =
+          !localSearchQuery ||
+          task.title.toLowerCase().includes(searchLower) ||
+          task.description?.toLowerCase().includes(searchLower);
+        const matchesStatus =
+          statusFilter === "all" || task.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      });
+    }, [allTasks, localSearchQuery, statusFilter]);
+
+    // Client-side pagination
+    const paginatedTasks = useMemo(() => {
+      const start = (page - 1) * PAGE_SIZE;
+      return filteredTasks.slice(start, start + PAGE_SIZE);
+    }, [filteredTasks, page]);
+
+    const total = filteredTasks.length;
+    const hasMore = page * PAGE_SIZE < total;
 
     // Handle refresh logic exposed to parent
     useImperativeHandle(ref, () => ({
@@ -237,6 +241,12 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       setOpenMenuId((prev) => (prev === taskId ? null : taskId));
     }, []);
 
+    const handleClearSearch = useCallback(() => {
+      setLocalSearchQuery("");
+      setPage(1);
+      searchInputRef.current?.focus();
+    }, []);
+
     // Close menu when clicking outside
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -289,7 +299,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
           {/* List Skeleton */}
           <div className="space-y-4">
             {[...Array(5)].map((_, i) => (
-              <Card key={i} className="border-white/10 bg-white/5">
+              <Card key={i} className="border-border bg-card">
                 <CardContent className="p-4">
                   <div className="flex gap-4">
                     <Skeleton className="h-4 w-4 rounded-full" />
@@ -310,8 +320,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       const errorMessage =
         typeof error === "string"
           ? error
-          : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ((error as any)?.message ?? "Failed to load tasks.");
+          : ((error as Error)?.message ?? "Failed to load tasks.");
 
       return (
         <div className="flex flex-col items-center justify-center h-64 space-y-4">
@@ -329,14 +338,14 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
         {!hideHeader && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-white">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">
                 {title}
               </h2>
-              <p className="mt-1 text-zinc-400">{description}</p>
+              <p className="mt-1 text-muted-foreground">{description}</p>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               <Button
-                className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20"
+                className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
                 onClick={() => {
                   setEditingTask(null);
                   setIsNewTaskModalOpen(true);
@@ -350,44 +359,69 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
         )}
 
         {/* Search and Filter Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
-            <Input
-              placeholder="Search tasks..."
-              value={localSearchQuery}
-              onChange={(e) => {
-                setLocalSearchQuery(e.target.value);
-                debouncedSearch(e.target.value);
+        <div className="space-y-4 relative z-10">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                ref={searchInputRef}
+                id={searchId}
+                name={`task-search-${searchId}`}
+                type="search"
+                role="searchbox"
+                placeholder="Search tasks..."
+                aria-label="Search tasks"
+                autoComplete="off"
+                aria-autocomplete="none"
+                data-1p-ignore="true"
+                data-lpignore="true"
+                data-protonpass-ignore="true"
+                data-bwignore="true"
+                data-form-type="other"
+                value={localSearchQuery}
+                onChange={(e) => setLocalSearchQuery(e.target.value)}
+                className="pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground h-10"
+              />
+              {localSearchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-all duration-200"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <CustomSelect
+              value={statusFilter === "all" ? "" : statusFilter}
+              placeholder="All Status"
+              onChange={(value: string) => {
+                setStatusFilter(value);
               }}
-              className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400"
+              options={[
+                ...(statusFilter !== "all"
+                  ? [{ value: "all", label: "All Status" }]
+                  : []),
+                { value: "todo", label: "To Do" },
+                { value: "in_progress", label: "In Progress" },
+                { value: "in_review", label: "In Review" },
+                { value: "done", label: "Done" },
+                { value: "cancelled", label: "Cancelled" },
+              ]}
+              className="w-full sm:w-[180px] h-10"
+              triggerClassName="h-10"
             />
           </div>
-          <CustomSelect
-            value={statusFilter === "all" ? "" : statusFilter}
-            placeholder="All Status"
-            onChange={(value: string) => {
-              setStatusFilter(value);
-              setPage(1); // Reset to first page when filtering
-            }}
-            options={[
-              ...(statusFilter !== "all"
-                ? [{ value: "all", label: "All Status" }]
-                : []),
-              { value: "todo", label: "To Do" },
-              { value: "in_progress", label: "In Progress" },
-              { value: "in_review", label: "In Review" },
-              { value: "done", label: "Done" },
-              { value: "cancelled", label: "Cancelled" },
-            ]}
-            className="w-full sm:w-48"
-          />
         </div>
 
         {/* Content */}
         <div className="space-y-4">
-          {tasks.length > 0 ? (
-            tasks.map((task) => (
+          {paginatedTasks.length > 0 ? (
+            paginatedTasks.map((task) => (
               <TaskItem
                 key={task.id}
                 task={task}
@@ -401,44 +435,61 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
               />
             ))
           ) : (
-            <div className="text-center py-12 text-zinc-400">
-              <CheckCircle2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <h3 className="text-lg font-medium text-white">No tasks found</h3>
-              <p>Try adjusting your search or filters.</p>
+            <div className="text-center py-20 bg-card/10 rounded-2xl border border-dashed border-border animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="relative inline-flex mb-4">
+                <CheckCircle2 className="h-12 w-12 text-muted-foreground opacity-20" />
+                <Search className="h-6 w-6 text-primary absolute -bottom-1 -right-1" />
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-2">No tasks found</h3>
+              <p className="text-muted-foreground max-w-xs mx-auto mb-6">
+                We couldn't find any tasks matching your current search or filters.
+              </p>
+              {(localSearchQuery || statusFilter !== "all") && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    handleClearSearch();
+                    setStatusFilter("all");
+                  }}
+                  className="rounded-full px-6 hover:bg-primary/5 hover:text-primary hover:border-primary/30 transition-all duration-300"
+                >
+                  Clear all filters
+                </Button>
+              )}
             </div>
           )}
         </div>
 
         {/* Pagination Controls */}
-        {tasks.length > 0 && (
+        {paginatedTasks.length > 0 && (
           <div className="flex justify-between items-center mt-8">
-            <div className="text-sm text-zinc-400">
+            <div className="text-sm text-muted-foreground">
               Showing {(page - 1) * PAGE_SIZE + 1} to{" "}
-              {Math.min((page - 1) * PAGE_SIZE + PAGE_SIZE, total)} of {total}{" "}
+              {Math.min(page * PAGE_SIZE, total)} of {total}{" "}
               tasks
             </div>
             <div className="flex gap-2">
               <Button
-                variant="glass"
+                variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="flex items-center gap-2 text-white font-medium border-white/10 hover:bg-white/10"
+                className="flex items-center gap-2"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Previous
               </Button>
-              <div className="flex items-center px-4 py-1 bg-white/10 rounded-md border border-white/20 shadow-sm">
-                <span className="text-sm font-bold text-white tracking-wide">
+              <div className="flex items-center px-4 py-1 bg-muted rounded-md border border-border shadow-sm">
+                <span className="text-sm font-bold text-foreground tracking-wide">
                   Page {page}
                 </span>
               </div>
               <Button
-                variant="glass"
+                variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={!hasMore}
-                className="flex items-center gap-2 text-white font-medium border-white/10 hover:bg-white/10"
+                className="flex items-center gap-2"
               >
                 Next
                 <ChevronRight className="h-4 w-4" />

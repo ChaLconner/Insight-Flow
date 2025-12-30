@@ -10,6 +10,8 @@ interface ProjectGridProps {
   isLoading: boolean;
   onEdit: (project: Project) => void;
   onArchive: (project: Project) => void;
+  onFavorite?: (project: Project) => void;
+  favoriteIds?: Set<string>;
   hasFilters: boolean;
   onCreateProject: () => void;
 }
@@ -19,6 +21,8 @@ export const ProjectGrid = memo(function ProjectGrid({
   isLoading,
   onEdit,
   onArchive,
+  onFavorite,
+  favoriteIds = new Set(),
   hasFilters,
   onCreateProject,
 }: ProjectGridProps) {
@@ -26,13 +30,13 @@ export const ProjectGrid = memo(function ProjectGrid({
   if (projects.length === 0 && !isLoading) {
     return (
       <div className="text-center py-12">
-        <div className="mx-auto h-12 w-12 rounded-full bg-white/5 flex items-center justify-center mb-4">
-          <Search className="h-6 w-6 text-zinc-400" />
+        <div className="mx-auto h-12 w-12 rounded-full bg-secondary flex items-center justify-center mb-4">
+          <Search className="h-6 w-6 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-medium text-white mb-2">
+        <h3 className="text-lg font-medium text-foreground mb-2">
           No projects found
         </h3>
-        <p className="text-zinc-400 mb-6">
+        <p className="text-muted-foreground mb-6">
           {hasFilters
             ? "Try adjusting your search or filter criteria."
             : "Get started by creating your first project."}
@@ -60,7 +64,7 @@ export const ProjectGrid = memo(function ProjectGrid({
         visible: {
           opacity: 1,
           transition: {
-            staggerChildren: 0.1,
+            staggerChildren: 0.03,
           },
         },
       }}
@@ -72,6 +76,8 @@ export const ProjectGrid = memo(function ProjectGrid({
             project={project}
             onEdit={onEdit}
             onArchive={onArchive}
+            onFavorite={onFavorite}
+            isFavorite={favoriteIds.has(project.id)}
           />
         ))}
       </AnimatePresence>

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 // Hook for app global state management
 // Hook for app global state management
-const EMPTY_OBJECT = {};
+const EMPTY_OBJECT: Record<string, unknown> = {};
 
 export const useAppState = () => {
   // Zustand store state
@@ -59,40 +59,23 @@ export const useAppState = () => {
   const resetAppState = store.resetAppState;
 
   // Convenience functions for toast notifications
+  // These use sonner toast directly without adding to alerts to avoid duplicate notifications
   const showSuccess = useCallback(
     (message: string, description?: string) => {
       toast.success(message, {
         description,
-        action: {
-          label: "Undo",
-          onClick: () => {},
-        },
-      });
-      addAlert({
-        type: "success",
-        title: message,
-        message: description ?? "",
       });
     },
-    [addAlert],
+    [],
   );
 
   const showError = useCallback(
     (message: string, description?: string) => {
       toast.error(message, {
         description,
-        action: {
-          label: "Retry",
-          onClick: () => {},
-        },
-      });
-      addAlert({
-        type: "error",
-        title: message,
-        message: description ?? "",
       });
     },
-    [addAlert],
+    [],
   );
 
   const showWarning = useCallback(
@@ -100,13 +83,8 @@ export const useAppState = () => {
       toast.warning(message, {
         description,
       });
-      addAlert({
-        type: "warning",
-        title: message,
-        message: description ?? "",
-      });
     },
-    [addAlert],
+    [],
   );
 
   const showInfo = useCallback(
@@ -114,13 +92,8 @@ export const useAppState = () => {
       toast.info(message, {
         description,
       });
-      addAlert({
-        type: "info",
-        title: message,
-        message: description ?? "",
-      });
     },
-    [addAlert],
+    [],
   );
 
   // Modal management helpers
@@ -157,16 +130,13 @@ export const useAppState = () => {
     (
       id: string,
       title: string,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      fields: any[],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      onSubmit: (data: any) => void,
+      fields: unknown[],
+      onSubmit: (data: Record<string, unknown>) => void,
       options?: {
         description?: string;
         submitText?: string;
         cancelText?: string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        initialData?: any;
+        initialData?: unknown;
       },
     ) => {
       showModal(id, {
@@ -352,17 +322,16 @@ export const useSearch = () => {
 
   const updateSearchQuery = useCallback(
     (query: string) => {
-      setSearch({ query, filters: {}, isActive: query.length > 0 });
+      setSearch({ query, filters: {}, isActive: query.length > 0, isSearching: false });
     },
     [setSearch],
   );
 
   const updateSearchFilters = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (filters: Record<string, any>) => {
-      setSearch({ filters, isActive: true });
+    (filters: Record<string, unknown>) => {
+      setSearch({ ...search, filters, isActive: true });
     },
-    [setSearch],
+    [setSearch, search],
   );
 
   const resetSearch = useCallback(() => {
@@ -388,8 +357,7 @@ export const useBreadcrumbs = () => {
   const { breadcrumbs, setBreadcrumbs, navigateWithBreadcrumb } = useAppState();
 
   const addBreadcrumb = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (item: { label: string; href?: string; icon?: any }) => {
+    (item: { label: string; href?: string; icon?: React.ElementType }) => {
       const newBreadcrumbs = [...breadcrumbs, item];
       setBreadcrumbs(newBreadcrumbs);
       return navigateWithBreadcrumb(item);
@@ -406,8 +374,7 @@ export const useBreadcrumbs = () => {
   );
 
   const resetBreadcrumbs = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (home: { label: string; href: string; icon?: any }) => {
+    (home: { label: string; href: string; icon?: React.ElementType }) => {
       setBreadcrumbs([home]);
     },
     [setBreadcrumbs],
@@ -419,8 +386,7 @@ export const useBreadcrumbs = () => {
       item: {
         label: string;
         href?: string;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        icon?: any;
+        icon?: React.ElementType;
       },
     ) => {
       const newBreadcrumbs = [...breadcrumbs];
@@ -452,8 +418,7 @@ export const useForm = (formId: string) => {
   const formTouched = forms[formId]?.touched ?? EMPTY_OBJECT;
 
   const updateField = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (field: string, value: any) => {
+    (field: string, value: unknown) => {
       updateForm(formId, {
         data: { ...formData, [field]: value },
         errors: { ...formErrors, [field]: undefined },
@@ -486,9 +451,8 @@ export const useForm = (formId: string) => {
   );
 
   const validateField = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (field: string, validator: (value: any) => string | null) => {
-      const error = validator(formData[field]);
+    (field: string, validator: (value: unknown) => string | null) => {
+      const error = validator((formData as Record<string, unknown>)[field]);
       setFieldError(field, error ?? "");
       return !error;
     },
@@ -501,14 +465,14 @@ export const useForm = (formId: string) => {
 
   const isFieldTouched = useCallback(
     (field: string) => {
-      return formTouched[field] ?? false;
+      return (formTouched as Record<string, boolean>)[field] ?? false;
     },
     [formTouched],
   );
 
   const getFieldError = useCallback(
     (field: string) => {
-      return formErrors[field];
+      return (formErrors as Record<string, string>)[field];
     },
     [formErrors],
   );

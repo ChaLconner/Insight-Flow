@@ -3,16 +3,32 @@
 // ===========================================
 
 import { useEffect, useCallback, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import {
   useThemeStore,
   themeSelectors,
   themeActions,
 } from "@/stores/theme-store";
 
+// Add View Transitions API support
+declare global {
+  interface Document {
+    startViewTransition(callback: () => void | Promise<void>): {
+      ready: Promise<void>;
+      finished: Promise<void>;
+      updateCallbackDone: Promise<void>;
+    };
+  }
+}
+
 // Primary theme hook for managing dark/light mode
 export const useTheme = () => {
   // SSR detection
   const isSSR = typeof window === "undefined";
+
+  // Check if on auth pages - theme changes should be skipped
+  const pathname = usePathname();
+  const isAuthPage = pathname?.startsWith("/auth");
 
   // Zustand store state
   const store = useThemeStore();
@@ -44,11 +60,6 @@ export const useTheme = () => {
   const updateSystemPreference = store.updateSystemPreference;
   const _setSystemPrefersDark = store.setSystemPrefersDark;
 
-  // Sync with system on mount
-  useEffect(() => {
-    themeActions.init();
-  }, []);
-
   // Listen to system theme changes when using system preference
   useEffect(() => {
     if (!isSystemMode || typeof window === "undefined") {
@@ -75,45 +86,54 @@ export const useTheme = () => {
       return;
     }
 
+    // Skip theme changes on auth pages - they force dark theme
+    if (isAuthPage) {
+      return;
+    }
+
     const root = document.documentElement;
 
-    // Remove existing theme classes
-    root.classList.remove("light", "dark", "system");
+    const updateThemeDOM = () => {
+      // Remove existing theme classes
+      root.classList.remove("light", "dark", "system");
 
-    // Apply current theme
-    if (isSystemMode) {
-      root.classList.add("system");
-      root.classList.toggle("dark", systemPrefersDark);
+      // Apply current theme
+      if (isSystemMode) {
+        root.classList.add("system");
+        root.classList.toggle("dark", systemPrefersDark);
+      } else {
+        root.classList.add(currentTheme);
+        root.classList.toggle("dark", isDarkMode);
+      }
+
+      // Set data attributes for CSS customization
+      root.setAttribute("data-theme", currentTheme);
+      root.setAttribute("data-color-scheme", colorScheme);
+
+      // Update color-scheme property for native controls
+      root.style.colorScheme = colorScheme;
+
+      // Update meta theme-color for mobile browsers
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (metaThemeColor) {
+        const themeColor = isDarkMode ? "#09090b" : "#ffffff"; // Updated to match actual dark bg
+        metaThemeColor.setAttribute("content", themeColor);
+      }
+    };
+
+    // Use View Transitions API if available for smooth switching
+    if (document.startViewTransition) {
+      document.startViewTransition(() => {
+        updateThemeDOM();
+      });
     } else {
-      root.classList.add(currentTheme);
-      root.classList.toggle("dark", isDarkMode);
+      updateThemeDOM();
     }
 
-    // Set data attributes for CSS customization
-    root.setAttribute("data-theme", currentTheme);
-    root.setAttribute("data-color-scheme", colorScheme);
+    // Do NOT manually save to localStorage here.
+    // Zustand persist middleware (in theme-store.ts) handles storage synchronization automatically.
+    // Manual saving creates a race condition and invalidates the storage structure.
 
-    // Store theme preference
-    try {
-      localStorage.setItem(
-        "insight-flow-theme",
-        JSON.stringify({
-          theme: currentTheme,
-          systemMode: isSystemMode,
-          primaryColor: store.primaryColor,
-          updatedAt: Date.now(),
-        }),
-      );
-    } catch (error) {
-      console.warn("Failed to save theme preference to localStorage:", error);
-    }
-
-    // Update meta theme-color for mobile browsers
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor) {
-      const themeColor = isDarkMode ? "#1f2937" : "#ffffff";
-      metaThemeColor.setAttribute("content", themeColor);
-    }
   }, [
     currentTheme,
     isDarkMode,
@@ -121,6 +141,7 @@ export const useTheme = () => {
     systemPrefersDark,
     colorScheme,
     store.primaryColor,
+    isAuthPage,
   ]);
 
   // Computed values
@@ -168,47 +189,6 @@ export const useTheme = () => {
     const oppositeTheme = getOppositeTheme();
     setTheme(oppositeTheme);
   }, [getOppositeTheme, setTheme]);
-
-  // Theme detection utilities
-  const getThemeFromStorage = useCallback(() => {
-    try {
-      const stored = localStorage.getItem("insight-flow-theme");
-      if (!stored) {
-        return null;
-      }
-
-      const parsed = JSON.parse(stored);
-      return {
-        theme: parsed.theme,
-        systemMode: parsed.systemMode,
-        primaryColor: parsed.primaryColor,
-        updatedAt: parsed.updatedAt,
-      };
-    } catch (error) {
-      console.warn(
-        "Failed to parse theme preference from localStorage:",
-        error,
-      );
-      return null;
-    }
-  }, []);
-
-  const syncWithStorage = useCallback(() => {
-    const stored = getThemeFromStorage();
-    if (!stored) {
-      return;
-    }
-
-    if (stored.systemMode) {
-      enableAutoTheme();
-    } else {
-      setTheme(stored.theme);
-    }
-
-    if (stored.primaryColor) {
-      setPrimaryColor(stored.primaryColor);
-    }
-  }, [getThemeFromStorage, enableAutoTheme, setTheme, setPrimaryColor]);
 
   // Accessibility helpers
   const prefersReducedMotion = useMemo(() => {
@@ -278,7 +258,7 @@ export const useTheme = () => {
     // Utility actions
     resetTheme,
     updateSystemPreference,
-    syncWithStorage,
+
     initializeTheme: themeActions.init,
 
     // Computed values
@@ -291,7 +271,6 @@ export const useTheme = () => {
     prefersReducedMotion,
 
     // Storage
-    getThemeFromStorage,
 
     // Store methods for advanced usage
     setSystemPrefersDark: store.setSystemPrefersDark,

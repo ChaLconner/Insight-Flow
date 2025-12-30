@@ -1,12 +1,14 @@
-from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
-from alembic import context
+import asyncio
 import os
 import sys
+from logging.config import fileConfig
+
 from dotenv import load_dotenv
+from sqlalchemy import pool
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # Add the project root directory to the python path
 sys.path.append(os.getcwd())
@@ -16,6 +18,7 @@ load_dotenv()
 
 # Import Base from models for autogenerate support
 from models import Base
+
 target_metadata = Base.metadata
 
 # this is the Alembic Config object, which provides
@@ -27,23 +30,26 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+
 def get_url():
     url = os.getenv("DATABASE_URL", "")
     if not url:
         return ""
-    
-    # Ensure pg8000 driver usage as per database.py
-    if not url.startswith("postgresql+pg8000://"):
-        if url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+pg8000://", 1)
-        elif url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+pg8000://", 1)
-            
-    # Clean up params for pg8000
-    if "pg8000" in url and "?" in url:
+
+    # Ensure usage of asyncpg driver
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql+pg8000://"):
+        url = url.replace("postgresql+pg8000://", "postgresql+asyncpg://", 1)
+
+    # Clean up params if needed (usually not needed for asyncpg + alchemy handled well, but good to be safe)
+    if "?" in url:
         url = url.split("?")[0]
-        
+
     return url
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -69,30 +75,37 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+def do_run_migrations(connection: Connection) -> None:
+    context.configure(connection=connection, target_metadata=target_metadata)
 
-    In this scenario we need to create an Engine
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+async def run_async_migrations() -> None:
+    """In this scenario we need to create an Engine
     and associate a connection with the context.
 
     """
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = get_url()
-    
-    connectable = engine_from_config(
+
+    # Use async engine
+    connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"ssl_context": __import__("ssl").create_default_context()} if "pg8000" in get_url() else {}
     )
 
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+    async with connectable.connect() as connection:
+        await connection.run_sync(do_run_migrations)
 
-        with context.begin_transaction():
-            context.run_migrations()
+    await connectable.dispose()
+
+
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
+    asyncio.run(run_async_migrations())
 
 
 if context.is_offline_mode():

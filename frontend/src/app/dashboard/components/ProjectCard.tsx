@@ -6,7 +6,7 @@ import Link from "next/link";
 
 // Static class names
 const PROJECT_ITEM_CLASSES =
-  "group p-3 rounded-xl hover:bg-white/5 transition-all border border-transparent hover:border-white/5 cursor-pointer";
+  "group p-3 rounded-xl bg-muted/20 hover:bg-muted/40 transition-all cursor-pointer";
 const ICON_CONTAINER_CLASSES =
   "h-12 w-12 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 duration-300 shrink-0";
 
@@ -61,10 +61,10 @@ const ProjectCard = memo(function ProjectCard({ project }: ProjectCardProps) {
               </span>
             </div>
             <div className="min-w-0 overflow-hidden w-full">
-              <h4 className="font-semibold text-white text-base truncate group-hover:text-indigo-400 transition-colors">
+              <h4 className="font-semibold text-foreground text-base truncate group-hover:text-primary transition-colors">
                 {project.name}
               </h4>
-              <p className="text-sm text-zinc-400 truncate">
+              <p className="text-sm text-muted-foreground truncate">
                 {project.description ?? "No description"}
               </p>
             </div>
@@ -74,12 +74,12 @@ const ProjectCard = memo(function ProjectCard({ project }: ProjectCardProps) {
           <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0">
             <div className="flex-1 sm:flex-none sm:w-32">
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-zinc-400">Progress</span>
-                <span className="text-white font-medium">
+                <span className="text-muted-foreground">Progress</span>
+                <span className="text-foreground font-medium">
                   {projectProgress}%
                 </span>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
+              <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{

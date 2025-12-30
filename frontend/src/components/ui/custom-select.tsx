@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useId } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
 
 interface Option {
   value: string;
@@ -15,8 +15,11 @@ interface CustomSelectProps {
   onChange: (value: string) => void;
   options: Option[];
   className?: string;
+  triggerClassName?: string;
   size?: "default" | "sm" | "lg" | "icon";
   placeholder?: string;
+  id?: string;
+  name?: string;
 }
 
 export function CustomSelect({
@@ -24,11 +27,18 @@ export function CustomSelect({
   onChange,
   options,
   className,
+  triggerClassName,
   size = "default",
   placeholder,
+  id,
+  name,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const reactId = useId();
+  
+  // Use provided ID or fallback to stable unique ID for accessibility
+  const buttonId = id ?? `select-${reactId}`;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -46,7 +56,7 @@ export function CustomSelect({
 
   const selectedOption = options.find((opt) => opt.value === value);
   const selectedLabel =
-    selectedOption?.label || value || placeholder || "Select...";
+    selectedOption?.label ?? (value ? value : placeholder) ?? "Select...";
 
   const sizeClasses = {
     default: "h-9 px-3 py-2",
@@ -59,14 +69,17 @@ export function CustomSelect({
     <div className={cn("relative min-w-[140px]", className)} ref={containerRef}>
       <button
         type="button"
+        id={buttonId}
+        name={name}
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        aria-label={placeholder || "Select option"}
+        aria-label={placeholder ?? "Select option"}
         className={cn(
-          "flex items-center justify-between w-full rounded-lg glass border border-white/10 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer relative z-20",
+          "flex items-center justify-between w-full rounded-lg border border-border bg-background text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 cursor-pointer relative z-20",
           sizeClasses[size],
           size === "default" && "text-sm",
+          triggerClassName
         )}
       >
         <span className={cn("truncate", selectedOption?.color)}>
@@ -82,7 +95,7 @@ export function CustomSelect({
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover/95 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100">
           <div
             className="py-1 max-h-60 overflow-auto custom-scrollbar"
             role="listbox"
@@ -98,24 +111,24 @@ export function CustomSelect({
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-white/10 cursor-pointer",
-                  value === option.value ? "bg-indigo-600/30" : "",
+                  "flex w-full flex-col items-start px-3 py-2 text-left transition-colors hover:bg-accent cursor-pointer",
+                  value === option.value ? "bg-primary/20" : "",
                 )}
               >
                 <span
                   className={cn(
                     "font-medium",
                     size === "sm" ? "text-xs" : "text-sm",
-                    option.color ||
+                    option.color ??
                       (value === option.value
-                        ? "text-indigo-200"
-                        : "text-zinc-200"),
+                        ? "text-primary"
+                        : "text-foreground"),
                   )}
                 >
                   {option.label}
                 </span>
                 {option.description && (
-                  <span className="text-xs text-zinc-500 mt-0.5">
+                  <span className="text-xs text-muted-foreground mt-0.5">
                     {option.description}
                   </span>
                 )}

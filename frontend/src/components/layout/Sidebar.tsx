@@ -13,6 +13,26 @@ import {
   User,
 } from "lucide-react";
 import { authActions } from "@/stores/auth-actions";
+import { useAuthStore } from "@/stores/auth-store";
+
+function UserProfileDisplay() {
+  const user = useAuthStore((state) => state.user);
+  
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-semibold text-sm text-foreground truncate">
+        {user.name ?? user.firstName}
+      </span>
+      <span className="text-xs text-muted-foreground truncate">
+        @{user.username}
+      </span>
+    </div>
+  );
+}
 
 const sidebarItems = [
   {
@@ -65,13 +85,13 @@ export function Sidebar({
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-50 h-screen w-72 border-r border-white/10 bg-black/90 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0 lg:bg-black/40 [content-visibility:auto]",
+          "fixed left-0 top-0 z-50 h-screen w-72 border-r border-border bg-card/95 backdrop-blur-xl transition-transform duration-300 lg:translate-x-0 lg:bg-card/80 [content-visibility:auto]",
           isOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-full flex-col px-4 py-6">
           {/* Logo */}
-          <div className="mb-10 flex items-center justify-between px-2">
+          <div className="mb-10 flex items-center px-2">
             <Link
               href="/dashboard"
               onClick={() => onClose()}
@@ -80,44 +100,38 @@ export function Sidebar({
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/20">
                 <Layers className="h-6 w-6 text-white" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-white">
+              <span className="text-xl font-bold tracking-tight text-foreground">
                 Insight Flow
               </span>
             </Link>
-            {/* Close button for mobile */}
-            <button
-              onClick={onClose}
-              aria-label="Close sidebar"
-              className="rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white lg:hidden cursor-pointer"
-            >
-              <LogOut className="h-5 w-5 rotate-180" aria-hidden="true" />
-            </button>
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 space-y-2">
             {sidebarItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive =
+                pathname === item.href || pathname?.startsWith(`${item.href}/`);
               const Icon = item.icon;
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={true} // Prefetch pages for faster navigation
                   onClick={() => onClose()} // Close sidebar on navigation (mobile)
                   className={cn(
                     "group flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200",
                     isActive
-                      ? "bg-white/10 text-white shadow-inner shadow-white/5"
-                      : "text-zinc-400 hover:bg-white/5 hover:text-white",
+                      ? "bg-primary/25 text-primary shadow-sm font-semibold border border-primary/20"
+                      : "text-muted-foreground hover:bg-white/10 hover:text-foreground hover:pl-5",
                   )}
                 >
                   <Icon
                     className={cn(
                       "h-5 w-5 transition-colors",
                       isActive
-                        ? "text-indigo-400"
-                        : "text-zinc-500 group-hover:text-indigo-400",
+                        ? "text-primary drop-shadow-sm"
+                        : "text-muted-foreground group-hover:text-primary",
                     )}
                   />
                   {item.title}
@@ -127,7 +141,13 @@ export function Sidebar({
           </nav>
 
           {/* User Profile / Footer */}
-          <div className="mt-auto border-t border-white/10 pt-6">
+          <div className="mt-auto border-t border-border pt-6">
+             {/* User Info (Passive Discovery) */}
+            <div className="mb-4 flex flex-col px-4">
+               {/* We need to get user from store. Since Sidebar is client component, we can use useAuthStore */}
+               <UserProfileDisplay />
+            </div>
+
             <button
               type="button"
               aria-label="Sign out"
@@ -135,9 +155,9 @@ export function Sidebar({
                 const { logoutAndRedirect } = authActions;
                 logoutAndRedirect("/auth/login");
               }}
-              className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-zinc-400 transition-all hover:bg-white/5 hover:text-white cursor-pointer"
+              className="group flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition-all hover:bg-accent hover:text-foreground cursor-pointer"
             >
-              <LogOut className="h-5 w-5 text-zinc-500 transition-colors group-hover:text-red-400" />
+              <LogOut className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-destructive" />
               Sign Out
             </button>
           </div>

@@ -1,106 +1,229 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { useEffect, useState, useCallback } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StripeProvider } from "@/components/providers/StripeProvider";
+import { PaymentMethodForm } from "@/components/billing/PaymentMethodForm";
+import { PaymentFormSkeleton } from "@/components/billing/PaymentFormSkeleton";
+import { usePaymentMethods, useSetupIntent, useSubscription } from "@/hooks/usePayment";
+import { useBillingData } from "@/hooks/useBillingData";
+import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
+import type { PlanInfo } from "@/types";
+import { motion } from "framer-motion";
+
+// Import refactored components
+import { 
+  CurrentPlanCard, 
+  UsageLimitsCard, 
+  PaymentMethodsCard, 
+  ChangePlanDialog 
+} from "./billing";
+
+// Default plan fallback
+const getDefaultPlan = (key: string): PlanInfo => ({
+  plan: key as PlanInfo["plan"],
+  name: key.charAt(0).toUpperCase() + key.slice(1), 
+  price_monthly: 0, 
+  price_yearly: 0,
+  currency: "usd",
+  features: [], 
+  project_limit: 2,
+  member_limit: 3,
+  original_price: null, 
+  discount_percent: 0, 
+  color: "text-gray-500", 
+  badge: null,
+  badge_color: null,
+  is_limited_offer: false,
+});
 
 export function BillingSettings() {
+  const [isAddCardOpen, setIsAddCardOpen] = useState(false);
+  const [isChangePlanOpen, setIsChangePlanOpen] = useState(false);
+  const [isDialogReady, setIsDialogReady] = useState(false);
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(null);
+  
+  // Get user info for pre-filling form
+  const { user } = useAuthStore();
+  
+  // Hooks
+  const { methods, isLoading: methodsLoading, fetchMethods, setDefault, deleteMethod } = usePaymentMethods();
+  const { subscription, isLoading: subLoading, fetchSubscription, cancelSubscription, updateSubscription, resumeSubscription } = useSubscription();
+  const { setupIntent, isLoading: setupLoading, createSetupIntent, reset: resetSetupIntent, prefetch: prefetchSetupIntent, isPrefetched } = useSetupIntent();
+  const { plans, usageStats, isLoading: billingDataLoading } = useBillingData();
+
+  // Combined Loading State
+  const isLoading = methodsLoading || subLoading || billingDataLoading;
+
+  // Load data on mount
+  useEffect(() => {
+    fetchMethods();
+    fetchSubscription();
+  }, [fetchMethods, fetchSubscription]);
+
+  // Prefetch SetupIntent in background
+  useEffect(() => {
+    prefetchSetupIntent();
+  }, [prefetchSetupIntent]);
+
+  // Update selected payment method when methods are loaded
+  useEffect(() => {
+    if (methods.length > 0 && !selectedPaymentMethodId) {
+      const defaultMethod = methods.find(m => m.isDefault) ?? methods[0];
+      setSelectedPaymentMethodId(defaultMethod.id);
+    }
+  }, [methods, selectedPaymentMethodId]);
+
+  // Handle opening add card dialog
+  const handleOpenAddCard = useCallback(async () => {
+    setIsAddCardOpen(true);
+    setIsDialogReady(false);
+    
+    if (isPrefetched && setupIntent) {
+      setIsDialogReady(true);
+      return;
+    }
+    
+    const intent = await createSetupIntent();
+    if (intent) {
+      setIsDialogReady(true);
+    } else {
+      setIsAddCardOpen(false);
+    }
+  }, [isPrefetched, setupIntent, createSetupIntent]);
+
+  const handleCardAdded = useCallback(async () => {
+    setIsAddCardOpen(false);
+    resetSetupIntent();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await fetchMethods();
+    setTimeout(() => prefetchSetupIntent(), 100);
+    
+    toast.success("Card added successfully", {
+      description: "Your payment card has been linked to your account.",
+    });
+  }, [resetSetupIntent, fetchMethods, prefetchSetupIntent]);
+
+  const handleCloseAddCardDialog = useCallback(() => {
+    setIsAddCardOpen(false);
+    setIsDialogReady(false);
+    resetSetupIntent();
+    setTimeout(() => prefetchSetupIntent(), 100);
+  }, [resetSetupIntent, prefetchSetupIntent]);
+
+  const handleConfirmPlanChange = useCallback(async (planKey: string) => {
+    if (planKey === subscription?.plan) {
+      return;
+    }
+    
+    const paymentMethodId = planKey !== 'free' ? selectedPaymentMethodId : undefined;
+    
+    if (planKey !== 'free' && !paymentMethodId) {
+      toast.error("No card selected", { description: "Please select a card to proceed." });
+      return;
+    }
+
+    try {
+      await updateSubscription(planKey, paymentMethodId ?? undefined);
+      toast.success("Plan updated successfully");
+      setIsChangePlanOpen(false);
+      // Wait a bit before refreshing to allow backend to process
+      setTimeout(() => fetchSubscription(), 1000);
+    } catch {
+       // Error usually handled by hook
+       toast.error("Failed to update plan");
+    }
+  }, [subscription?.plan, selectedPaymentMethodId, updateSubscription, fetchSubscription]);
+
+  // Resolve Current Plan Config
+  const currentPlan = subscription?.plan ?? "free";
+  const planConfig = plans[currentPlan] || getDefaultPlan("free");
+
   return (
     <div className="space-y-6">
-      {/* Current Plan */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">
-            Current Plan
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-            <div>
-              <h3 className="text-lg font-semibold text-white">Pro Plan</h3>
-              <p className="text-zinc-400">$29/month • Billed monthly</p>
-              <p className="text-sm text-zinc-500 mt-1">
-                Next billing: February 18, 2024
-              </p>
-            </div>
-            <Badge className="bg-emerald-500/20 text-emerald-400">Active</Badge>
-          </div>
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        {/* Current Plan */}
+        <CurrentPlanCard
+          subscription={subscription}
+          planConfig={planConfig}
+          isLoading={isLoading}
+          onChangePlan={() => setIsChangePlanOpen(true)}
+          onCancelSubscription={() => cancelSubscription(false)}
+          onResumeSubscription={resumeSubscription}
+        />
+      </motion.div>
 
-          <div className="flex gap-3">
-            <Button variant="glass">Change Plan</Button>
-            <Button variant="glass">Cancel Subscription</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+      >
+        {/* Usage Limits */}
+        <UsageLimitsCard
+          usageStats={usageStats}
+          planConfig={planConfig}
+        />
+      </motion.div>
 
-      {/* Usage */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">
-            Usage This Month
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-zinc-400">Projects</span>
-              <span className="text-white">3 / 10</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-indigo-500 w-[30%]" />
-            </div>
-          </div>
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+      >
+        {/* Payment Methods */}
+        <PaymentMethodsCard
+          methods={methods}
+          isLoading={methodsLoading}
+          setupLoading={setupLoading}
+          onAddCard={handleOpenAddCard}
+          onSetDefault={setDefault}
+          onDelete={deleteMethod}
+        />
+      </motion.div>
 
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-zinc-400">Storage</span>
-              <span className="text-white">2.4 GB / 10 GB</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-blue-500 w-[24%]" />
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-zinc-400">Team Members</span>
-              <span className="text-white">6 / 25</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-emerald-500 w-[24%]" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Payment Method */}
-      <Card className="glass-card">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">
-            Payment Method
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded flex items-center justify-center">
-                <span className="text-white text-xs font-bold">VISA</span>
-              </div>
-              <div>
-                <p className="text-white font-medium">•••• •••• •••• 4242</p>
-                <p className="text-zinc-400 text-sm">Expires 12/26</p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="border border-white/10 text-white bg-transparent hover:bg-white/10"
-            >
-              Update
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Add Card Dialog */}
+      <Dialog open={isAddCardOpen} onOpenChange={handleCloseAddCardDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Card</DialogTitle>
+          </DialogHeader>
+          {(!isDialogReady || !setupIntent) ? (
+            <PaymentFormSkeleton />
+          ) : (
+            <StripeProvider options={{ clientSecret: setupIntent.client_secret }}>
+              <PaymentMethodForm
+                clientSecret={setupIntent.client_secret}
+                customerId={setupIntent.customer_id}
+                onSuccess={handleCardAdded}
+                onCancel={handleCloseAddCardDialog}
+                defaultName={user?.name ?? ""}
+              />
+            </StripeProvider>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Change Plan Dialog */}
+      <ChangePlanDialog
+        open={isChangePlanOpen}
+        onOpenChange={setIsChangePlanOpen}
+        currentPlan={currentPlan}
+        planConfig={planConfig}
+        plans={plans}
+        plansLoading={billingDataLoading}
+        methods={methods}
+        selectedPaymentMethodId={selectedPaymentMethodId}
+        onPaymentMethodChange={setSelectedPaymentMethodId}
+        onAddCard={handleOpenAddCard}
+        onConfirm={handleConfirmPlanChange}
+      />
     </div>
   );
 }
+
+export default BillingSettings;

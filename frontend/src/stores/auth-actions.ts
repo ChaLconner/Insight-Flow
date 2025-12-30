@@ -17,7 +17,7 @@ export const authActions = {
     const { login } = useAuthStore.getState();
 
     // Backend may set HttpOnly cookies, but also returns tokens in body for fallback.
-    const user = (response as any).user || (response as any).data || null;
+    const user = response.user ?? null;
 
     if (typeof window !== "undefined") {
       // Note: We rely on Zustand persist middleware to handle storage.
@@ -96,7 +96,7 @@ export const authActions = {
 
 // Listen for auth events (only in browser environment)
 if (typeof window !== "undefined") {
-  window.addEventListener("auth:login", (_event: any) => {});
+  window.addEventListener("auth:login", (_event: Event) => {});
 
   window.addEventListener("auth:logout", () => {});
 }

@@ -8,8 +8,38 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: "./src/tests/setup.ts",
+    exclude: ["node_modules", "e2e/**", "playwright.config.ts"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Coverage configuration for 10/10 score
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html", "lcov"],
+      reportsDirectory: "./coverage",
+      exclude: [
+        "node_modules/**",
+        "e2e/**",
+        "**/*.d.ts",
+        "**/*.config.*",
+        "**/types/**",
+        "**/__mocks__/**",
+        "**/tests/setup.ts",
+      ],
+      thresholds: {
+        statements: 70,
+        branches: 65,
+        functions: 70,
+        lines: 70,
+      },
+    },
+    // Performance optimizations
+    pool: "threads",
+    reporters: ["verbose"],
+    // Watch mode optimizations
+    watch: false,
+    // Timeout settings
+    testTimeout: 10000,
+    hookTimeout: 10000,
   },
 });

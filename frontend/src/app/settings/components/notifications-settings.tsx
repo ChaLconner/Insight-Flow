@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Bell, Mail, FlaskConical, Loader2, CheckCircle2 } from "lucide-react";
+import { Bell, Mail, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { usersApi } from "@/lib/api-endpoints";
 
 // ===================================
 // Type Definitions
@@ -29,11 +29,6 @@ export interface InAppNotificationSettings {
 export interface NotificationState {
   email: EmailNotificationSettings;
   inApp: InAppNotificationSettings;
-}
-
-interface NotificationsSettingsProps {
-  notifications: NotificationState;
-  setNotifications: React.Dispatch<React.SetStateAction<NotificationState>>;
 }
 
 // ===================================
@@ -93,98 +88,138 @@ const emailNotificationLabels: Record<keyof EmailNotificationSettings, Notificat
 // Component
 // ===================================
 
-export function NotificationsSettings({
-  notifications,
-  setNotifications,
-}: NotificationsSettingsProps) {
-  const [isCreatingTest, setIsCreatingTest] = useState(false);
+export function NotificationsSettings() {
+  // Settings component with preferences state
 
-  const handleCreateTestNotifications = async () => {
-    setIsCreatingTest(true);
-    try {
-      // Use API client for consistency - fallback to fetch if not available
-      const response = await fetch('/api/notifications/create-test', {
-        method: 'POST',
-        credentials: 'include',
-      });
+  const [isLoading, setIsLoading] = useState(true);
+  const [preferences, setPreferences] = useState<NotificationState>({
+    email: {
+      tasks: true,
+      projects: true,
+      mentions: true,
+    },
+    inApp: {
+      tasks: true,
+      projects: true,
+      mentions: true,
+      updates: true,
+      system: true,
+    },
+  });
 
-      if (response.ok) {
-        const data = await response.json();
-        toast.success(data.message, {
-          description: "Check the bell icon to see your notifications",
-        });
-      } else {
-        toast.error("Failed to create test notifications");
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        setIsLoading(true);
+        const userSettings = await usersApi.getSettings().catch(() => null) as { notificationPreferences?: { email?: Partial<EmailNotificationSettings>; inApp?: Partial<InAppNotificationSettings> } } | null;
+        if (userSettings?.notificationPreferences) {
+          setPreferences((prev) => ({
+            email: {
+              ...prev.email,
+              ...(userSettings.notificationPreferences?.email ?? {}),
+            },
+            inApp: {
+              ...prev.inApp,
+              ...(userSettings.notificationPreferences?.inApp ?? {}),
+            },
+          }));
+        }
+      } catch {
+        // Silent failure - use defaults
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Error creating test notifications:", error);
-      toast.error("Failed to create test notifications");
-    } finally {
-      setIsCreatingTest(false);
+    };
+
+    loadSettings();
+  }, []);
+
+  const persistSettings = async (newState: NotificationState) => {
+    try {
+      await usersApi.updateSettings({
+        notificationPreferences: newState,
+      });
+      // Silent success for auto-save unless we want a small toast or indicator
+    } catch (_err) {
+      toast.error("Failed to save notification preferences");
     }
   };
 
   const handleToggleInApp = (key: keyof InAppNotificationSettings, checked: boolean) => {
-    setNotifications((prev) => ({
-      ...prev,
-      inApp: { ...prev.inApp, [key]: checked },
-    }));
+    const newState = {
+      ...preferences,
+      inApp: { ...preferences.inApp, [key]: checked },
+    };
+    setPreferences(newState);
+    persistSettings(newState);
   };
 
   const handleToggleEmail = (key: keyof EmailNotificationSettings, checked: boolean) => {
-    setNotifications((prev) => ({
-      ...prev,
-      email: { ...prev.email, [key]: checked },
-    }));
+    const newState = {
+      ...preferences,
+      email: { ...preferences.email, [key]: checked },
+    };
+    setPreferences(newState);
+    persistSettings(newState);
   };
 
   // Count enabled notifications
-  const enabledInAppCount = Object.values(notifications.inApp).filter(Boolean).length;
-  const enabledEmailCount = Object.values(notifications.email).filter(Boolean).length;
+  const enabledInAppCount = Object.values(preferences.inApp).filter(Boolean).length;
+  const enabledEmailCount = Object.values(preferences.email).filter(Boolean).length;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-64 animate-pulse bg-muted rounded-xl" />
+        <div className="h-48 animate-pulse bg-muted rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* In-App Notifications Section */}
-      <Card className="glass-card border-emerald-500/20">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                <Bell className="h-5 w-5 text-emerald-400" />
+              <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Bell className="h-5 w-5 text-emerald-500" />
                 In-App Notifications
               </CardTitle>
-              <p className="text-sm text-zinc-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Choose which notifications appear in the notification center
               </p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span>{enabledInAppCount} of {Object.keys(notifications.inApp).length} enabled</span>
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+              <span>{enabledInAppCount} of {Object.keys(preferences.inApp).length} enabled</span>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-1">
-          {(Object.keys(notifications.inApp) as Array<keyof InAppNotificationSettings>).map((key) => {
+          {(Object.keys(preferences.inApp) as Array<keyof InAppNotificationSettings>).map((key) => {
             const config = inAppNotificationLabels[key];
-            const isEnabled = notifications.inApp[key];
-            
+            const isEnabled = preferences.inApp[key];
+
             return (
               <div
                 key={key}
                 className={`flex items-center justify-between py-3 px-4 rounded-lg transition-colors border ${
-                  isEnabled 
-                    ? "bg-white/5 border-white/10 hover:border-emerald-500/30" 
+                  isEnabled
+                    ? "bg-primary/20 border-primary/30 shadow-sm"
                     : "border-transparent hover:bg-white/5"
                 }`}
               >
                 <div className="flex-1 pr-4">
-                  <Label className="text-zinc-200 font-medium cursor-pointer flex items-center gap-2">
+                  <Label className="text-foreground font-medium cursor-pointer flex items-center gap-2">
                     {config.label}
                     {isEnabled && (
-                      <span className={`text-xs ${config.color ?? 'text-emerald-400'}`}>•</span>
+                      <span className={`text-xs ${config.color ?? 'text-emerald-500'}`}>•</span>
                     )}
                   </Label>
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {config.description}
                   </p>
                 </div>
@@ -199,43 +234,43 @@ export function NotificationsSettings({
       </Card>
 
       {/* Email Notifications Section */}
-      <Card className="glass-card border-blue-500/20">
+      <Card className="border-border bg-card">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                <Mail className="h-5 w-5 text-blue-400" />
+              <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Mail className="h-5 w-5 text-blue-500" />
                 Email Notifications
               </CardTitle>
-              <p className="text-sm text-zinc-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Receive email updates for important activities
               </p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-500">
-              <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
-              <span>{enabledEmailCount} of {Object.keys(notifications.email).length} enabled</span>
+            <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+              <CheckCircle2 className="h-3.5 w-3.5 text-blue-500" />
+              <span>{enabledEmailCount} of {Object.keys(preferences.email).length} enabled</span>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-1">
-          {(Object.keys(notifications.email) as Array<keyof EmailNotificationSettings>).map((key) => {
+          {(Object.keys(preferences.email) as Array<keyof EmailNotificationSettings>).map((key) => {
             const config = emailNotificationLabels[key];
-            const isEnabled = notifications.email[key];
-            
+            const isEnabled = preferences.email[key];
+
             return (
               <div
                 key={key}
                 className={`flex items-center justify-between py-3 px-4 rounded-lg transition-colors border ${
-                  isEnabled 
-                    ? "bg-white/5 border-white/10 hover:border-blue-500/30" 
+                  isEnabled
+                    ? "bg-primary/20 border-primary/30 shadow-sm"
                     : "border-transparent hover:bg-white/5"
                 }`}
               >
                 <div className="flex-1 pr-4">
-                  <Label className="text-zinc-200 font-medium cursor-pointer">
+                  <Label className="text-foreground font-medium cursor-pointer">
                     {config.label}
                   </Label>
-                  <p className="text-xs text-zinc-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {config.description}
                   </p>
                 </div>
@@ -246,41 +281,6 @@ export function NotificationsSettings({
               </div>
             );
           })}
-        </CardContent>
-      </Card>
-
-      {/* Test Notifications */}
-      <Card className="glass-card border-amber-500/20">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-            <FlaskConical className="h-5 w-5 text-amber-400" />
-            Test Notifications
-          </CardTitle>
-          <p className="text-sm text-zinc-400 mt-1">
-            Create sample notifications to test the system
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={handleCreateTestNotifications}
-            disabled={isCreatingTest}
-            className="bg-amber-600 hover:bg-amber-500 text-white"
-          >
-            {isCreatingTest ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <FlaskConical className="h-4 w-4 mr-2" />
-                Create Test Notifications
-              </>
-            )}
-          </Button>
-          <p className="text-xs text-zinc-500 mt-3">
-            This will create 5 sample notifications. Check the bell icon in the header to view them.
-          </p>
         </CardContent>
       </Card>
     </div>

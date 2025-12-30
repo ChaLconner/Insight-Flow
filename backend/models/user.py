@@ -1,46 +1,100 @@
 """
 User model for Insight-Flow application.
 """
-from sqlalchemy import Column, String, Boolean, Text, DateTime
-from sqlalchemy.orm import relationship
+
+from datetime import datetime
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from .base import BaseModel
+
+if TYPE_CHECKING:
+    from .analytics import UserProductivity
+    from .notification import Notification
+    from .project import Project, ProjectMember
+    from .task import Task, TaskAttachment, TaskComment, TaskTimeTracking
+    from .user_favorite import UserFavorite
+    from .user_settings import UserSettings
+
 
 class User(BaseModel):
     """
     User model representing application users.
     """
+
     __tablename__ = "users"
-    
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    name = Column(String(255), nullable=True)  # Made nullable to support first_name/last_name
-    first_name = Column(String(255), nullable=True)
-    last_name = Column(String(255), nullable=True)
-    username = Column(String(255), unique=True, nullable=True, index=True)
-    hashed_password = Column(String(255))  # For password authentication
-    avatar_url = Column(String(500))
-    google_id = Column(String(255), unique=True, index=True)
-    github_id = Column(String(255), unique=True, index=True, nullable=True)
-    is_active = Column(Boolean, default=True)
-    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    google_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    github_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verification_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
 
     # role field is optional to support existing databases without the field
     # will be set to default value "user" if not present
-    role = Column(String(50), nullable=True)
-    
+    role: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    # Stripe customer ID (cached for faster payment operations)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+
     # Extended profile fields
-    phone = Column(String(50), nullable=True)
-    bio = Column(Text, nullable=True)
-    location = Column(String(255), nullable=True)
-    website = Column(String(255), nullable=True)
-    
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # Relationships
-    owned_projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
-    project_memberships = relationship("ProjectMember", back_populates="user", cascade="all, delete-orphan")
-    assigned_tasks = relationship("Task", foreign_keys="Task.assignee_id", back_populates="assignee")
-    created_tasks = relationship("Task", foreign_keys="Task.created_by", back_populates="creator")
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
-    productivity = relationship("UserProductivity", back_populates="user", cascade="all, delete-orphan")
-    time_tracking = relationship("TaskTimeTracking", back_populates="user", cascade="all, delete-orphan")
-    task_comments = relationship("TaskComment", back_populates="user", cascade="all, delete-orphan")
-    uploaded_attachments = relationship("TaskAttachment", back_populates="uploaded_by_user", cascade="all, delete-orphan")
-    settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    owned_projects: Mapped[list["Project"]] = relationship(
+        "Project", back_populates="owner", cascade="all, delete-orphan"
+    )
+    project_memberships: Mapped[list["ProjectMember"]] = relationship(
+        "ProjectMember", back_populates="user", cascade="all, delete-orphan"
+    )
+    assigned_tasks: Mapped[list["Task"]] = relationship(
+        "Task", foreign_keys="Task.assignee_id", back_populates="assignee"
+    )
+    created_tasks: Mapped[list["Task"]] = relationship(
+        "Task", foreign_keys="Task.created_by", back_populates="creator"
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
+    )
+    productivity: Mapped[list["UserProductivity"]] = relationship(
+        "UserProductivity", back_populates="user", cascade="all, delete-orphan"
+    )
+    time_tracking: Mapped[list["TaskTimeTracking"]] = relationship(
+        "TaskTimeTracking", back_populates="user", cascade="all, delete-orphan"
+    )
+    task_comments: Mapped[list["TaskComment"]] = relationship(
+        "TaskComment", back_populates="user", cascade="all, delete-orphan"
+    )
+    uploaded_attachments: Mapped[list["TaskAttachment"]] = relationship(
+        "TaskAttachment", back_populates="uploaded_by_user", cascade="all, delete-orphan"
+    )
+    settings: Mapped[Optional["UserSettings"]] = relationship(
+        "UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    favorite_projects: Mapped[list["UserFavorite"]] = relationship(
+        "UserFavorite", back_populates="user", cascade="all, delete-orphan"
+    )

@@ -22,7 +22,6 @@ interface BurndownChartProps {
 
 // Memoized tooltip styles to prevent recreation on each render
 
-
 const BurndownChartComponent: React.FC<BurndownChartProps> = ({
   data,
   period,
@@ -44,12 +43,12 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({
 
   return (
     <Card
-      className="border-white/10 bg-white/5 backdrop-blur-sm h-full"
+      className="border-border bg-card backdrop-blur-sm h-full"
       role="figure"
       aria-label={`Burndown chart showing ${title}`}
     >
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-semibold text-white">
+        <CardTitle className="text-lg font-semibold text-foreground">
           {title}
         </CardTitle>
       </CardHeader>

@@ -340,8 +340,7 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
       activityEvents.forEach((event) => {
         document.removeEventListener(event, handleActivity, {
           capture: true,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any);
+        });
       });
     };
   }, [updateActivity, checkAuthStatus, timeoutMinutes]);

@@ -1,0 +1,77 @@
+/* CSS Variables for Insight Flow Theme */
+:root,
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 215 28% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 215 28% 17%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 215 28% 17%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 215 28% 17%;
+  --input: 215 28% 17%;
+  --ring: 239 84% 67%;
+  --radius: 0.75rem;
+
+  /* Glass morphism colors (Dark Mode Default) */
+  --glass-light: 0 0% 100% / 3%;
+  --glass-medium: 0 0% 100% / 7%;
+  --glass-dark: 0 0% 0% / 20%;
+  --glass-border: 0 0% 100% / 8%;
+  --glass-border-light: 0 0% 100% / 4%;
+
+  /* Insight Flow specific colors */
+  --primary-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  --secondary-gradient: linear-gradient(135deg, #3b82f6 0%, #2dd4bf 100%);
+  --success-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  --warning-gradient: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  --error-gradient: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+}
+
+.light {
+  /* Slightly gray background for depth, cards stay pure white */
+  --background: 220 14% 96%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 47% 11%;
+  --primary: 243 75% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 92%;
+  --secondary-foreground: 222.2 47% 11%;
+  --muted: 220 14% 92%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 220 14% 92%;
+  --accent-foreground: 222.2 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 13% 87%;
+  --input: 220 13% 87%;
+  --ring: 243 75% 59%;
+
+  /* Light mode glass colors - adjusted for light backgrounds */
+  --glass-light: 220 14% 96% / 80%;
+  --glass-medium: 0 0% 100% / 60%;
+  --glass-dark: 0 0% 0% / 3%;
+  --glass-border: 220 13% 87%;
+  --glass-border-light: 220 13% 91%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}

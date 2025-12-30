@@ -26,15 +26,15 @@ export function UserPagination({
   const endIndex = startIndex + currentCount - 1;
 
   return (
-    <div className="flex items-center justify-between p-4 border-t border-white/10">
-      <div className="text-sm text-zinc-400">
+    <div className="flex items-center justify-between p-4 border-t border-border">
+      <div className="text-sm text-muted-foreground">
         {totalUsers > 0 ? (
           <>
             Showing{" "}
-            <span className="font-medium text-white">
+            <span className="font-medium text-foreground">
               {startIndex}-{endIndex}
             </span>{" "}
-            of <span className="font-medium text-white">{totalUsers}</span>{" "}
+            of <span className="font-medium text-foreground">{totalUsers}</span>{" "}
             users
           </>
         ) : (
@@ -49,18 +49,18 @@ export function UserPagination({
         <Button
           variant="outline"
           size="sm"
-          className="glass border-white/10 text-white hover:bg-white/5 disabled:opacity-50"
+          className="border-border text-foreground hover:bg-accent disabled:opacity-50"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1 || isLoading}
           aria-label="Go to previous page"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
-        <span className="text-sm text-zinc-400 px-2">Page {page}</span>
+        <span className="text-sm text-muted-foreground px-2">Page {page}</span>
         <Button
           variant="outline"
           size="sm"
-          className="glass border-white/10 text-white hover:bg-white/5 disabled:opacity-50"
+          className="border-border text-foreground hover:bg-accent disabled:opacity-50"
           onClick={() => onPageChange(page + 1)}
           disabled={!hasMore || isLoading}
           aria-label="Go to next page"

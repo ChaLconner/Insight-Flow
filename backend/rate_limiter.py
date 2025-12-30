@@ -1,0 +1,226 @@
+"""
+Rate limiting configuration for the application.
+Uses slowapi for simple and effective rate limiting.
+
+Production: Uses Redis for distributed rate limiting across multiple workers.
+Development: Falls back to in-memory storage for simplicity.
+"""
+
+import logging
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+logger = logging.getLogger(__name__)
+
+
+def get_user_identifier(request: Request) -> str:
+    """
+    Get user identifier for rate limiting.
+    Uses authenticated user ID if available, otherwise falls back to IP address.
+    """
+    # Try to get user from request state (set by auth middleware)
+    if hasattr(request.state, "user") and request.state.user:
+        return f"user:{request.state.user.id}"
+
+    # Fallback to IP address
+    return get_remote_address(request)
+
+
+def create_limiter() -> Limiter:
+    """
+    Create rate limiter with Redis storage for production,
+    falling back to in-memory for development.
+    """
+    from config import get_settings
+
+    settings = get_settings()
+
+    # Try to use Redis if configured
+    redis_url = settings.cache.redis_url
+
+    if redis_url and settings.is_production:
+        try:
+            # Test Redis connection
+            import redis
+
+            r = redis.from_url(redis_url)
+            r.ping()
+
+            logger.info(f"Rate limiter using Redis: {redis_url[:20]}...")
+            return Limiter(
+                key_func=get_user_identifier,
+                storage_uri=redis_url,
+                strategy="fixed-window",
+            )
+        except Exception as e:
+            logger.warning(f"Redis connection failed, using in-memory rate limiting: {e}")
+
+    # Fallback to in-memory storage
+    if settings.is_production:
+        logger.warning(
+            "Using in-memory rate limiting in production - "
+            "rate limits won't be shared across workers. "
+            "Configure REDIS_URL for distributed rate limiting."
+        )
+    else:
+        logger.info("Using in-memory rate limiting (development mode)")
+
+    return Limiter(key_func=get_user_identifier)
+
+
+# Create limiter instance
+limiter = create_limiter()
+
+
+def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """Custom handler for rate limit exceeded errors."""
+    # Log the rate limit hit
+    logger.warning(
+        f"Rate limit exceeded: {get_user_identifier(request)} "
+        f"on {request.method} {request.url.path}"
+    )
+
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "Rate limit exceeded. Please try again later.",
+            "retry_after": exc.detail,
+            "error_code": "RATE_LIMIT_EXCEEDED",
+        },
+        headers={
+            "Retry-After": str(exc.detail),
+            "X-RateLimit-Limit": request.state.view_rate_limit
+            if hasattr(request.state, "view_rate_limit")
+            else "unknown",
+        },
+    )
+
+
+# Rate limit configurations for different endpoint types
+class RateLimits:
+    """
+    Centralized rate limit configurations.
+    All limits are defined here for easy adjustment.
+
+    Format: "X/period" where period is: second, minute, hour, day
+
+    Production recommendations:
+    - Use stricter limits for financial operations
+    - Consider IP-based limiting for unauthenticated endpoints
+    - Monitor and adjust based on actual usage patterns
+    """
+
+    # Payment & Financial endpoints (most restrictive)
+    PAYMENT_SETUP_INTENT = "5/minute"  # Creating setup intents
+    PAYMENT_ADD_METHOD = "10/minute"  # Adding payment methods
+    PAYMENT_SUBSCRIPTION = "5/minute"  # Subscription operations
+    PAYMENT_DELETE = "10/minute"  # Deleting payment methods
+
+    # General payment reads (more lenient)
+    PAYMENT_READ = "60/minute"  # Reading payment data
+
+    # Authentication (prevent brute force)
+    AUTH_LOGIN = "10/minute"  # Login attempts
+    AUTH_REGISTER = "5/minute"  # Registration
+    AUTH_PASSWORD_RESET = "3/minute"  # Password reset requests
+
+    # General API endpoints
+    API_READ = "200/minute"  # General read operations
+    API_WRITE = "60/minute"  # General write operations
+
+    # Webhooks (from Stripe) - high limit
+    WEBHOOK = "300/minute"  # Webhook processing
+
+    # Stricter limits for known abuse vectors
+    SENSITIVE_READ = "30/minute"  # Sensitive data access
+    BULK_OPERATIONS = "20/minute"  # Bulk create/update/delete
+
+
+# =============================================================================
+# Async Rate Limiter for FastAPI Dependencies (e.g., auth routes)
+# Uses cache_service for rate limiting with async support
+# =============================================================================
+
+import time
+
+from fastapi import HTTPException, status
+
+from services.cache_service import cache_service
+
+
+class AuthRateLimiter:
+    """
+    Async rate limiter for use as FastAPI dependency.
+    Uses cache_service for storage, supporting both Redis and in-memory backends.
+    """
+
+    def __init__(self, requests: int = 5, window: int = 60):
+        """
+        Initialize rate limiter.
+
+        Args:
+            requests: Maximum number of requests allowed in the window
+            window: Time window in seconds
+        """
+        self.requests = requests
+        self.window = window
+        self.cache_service = cache_service
+
+    async def __call__(self, request: Request):
+        """
+        Check rate limit for the request.
+        Raises HTTPException if limit exceeded.
+        """
+        # Skip rate limiting in testing mode
+        from config import get_settings
+
+        settings = get_settings()
+        if settings.is_testing:
+            return
+
+        # Get client IP
+        client_ip = request.client.host if request.client else "unknown"
+        path = request.url.path
+
+        key = f"rate_limit:{client_ip}:{path}"
+
+        # Get current usage
+        usage_data = self.cache_service.get(key)
+        current_time = time.time()
+
+        if usage_data:
+            count = usage_data["content"]["count"]
+            start_time = usage_data["content"]["start_time"]
+
+            # Check if window expired
+            if current_time - start_time > self.window:
+                # Reset
+                self.cache_service.set(
+                    key, {"content": {"count": 1, "start_time": current_time}}, timeout=self.window
+                )
+            else:
+                # Increment
+                if count >= self.requests:
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail="Too many requests. Please try again later.",
+                    )
+
+                self.cache_service.set(
+                    key,
+                    {"content": {"count": count + 1, "start_time": start_time}},
+                    timeout=self.window,
+                )
+        else:
+            # First request
+            self.cache_service.set(
+                key, {"content": {"count": 1, "start_time": current_time}}, timeout=self.window
+            )
+
+
+# Pre-configured auth rate limiter instance
+auth_rate_limiter = AuthRateLimiter(requests=5, window=60)  # 5 requests per minute

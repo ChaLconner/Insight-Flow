@@ -16,15 +16,15 @@ const RecentProjects = memo(function RecentProjects({
   projects,
 }: RecentProjectsProps) {
   return (
-    <Card className="col-span-4 border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="col-span-4 border-border bg-card">
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-semibold text-white">
+        <CardTitle className="text-lg font-semibold text-foreground">
           Recent Projects
         </CardTitle>
         <Button
           variant="ghost"
           size="sm"
-          className="text-zinc-400 hover:text-white cursor-pointer"
+          className="text-muted-foreground hover:text-foreground cursor-pointer"
           asChild
         >
           <Link href="/projects">View All</Link>
@@ -48,11 +48,11 @@ const RecentProjects = memo(function RecentProjects({
 // Separate empty state component - memoized
 const EmptyProjectsState = memo(function EmptyProjectsState() {
   return (
-    <div className="text-center text-zinc-400 py-12">
-      <div className="mx-auto h-12 w-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
-        <Briefcase className="h-6 w-6 text-zinc-500" />
+    <div className="text-center text-muted-foreground py-12">
+      <div className="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+        <Briefcase className="h-6 w-6 text-muted-foreground" />
       </div>
-      <p className="font-medium text-white">No projects yet</p>
+      <p className="font-medium text-foreground">No projects yet</p>
       <p className="text-sm mt-1">Create your first project to get started!</p>
     </div>
   );

@@ -33,10 +33,10 @@ const WelcomeSectionSkeleton = memo(function WelcomeSectionSkeleton() {
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
         {/* Show actual text immediately for LCP optimization */}
-        <h2 className="text-3xl font-bold tracking-tight text-white">
+        <h2 className="text-3xl font-bold tracking-tight text-foreground">
           Dashboard
         </h2>
-        <p className="text-zinc-400">
+        <p className="text-muted-foreground">
           Here's an overview of your projects and tasks.
         </p>
       </div>
@@ -54,7 +54,7 @@ const StatsGridSkeleton = memo(function StatsGridSkeleton() {
       {Array.from({ length: STATS_SKELETON_COUNT }, (_, i) => (
         <Card
           key={`stat-skeleton-${i}`}
-          className="border-white/10 bg-white/5 backdrop-blur-sm"
+          className="border-border bg-card backdrop-blur-sm"
         >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <Skeleton className="h-4 w-24" />
@@ -72,7 +72,7 @@ const StatsGridSkeleton = memo(function StatsGridSkeleton() {
 
 const ProjectsListSkeleton = memo(function ProjectsListSkeleton() {
   return (
-    <Card className="col-span-4 border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="col-span-4 border-border bg-card backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between">
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-5 w-5 rounded-full" />
@@ -108,7 +108,7 @@ const ProjectsListSkeleton = memo(function ProjectsListSkeleton() {
 
 const ActivityFeedSkeleton = memo(function ActivityFeedSkeleton() {
   return (
-    <Card className="col-span-3 border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="col-span-3 border-border bg-card backdrop-blur-sm">
       <CardHeader>
         <Skeleton className="h-6 w-32" />
       </CardHeader>

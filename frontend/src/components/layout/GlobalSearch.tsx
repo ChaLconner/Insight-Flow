@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useId } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Folder, CheckSquare, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -22,9 +22,11 @@ interface SearchResults {
 export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
+  const searchId = useId();
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(true); // Prevents browser autofill
 
   // Cache data to avoid re-fetching on every keystroke
   const [cachedData, setCachedData] = useState<{
@@ -68,12 +70,10 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
       // Normalize data to ensure we have arrays, handling both direct arrays and paginated responses
       const projects = Array.isArray(projectsData)
         ? projectsData
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        : (projectsData as any).items ?? [];
+        : ((projectsData as Record<string, unknown>).items as Project[]) ?? [];
       const tasks = Array.isArray(tasksData)
         ? tasksData
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        : (tasksData as any).items ?? [];
+        : ((tasksData as Record<string, unknown>).items as Task[]) ?? [];
 
       setCachedData({ projects, tasks });
     } catch (error) {
@@ -133,7 +133,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
       className={cn("relative w-full md:w-80", className)}
       ref={containerRef}
     >
-      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={query}
         onChange={(e) => {
@@ -141,23 +141,40 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
           setQuery(newValue);
           setIsOpen(!!newValue.trim());
         }}
-        onFocus={handleFocus}
+        onFocus={() => {
+          setIsReadOnly(false);
+          handleFocus();
+        }}
+        onBlur={() => {
+          // Re-enable readonly when not focused to prevent future autofills
+          if (!query) {
+            setIsReadOnly(true);
+          }
+        }}
+        readOnly={isReadOnly}
         placeholder="Search projects, tasks..."
-        autoComplete="new-password"
+        type="search"
+        role="searchbox"
+        autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
-        name="global-search-query"
+        name={`global-search-${searchId}`}
         id="global-search-input"
+        aria-autocomplete="none"
         data-1p-ignore="true"
         data-lpignore="true"
+        data-protonpass-ignore="true"
+        data-bwignore="true"
         data-form-type="other"
-        className="h-10 rounded-full border-white/10 bg-white/5 pl-10 pr-10 text-sm text-white placeholder:text-zinc-500 focus:border-indigo-50/50 focus:bg-white/10 focus:ring-0 transition-all duration-200"
+        data-dashlane-rid="disabled"
+        className="h-10 rounded-full border-border bg-background pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:bg-background focus:ring-0 transition-all duration-200 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden [&::-ms-clear]:hidden"
       />
       {query && (
         <button
           onClick={clearSearch}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          aria-label="Clear search"
         >
           <X className="h-4 w-4" />
         </button>
@@ -165,9 +182,9 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
 
       {/* Dropdown Results */}
       {isOpen && query && cachedData && (
-        <div className="absolute top-full mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 p-2 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 z-50">
+        <div className="absolute top-full mt-2 w-full overflow-hidden rounded-xl border border-border bg-popover/80 p-2 shadow-xl backdrop-blur-xl backdrop-saturate-[1.8] animate-in fade-in zoom-in-95 duration-200 z-50">
           {results.projects.length === 0 && results.tasks.length === 0 ? (
-            <div className="py-4 text-center text-sm text-zinc-500">
+            <div className="py-4 text-center text-sm text-muted-foreground">
               {query ? "No results found." : "Type to search..."}
             </div>
           ) : (
@@ -175,16 +192,16 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
               {/* Projects Section */}
               {results.projects.length > 0 && (
                 <div>
-                  <div className="px-2 py-1 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Projects
                   </div>
                   {results.projects.map((project) => (
                     <button
                       key={project.id}
                       onClick={() => handleSelectProject(project)}
-                      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors group cursor-pointer"
+                      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors group cursor-pointer"
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500/20 group-hover:text-indigo-300 transition-colors">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-indigo-500/10 text-indigo-500 group-hover:bg-indigo-500/20 transition-colors">
                         <Folder className="h-4 w-4" />
                       </div>
                       <span className="truncate flex-1">{project.name}</span>
@@ -195,27 +212,27 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
 
               {/* Tasks Section */}
               {results.projects.length > 0 && results.tasks.length > 0 && (
-                <div className="my-1 border-t border-white/5" />
+                <div className="my-1 border-t border-border" />
               )}
 
               {results.tasks.length > 0 && (
                 <div>
-                  <div className="px-2 py-1 text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Tasks
                   </div>
                   {results.tasks.map((task) => (
                     <button
                       key={task.id}
                       onClick={() => handleSelectTask(task)}
-                      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors group cursor-pointer"
+                      className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors group cursor-pointer"
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20 group-hover:text-emerald-300 transition-colors">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
                         <CheckSquare className="h-4 w-4" />
                       </div>
                       <div className="flex flex-col min-w-0 flex-1">
                         <span className="truncate">{task.title}</span>
                         {task.project && (
-                          <span className="text-xs text-zinc-500 truncate">
+                          <span className="text-xs text-muted-foreground truncate">
                             {task.project.name}
                           </span>
                         )}

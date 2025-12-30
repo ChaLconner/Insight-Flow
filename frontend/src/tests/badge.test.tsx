@@ -96,7 +96,7 @@ describe("Badge Component", () => {
       </Badge>,
     );
     const badge = screen.getByTestId("badge");
-    expect(badge).toHaveClass("bg-blue-500/20");
+    expect(badge).toHaveClass("bg-primary/20");
   });
 
   it("applies glass-success variant", () => {
@@ -106,7 +106,7 @@ describe("Badge Component", () => {
       </Badge>,
     );
     const badge = screen.getByTestId("badge");
-    expect(badge).toHaveClass("bg-green-500/20");
+    expect(badge).toHaveClass("bg-emerald-500/20");
   });
 
   it("applies custom className", () => {

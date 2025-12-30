@@ -83,8 +83,8 @@ const SLIDE_TRANSITION = {
 } as const;
 
 const ChartLoadingFallback = () => (
-  <div className="flex h-full w-full items-center justify-center bg-white/5 rounded-xl border border-white/10">
-    <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+  <div className="flex h-full w-full items-center justify-center bg-muted rounded-xl border border-border">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
   </div>
 );
 
@@ -223,7 +223,7 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
       <div className="relative h-[450px] overflow-hidden rounded-xl">
         {/* Left Navigation Zone */}
         <div
-          className="absolute top-24 bottom-12 left-0 w-12 z-10 cursor-pointer flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 transition-all"
+          className="absolute top-24 bottom-12 left-0 w-12 z-10 cursor-pointer flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-accent/50 transition-all"
           onClick={(e) => {
             e.stopPropagation();
             prevSlide();
@@ -236,7 +236,7 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
 
         {/* Right Navigation Zone */}
         <div
-          className="absolute top-24 bottom-12 right-0 w-12 z-10 cursor-pointer flex items-center justify-center text-white/30 hover:text-white hover:bg-white/5 transition-all"
+          className="absolute top-24 bottom-12 right-0 w-12 z-10 cursor-pointer flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-accent/50 transition-all"
           onClick={(e) => {
             e.stopPropagation();
             nextSlide();
@@ -286,8 +286,8 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
             onClick={() => handlePaginationClick(index)}
             className={`h-2 w-2 rounded-full transition-all ${
               index === currentIndex
-                ? "bg-indigo-500 w-4"
-                : "bg-zinc-600 hover:bg-zinc-500"
+                ? "bg-primary w-4"
+                : "bg-muted-foreground/50 hover:bg-muted-foreground"
             }`}
             aria-label={`Go to slide ${index + 1}`}
           />

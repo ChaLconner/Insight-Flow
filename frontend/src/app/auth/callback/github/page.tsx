@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_CONFIG } from "@/lib/constants";
 import { authActions } from "@/stores/auth-actions";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-export default function GitHubCallbackPage() {
+function GitHubCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
-  /* const [isProcessing, setIsProcessing] = useState(true); */ // unused
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -21,7 +20,6 @@ export default function GitHubCallbackPage() {
 
       if (errorParam) {
         setError(errorDescription ?? errorParam);
-        // setIsProcessing(false);
         toast.error("GitHub login failed", {
           description: errorDescription ?? errorParam,
         });
@@ -30,7 +28,6 @@ export default function GitHubCallbackPage() {
 
       if (!code) {
         setError("No authorization code received from GitHub");
-        // setIsProcessing(false);
         toast.error("GitHub login failed", {
           description: "No authorization code received",
         });
@@ -54,7 +51,7 @@ export default function GitHubCallbackPage() {
         }
 
         const data = await response.json();
-        console.log("✅ GitHub login successful");
+
 
         // Use authActions to handle login
         await authActions.loginWithResponse(data);
@@ -94,8 +91,6 @@ export default function GitHubCallbackPage() {
           err instanceof Error ? err.message : "GitHub authentication failed";
         setError(errorMessage);
         toast.error("GitHub login failed", { description: errorMessage });
-      } finally {
-        // setIsProcessing(false);
       }
     };
 
@@ -104,18 +99,18 @@ export default function GitHubCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-indigo-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-red-600 flex items-center justify-center mb-4">
-            <span className="text-2xl">✕</span>
+          <div className="mx-auto h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center mb-4">
+            <span className="text-2xl text-destructive">✕</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">
+          <h1 className="text-2xl font-bold text-foreground mb-2">
             Authentication Failed
           </h1>
-          <p className="text-zinc-400 mb-6">{error}</p>
+          <p className="text-muted-foreground mb-6">{error}</p>
           <button
             onClick={() => router.push("/auth/login")}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+            className="px-6 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors"
           >
             Back to Login
           </button>
@@ -125,18 +120,32 @@ export default function GitHubCallbackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-indigo-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="text-center">
-        <div className="mx-auto h-12 w-12 rounded-xl bg-indigo-600 flex items-center justify-center mb-4">
-          <Loader2 className="h-6 w-6 text-white animate-spin" />
+        <div className="mx-auto h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+          <Loader2 className="h-6 w-6 text-primary animate-spin" />
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">
+        <h1 className="text-2xl font-bold text-foreground mb-2">
           Signing in with GitHub
         </h1>
-        <p className="text-zinc-400">
+        <p className="text-muted-foreground">
           Please wait while we complete your authentication...
         </p>
       </div>
     </div>
+  );
+}
+
+export default function GitHubCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <Loader2 className="h-6 w-6 text-primary animate-spin" />
+        </div>
+      }
+    >
+      <GitHubCallbackContent />
+    </Suspense>
   );
 }

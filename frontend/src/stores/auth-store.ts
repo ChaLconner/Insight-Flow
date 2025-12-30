@@ -4,7 +4,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { User } from "@/types";
+import { User, UpdateUserRequest } from "@/types";
 
 interface AuthState {
   // State
@@ -33,13 +33,6 @@ interface PersistedAuthState {
   lastActivity: number;
 }
 
-// Global flag removed to prevent race conditions
-// let initializationPromise: Promise<void> | null = null;
-
-// Export function to reset global initialization flag (for auth-actions)
-export const resetGlobalAuthInitialization = () => {
-  // No-op as global flag is removed
-};
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -100,16 +93,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // Clear localStorage user data
-        // Clear localStorage user data - Removed as we use Zustand persist which handles this
-        // and we want to rely on state management not manual API
-        if (typeof window !== "undefined") {
-          // We explicitly DO NOT want to manually clear 'user' from localStorage
-          // because Zustand persist middleware manages the 'insight-flow-auth' key.
-          // Clearing 'user' (if it existed from old code) is fine, but we should strictly rely on the store.
-        }
-
-        // Clear state
+        // Clear state - Zustand persist middleware handles localStorage cleanup
         set({
           user: null,
           isAuthenticated: false,
@@ -117,9 +101,6 @@ export const useAuthStore = create<AuthState>()(
           lastActivity: 0,
           isInitialized: false,
         });
-
-        // Reset global initialization flag to allow re-initialization
-        resetGlobalAuthInitialization();
       },
 
       updateActivity: () => {
@@ -134,12 +115,12 @@ export const useAuthStore = create<AuthState>()(
           return false;
         }
 
-        // Check inactivity timeout (30 minutes)
+        // Check inactivity timeout (30 days)
         const now = Date.now();
         const timeSinceActivity = now - lastActivity;
-        const thirtyMinutes = 30 * 60 * 1000;
+        const thirtyDays = 30 * 24 * 60 * 60 * 1000;
 
-        if (timeSinceActivity > thirtyMinutes) {
+        if (timeSinceActivity > thirtyDays) {
           get().logout();
           return false;
         }
@@ -232,12 +213,12 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      updateUserProfile: async (data: Partial<User>) => {
+      updateUserProfile: async (data: UpdateUserRequest) => {
         const { setUser, user } = get();
         try {
           const { usersApi } = await import("@/lib/api-endpoints");
           // Assuming the API takes the update object directly
-          const updatedUser = await usersApi.updateCurrentUser(data as any);
+          const updatedUser = await usersApi.updateCurrentUser(data);
           setUser({ ...user, ...updatedUser });
           return updatedUser;
         } catch (error) {

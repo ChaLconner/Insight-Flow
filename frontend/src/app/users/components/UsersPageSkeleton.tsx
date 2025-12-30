@@ -27,7 +27,7 @@ export function UsersPageSkeleton() {
       {/* Stats Grid Skeleton */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <Card key={i} className="border-white/10 bg-white/5 backdrop-blur-sm">
+          <Card key={i} className="border-border bg-card backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <Skeleton className="h-4 w-24" aria-hidden="true" />
               <Skeleton className="h-4 w-4" aria-hidden="true" />
@@ -51,9 +51,9 @@ export function UsersPageSkeleton() {
       </div>
 
       {/* Users List Skeleton */}
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="border-border bg-card backdrop-blur-sm">
         <CardContent className="p-0">
-          <div className="divide-y divide-white/10">
+          <div className="divide-y divide-border">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="p-6">
                 <div className="flex items-center justify-between">

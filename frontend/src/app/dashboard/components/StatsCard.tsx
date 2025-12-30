@@ -7,9 +7,9 @@ import type { LucideIcon } from "lucide-react";
 
 // Static class names extracted for better performance
 const CARD_CLASSES =
-  "border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors cursor-pointer";
-const TITLE_CLASSES = "text-sm font-medium text-zinc-400";
-const VALUE_CLASSES = "text-2xl font-bold text-white";
+  "border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer";
+const TITLE_CLASSES = "text-sm font-medium text-muted-foreground";
+const VALUE_CLASSES = "text-2xl font-bold text-foreground";
 
 export interface StatsCardProps {
   title: string;
@@ -51,7 +51,7 @@ const StatsCard = memo(function StatsCard({
             )}
             {change ?? "0%"}
           </span>
-          <span className="text-xs text-zinc-500">from last month</span>
+          <span className="text-xs text-muted-foreground">from last month</span>
         </div>
       </CardContent>
     </Card>

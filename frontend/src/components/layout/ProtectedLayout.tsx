@@ -11,37 +11,42 @@ interface ProtectedLayoutProps {
   requiredRole?: string; // Optional role requirement
 }
 
-// Loading component for authentication
+/**
+ * Note: Primary authentication check is now handled by middleware.ts at the Edge.
+ * This component provides:
+ * 1. Loading state while client-side auth initializes (hydration)
+ * 2. Role-based access control (middleware only checks if logged in)
+ * 3. Fallback protection if middleware is bypassed
+ */
+
+// Loading component for authentication - shown briefly during hydration
 function AuthLoadingLayout() {
   return (
-    <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center relative overflow-hidden">
-      {/* Background Gradients */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute -left-[10%] -top-[10%] h-[500px] w-[500px] rounded-full bg-indigo-500/10 blur-[100px]" />
-        <div className="absolute -right-[10%] top-[20%] h-[500px] w-[500px] rounded-full bg-violet-500/10 blur-[100px]" />
-        <div className="absolute bottom-[10%] left-[20%] h-[500px] w-[500px] rounded-full bg-blue-500/10 blur-[100px]" />
-      </div>
-
-      <div className="flex flex-col items-center space-y-4 z-10">
-        <div className="relative">
-          <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full" />
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-500 relative z-10" />
+    <DashboardLayout>
+      <div className="flex h-[calc(100vh-4rem)] w-full items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="relative">
+            <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full" />
+            <Loader2 className="h-8 w-8 animate-spin text-indigo-500 relative z-10" />
+          </div>
+          <p className="text-muted-foreground font-medium">Loading...</p>
         </div>
-        <p className="text-zinc-400 font-medium">Redirecting to login...</p>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
 
 // Loading component for role-based redirects
 function RoleRedirectLayout() {
   return (
-    <div className="min-h-screen bg-black text-zinc-100 flex items-center justify-center">
-      <div className="flex flex-col items-center space-y-4">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-        <p className="text-zinc-400">Redirecting...</p>
+    <DashboardLayout>
+      <div className="flex h-[calc(100vh-4rem)] w-full items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+          <p className="text-muted-foreground">Redirecting...</p>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
 
@@ -65,7 +70,7 @@ export function ProtectedLayout({
     (requiredRole === "manager" && isManagerOrHigher) ||
     (requiredRole && requiredRole !== "admin" && requiredRole !== "manager");
 
-  // Fast role-based redirect with optimized checks
+  // Role-based redirect (auth redirect handled by middleware)
   useEffect(() => {
     // Skip checks if we don't have all required data yet
     if (!user || !requiredRole || !isAuthenticated) {
@@ -88,8 +93,8 @@ export function ProtectedLayout({
     }
   }, [isLoading]);
 
-  // Show loading spinner while checking authentication (LCP Optimization)
-  // Render DashboardLayout immediately with a spinner to show the "App Shell" ASAP
+  // Show App Shell immediately with loading indicator (LCP Optimization)
+  // Middleware handles unauthenticated users, so this is just for hydration
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -100,11 +105,9 @@ export function ProtectedLayout({
     );
   }
 
-  // If not authenticated, useRequireAuth will handle redirect
-  // So we only render children if authenticated
-  // Also check !user to avoid showing this screen when we have a user but isAuthenticated is briefly false
+  // Fallback: If client-side auth check fails (middleware should have handled this)
+  // Show loading state briefly - middleware will redirect on next navigation
   if (!isAuthenticated && !user) {
-    // Show loading state instead of null to prevent white screen
     return <AuthLoadingLayout />;
   }
 

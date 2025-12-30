@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import typescript from "typescript-eslint";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
+import globals from "globals";
 
 export default typescript.config(
   js.configs.recommended,
@@ -20,6 +21,9 @@ export default typescript.config(
         },
         project: "./tsconfig.json",
         tsconfigRootDir: import.meta.dirname,
+      },
+      globals: {
+        ...globals.browser,
       },
     },
     rules: {
@@ -117,12 +121,10 @@ export default typescript.config(
     },
   },
   {
-    files: ["next.config.js"],
+    files: ["next.config.mjs", "next.config.js"],
     languageOptions: {
       globals: {
-        process: "readonly",
-        __dirname: "readonly",
-        module: "readonly",
+        ...globals.node,
       },
     },
   },
@@ -133,6 +135,9 @@ export default typescript.config(
       "**/build/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
+      "**/e2e/**",
+      "**/playwright.config.ts",
+      "**/e2e-results/**",
     ],
   },
 );

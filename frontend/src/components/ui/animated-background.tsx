@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Particle {
   x: number;
@@ -194,19 +194,38 @@ export function AnimatedBackground({
 
 // Floating shapes component for additional visual appeal
 export function FloatingShapes() {
+  const [shapes, setShapes] = useState<
+    Array<{ left: string; top: string; delay: string; duration: string }>
+  >([]);
+
+  useEffect(() => {
+    setShapes(
+      Array.from({ length: 20 }).map(() => ({
+        left: `${Math.random() * 100}%`,
+        top: `${Math.random() * 100}%`,
+        delay: `${Math.random() * 5}s`,
+        duration: `${2 + Math.random() * 10}s`,
+      })),
+    );
+  }, []);
+
+  if (shapes.length === 0) {
+    return null;
+  }
+
   return (
     <div className="fixed inset-0 pointer-events-none z-10">
       {/* Dots pattern */}
       <div className="absolute inset-0 opacity-30">
-        {Array.from({ length: 20 }).map((_, i) => (
+        {shapes.map((shape, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-indigo-400/40 rounded-full animate-pulse"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${2 + Math.random() * 10}s`,
+              left: shape.left,
+              top: shape.top,
+              animationDelay: shape.delay,
+              animationDuration: shape.duration,
             }}
           />
         ))}

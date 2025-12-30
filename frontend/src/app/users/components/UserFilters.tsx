@@ -62,7 +62,7 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
       >
         <div className="relative flex-1">
           <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400"
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
@@ -72,7 +72,7 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
             placeholder="Search users by name or email... (Press / to focus)"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 pr-10 bg-white/5 border-white/10 text-white placeholder:text-zinc-400"
+            className="pl-10 pr-10 bg-background border-border text-foreground placeholder:text-muted-foreground"
             aria-label="Search users by name or email. Press forward slash to focus."
             aria-describedby="search-hint"
           />
@@ -84,13 +84,13 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
             {isSearching ? (
               <RefreshCw
-                className="h-4 w-4 text-zinc-400 animate-spin"
+                className="h-4 w-4 text-muted-foreground animate-spin"
                 aria-hidden="true"
               />
             ) : searchQuery ? (
               <button
                 onClick={handleClearSearch}
-                className="text-zinc-400 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+                className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary rounded"
                 aria-label="Clear search"
                 type="button"
               >
@@ -98,7 +98,7 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
               </button>
             ) : (
               <kbd
-                className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-xs text-zinc-500 bg-zinc-800 rounded border border-zinc-700"
+                className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-xs text-muted-foreground bg-muted rounded border border-border"
                 aria-hidden="true"
               >
                 /

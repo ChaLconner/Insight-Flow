@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Project, User } from "@/types";
+import type { Project, User, UserRole } from "@/types";
 import { ProjectStatus } from "@/types";
 import { getAvatarUrl } from "@/lib/utils";
 
@@ -17,77 +16,76 @@ export const PROJECT_COLORS = [
  * Handles missing fields with robust defaults.
  */
 export function transformProjectData(
-  project: any,
+  project: unknown,
   currentUser?: User,
   index: number = 0,
 ): Project {
+  const p = project as Record<string, unknown>;
   // Find owner from member summaries with fallback
-  const ownerMember = project.memberSummaries?.find(
-    (m: any) => m.role === "owner",
+  const ownerMember = (p.memberSummaries as Record<string, unknown>[])?.find(
+    (m) => m.role === "owner",
   );
 
   // Safely extract owner name
   const getOwnerName = (): string => {
     if (ownerMember?.name) {
-      return ownerMember.name;
+      return ownerMember.name as string;
     }
-    if (project.ownerName) {
-      return project.ownerName;
+    if (p.ownerName) {
+      return p.ownerName as string;
     }
-    if (currentUser?.id === project.ownerId && currentUser?.name) {
+    if (currentUser?.id === p.ownerId && currentUser?.name) {
       return currentUser.name;
     }
     return "Unknown User";
   };
 
   const ownerName = getOwnerName();
-  const ownerId = project.ownerId ?? currentUser?.id ?? "unknown";
+  const ownerId = (p.ownerId as string) ?? currentUser?.id ?? "unknown";
 
   // Construct Owner User object
   const owner: User = {
     id: ownerId,
-    email: ownerMember?.email ?? currentUser?.email ?? "unknown@company.com",
+    email: (ownerMember?.email as string) ?? currentUser?.email ?? "unknown@company.com",
     username:
-      ownerMember?.name?.toLowerCase().replace(/\s+/g, "") ??
-      currentUser?.username ??
       ownerName.toLowerCase().replace(/\s+/g, "") ??
       "unknownuser",
     firstName:
-      ownerMember?.name?.split(" ")[0] ??
+      (ownerMember?.name as string)?.split(" ")[0] ??
       ownerName.split(" ")[0] ??
       currentUser?.firstName ??
       "Unknown",
     lastName:
-      ownerMember?.name?.split(" ").slice(1).join(" ") ??
+      (ownerMember?.name as string)?.split(" ").slice(1).join(" ") ??
       ownerName.split(" ").slice(1).join(" ") ??
       currentUser?.lastName ??
       "User",
-    role: "admin" as any, // Owner is always admin-like
+    role: "admin" as UserRole, // Owner is always admin-like
     isActive: true, // simplified
     emailVerified: true,
-    createdAt: project.createdAt ?? new Date().toISOString(),
-    updatedAt: project.updatedAt ?? new Date().toISOString(),
-    avatar: getAvatarUrl(ownerMember?.avatar ?? currentUser?.avatar),
+    createdAt: (p.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (p.updatedAt as string) ?? new Date().toISOString(),
+    avatar: getAvatarUrl(ownerMember?.avatar as string ?? currentUser?.avatar),
   };
 
   // Map Members
-  const members = (project.memberSummaries ?? project.members ?? []).map(
-    (m: any, index: number) => ({
-      id: m.id ?? `member-${m.userId}-${index}`,
-      userId: m.userId ?? m.id ?? "unknown",
-      projectId: project.id,
-      role: m.role ?? "member",
-      joinedAt: m.joinedAt ?? new Date().toISOString(),
+  const members = ((p.memberSummaries as Record<string, unknown>[]) ?? (p.members as Record<string, unknown>[]) ?? []).map(
+    (m, index) => ({
+      id: (m.id as string) ?? `member-${m.userId}-${index}`,
+      userId: (m.userId as string) ?? (m.id as string) ?? "unknown",
+      projectId: p.id as string,
+      role: (m.role as string) ?? "member",
+      joinedAt: (m.joinedAt as string) ?? new Date().toISOString(),
       user: {
-        id: m.userId ?? m.id ?? "unknown",
-        email: m.email ?? "unknown@company.com",
-        name: m.name ?? ownerName,
-        avatar: getAvatarUrl(m.avatar),
-        role: m.role ?? "member",
+        id: (m.userId as string) ?? (m.id as string) ?? "unknown",
+        email: (m.email as string) ?? "unknown@company.com",
+        name: (m.name as string) ?? (m.username as string) ?? "Unknown",
+        avatar: getAvatarUrl(m.avatar as string),
+        role: (m.role as UserRole) ?? "member",
         isActive: m.isActive !== false,
         emailVerified: m.emailVerified !== false,
-        createdAt: m.createdAt ?? new Date().toISOString(),
-        updatedAt: m.updatedAt ?? new Date().toISOString(),
+        createdAt: (m.createdAt as string) ?? new Date().toISOString(),
+        updatedAt: (m.updatedAt as string) ?? new Date().toISOString(),
       },
     }),
   );
@@ -95,47 +93,48 @@ export function transformProjectData(
   // Map Stats
   const stats = {
     totalTasks: Number(
-      project.taskCount ?? project.task_count ?? project.totalTasks ?? 0,
+      p.taskCount ?? p.task_count ?? p.totalTasks ?? 0,
     ),
     completedTasks: Number(
-      project.completedTasks ?? project.completed_tasks ?? 0,
+      p.completedTasks ?? p.completed_tasks ?? 0,
     ),
     inProgressTasks:
-      Number(project.taskCount ?? project.task_count ?? 0) -
-      Number(project.completedTasks ?? project.completed_tasks ?? 0),
-    overdueTasks: Number(project.overdueTasks ?? project.overdue_tasks ?? 0),
+      Number(p.taskCount ?? p.task_count ?? 0) -
+      Number(p.completedTasks ?? p.completed_tasks ?? 0),
+    overdueTasks: Number(p.overdueTasks ?? p.overdue_tasks ?? 0),
     teamMembers: Number(
-      project.memberCount ?? project.member_count ?? members.length ?? 1,
+      p.memberCount ?? p.member_count ?? members.length ?? 1,
     ),
     recentActivity: Number(
-      project.recentActivity ?? project.recent_activity ?? 0,
+      p.recentActivity ?? p.recent_activity ?? 0,
     ),
   };
 
   // Map Settings
+  const pSettings = p.settings as Record<string, unknown> | undefined;
   const settings = {
-    allowPublicAccess: project.settings?.allowPublicAccess ?? false,
-    requireApproval: project.settings?.requireApproval !== false,
-    defaultTaskVisibility: project.settings?.defaultTaskVisibility ?? "team",
+    allowPublicAccess: pSettings?.allowPublicAccess ?? false,
+    requireApproval: pSettings?.requireApproval !== false,
+    defaultTaskVisibility: pSettings?.defaultTaskVisibility ?? "team",
     notificationSettings: {
       taskAssigned:
-        project.settings?.notificationSettings?.taskAssigned !== false,
+        ((pSettings?.notificationSettings as Record<string, unknown>)?.taskAssigned) !== false,
       statusChanged:
-        project.settings?.notificationSettings?.statusChanged !== false,
+        ((pSettings?.notificationSettings as Record<string, unknown>)?.statusChanged) !== false,
       deadlineApproaching:
-        project.settings?.notificationSettings?.deadlineApproaching !== false,
+        ((pSettings?.notificationSettings as Record<string, unknown>)?.deadlineApproaching) !== false,
       commentAdded:
-        project.settings?.notificationSettings?.commentAdded !== false,
+        ((pSettings?.notificationSettings as Record<string, unknown>)?.commentAdded) !== false,
     },
   };
 
   return {
-    id: project.id,
-    name: project.name ?? "Unnamed Project",
-    description: project.description ?? "",
-    color: project.color ?? PROJECT_COLORS[index % PROJECT_COLORS.length], // fallback color
+    id: p.id as string,
+    name: (p.name as string) ?? "Unnamed Project",
+    description: (p.description as string) ?? "",
+    color: (p.color as string) ?? PROJECT_COLORS[index % PROJECT_COLORS.length], // fallback color
     status:
-      project.isActive !== false
+      p.isActive !== false
         ? ProjectStatus.ACTIVE
         : ProjectStatus.ARCHIVED,
     ownerId,
@@ -143,8 +142,8 @@ export function transformProjectData(
     members,
     stats,
     settings,
-    createdAt: project.createdAt ?? new Date().toISOString(),
-    updatedAt: project.updatedAt ?? new Date().toISOString(),
+    createdAt: (p.createdAt as string) ?? new Date().toISOString(),
+    updatedAt: (p.updatedAt as string) ?? new Date().toISOString(),
     // extra properties for backward compatibility if needed, but keeping Project interface clean is better
     taskCount: stats.totalTasks,
     completedTasks: stats.completedTasks,

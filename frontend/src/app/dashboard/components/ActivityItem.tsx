@@ -7,8 +7,8 @@ import { getAvatarUrl } from "@/lib/utils";
 
 // Static class names
 const AVATAR_CONTAINER_CLASSES =
-  "h-8 w-8 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center overflow-hidden shrink-0 group";
-const TIMELINE_LINE_CLASSES = "absolute left-4 top-8 h-full w-px bg-white/10";
+  "h-8 w-8 rounded-full bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0 group";
+const TIMELINE_LINE_CLASSES = "absolute left-4 top-8 bottom-0 w-px bg-border";
 
 export interface ActivityItemData {
   id: string;
@@ -60,7 +60,6 @@ const ActivityItem = memo(function ActivityItem({
 
   // Handle image error
 
-
   return (
     <div className="flex gap-4">
       <div className="relative">
@@ -85,7 +84,7 @@ const ActivityItem = memo(function ActivityItem({
             </div>
           ) : null}
           <span
-            className={`${userAvatar ? "hidden" : ""} text-xs font-medium text-zinc-400`}
+            className={`${userAvatar ? "hidden" : ""} text-xs font-medium text-muted-foreground`}
           >
             {userInitials}
           </span>
@@ -93,15 +92,15 @@ const ActivityItem = memo(function ActivityItem({
         {!isLast && <div className={TIMELINE_LINE_CLASSES} />}
       </div>
       <div className="space-y-1">
-        <p className="text-sm text-zinc-300">
-          <span className="font-medium text-white">{userName}</span>{" "}
+        <p className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">{userName}</span>{" "}
           {activity.action}{" "}
           {displayTarget && (
-            <span className="text-indigo-400">{displayTarget}</span>
+            <span className="text-primary">{displayTarget}</span>
           )}
         </p>
         {formattedTime && (
-          <p className="text-xs text-zinc-500">{formattedTime}</p>
+          <p className="text-xs text-muted-foreground/70">{formattedTime}</p>
         )}
       </div>
     </div>

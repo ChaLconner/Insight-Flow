@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,14 +10,12 @@ import {
   Calendar,
   // User,
   Flag,
-  Clock,
-  Tag,
   Paperclip,
   MessageCircle,
   Save,
   Loader2,
 } from "lucide-react";
-import type { Task, CreateTaskRequest } from "@/types";
+import type { Task, CreateTaskRequest, Project, User, ProjectMember } from "@/types";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 import { TaskStatus, TaskPriority, TaskType } from "@/types";
@@ -33,22 +31,26 @@ interface TaskModalProps {
 const priorityConfig = {
   [TaskPriority.LOW]: {
     label: "Low",
-    color: "bg-zinc-500/20 text-zinc-400",
+    bgColor: "bg-slate-100 dark:bg-zinc-500/20",
+    textColor: "text-slate-700 dark:text-zinc-400",
     icon: Flag,
   },
   [TaskPriority.MEDIUM]: {
     label: "Medium",
-    color: "bg-amber-500/20 text-amber-400",
+    bgColor: "bg-amber-100 dark:bg-amber-500/20",
+    textColor: "text-amber-700 dark:text-amber-400",
     icon: Flag,
   },
   [TaskPriority.HIGH]: {
     label: "High",
-    color: "bg-orange-500/20 text-orange-400",
+    bgColor: "bg-orange-100 dark:bg-orange-500/20",
+    textColor: "text-orange-700 dark:text-orange-400",
     icon: Flag,
   },
   [TaskPriority.URGENT]: {
     label: "Urgent",
-    color: "bg-fuchsia-500/20 text-fuchsia-400",
+    bgColor: "bg-fuchsia-100 dark:bg-fuchsia-500/20",
+    textColor: "text-fuchsia-700 dark:text-fuchsia-400",
     icon: Flag,
   },
 };
@@ -69,6 +71,7 @@ export function TaskModal({
   mode,
   onSubmit,
 }: TaskModalProps) {
+  const id = useId();
   const [formData, setFormData] = useState({
     title: task?.title ?? "",
     description: task?.description ?? "",
@@ -78,17 +81,14 @@ export function TaskModal({
     type: task?.type ?? TaskType.FEATURE,
     status: task?.status ?? TaskStatus.TODO,
     dueDate: task?.dueDate ? task.dueDate.split("T")[0] : "",
-    estimatedHours: task?.estimatedHours ?? 0,
-    tags: task?.tags?.join(", ") ?? "",
+
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [projects, setProjects] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [assignableUsers, setAssignableUsers] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<User[]>([]);
   const [_isLoadingResources, _setIsLoadingResources] = useState(false);
 
   // Fetch projects on mount
@@ -101,13 +101,11 @@ export function TaskModal({
 
         // If we're in edit mode and have a project ID, fetch its members
         if (task?.projectId) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const members: any = await projectsApi.getProjectMembers(
+          const members = (await projectsApi.getProjectMembers(
             task.projectId,
-          );
+          )) as ProjectMember[];
           if (Array.isArray(members)) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            setAssignableUsers(members.map((m: any) => m.user));
+            setAssignableUsers(members.map((m) => m.user));
           }
         }
       } catch (error) {
@@ -127,13 +125,11 @@ export function TaskModal({
 
       try {
         const { projectsApi } = await import("@/lib/api-endpoints");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const members: any = await projectsApi.getProjectMembers(
+        const members = (await projectsApi.getProjectMembers(
           formData.projectId,
-        );
+        )) as ProjectMember[];
         if (Array.isArray(members)) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          setAssignableUsers(members.map((m: any) => m.user));
+          setAssignableUsers(members.map((m) => m.user));
         }
       } catch (error) {
         console.error("Failed to fetch project members:", error);
@@ -177,11 +173,7 @@ export function TaskModal({
         priority: formData.priority,
         type: formData.type,
         dueDate: formData.dueDate ? formData.dueDate : undefined,
-        estimatedHours: formData.estimatedHours ? formData.estimatedHours : undefined,
-        tags: formData.tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
+
       };
 
       await onSubmit(submitData);
@@ -209,8 +201,7 @@ export function TaskModal({
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
@@ -232,16 +223,16 @@ export function TaskModal({
       />
 
       {/* Modal */}
-      <Card className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto border-white/10 bg-zinc-900/95 backdrop-blur-xl shadow-2xl">
+      <Card className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto border-border bg-popover/95 backdrop-blur-xl shadow-2xl">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
-          <CardTitle className="text-xl font-semibold text-white">
+          <CardTitle className="text-xl font-semibold text-foreground">
             {mode === "create" ? "Create New Task" : "Edit Task"}
           </CardTitle>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="h-8 w-8 p-0 text-zinc-400 hover:text-white"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -252,15 +243,17 @@ export function TaskModal({
             {/* Basic Information */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title" className="text-zinc-300">
+                <Label htmlFor={`${id}-title`} className="text-foreground">
                   Task Title *
                 </Label>
                 <Input
-                  id="title"
+                  id={`${id}-title`}
+                  name="title"
+                  autoComplete="off"
                   value={formData.title}
                   onChange={(e) => handleInputChange("title", e.target.value)}
                   placeholder="Enter task title"
-                  className={`bg-white/5 border-white/10 text-white placeholder:text-zinc-400 ${
+                  className={`bg-background border-border text-foreground placeholder:text-muted-foreground ${
                     errors.title ? "border-red-500" : ""
                   }`}
                   disabled={isSubmitting}
@@ -271,18 +264,20 @@ export function TaskModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-zinc-300">
+                <Label htmlFor={`${id}-description`} className="text-foreground">
                   Description
                 </Label>
                 <textarea
-                  id="description"
+                  id={`${id}-description`}
+                  name="description"
+                  autoComplete="off"
                   rows={4}
                   value={formData.description}
                   onChange={(e) =>
                     handleInputChange("description", e.target.value)
                   }
                   placeholder="Describe the task in detail..."
-                  className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder:text-zinc-400"
+                  className="w-full rounded-lg bg-background border border-border px-3 py-2 text-foreground placeholder:text-muted-foreground"
                   disabled={isSubmitting}
                 />
               </div>
@@ -291,17 +286,19 @@ export function TaskModal({
             {/* Project and Status */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="projectId" className="text-zinc-300">
+                <Label htmlFor={`${id}-project`} className="text-foreground">
                   Project *
                 </Label>
                 <select
-                  id="projectId"
+                  id={`${id}-project`}
+                  name="projectId"
+                  autoComplete="off"
                   value={formData.projectId}
                   onChange={(e) =>
                     handleInputChange("projectId", e.target.value)
                   }
-                  className={`w-full rounded-lg bg-white/5 border px-3 py-2 text-white text-sm ${
-                    errors.projectId ? "border-red-500" : "border-white/10"
+                  className={`w-full rounded-lg bg-background border px-3 py-2 text-foreground text-sm ${
+                    errors.projectId ? "border-red-500" : "border-border"
                   }`}
                   disabled={isSubmitting}
                 >
@@ -318,16 +315,18 @@ export function TaskModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="status" className="text-zinc-300">
+                <Label htmlFor={`${id}-status`} className="text-foreground">
                   Status
                 </Label>
                 <select
-                  id="status"
+                  id={`${id}-status`}
+                  name="status"
+                  autoComplete="off"
                   value={formData.status}
                   onChange={(e) =>
                     handleInputChange("status", e.target.value as TaskStatus)
                   }
-                  className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm"
+                  className="w-full rounded-lg bg-background border border-border px-3 py-2 text-foreground text-sm"
                   disabled={isSubmitting}
                 >
                   <option value={TaskStatus.TODO}>To Do</option>
@@ -342,16 +341,18 @@ export function TaskModal({
             {/* Priority and Type */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-zinc-300">Priority</Label>
+                <Label className="text-foreground">Priority</Label>
                 <div className="space-y-2">
                   {Object.entries(priorityConfig).map(([key, config]) => {
                     const IconComponent = config.icon;
                     return (
                       <label
                         key={key}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 cursor-pointer"
+                        htmlFor={`${id}-priority-${key}`}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent cursor-pointer"
                       >
                         <input
+                          id={`${id}-priority-${key}`}
                           type="radio"
                           name="priority"
                           value={key}
@@ -362,14 +363,18 @@ export function TaskModal({
                               e.target.value as TaskPriority,
                             )
                           }
-                          className="rounded border-white/10 bg-white/5 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded border-border bg-card text-indigo-600 focus:ring-indigo-500"
                           disabled={isSubmitting}
                         />
                         <IconComponent
-                          className={`h-4 w-4 ${config.color.split(" ")[1]}`}
+                          className={`h-4 w-4 ${config.textColor}`}
                         />
                         <span
-                          className={`text-sm ${formData.priority === key ? config.color.split(" ")[1] : "text-zinc-300"}`}
+                          className={`text-sm ${
+                            formData.priority === key
+                              ? config.textColor
+                              : "text-foreground"
+                          }`}
                         >
                           {config.label}
                         </span>
@@ -380,16 +385,18 @@ export function TaskModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="type" className="text-zinc-300">
+                <Label htmlFor={`${id}-type`} className="text-foreground">
                   Type
                 </Label>
                 <select
-                  id="type"
+                  id={`${id}-type`}
+                  name="type"
+                  autoComplete="off"
                   value={formData.type}
                   onChange={(e) =>
                     handleInputChange("type", e.target.value as TaskType)
                   }
-                  className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm"
+                  className="w-full rounded-lg bg-background border border-border px-3 py-2 text-foreground text-sm"
                   disabled={isSubmitting}
                 >
                   {Object.entries(typeConfig).map(([key, config]) => (
@@ -404,16 +411,18 @@ export function TaskModal({
             {/* Assignee and Due Date */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="assigneeId" className="text-zinc-300">
+                <Label htmlFor={`${id}-assignee`} className="text-foreground">
                   Assignee
                 </Label>
                 <select
-                  id="assigneeId"
+                  id={`${id}-assignee`}
+                  name="assigneeId"
+                  autoComplete="off"
                   value={formData.assigneeId}
                   onChange={(e) =>
                     handleInputChange("assigneeId", e.target.value)
                   }
-                  className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white text-sm"
+                  className="w-full rounded-lg bg-background border border-border px-3 py-2 text-foreground text-sm"
                   disabled={isSubmitting}
                 >
                   <option value="">Unassigned</option>
@@ -426,72 +435,28 @@ export function TaskModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="dueDate" className="text-zinc-300">
+                <Label htmlFor={`${id}-due-date`} className="text-foreground">
                   Due Date
                 </Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="dueDate"
+                    id={`${id}-due-date`}
+                    name="dueDate"
+                    autoComplete="off"
                     type="date"
                     value={formData.dueDate}
                     onChange={(e) =>
                       handleInputChange("dueDate", e.target.value)
                     }
-                    className="pl-10 bg-white/5 border-white/10 text-white"
+                    className="pl-10 bg-background border-border text-foreground"
                     disabled={isSubmitting}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Estimated Hours and Tags */}
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="estimatedHours" className="text-zinc-300">
-                  Estimated Hours
-                </Label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                  <Input
-                    id="estimatedHours"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={formData.estimatedHours}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "estimatedHours",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                    placeholder="0"
-                    className="pl-10 bg-white/5 border-white/10 text-white"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="tags" className="text-zinc-300">
-                  Tags
-                </Label>
-                <div className="relative">
-                  <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
-                  <Input
-                    id="tags"
-                    value={formData.tags}
-                    onChange={(e) => handleInputChange("tags", e.target.value)}
-                    placeholder="frontend, urgent, bug"
-                    className="pl-10 bg-white/5 border-white/10 text-white"
-                    disabled={isSubmitting}
-                  />
-                </div>
-                <p className="text-xs text-zinc-400">
-                  Separate tags with commas
-                </p>
-              </div>
-            </div>
 
             {/* Quick Actions */}
             <div className="flex gap-2">
@@ -499,7 +464,7 @@ export function TaskModal({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="border-white/10 text-white hover:bg-white/5"
+                className="border-border text-foreground hover:bg-accent"
                 disabled={isSubmitting}
               >
                 <Paperclip className="h-4 w-4 mr-2" />
@@ -509,7 +474,7 @@ export function TaskModal({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="border-white/10 text-white hover:bg-white/5"
+                className="border-border text-foreground hover:bg-accent"
                 disabled={isSubmitting}
               >
                 <MessageCircle className="h-4 w-4 mr-2" />
@@ -518,12 +483,12 @@ export function TaskModal({
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3 pt-6 border-t border-white/10">
+            <div className="flex gap-3 pt-6 border-t border-border">
               <Button
                 type="button"
                 variant="outline"
                 onClick={onClose}
-                className="flex-1 border-white/10 text-white hover:bg-white/5"
+                className="flex-1 border-border text-foreground hover:bg-accent"
                 disabled={isSubmitting}
               >
                 Cancel

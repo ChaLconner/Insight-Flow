@@ -25,7 +25,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 // Memoized tooltip style
 
-
 // Format status name for display
 const formatStatusName = (name: string): string => {
   const nameMap: Record<string, string> = {
@@ -57,23 +56,23 @@ const StatusDistributionChartComponent: React.FC<
 
   if (!data || data.length === 0) {
     return (
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+      <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">
+          <CardTitle className="text-lg font-semibold text-foreground">
             Task Status Distribution
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
-          <p className="text-zinc-500">No status data available</p>
+          <p className="text-muted-foreground">No status data available</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+    <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-white">
+        <CardTitle className="text-lg font-semibold text-foreground">
           Task Status Distribution
         </CardTitle>
       </CardHeader>
@@ -123,7 +122,7 @@ const StatusDistributionChartComponent: React.FC<
               <Legend
                 wrapperStyle={{ paddingTop: "20px" }}
                 formatter={(value) => (
-                  <span style={{ color: "#a1a1aa" }}>{value}</span>
+                  <span className="text-muted-foreground">{value}</span>
                 )}
               />
             </PieChart>

@@ -17,9 +17,20 @@ export const getTrendColor = (trend: string) => {
 
 export const getVelocityBadge = (velocity: string) => {
   const config = {
-    high: { label: "High", color: "bg-emerald-500/20 text-emerald-400" },
-    medium: { label: "Medium", color: "bg-amber-500/20 text-amber-400" },
-    low: { label: "Low", color: "bg-red-500/20 text-red-400" },
+    high: {
+      label: "High",
+      color:
+        "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+    },
+    medium: {
+      label: "Medium",
+      color:
+        "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
+    },
+    low: {
+      label: "Low",
+      color: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
+    },
   };
 
   return (

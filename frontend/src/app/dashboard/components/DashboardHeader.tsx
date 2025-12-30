@@ -21,10 +21,10 @@ const DashboardHeader = memo(function DashboardHeader(
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-white">
+        <h2 className="text-3xl font-bold tracking-tight text-foreground">
           Dashboard
         </h2>
-        <p className="text-zinc-400">
+        <p className="text-muted-foreground">
           Here's an overview of your projects and tasks.
         </p>
       </div>
@@ -52,20 +52,20 @@ const DashboardHeader = memo(function DashboardHeader(
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="w-56 bg-zinc-900 border-white/10"
+            className="w-56 bg-popover border-border"
           >
             <DropdownMenuItem
               asChild
-              className="cursor-pointer focus:bg-white/10"
+              className="cursor-pointer focus:bg-accent"
             >
               <Link
                 href="/projects?action=create"
                 className="flex items-center"
               >
-                <FolderPlus className="h-4 w-4 mr-3 text-blue-400" />
+                <FolderPlus className="h-4 w-4 mr-3 text-blue-500" />
                 <div>
-                  <div className="font-medium text-white">New Project</div>
-                  <div className="text-xs text-zinc-400">
+                  <div className="font-medium text-foreground">New Project</div>
+                  <div className="text-xs text-muted-foreground">
                     Create a new project
                   </div>
                 </div>
@@ -74,28 +74,28 @@ const DashboardHeader = memo(function DashboardHeader(
 
             <DropdownMenuItem
               asChild
-              className="cursor-pointer focus:bg-white/10"
+              className="cursor-pointer focus:bg-accent"
             >
-              <Link href="/tasks?action=create" className="flex items-center">
-                <ClipboardList className="h-4 w-4 mr-3 text-emerald-400" />
+              <Link href="/projects?tab=tasks" className="flex items-center">
+                <ClipboardList className="h-4 w-4 mr-3 text-emerald-500" />
                 <div>
-                  <div className="font-medium text-white">New Task</div>
-                  <div className="text-xs text-zinc-400">Add a quick task</div>
+                  <div className="font-medium text-foreground">View Tasks</div>
+                  <div className="text-xs text-muted-foreground">Manage your tasks</div>
                 </div>
               </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuSeparator className="bg-border" />
 
             <DropdownMenuItem
               asChild
-              className="cursor-pointer focus:bg-white/10"
+              className="cursor-pointer focus:bg-accent"
             >
               <Link href="/analytics" className="flex items-center">
-                <Sparkles className="h-4 w-4 mr-3 text-violet-400" />
+                <Sparkles className="h-4 w-4 mr-3 text-violet-500" />
                 <div>
-                  <div className="font-medium text-white">View Analytics</div>
-                  <div className="text-xs text-zinc-400">Detailed insights</div>
+                  <div className="font-medium text-foreground">View Analytics</div>
+                  <div className="text-xs text-muted-foreground">Detailed insights</div>
                 </div>
               </Link>
             </DropdownMenuItem>

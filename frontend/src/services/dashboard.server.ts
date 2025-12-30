@@ -8,10 +8,10 @@ export async function getDashboardData() {
     return null;
   }
 
-  const apiUrl = process.env.API_URL ?? "http://localhost:8000"; // Direct backend URL
+  const apiUrl = process.env.API_URL ?? "http://127.0.0.1:8000"; // Direct backend URL
 
   try {
-    const res = await fetch(`${apiUrl}/dashboard/overview`, {
+    const res = await fetch(`${apiUrl}/api/v1/dashboard/overview`, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",

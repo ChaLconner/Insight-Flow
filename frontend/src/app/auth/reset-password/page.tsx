@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,9 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
+import { Loader2 } from "lucide-react";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const [token, setToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -55,8 +56,8 @@ export default function ResetPasswordPage() {
     } catch (err) {
       console.error("Token validation error:", err);
       // If validation endpoint doesn't exist, continue anyway
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((err as any).response?.status !== 404) {
+      const axiosError = err as { response?: { status?: number } };
+      if (axiosError.response?.status !== 404) {
         setTokenError("Failed to validate reset token. Please try again.");
       }
     }
@@ -274,5 +275,19 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        </div>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

@@ -84,15 +84,15 @@ export function InviteUserModal({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg rounded-2xl border border-white/10 bg-[#18181b] shadow-2xl overflow-hidden"
+            className="relative w-full max-w-lg rounded-2xl border border-border bg-popover shadow-2xl overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+            <div className="flex items-center justify-between p-6 border-b border-border">
               <div>
-                <h2 className="text-xl font-semibold text-white">
+                <h2 className="text-xl font-semibold text-foreground">
                   Add Existing User
                 </h2>
-                <p className="text-sm text-zinc-400 mt-1">
+                <p className="text-sm text-muted-foreground mt-1">
                   Update role for an existing, registered user.
                 </p>
               </div>
@@ -100,7 +100,7 @@ export function InviteUserModal({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="text-zinc-400 hover:text-white hover:bg-white/10 rounded-full"
+                className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-full"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -112,7 +112,7 @@ export function InviteUserModal({
                 <div className="space-y-4">
                   {/* Email / User Search Field */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-300">
+                    <label htmlFor="invite-user-email" className="text-sm font-medium text-foreground">
                       Find User
                     </label>
                     <div className="relative">
@@ -123,6 +123,9 @@ export function InviteUserModal({
                           <UserSearchSelect
                             value={field.value}
                             onChange={field.onChange}
+                            id="invite-user-email"
+                            name="email"
+                            autoComplete="off"
                             placeholder="Search by name or email..."
                           />
                         )}
@@ -137,7 +140,7 @@ export function InviteUserModal({
 
                   {/* Role Selection */}
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-zinc-300">
+                    <label htmlFor="invite-user-role" className="text-sm font-medium text-foreground">
                       Role
                     </label>
                     <Controller
@@ -147,6 +150,8 @@ export function InviteUserModal({
                         <CustomSelect
                           value={field.value}
                           onChange={field.onChange}
+                          id="invite-user-role"
+                          name="role"
                           options={[
                             {
                               value: UserRole.ADMIN,
@@ -170,14 +175,14 @@ export function InviteUserModal({
                               value: UserRole.VIEWER,
                               label: "Viewer",
                               description: "Read-only access",
-                              color: "text-zinc-400",
+                              color: "text-muted-foreground",
                             },
                           ]}
                           className="w-full h-auto"
                         />
                       )}
                     />
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-muted-foreground">
                       Assigning a new role will immediately update the user's
                       permissions.
                     </p>
@@ -195,14 +200,14 @@ export function InviteUserModal({
                     type="button"
                     variant="ghost"
                     onClick={onClose}
-                    className="text-zinc-400 hover:text-white hover:bg-white/10"
+                    className="text-muted-foreground hover:text-foreground hover:bg-accent"
                     disabled={isSubmitting}
                   >
                     Cancel
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white min-w-[120px]"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[120px]"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (

@@ -50,49 +50,33 @@ export const useTasks = ({
       const skip = (page - 1) * pageSize;
       const limit = pageSize;
 
-      let data;
-      if (projectId) {
-        data = await tasksApi.getProjectTasks(
-          projectId,
-          skip,
-          limit,
-          undefined,
-          undefined,
-          searchQuery,
-          statusFilter,
-        );
-      } else {
-        data = await tasksApi.getMyTasks(
-          skip,
-          limit,
-          searchQuery,
-          statusFilter,
-        );
-      }
+      const data = projectId
+        ? await tasksApi.getProjectTasks(
+            projectId,
+            skip,
+            limit,
+            undefined,
+            undefined,
+            searchQuery,
+            statusFilter,
+          )
+        : await tasksApi.getMyTasks(skip, limit, searchQuery, statusFilter);
 
-      // Check if response is TaskListResponse
+      // Standard response format
       if (data && "items" in data) {
         return data as unknown as TaskListResponse;
       }
 
-      // Fallback for array response (if any legacy endpoints remain)
-      let items: Task[] = [];
-      if (Array.isArray(data)) {
-        items = data;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } else if ((data as any)?.data && Array.isArray((data as any).data)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        items = (data as any).data;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } else if ((data as any)?.tasks && Array.isArray((data as any).tasks)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        items = (data as any).tasks;
-      }
+      // Handle legacy array responses with unified fallback
+      const items: Task[] = Array.isArray(data)
+        ? data
+        : (data as { data?: Task[]; tasks?: Task[] })?.data ??
+          (data as { tasks?: Task[] })?.tasks ??
+          [];
 
-      // Construct artificial pagination for fallback
       return {
         items,
-        total: items.length, // Inaccurate if paginated on backend but returning array
+        total: items.length,
         page,
         size: pageSize,
         hasMore: items.length >= pageSize,

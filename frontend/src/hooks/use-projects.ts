@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi } from "@/lib/api-endpoints";
 import type {
@@ -12,6 +11,17 @@ import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 
+// Type for API data with members
+interface ApiProjectData extends CreateProjectRequest {
+  members?: Array<{ userId: string; role: string }>;
+  memberIds?: string[];
+}
+
+// Type for update API data
+interface ApiUpdateProjectData extends UpdateProjectRequest {
+  is_active?: boolean;
+}
+
 export function useProjects(options?: { enabled?: boolean }) {
   const { user } = useAuthStore();
 
@@ -22,7 +32,7 @@ export function useProjects(options?: { enabled?: boolean }) {
       const data = await projectsApi.getProjects(0, 100, false);
       // Transform data
       return Array.isArray(data)
-        ? data.map((p: any, index: number) =>
+        ? data.map((p: Project, index: number) =>
             transformProjectData(p, user ?? undefined, index),
           )
         : [];
@@ -41,7 +51,7 @@ export function useCreateProject() {
     mutationFn: async (data: CreateProjectRequest) => {
       // Map memberIds to members logic if needed by backend, handled in API usually
       // But page.tsx did some manual mapping:
-      const apiData: any = { ...data };
+      const apiData: ApiProjectData = { ...data };
       if (apiData.memberIds && Array.isArray(apiData.memberIds)) {
         apiData.members = apiData.memberIds.map((userId: string) => ({
           userId,
@@ -81,7 +91,7 @@ export function useUpdateProject() {
       id: string;
       data: UpdateProjectRequest;
     }) => {
-      const apiData: any = { ...data };
+      const apiData: ApiUpdateProjectData = { ...data };
       // Map status to is_active
       if (apiData.status) {
         apiData.is_active = apiData.status === ProjectStatus.ACTIVE;
@@ -119,7 +129,7 @@ export function useArchiveProject() {
   return useMutation({
     mutationFn: async (project: Project) => {
       // API call
-      await projectsApi.updateProject(project.id, { is_active: false } as any);
+      await projectsApi.updateProject(project.id, { is_active: false } as ApiUpdateProjectData);
       return project;
     },
     onMutate: async (project) => {

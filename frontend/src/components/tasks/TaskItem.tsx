@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getAvatarUrl } from "@/lib/utils";
 import type { Task } from "@/types";
-import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 interface TaskItemProps {
   task: Task;
@@ -45,7 +45,7 @@ export const TaskItem = memo(
     return (
       <ErrorBoundary>
         <Card
-          className={`border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/10 transition-colors cursor-pointer relative group ${isOpen ? "z-20" : "z-0"}`}
+          className={`border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer relative group ${isOpen ? "z-20" : "z-0"}`}
           onClick={() => onClick(task)}
         >
           <CardContent className="p-4 flex items-center justify-between gap-4">
@@ -64,13 +64,13 @@ export const TaskItem = memo(
                 }`}
               />
               <div className="min-w-0 flex-1">
-                <h4 className="text-white font-medium truncate">
+                <h4 className="text-foreground font-medium truncate">
                   {task.title}
                 </h4>
-                <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1 text-xs text-zinc-400">
+                <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mt-1 text-xs text-muted-foreground">
                   {showProjectName && task.project && (
                     <span className="flex items-center gap-1">
-                      <FolderKanban className="h-3 w-3 text-zinc-400" />
+                      <FolderKanban className="h-3 w-3 text-muted-foreground" />
                       {task.project.name}
                     </span>
                   )}
@@ -91,7 +91,7 @@ export const TaskItem = memo(
                     </span>
                   )}
                   {task.type && (
-                    <span className="flex items-center gap-1 text-zinc-400">
+                    <span className="flex items-center gap-1 text-muted-foreground">
                       <Tag className="h-3 w-3" />
                       <span className="capitalize">{task.type}</span>
                     </span>
@@ -110,7 +110,7 @@ export const TaskItem = memo(
                           alt={task.assignee.firstName ?? "Assignee"}
                           width={16}
                           height={16}
-                          className="rounded-full object-cover"
+                          className="rounded-full object-cover w-4 h-4"
                         />
                       ) : null}
                       <UserIcon
@@ -131,7 +131,7 @@ export const TaskItem = memo(
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-white/10 task-menu-trigger"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground hover:bg-accent task-menu-trigger"
                   onClick={(e) => onToggleMenu(e, task.id)}
                   aria-label="Task actions"
                 >
@@ -139,14 +139,14 @@ export const TaskItem = memo(
                 </Button>
 
                 {isOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 rounded-md border border-white/10 bg-[#18181b] shadow-xl z-50 py-1 ring-1 ring-black ring-opacity-5 focus:outline-none task-menu-dropdown">
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-md bg-popover shadow-xl z-50 py-1 focus:outline-none task-menu-dropdown">
                     <button
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
                         onEdit(task);
                       }}
-                      className="w-full flex items-center px-4 py-2 text-sm text-zinc-300 hover:bg-white/10 hover:text-white transition-colors text-left cursor-pointer"
+                      className="w-full flex items-center px-4 py-2 text-sm text-foreground hover:bg-accent transition-colors text-left cursor-pointer"
                     >
                       <Edit className="mr-2 h-4 w-4" />
                       Edit Task

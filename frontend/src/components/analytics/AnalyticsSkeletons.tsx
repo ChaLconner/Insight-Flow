@@ -5,7 +5,7 @@ import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 
 export const MetricCardSkeleton = memo(function MetricCardSkeleton() {
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="border-border bg-card backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-4" />
@@ -20,7 +20,7 @@ export const MetricCardSkeleton = memo(function MetricCardSkeleton() {
 
 export const TrendItemSkeleton = memo(function TrendItemSkeleton() {
   return (
-    <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
+    <div className="flex items-center justify-between p-4 rounded-lg bg-secondary">
       <div className="space-y-2">
         <Skeleton className="h-3 w-24" />
         <Skeleton className="h-6 w-12" />
@@ -36,7 +36,7 @@ export const TrendItemSkeleton = memo(function TrendItemSkeleton() {
 export const PerformanceCardItemSkeleton = memo(
   function PerformanceCardItemSkeleton() {
     return (
-      <div className="flex items-center justify-between p-4 rounded-lg bg-white/5">
+      <div className="flex items-center justify-between p-4 rounded-lg bg-secondary">
         <div className="flex-1 space-y-2">
           <div className="flex justify-between">
             <Skeleton className="h-4 w-32" />
@@ -52,7 +52,7 @@ export const PerformanceCardItemSkeleton = memo(
 
 export const PerformanceCardSkeleton = memo(function PerformanceCardSkeleton() {
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="border-border bg-card backdrop-blur-sm">
       <CardHeader>
         <Skeleton className="h-6 w-48" />
       </CardHeader>
@@ -70,7 +70,7 @@ export const PerformanceCardSkeleton = memo(function PerformanceCardSkeleton() {
 export const PerformanceTrendsSkeleton = memo(
   function PerformanceTrendsSkeleton() {
     return (
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+      <Card className="border-border bg-card backdrop-blur-sm">
         <CardHeader>
           <Skeleton className="h-6 w-48" />
         </CardHeader>
@@ -92,7 +92,7 @@ export const ListSkeleton = memo(function ListSkeleton({
   title: string;
 }) {
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+    <Card className="border-border bg-card backdrop-blur-sm">
       <CardHeader>
         <Skeleton className="h-6 w-48" />
       </CardHeader>
@@ -109,7 +109,7 @@ export const ListSkeleton = memo(function ListSkeleton({
 
 export const ChartCarouselSkeleton = memo(function ChartCarouselSkeleton() {
   return (
-    <div className="h-[450px] rounded-xl border border-white/5 bg-white/5 backdrop-blur-sm flex items-center justify-center">
+    <div className="h-[450px] rounded-xl border border-border bg-card backdrop-blur-sm flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
         <Skeleton className="h-4 w-32" />

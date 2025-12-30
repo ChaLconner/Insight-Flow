@@ -20,17 +20,18 @@ const badgeVariants = cva(
           "border-transparent bg-yellow-500 text-white hover:bg-yellow-500/80",
         error: "border-transparent bg-red-500 text-white hover:bg-red-500/80",
         // Glassmorphism variants
-        glass: "glass text-foreground border-white/30 backdrop-blur-sm",
+        glass:
+          "bg-muted/50 text-foreground border-border backdrop-blur-sm border",
         "glass-primary":
-          "backdrop-blur-lg bg-blue-500/20 text-blue-600 border-blue-500/30",
+          "backdrop-blur-lg bg-primary/20 text-primary border-primary/30 border",
         "glass-success":
-          "backdrop-blur-lg bg-green-500/20 text-green-600 border-green-500/30",
+          "backdrop-blur-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 border",
         "glass-warning":
-          "backdrop-blur-lg bg-yellow-500/20 text-yellow-600 border-yellow-500/30",
+          "backdrop-blur-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 border",
         "glass-error":
-          "backdrop-blur-lg bg-red-500/20 text-red-600 border-red-500/30",
+          "backdrop-blur-lg bg-destructive/20 text-destructive border-destructive/30 border",
         "glass-secondary":
-          "backdrop-blur-lg bg-gray-500/20 text-gray-600 border-gray-500/30",
+          "backdrop-blur-lg bg-secondary/50 text-secondary-foreground border-secondary/50 border",
       },
     },
     defaultVariants: {

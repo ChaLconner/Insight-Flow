@@ -36,19 +36,19 @@ interface MetricCardProps {
 const MetricCard = memo<MetricCardProps>(
   ({ title, value, icon: Icon, iconColor, trend, periodLabel }) => {
     const trendColor =
-      trend?.direction === "up" ? "text-emerald-400" : "text-red-400";
+      trend?.direction === "up" ? "text-emerald-500" : "text-destructive";
     const TrendIcon = trend?.direction === "up" ? TrendingUp : TrendingDown;
 
     return (
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm hover:bg-white/[0.07] transition-colors">
+      <Card className="border-border bg-card backdrop-blur-sm hover:bg-accent/50 transition-colors">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-zinc-400">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
             {title}
           </CardTitle>
           <Icon className={`h-4 w-4 ${iconColor}`} />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-white">{value}</div>
+          <div className="text-2xl font-bold text-foreground">{value}</div>
           {trend && (
             <div className="flex items-center gap-2 mt-1">
               <span className={`flex items-center text-xs ${trendColor}`}>
@@ -57,7 +57,7 @@ const MetricCard = memo<MetricCardProps>(
                 {trend.value}
                 {trend.suffix ?? "%"}
               </span>
-              <span className="text-xs text-zinc-500">{periodLabel}</span>
+              <span className="text-xs text-muted-foreground">{periodLabel}</span>
             </div>
           )}
         </CardContent>
@@ -100,44 +100,28 @@ const KeyMetricsComponent: React.FC<KeyMetricsProps> = ({
         value: `${data.completionRate}%`,
         icon: Target,
         iconColor: "text-emerald-400",
-        trend: getTrendData("completion rate") ??
-          getTrendData("tasks completed") ?? {
-            value: 5.2,
-            direction: "up" as const,
-          },
+        trend: getTrendData("completion rate") ?? getTrendData("tasks completed"),
       },
       {
         title: "Team Velocity",
         value: data.teamVelocity,
         icon: Activity,
         iconColor: "text-blue-400",
-        trend: getTrendData("project velocity") ??
-          getTrendData("team velocity") ?? {
-            value: 8.1,
-            direction: "up" as const,
-          },
+        trend: getTrendData("project velocity") ?? getTrendData("team velocity"),
       },
       {
         title: "Avg. Completion Time",
         value: `${data.averageCompletionTime}d`,
         icon: Clock,
         iconColor: "text-amber-400",
-        trend: {
-          value: 0.8,
-          direction: "down" as const,
-          suffix: "d",
-        },
+        // trend: Backend implementation needed
       },
       {
         title: "Active Projects",
         value: data.activeProjects,
         icon: BarChart3,
         iconColor: "text-violet-400",
-        trend: {
-          value: 2,
-          direction: "up" as const,
-          suffix: "",
-        },
+        // trend: Backend implementation needed
       },
     ],
     [data, getTrendData],

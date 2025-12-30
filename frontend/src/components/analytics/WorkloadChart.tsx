@@ -112,17 +112,17 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
   // Empty state
   if (!displayData || displayData.length === 0) {
     return (
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+      <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Users className="w-5 h-5 text-violet-400" />
             Team Workload
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <Users className="w-12 h-12 mx-auto text-zinc-600 mb-3" />
-            <p className="text-zinc-500">No workload data available</p>
+            <Users className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No workload data available</p>
           </div>
         </CardContent>
       </Card>
@@ -130,14 +130,14 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
   }
 
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+    <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
             <Users className="w-5 h-5 text-violet-400" />
             Team Workload
             {totalCount > 0 && (
-              <span className="text-sm font-normal text-zinc-400 ml-2">
+              <span className="text-sm font-normal text-muted-foreground ml-2">
                 ({totalCount.toLocaleString()} members)
               </span>
             )}
@@ -148,13 +148,17 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
             <div className="flex items-center gap-2">
               {/* Search */}
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <label htmlFor="workload-search" className="sr-only">Search team members</label>
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
+                  id="workload-search"
+                  name="workload-search"
                   type="text"
                   placeholder="Search..."
                   value={searchTerm}
                   onChange={handleSearchChange}
-                  className="pl-8 w-36 h-8 text-sm bg-white/5 border-white/10 text-white placeholder:text-zinc-500 focus:border-violet-500"
+                  className="pl-8 w-36 h-8 text-sm bg-background/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary"
+                  autoComplete="off"
                 />
               </div>
 
@@ -163,7 +167,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={toggleSortOrder}
-                className="h-8 px-2 text-zinc-400 hover:text-white hover:bg-white/10"
+                className="h-8 px-2 text-muted-foreground hover:text-foreground hover:bg-accent"
                 title={
                   sortOrder === "desc"
                     ? "Sort: Highest First"
@@ -184,8 +188,8 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
       <CardContent className="flex-1 flex flex-col">
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
-            <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-lg">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
@@ -243,8 +247,8 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
 
         {/* Pagination Controls */}
         {usePagination && paginatedData && paginatedData.total_pages > 1 && (
-          <div className="flex items-center justify-between pt-4 mt-2 border-t border-white/10">
-            <span className="text-sm text-zinc-400">
+          <div className="flex items-center justify-between pt-4 mt-2 border-t border-border">
+            <span className="text-sm text-muted-foreground">
               Page {paginatedData.page} of{" "}
               {paginatedData.total_pages.toLocaleString()}
             </span>
@@ -255,7 +259,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                 size="sm"
                 onClick={handlePrevPage}
                 disabled={!paginatedData.has_prev || isLoading}
-                className="h-8 px-3 text-zinc-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-8 px-3 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 Prev
@@ -266,7 +270,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                 size="sm"
                 onClick={handleNextPage}
                 disabled={!paginatedData.has_next || isLoading}
-                className="h-8 px-3 text-zinc-400 hover:text-white hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-8 px-3 text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
                 <ChevronRight className="w-4 h-4 ml-1" />
@@ -277,7 +281,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
 
         {/* Info for large datasets */}
         {usePagination && paginatedData && paginatedData.total > 100 && (
-          <p className="text-xs text-zinc-500 mt-2 text-center">
+          <p className="text-xs text-muted-foreground mt-2 text-center">
             💡 Use search to find specific team members
           </p>
         )}

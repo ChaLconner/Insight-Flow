@@ -50,20 +50,47 @@ interface ThemeState {
   setSystemPrefersDark: (prefersDark: boolean) => void; // For compatibility
 }
 
+const getInitialTheme = (): Theme => {
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("insight-flow-theme");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.state?.theme) {
+          return parsed.state.theme;
+        }
+      }
+    } catch (_) {
+      // Ignore parsing errors
+    }
+  }
+  return "dark"; // Default fallback
+};
+
+const initialTheme = getInitialTheme();
+const isSystem = initialTheme === "system";
+const systemPrefersDark = typeof window !== "undefined"
+  ? window.matchMedia("(prefers-color-scheme: dark)").matches
+  : false;
+
+const initialResolvedTheme = isSystem
+  ? (systemPrefersDark ? "dark" : "light")
+  : (initialTheme === "light" ? "light" : "dark");
+
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
       // Initial state
-      theme: "system",
-      currentTheme: "system", // Alias for theme
-      resolvedTheme: "light",
-      systemPrefersDark: false,
-      isSystemMode: true, // Default to system mode
-      isSystem: true, // Default to system mode
+      theme: initialTheme,
+      currentTheme: initialTheme, // Alias for theme
+      resolvedTheme: initialResolvedTheme,
+      systemPrefersDark: systemPrefersDark,
+      isSystemMode: isSystem,
+      isSystem: isSystem,
       isTransitioning: false,
       availableThemes: ["light", "dark", "system"],
-      colorScheme: "light",
-      nextTheme: "dark",
+      colorScheme: initialResolvedTheme,
+      nextTheme: initialTheme === "light" ? "dark" : "light",
       primaryColor: "#3b82f6",
 
       // Actions
@@ -84,9 +111,6 @@ export const useThemeStore = create<ThemeState>()(
             // For system theme, listen to system changes
             get().listenToSystemTheme();
           }
-
-          // Save to localStorage
-          localStorage.setItem("insight-flow-theme", theme);
         }
       },
 
@@ -114,7 +138,6 @@ export const useThemeStore = create<ThemeState>()(
 
         if (typeof window !== "undefined") {
           get().applySystemTheme();
-          localStorage.setItem("insight-flow-theme", "system");
         }
       },
 
@@ -123,11 +146,11 @@ export const useThemeStore = create<ThemeState>()(
           theme: "light",
           currentTheme: "light",
           isSystemMode: false,
+          isSystem: false,
         });
 
         if (typeof window !== "undefined") {
           get().applyTheme("light");
-          localStorage.setItem("insight-flow-theme", "light");
         }
       },
 
@@ -168,7 +191,6 @@ export const useThemeStore = create<ThemeState>()(
 
         if (typeof window !== "undefined") {
           get().applyTheme("light");
-          localStorage.setItem("insight-flow-theme", "light");
         }
       },
 
@@ -196,25 +218,15 @@ export const useThemeStore = create<ThemeState>()(
       },
 
       initializeTheme: () => {
-        // Load theme from localStorage or use default (client-side only)
-        let savedTheme: Theme | null = null;
-
+         // Apply initial theme (client-side only)
         if (typeof window !== "undefined") {
-          savedTheme = localStorage.getItem("insight-flow-theme") as Theme;
-        }
-
-        const initialTheme = savedTheme || "system";
-
-        set({ theme: initialTheme });
-
-        // Apply initial theme (client-side only)
-        if (typeof window !== "undefined") {
-          if (initialTheme === "system") {
-            get().listenToSystemTheme();
-            get().applySystemTheme();
-          } else {
-            get().applyTheme(initialTheme);
-          }
+            const { theme } = get();
+            if (theme === "system") {
+                get().listenToSystemTheme();
+                get().applySystemTheme();
+            } else {
+                get().applyTheme(theme);
+            }
         }
       },
 
@@ -299,6 +311,18 @@ export const useThemeStore = create<ThemeState>()(
       partialize: (state) => ({
         theme: state.theme,
       }),
+      onRehydrateStorage: () => (state) => {
+        // After rehydrating from localStorage, apply the theme to the DOM
+        if (state && typeof window !== "undefined") {
+          const { theme, applyTheme, applySystemTheme, listenToSystemTheme } = state;
+          if (theme === "system") {
+            listenToSystemTheme();
+            applySystemTheme();
+          } else {
+            applyTheme(theme);
+          }
+        }
+      },
     },
   ),
 );

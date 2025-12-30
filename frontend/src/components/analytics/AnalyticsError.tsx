@@ -19,10 +19,10 @@ export const AnalyticsError = memo(function AnalyticsError({
           <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
             <AlertCircle className="w-8 h-8 text-red-400" />
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">
+          <h3 className="text-lg font-semibold text-foreground mb-2">
             Failed to Load Analytics
           </h3>
-          <p className="text-zinc-400 max-w-md mb-4">
+          <p className="text-muted-foreground max-w-md mb-4">
             {error instanceof Error
               ? error.message
               : "An unexpected error occurred while loading analytics data."}

@@ -9,14 +9,54 @@ import axios, {
 } from "axios";
 import axiosRetry from "axios-retry";
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
-// useAuthStore import removed to prevent circular dependency
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { toast } from "sonner";
 
-// Request deduplication cache removed for simplicity
-// const requestCache = new Map<string, Promise<any>>();
+// ===========================================
+// Type Definitions
+// ===========================================
 
-// Create axios instance
+// Generic API response wrapper
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+}
+
+// API error interface
+export interface ApiError {
+  message?: string;
+  detail?: string | Record<string, unknown> | Array<unknown>; // FastAPI uses 'detail'
+  code?: string;
+  status?: number;
+  details?: Record<string, unknown>;
+}
+
+// Enhanced type definitions for better type safety
+export interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+  expires_in?: number;
+  token_type?: string;
+}
+
+export interface RefreshTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in?: number;
+  token_type?: string;
+}
+
+// Backend health check response
+export interface HealthCheckResponse {
+  status: "healthy" | "unhealthy";
+  message?: string;
+}
+
+// ===========================================
+// API Client Setup
+// ===========================================
+
 // Create axios instance
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_CONFIG.BASE_URL,
@@ -42,7 +82,7 @@ axiosRetry(apiClient, {
       );
       return true;
     }
-    if (error.response?.status >= 500) {
+    if (error.response?.status && error.response.status >= 500) {
       console.warn(
         `🔄 Retrying server error ${error.response.status} (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
       );
@@ -73,7 +113,7 @@ apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
-  async (error: AxiosError) => {
+  async (error: AxiosError<unknown>) => {
     const originalRequest = error.config as AxiosRequestConfig & {
       _retry?: boolean;
     };
@@ -110,6 +150,10 @@ apiClient.interceptors.response.use(
   },
 );
 
+// ===========================================
+// Authentication Helpers
+// ===========================================
+
 // Callback storage
 let logoutCallback: (() => void) | null = null;
 
@@ -131,7 +175,7 @@ async function clearAuthTokens(): Promise<void> {
       {},
       { withCredentials: true },
     );
-  } catch (_) {
+  } catch {
     // ignore
   }
 
@@ -140,28 +184,22 @@ async function clearAuthTokens(): Promise<void> {
     logoutCallback();
   }
 
-  // Use Next.js router for navigation instead of window.location
-  try {
-    const nav = await import("next/navigation");
-    nav.redirect("/auth/login");
-  } catch (_) {
-    // Fallback to window.location if Next.js redirect fails
-    window.location.href = "/auth/login";
-  }
+  // Navigate to login page
+  window.location.href = "/auth/login";
 }
 
 // Helper function to get user-friendly error message
-function getErrorMessage(error: AxiosError): string {
+function getErrorMessage(error: AxiosError<unknown>): string {
   // Enhanced network error handling
   if (!error.response) {
     if (error.code === "ECONNABORTED") {
       return "Request timeout. Please check your connection and try again.";
     }
     if (error.code === "ECONNREFUSED") {
-      return "Cannot connect to server. Please ensure the backend is running.";
+      return "Cannot connect to server. Please ensure backend is running.";
     }
     if (error.code === "ENOTFOUND") {
-      return "Server not found. Please check the API URL.";
+      return "Server not found. Please check API URL.";
     }
     if (error.code === "ETIMEDOUT") {
       return "Connection timed out. Please check your connection.";
@@ -177,64 +215,34 @@ function getErrorMessage(error: AxiosError): string {
   }
 
   const status = error.response.status;
-  const data = error.response.data as any;
+  const data = error.response.data as ApiError | undefined;
 
   switch (status) {
     case 400:
-      return data?.message ?? ERROR_MESSAGES.VALIDATION_ERROR;
+      return data?.message ?? (typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail)) ?? ERROR_MESSAGES.VALIDATION_ERROR;
     case 401:
       return ERROR_MESSAGES.UNAUTHORIZED;
     case 403:
-      return ERROR_MESSAGES.FORBIDDEN;
+      return data?.message ?? (typeof data?.detail === 'string' ? data.detail : ERROR_MESSAGES.FORBIDDEN);
     case 404:
-      return ERROR_MESSAGES.NOT_FOUND;
+      return data?.message ?? (typeof data?.detail === 'string' ? data.detail : ERROR_MESSAGES.NOT_FOUND);
     case 422:
-      return data?.message ?? ERROR_MESSAGES.VALIDATION_ERROR;
+      return data?.message ?? (typeof data?.detail === 'string' ? data.detail : JSON.stringify(data?.detail)) ?? ERROR_MESSAGES.VALIDATION_ERROR;
     case 429:
       return ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
     case 500:
-      return ERROR_MESSAGES.SERVER_ERROR;
+      return data?.message ?? (typeof data?.detail === 'string' ? data.detail : ERROR_MESSAGES.SERVER_ERROR);
     default:
       return ERROR_MESSAGES.SERVER_ERROR;
   }
 }
 
 // ===========================================
-// API Request/Response Types
+// Utility Functions
 // ===========================================
 
-export interface ApiError {
-  message: string;
-  code?: string;
-  status?: number;
-  details?: any;
-}
-
-// Generic API response wrapper
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  message?: string;
-  error?: string;
-}
-
-// Enhanced type definitions for better type safety
-export interface AuthTokens {
-  access_token: string;
-  refresh_token: string;
-  expires_in?: number;
-  token_type?: string;
-}
-
-export interface RefreshTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in?: number;
-  token_type?: string;
-}
-
 // FormData upload helper
-export function createFormData(data: Record<string, any>): FormData {
+export function createFormData(data: Record<string, FormDataValue>): FormData {
   const formData = new FormData();
 
   Object.entries(data).forEach(([key, value]) => {
@@ -261,6 +269,9 @@ export function createFormData(data: Record<string, any>): FormData {
 
   return formData;
 }
+
+// Type for FormData values
+type FormDataValue = string | number | boolean | File | File[] | FormDataValue[] | Record<string, unknown> | null;
 
 // Download file helper with improved error handling
 export async function downloadFile(
@@ -306,14 +317,45 @@ export function createCustomApiClient(
   });
 }
 
-// Enhanced helper function to create deduplicated requests with rate limiting
-export function createDeduplicatedRequest<T = any>(
+// ===========================================
+// Request Deduplication
+// ===========================================
+
+// In-flight request cache for deduplication
+const inFlightRequests = new Map<string, Promise<unknown>>();
+
+/**
+ * Creates a deduplicated request that prevents multiple identical concurrent requests.
+ * If a request with the same cacheKey is already in-flight, returns that promise instead.
+ * @param requestFn - The async function to execute
+ * @param cacheKey - Unique key to identify this request
+ * @returns Promise resolving to request result
+ */
+export function createDeduplicatedRequest<T = unknown>(
   requestFn: () => Promise<T>,
   cacheKey: string,
-  _ttl: number = 500,
 ): Promise<T> {
-  // Pass-through implementation to remove complexity
-  return requestFn();
+  // Check if there's already an in-flight request with this key
+  const existing = inFlightRequests.get(cacheKey);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+
+  // Create new request and store it
+  const promise = requestFn()
+    .then((result) => {
+      // Remove from cache after completion
+      inFlightRequests.delete(cacheKey);
+      return result;
+    })
+    .catch((error) => {
+      // Remove from cache on error too
+      inFlightRequests.delete(cacheKey);
+      throw error;
+    });
+
+  inFlightRequests.set(cacheKey, promise);
+  return promise;
 }
 
 // ===========================================
@@ -323,13 +365,14 @@ export function createDeduplicatedRequest<T = any>(
 // Backend health check with retry
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const _response = await apiClient.get("/minimal-test", {
+    const _response = await apiClient.get<HealthCheckResponse>("/minimal-test", {
       timeout: 5000, // Shorter timeout for health check
     });
 
     return true;
-  } catch (error: any) {
-    console.error("❌ Backend health check failed:", error.message);
+  } catch (error) {
+    const axiosError = error as AxiosError<unknown>;
+    console.error("❌ Backend health check failed:", axiosError.message);
     return false;
   }
 }
@@ -353,19 +396,3 @@ export async function waitForBackend(
   console.error("❌ Backend failed to start after maximum attempts");
   return false;
 }
-
-// Rate limiting helper for user-initiated actions
-export function createRateLimitedRequest<T = any>(
-  requestFn: () => Promise<T>,
-  cacheKey: string,
-  _ttl: number = 2000,
-): Promise<T> {
-  // Pass-through implementation to remove complexity
-  return requestFn();
-}
-
-// ===========================================
-// Token Management Helpers
-// ===========================================
-
-// Token management helpers removed as we use HttpOnly cookies

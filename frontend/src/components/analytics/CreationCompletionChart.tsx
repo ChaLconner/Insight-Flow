@@ -19,7 +19,6 @@ interface CreationCompletionChartProps {
 
 // Memoized styles
 
-
 const CreationCompletionChartComponent: React.FC<
   CreationCompletionChartProps
 > = ({ data = [] }) => {
@@ -34,23 +33,23 @@ const CreationCompletionChartComponent: React.FC<
 
   if (!hasData) {
     return (
-      <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+      <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-white">
+          <CardTitle className="text-lg font-semibold text-foreground">
             Creation vs Completion
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
-          <p className="text-zinc-500">No trend data available</p>
+          <p className="text-muted-foreground">No trend data available</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+    <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-white">
+        <CardTitle className="text-lg font-semibold text-foreground">
           Creation vs Completion
         </CardTitle>
       </CardHeader>

@@ -22,6 +22,7 @@ dist/
 # Environment files
 .env
 .env.local
+.env.docker
 .env.development.local
 .env.test.local
 .env.production.local
@@ -70,6 +71,7 @@ pids/
 .coverage
 .mypy_cache
 .pytest_cache
+.ruff_cache/
 .hypothesis
 .tox/
 
@@ -199,6 +201,7 @@ jspm_packages/
 
 # Markdown files
 *.md
+!README.md
 !QA_REPORT.md
 
 # Specific markdown files to ensure they are ignored
@@ -238,3 +241,45 @@ analysis_*.json
 # Migration and utility scripts
 migrate_*.py
 reset_*.py
+add_stripe_customer_id.py
+check_payments.py
+check_sync.py
+fix_missing_dates.py
+list_subs.py
+test_db_write.py
+verify_limits.py
+
+# Test results and reports
+e2e-results/
+test-results/
+playwright-report/
+lighthouse-report.html
+*.lcov
+
+# AI Instructions and assistant files
+AI_INSTRUCTION.md
+*_INSTRUCTION.md
+.secrets.baseline
+
+# Editor/IDE specific
+*.sublime-*
+.project
+.classpath
+.settings/
+
+# Temporary test files
+*.spec.js.map
+*.test.js.map
+
+# Build artifacts
+*.egg-info/
+*.egg
+*.whl
+
+# Documentation build
+docs/_build/
+site/
+
+# Local development
+*.local
+.env*.local

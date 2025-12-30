@@ -42,28 +42,28 @@ export class ChartErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm h-full flex flex-col">
+        <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
           <CardHeader>
-            <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+            <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-400" />
               {this.props.fallbackTitle ?? "Chart Error"}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col items-center justify-center gap-4">
-            <p className="text-zinc-400 text-center max-w-sm">
+            <p className="text-muted-foreground text-center max-w-sm">
               Something went wrong while rendering this chart. Please try
               refreshing or contact support if the issue persists.
             </p>
             <Button
               variant="outline"
               onClick={this.handleRetry}
-              className="flex items-center gap-2 border-white/20 hover:bg-white/10"
+              className="flex items-center gap-2 border-border hover:bg-accent"
             >
               <RefreshCw className="h-4 w-4" />
               Try Again
             </Button>
             {process.env.NODE_ENV === "development" && this.state.error && (
-              <pre className="text-xs text-red-400 mt-4 p-2 bg-black/30 rounded max-w-full overflow-auto">
+              <pre className="text-xs text-red-400 mt-4 p-2 bg-destructive/10 rounded max-w-full overflow-auto">
                 {this.state.error.message}
               </pre>
             )}

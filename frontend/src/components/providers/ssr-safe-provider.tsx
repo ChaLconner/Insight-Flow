@@ -73,15 +73,13 @@ export function ThemeAwareProvider({
   // storageKey = "insight-flow-theme",
 }: ThemeAwareProviderProps) {
   const [isHydrated, setIsHydrated] = useState(false);
-  const { syncWithStorage, initializeTheme } = useTheme();
+  const { initializeTheme } = useTheme();
 
   useEffect(() => {
     setIsHydrated(true);
     // Initialize theme only on client
     initializeTheme();
-    // Sync with storage
-    syncWithStorage();
-  }, [syncWithStorage, initializeTheme]);
+  }, [initializeTheme]);
 
   // Prevent hydration mismatch by not rendering theme-dependent content until hydrated
   if (!isHydrated) {

@@ -87,22 +87,22 @@ export function NotificationsPopover() {
 
   const getNotificationUrl = (notification: Notification): string | null => {
     const data = notification.data as Record<string, string | number | boolean | null> | undefined;
-    
+
     if (!data) {
       return null;
     }
-    
+
     const projectId = data.project_id as string;
     const taskId = data.task_id as string;
-    
+
     if (taskId && projectId) {
       return `/projects/${projectId}?task=${taskId}`;
     }
-    
+
     if (projectId) {
       return `/projects/${projectId}`;
     }
-    
+
     return null;
   };
 
@@ -112,7 +112,7 @@ export function NotificationsPopover() {
     }
 
     const url = notification.actionUrl ?? getNotificationUrl(notification);
-    
+
     if (url) {
       router.push(url);
     }
@@ -165,7 +165,7 @@ export function NotificationsPopover() {
       <Button
         variant="ghost"
         size="icon"
-        className="relative h-10 w-10 rounded-full text-zinc-400 hover:bg-transparent hover:text-white transition-none"
+        className="relative h-10 w-10 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground transition-none"
         onClick={() => setIsOpen(!isOpen)}
         whileHover={{ scale: 1 }}
       >
@@ -177,28 +177,28 @@ export function NotificationsPopover() {
         )}
       </Button>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute -right-16 sm:right-0 top-12 z-50 w-80 sm:w-96 origin-top-right rounded-xl border border-white/10 bg-zinc-950/95 backdrop-blur-xl shadow-2xl flex flex-col max-h-[600px]"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="absolute -right-16 sm:right-0 top-12 z-50 w-80 sm:w-96 origin-top-right rounded-xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl flex flex-col max-h-[600px]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 shrink-0">
-              <h3 className="text-sm font-semibold text-white">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3 shrink-0">
+              <h3 className="text-sm font-semibold text-foreground">
                 Notifications
                 {unreadCount > 0 && (
-                  <span className="ml-2 text-xs font-normal text-zinc-500">
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
                     ({unreadCount} unread)
                   </span>
                 )}
               </h3>
               {unreadCount > 0 && (
                 <button
-                  className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                  className="text-xs text-primary hover:text-primary/80 transition-colors"
                   onClick={handleMarkAllAsRead}
                 >
                   Mark all read
@@ -207,7 +207,7 @@ export function NotificationsPopover() {
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center px-4 pt-3 pb-2 gap-4 border-b border-white/5 shrink-0">
+            <div className="flex items-center px-4 pt-3 pb-2 gap-4 border-b border-border/50 shrink-0">
               {(["all", "unread", "mentions"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -215,15 +215,15 @@ export function NotificationsPopover() {
                   className={cn(
                     "text-xs font-medium pb-2 transition-colors relative",
                     activeTab === tab
-                      ? "text-white"
-                      : "text-zinc-500 hover:text-zinc-300"
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground/80"
                   )}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                   {activeTab === tab && (
                     <motion.div
                       layoutId="activeTab"
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full"
                     />
                   )}
                 </button>
@@ -234,31 +234,27 @@ export function NotificationsPopover() {
             <div className="overflow-y-auto flex-1 custom-scrollbar">
               {isLoading && notifications.length === 0 ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-600 border-t-indigo-500" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted border-t-primary" />
                 </div>
               ) : groupedNotifications.length === 0 ? (
                 <div className="py-12 text-center">
-                  <Bell className="h-8 w-8 text-zinc-700 mx-auto mb-3" />
-                  <p className="text-sm text-zinc-500">No notifications found</p>
+                  <Bell className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No notifications found</p>
                 </div>
               ) : (
                 <div className="pb-2">
                   {groupedNotifications.map((group) => (
                     <div key={group.label}>
-                      <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur-sm px-4 py-2 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider border-y border-white/5">
+                      <div className="sticky top-0 z-10 bg-popover/95 backdrop-blur-sm px-4 py-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-y border-border/50">
                         {group.label}
                       </div>
-                      <AnimatePresence initial={false} mode="popLayout">
+                      <div>
                         {group.items.map((notification) => (
-                          <motion.div
-                            layout
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0, transition: { duration: 0.2 } }}
+                          <div
                             key={notification.id}
                             className={cn(
-                              "group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/5 border-b border-white/5 last:border-0",
-                              !notification.read && "bg-indigo-500/5"
+                              "group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-accent border-b border-border/50 last:border-0",
+                              !notification.read && "bg-primary/5"
                             )}
                             onClick={() => handleNotificationClick(notification)}
                           >
@@ -278,16 +274,16 @@ export function NotificationsPopover() {
                                 className={cn(
                                   "text-sm leading-snug",
                                   !notification.read
-                                    ? "text-white font-medium"
-                                    : "text-zinc-400"
+                                    ? "text-foreground font-medium"
+                                    : "text-muted-foreground"
                                 )}
                               >
                                 {notification.title}
                               </p>
-                              <p className="text-xs text-zinc-500 mt-0.5 line-clamp-2">
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                                 {notification.message}
                               </p>
-                              <p className="text-[10px] text-zinc-600 mt-1.5 flex items-center gap-1.5">
+                              <p className="text-[10px] text-muted-foreground/70 mt-1.5 flex items-center gap-1.5">
                                 <span>
                                   {formatDistanceToNow(new Date(notification.createdAt), {
                                     addSuffix: true,
@@ -300,7 +296,7 @@ export function NotificationsPopover() {
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity self-center">
                               {!notification.read && (
                                 <button
-                                  className="p-1.5 rounded-md text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all"
+                                  className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
                                   onClick={(e) => handleMarkAsRead(notification.id, e)}
                                   title="Mark as read"
                                 >
@@ -308,27 +304,26 @@ export function NotificationsPopover() {
                                 </button>
                               )}
                               <button
-                                className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                                 onClick={(e) => handleDelete(notification, e)}
                                 title="Delete"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
-                          </motion.div>
+                          </div>
                         ))}
-                      </AnimatePresence>
+                      </div>
                     </div>
                   ))}
-                  
+
                   {/* Load More Trigger */}
-                  <div className="p-2 border-t border-white/5">
-                     <Button 
-                        variant="ghost" 
-                        className="w-full text-xs text-zinc-500 hover:text-white h-8"
+                  <div className="p-2 border-t border-border/50">
+                     <Button
+                        variant="ghost"
+                        className="w-full text-xs text-muted-foreground hover:text-foreground h-8"
                         onClick={() => {
-                          /* Implement Load More logic here */
-                          console.log("Load more clicked");
+                          /* TODO: Implement Load More logic */
                         }}
                      >
                         Load Previous Notifications

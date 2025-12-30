@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { cookies } from "next/headers";
 import type { Task } from "@/types";
 import { transformProjectData } from "@/lib/project-utils";
 
 // Use backend directly for server-side fetching to avoid loopback overhead and URL issues
-const SERVER_BASE_URL = process.env.API_URL ?? "http://localhost:8000";
+const SERVER_BASE_URL = (process.env.API_URL ?? "http://127.0.0.1:8000") + "/api/v1";
 
 async function fetchServer<T>(
   path: string,
@@ -46,7 +45,7 @@ async function fetchServer<T>(
 
 export const serverApi = {
   getProjects: async () => {
-    const data: any[] = await fetchServer("/projects");
+    const data = await fetchServer<unknown[]>("/projects");
     return Array.isArray(data)
       ? data.map((p, index) => transformProjectData(p, undefined, index))
       : [];

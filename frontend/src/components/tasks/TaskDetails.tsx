@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -26,8 +27,8 @@ import {
   X,
   Briefcase,
 } from "lucide-react";
-import { format } from "date-fns";
-import type { Task } from "@/types";
+import { format, differenceInDays, isPast, isToday, isTomorrow } from "date-fns";
+import type { Task, UpdateTaskRequest } from "@/types";
 import { TaskStatus, TaskPriority, TaskType } from "@/types";
 import { tasksApi } from "@/lib/api-endpoints";
 import {
@@ -49,7 +50,7 @@ interface TaskDetailsProps {
 const renderDescription = (text: string) => {
   if (!text) {
     return (
-      <span className="text-zinc-600 italic">No description provided.</span>
+      <span className="text-muted-foreground/60 italic">No description provided.</span>
     );
   }
 
@@ -116,7 +117,7 @@ const renderDescription = (text: string) => {
     );
   }
   return (
-    <div className="text-zinc-300 leading-relaxed text-[15px]">{elements}</div>
+    <div className="text-muted-foreground leading-relaxed text-[15px]">{elements}</div>
   );
 };
 
@@ -174,8 +175,7 @@ export function TaskDetails({
     const previousTask = task;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const taskData: any = {
+      const taskData: UpdateTaskRequest = {
         title,
         description,
         priority,
@@ -260,21 +260,52 @@ export function TaskDetails({
     }
   };
 
+  const getStatusTextColor = (s: string) => {
+    switch (s) {
+      case TaskStatus.DONE:
+        return "text-emerald-500 dark:text-emerald-400";
+      case TaskStatus.IN_PROGRESS:
+        return "text-blue-500 dark:text-blue-400";
+      case TaskStatus.IN_REVIEW:
+        return "text-purple-500 dark:text-purple-400";
+      case TaskStatus.CANCELLED:
+        return "text-red-500 dark:text-red-400";
+      case TaskStatus.TODO:
+      default:
+        return "text-zinc-500 dark:text-zinc-400";
+    }
+  };
+
+  const getPriorityTextColor = (p: string) => {
+    switch (p) {
+      case TaskPriority.URGENT:
+        return "text-fuchsia-500 dark:text-fuchsia-400";
+      case TaskPriority.HIGH:
+        return "text-red-500 dark:text-red-400";
+      case TaskPriority.MEDIUM:
+        return "text-amber-500 dark:text-amber-400";
+      case TaskPriority.LOW:
+        return "text-green-500 dark:text-green-400";
+      default:
+        return "text-zinc-500 dark:text-zinc-400";
+    }
+  };
+
   // Options for Selects
   const priorityOptions = Object.values(TaskPriority).map((p) => ({
     value: p,
     label: p.charAt(0).toUpperCase() + p.slice(1),
-    color: getPriorityColor(p),
+    color: getPriorityTextColor(p),
   }));
   const statusOptions = Object.values(TaskStatus).map((s) => ({
     value: s,
     label: s.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    color: getStatusColor(s),
+    color: getStatusTextColor(s),
   }));
   const typeOptions = Object.values(TaskType).map((t) => ({
     value: t,
     label: t.charAt(0).toUpperCase() + t.slice(1),
-    color: "text-zinc-400",
+    color: "text-zinc-500 dark:text-zinc-400",
   }));
 
   return (
@@ -284,7 +315,7 @@ export function TaskDetails({
         <Button
           variant="ghost"
           size="sm"
-          className="p-0 h-auto hover:bg-transparent text-zinc-400 hover:text-white mb-2"
+          className="p-0 h-auto hover:bg-transparent text-muted-foreground hover:text-foreground mb-2"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           {backLabel}
@@ -292,228 +323,317 @@ export function TaskDetails({
       </Link>
 
       {/* Main Content Area */}
-      <div className="bg-[#18181b]/50 backdrop-blur-xl border border-white/10 rounded-2xl p-6 md:p-8 relative">
-        {/* Top Actions (Edit/Delete) */}
-        <div className="absolute top-6 right-6 flex items-center gap-2">
-          {isEditing ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setIsEditing(false)}
-                className="text-zinc-400 hover:text-white"
-              >
-                <X className="h-4 w-4 mr-1" /> Cancel
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
-              >
-                <Save className="h-4 w-4 mr-1" /> Save
-              </Button>
-            </>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-white/10"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-48 bg-[#18181b] border-white/10 z-50"
-              >
-                <DropdownMenuItem
-                  onClick={() => setIsEditing(true)}
-                  className="text-zinc-300 hover:text-white hover:bg-white/10 cursor-pointer"
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit Task
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-white/10" />
-                <DropdownMenuItem
-                  onClick={() => setIsDeleteModalOpen(true)}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 cursor-pointer"
-                >
-                  <Trash className="h-4 w-4 mr-2" />
-                  Delete Task
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+      <div className="bg-card/50 backdrop-blur-xl border border-border rounded-2xl p-6 md:p-8 relative">
+        {/* Header Section */}
+        <div className="space-y-6">
+          {/* Top Row: Project Breadcrumb & Actions */}
+          <div className="flex items-center justify-between gap-4">
+            {/* Project Name */}
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground/80 bg-secondary/50 px-3 py-1.5 rounded-full w-fit">
+              <Briefcase className="h-3.5 w-3.5" />
+              {task.project?.name ?? "Project"}
+            </div>
 
-        <div className="flex flex-col gap-4 max-w-4xl">
-          {/* 1. Title (Moved to Top) */}
-          <div className="mt-2">
+            {/* Actions (Edit/Delete/Save) */}
+            <div className="flex items-center gap-2 text-right">
+              {isEditing ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setIsEditing(false)}
+                    className="text-muted-foreground hover:text-foreground h-8"
+                  >
+                    <X className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Cancel</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground h-8 min-w-[80px]"
+                  >
+                    <Save className="h-4 w-4 mr-1" /> Save
+                  </Button>
+                </>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-48 bg-popover border-border z-50"
+                  >
+                    <DropdownMenuItem
+                      onClick={() => setIsEditing(true)}
+                      className="text-foreground hover:bg-accent cursor-pointer"
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Task
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-border" />
+                    <DropdownMenuItem
+                      onClick={() => setIsDeleteModalOpen(true)}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 cursor-pointer"
+                    >
+                      <Trash className="h-4 w-4 mr-2" />
+                      Delete Task
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          </div>
+
+          {/* Title Row */}
+          <div>
             {isEditing ? (
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="text-2xl md:text-3xl font-bold bg-black/20 border-white/10 text-white h-auto py-2"
-              />
+              <>
+                <label htmlFor="task-detail-title" className="sr-only">Task Title</label>
+                <Input
+                  id="task-detail-title"
+                  name="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Task Title"
+                  autoComplete="off"
+                  aria-label="Task Title"
+                  className="text-2xl md:text-3xl font-bold bg-transparent border-none px-0 shadow-none focus-visible:ring-0 placeholder:text-muted-foreground/30 h-auto py-1"
+                />
+              </>
             ) : (
-              <h1 className="text-3xl md:text-4xl font-bold text-white leading-tight">
+              <h1 className="text-3xl md:text-4xl font-bold text-foreground leading-tight tracking-tight">
                 {task.title}
               </h1>
             )}
           </div>
 
-          {/* 2. Project Name, Priority, Type, Assignee, Status (Below Title) */}
-          <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4 text-sm flex-wrap text-zinc-400">
-            {/* Project Name */}
-            <div className="flex items-center gap-2 font-medium tracking-wide text-zinc-500">
-              <Briefcase className="h-4 w-4" />
-              {task.project?.name ?? "Project"}
-            </div>
+          {/* Metadata Row (Status, Priority, Type, Assignee) */}
+          <div className="flex flex-wrap items-center gap-4">
+            {isEditing ? (
+              <>
+                <div className="w-40">
+                  <CustomSelect
+                    value={status}
+                    onChange={(v) => setStatus(v as TaskStatus)}
+                    options={statusOptions}
+                    className="w-full h-9"
+                  />
+                </div>
+                <div className="w-36">
+                  <CustomSelect
+                    value={priority}
+                    onChange={(v) => setPriority(v as TaskPriority)}
+                    options={priorityOptions}
+                    className="w-full h-9"
+                  />
+                </div>
+                <div className="w-36">
+                  <CustomSelect
+                    value={type}
+                    onChange={(v) => setType(v as TaskType)}
+                    options={typeOptions}
+                    className="w-full h-9"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Status Badge */}
+                <Badge
+                  className={`${getStatusColor(task.status)} border px-3 py-1 text-xs font-semibold uppercase tracking-wide rounded-md`}
+                >
+                  {task.status.replace("_", " ")}
+                </Badge>
 
-            {/* Metadata Items */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {isEditing ? (
-                <>
-                  <div className="w-32">
-                    <CustomSelect
-                      value={priority}
-                      onChange={(v) => setPriority(v as TaskPriority)}
-                      options={priorityOptions}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="w-32">
-                    <CustomSelect
-                      value={type}
-                      onChange={(v) => setType(v as TaskType)}
-                      options={typeOptions}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="w-40">
-                    <CustomSelect
-                      value={status}
-                      onChange={(v) => setStatus(v as TaskStatus)}
-                      options={statusOptions}
-                      className="w-full"
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Priority */}
-                  <span
-                    className={`flex items-center gap-1.5 ${getPriorityColor(task.priority).split(" ")[0]}`}
-                  >
-                    <Flag className="h-3.5 w-3.5" />
-                    <span className="capitalize">{task.priority}</span>
-                  </span>
+                {/* Priority */}
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${getPriorityColor(task.priority)}`}
+                >
+                  <Flag className="h-3.5 w-3.5" />
+                  <span className="capitalize">{task.priority}</span>
+                </div>
 
-                  {/* Type */}
-                  <span className="flex items-center gap-1.5 hover:text-zinc-300 transition-colors">
-                    <Tag className="h-3.5 w-3.5" />
-                    <span className="capitalize">{task.type ?? "Feature"}</span>
-                  </span>
+                {/* Type */}
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium text-muted-foreground bg-secondary/30 border-border">
+                  <Tag className="h-3.5 w-3.5" />
+                  <span className="capitalize">{task.type ?? "Feature"}</span>
+                </div>
+              </>
+            )}
 
-                  {/* Assignee */}
-                  <span className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-300 transition-colors">
-                    <UserIcon className="h-3.5 w-3.5" />
-                    {task.assignee?.firstName
-                      ? `${task.assignee?.firstName} ${task.assignee?.lastName ?? ""}`.trim()
-                      : (task.assignee?.username ?? "Unassigned")}
-                  </span>
+            {/* Separator */}
+            <div className="h-6 w-px bg-border mx-1 hidden sm:block"></div>
 
-                  {/* Status (Badge Style for prominence) */}
-                  <Badge
-                    className={`${getStatusColor(task.status)} border px-2.5 py-0.5 text-xs uppercase tracking-wider ml-2`}
-                  >
-                    {task.status.replace("_", " ")}
-                  </Badge>
-                </>
-              )}
+            {/* Assignee */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-secondary/20 px-3 py-1.5 rounded-full border border-border/50">
+              <UserIcon className="h-3.5 w-3.5" />
+              <span>
+                {task.assignee?.firstName
+                  ? `${task.assignee?.firstName} ${task.assignee?.lastName ?? ""}`.trim()
+                  : (task.assignee?.username ?? "Unassigned")}
+              </span>
             </div>
           </div>
         </div>
 
         {/* Divider */}
-        <div className="h-px w-full bg-white/5 my-8"></div>
+        <div className="h-px w-full bg-border my-8"></div>
 
         <div className="grid gap-8 md:grid-cols-3">
           {/* Main Content */}
           <div className="md:col-span-2 space-y-8">
             <div>
-              <h3 className="text-lg font-semibold text-white mb-4">
+              <h3 className="text-lg font-semibold text-foreground mb-4">
                 Description
               </h3>
               {isEditing ? (
-                <Textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="bg-black/20 border-white/10 text-white min-h-[200px]"
-                />
+                <>
+                  <label htmlFor="task-detail-description" className="sr-only">Description</label>
+                  <Textarea
+                    id="task-detail-description"
+                    name="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    autoComplete="off"
+                    aria-label="Description"
+                    className="bg-background border-border text-foreground min-h-[200px]"
+                  />
+                </>
               ) : (
                 renderDescription(task.description ?? "")
               )}
             </div>
           </div>
 
-          {/* Sidebar Details */}
-          <div className="space-y-6">
-            <Card className="border-0 bg-transparent shadow-none p-0">
-              <CardHeader className="px-0 pt-0">
-                <CardTitle className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                  Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6 px-0">
-                {/* Due Date */}
-                <div className="flex items-start gap-3">
-                  <Calendar className="h-4 w-4 text-zinc-500 mt-1" />
-                  <div className="flex-1">
-                    <p className="text-xs text-zinc-500 mb-0.5">Due Date</p>
-                    {isEditing ? (
-                      <Input
-                        type="date"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                        className="bg-black/20 border-white/10 text-white h-8 text-xs"
-                      />
-                    ) : (
-                      <p className="text-sm text-zinc-300 font-medium">
-                        {task.dueDate
-                          ? format(new Date(task.dueDate), "MMM d, yyyy")
-                          : "No due date"}
+                {/* Date Tiles Section */}
+                <div className="flex flex-col gap-6">
+                  {/* Smart Due Date Tile - Minimal */}
+                  <div className="flex items-start gap-3 group">
+                    {/* Status Icon */}
+                    <Calendar
+                      className={cn(
+                        "h-5 w-5 mt-0.5 transition-colors shrink-0",
+                        (() => {
+                          if (!task.dueDate) {
+                            return "text-zinc-400";
+                          }
+                          const date = new Date(task.dueDate);
+                          const today = new Date();
+                          if (isPast(date) && !isToday(date)) {
+                            return "text-red-500 dark:text-red-400";
+                          }
+                          if (differenceInDays(date, today) <= 2) {
+                            return "text-amber-500 dark:text-amber-400";
+                          }
+                          return "text-blue-500 dark:text-blue-400";
+                        })(),
+                      )}
+                    />
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">
+                        Due Date
                       </p>
-                    )}
+                      
+                      <div className="h-8 flex items-center">
+                        {isEditing ? (
+                          <>
+                            <label htmlFor="task-detail-due-date" className="sr-only">Due Date</label>
+                            <Input
+                              id="task-detail-due-date"
+                              name="dueDate"
+                              type="date"
+                              value={dueDate}
+                              onChange={(e) => setDueDate(e.target.value)}
+                              autoComplete="off"
+                              aria-label="Due Date"
+                              className="bg-transparent border-input px-2 h-8 text-sm w-full font-medium"
+                            />
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-foreground">
+                              {task.dueDate
+                                ? format(new Date(task.dueDate), "MMM d, yyyy")
+                                : "No date set"}
+                            </span>
+                            
+                            {task.dueDate && (
+                              <span
+                                className={cn(
+                                  "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm tracking-wider",
+                                  (() => {
+                                    const date = new Date(task.dueDate);
+                                    if (isPast(date) && !isToday(date)) {
+                                      return "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400";
+                                    }
+                                    if (isToday(date)) {
+                                      return "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400";
+                                    }
+                                    if (isTomorrow(date)) {
+                                      return "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400";
+                                    }
+                                    return "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400";
+                                  })()
+                                )}
+                              >
+                                {(() => {
+                                  const date = new Date(task.dueDate);
+                                  const today = new Date();
+                                  if (isPast(date) && !isToday(date)) {
+                                    return "Overdue";
+                                  }
+                                  if (isToday(date)) {
+                                    return "Today";
+                                  }
+                                  if (isTomorrow(date)) {
+                                    return "Tomorrow";
+                                  }
+                                  return `${differenceInDays(date, today)} days left`;
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
 
-                {/* Created At */}
-                <div className="flex items-start gap-3">
-                  <Clock className="h-4 w-4 text-zinc-500 mt-1" />
-                  <div className="flex-1">
-                    <p className="text-xs text-zinc-500 mb-0.5">Created</p>
-                    <p className="text-sm text-zinc-300">
-                      {format(new Date(task.createdAt), "MMM d, yyyy")}
-                    </p>
-                  </div>
-                </div>
+                  {/* Secondary Details Group */}
+                  <div className="space-y-6">
+                    {/* Created Date */}
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
+                          Created
+                        </p>
+                        <p className="text-sm font-medium text-foreground h-8 flex items-center">
+                          {format(new Date(task.createdAt), "MMM d, yyyy")}
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Last Updated */}
-                <div className="flex items-start gap-3">
-                  <History className="h-4 w-4 text-zinc-500 mt-1" />
-                  <div className="flex-1">
-                    <p className="text-xs text-zinc-500 mb-0.5">Last Updated</p>
-                    <p className="text-sm text-zinc-300">
-                      {format(new Date(task.updatedAt), "MMM d, yyyy")}
-                    </p>
+                    {/* Updated Date */}
+                    <div className="flex items-start gap-3">
+                      <History className="h-5 w-5 mt-0.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
+                          Last Updated
+                        </p>
+                        <p className="text-sm font-medium text-foreground h-8 flex items-center">
+                          {format(new Date(task.updatedAt), "MMM d, yyyy")}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </div>
 
@@ -525,21 +645,21 @@ export function TaskDetails({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#18181b] border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-2xl"
+              className="bg-popover border border-border rounded-xl p-6 max-w-sm w-full shadow-2xl"
             >
-              <h3 className="text-lg font-bold text-white mb-2">
+              <h3 className="text-lg font-bold text-foreground mb-2">
                 Delete Task?
               </h3>
-              <p className="text-zinc-400 text-sm mb-6">
+              <p className="text-muted-foreground text-sm mb-6">
                 Are you sure you want to delete{" "}
-                <span className="text-white font-medium">"{task.title}"</span>?
+                <span className="text-foreground font-medium">"{task.title}"</span>?
                 This action cannot be undone.
               </p>
               <div className="flex justify-end gap-3">
                 <Button
                   variant="ghost"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="text-zinc-400 hover:text-white hover:bg-white/5"
+                  className="text-muted-foreground hover:text-foreground hover:bg-accent"
                 >
                   Cancel
                 </Button>

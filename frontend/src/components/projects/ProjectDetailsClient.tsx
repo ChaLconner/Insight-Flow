@@ -33,24 +33,24 @@ export function ProjectDetailsClient({
             <Button
               variant="ghost"
               size="sm"
-              className="text-zinc-400 hover:text-white hover:bg-white/5"
+              className="text-muted-foreground hover:text-foreground hover:bg-accent"
               onClick={handleBack}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Projects
             </Button>
           </div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             {initialProject.name}
           </h1>
-          <p className="text-zinc-400 max-w-2xl">
+          <p className="text-muted-foreground max-w-2xl">
             {initialProject.description}
           </p>
         </div>
         <div className="flex gap-2">
           <Button
             variant="glass"
-            className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white hover:border-white/30 transition-all"
+            className="bg-transparent border-border text-foreground hover:bg-accent hover:text-foreground hover:border-border transition-all"
             onClick={() => router.push(`/projects/${projectId}/settings`)}
           >
             Settings
@@ -60,43 +60,43 @@ export function ProjectDetailsClient({
 
       {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-3">
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+        <Card className="border-border bg-card backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Tasks
             </CardTitle>
-            <Calendar className="h-4 w-4 text-zinc-400" />
+            <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-foreground">
               {initialProject.taskCount ?? 0}
             </div>
-            <p className="text-xs text-zinc-500">Active tasks</p>
+            <p className="text-xs text-muted-foreground">Active tasks</p>
           </CardContent>
         </Card>
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+        <Card className="border-border bg-card backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Members
             </CardTitle>
-            <Users className="h-4 w-4 text-zinc-400" />
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-foreground">
               {initialProject.memberCount ?? 0}
             </div>
-            <p className="text-xs text-zinc-500">Team members</p>
+            <p className="text-xs text-muted-foreground">Team members</p>
           </CardContent>
         </Card>
-        <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+        <Card className="border-border bg-card backdrop-blur-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-400">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               Progress
             </CardTitle>
-            <BarChart2 className="h-4 w-4 text-zinc-400" />
+            <BarChart2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+            <div className="text-2xl font-bold text-foreground">
               {initialProject.taskCount
                 ? Math.round(
                     ((initialProject.completedTasks ?? 0) /
@@ -106,7 +106,7 @@ export function ProjectDetailsClient({
                 : 0}
               %
             </div>
-            <p className="text-xs text-zinc-500">Completion rate</p>
+            <p className="text-xs text-muted-foreground">Completion rate</p>
           </CardContent>
         </Card>
       </div>
@@ -114,7 +114,7 @@ export function ProjectDetailsClient({
       {/* Project Tasks */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-white">Project Tasks</h2>
+          <h2 className="text-xl font-semibold text-foreground">Project Tasks</h2>
           <Button
             onClick={() => taskListRef.current?.openNewTaskModal()}
             className="bg-indigo-600 hover:bg-indigo-700 text-white"

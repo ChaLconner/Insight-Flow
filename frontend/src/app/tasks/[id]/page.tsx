@@ -32,7 +32,7 @@ export default async function TaskDetailsPage({ params }: PageProps) {
 
     return (
       <DashboardLayout>
-        <TaskDetails task={task} backLink="/tasks" backLabel="Back to Tasks" />
+        <TaskDetails task={task} backLink="/projects?tab=tasks" backLabel="Back to Tasks" />
       </DashboardLayout>
     );
   } catch (_error) {

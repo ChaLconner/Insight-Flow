@@ -1,6 +1,33 @@
 """
 Routers package for Insight-Flow application.
 """
-from . import auth, users, projects, tasks, analytics, project_tasks
 
-__all__ = ["auth", "users", "projects", "tasks", "analytics", "project_tasks"]
+from . import (
+    analytics,
+    auth,
+    dashboard,
+    files,
+    health,
+    notifications,
+    payment,
+    project_tasks,
+    projects,
+    tasks,
+    usage,
+    users,
+)
+
+__all__ = [
+    "analytics",
+    "auth",
+    "dashboard",
+    "files",
+    "health",
+    "notifications",
+    "payment",
+    "project_tasks",
+    "projects",
+    "tasks",
+    "usage",
+    "users",
+]
