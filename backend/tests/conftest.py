@@ -195,9 +195,10 @@ def async_session(db_session) -> MockAsyncSession:
 def mock_app_dependencies():
     """Automatically mock startup dependencies for all tests."""
     with patch('database.init_database', new_callable=AsyncMock) as mock_init:
-        with patch('services.scheduler.start_scheduler', return_value=None):
-            with patch('services.scheduler.shutdown_scheduler', return_value=None):
-                 yield
+        with patch('main.init_database', new_callable=AsyncMock):
+            with patch('services.scheduler.start_scheduler', return_value=None):
+                with patch('services.scheduler.shutdown_scheduler', return_value=None):
+                     yield
 
 
 @pytest.fixture(scope="function")

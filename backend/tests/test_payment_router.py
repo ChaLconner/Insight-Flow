@@ -12,6 +12,7 @@ from uuid import uuid4
 from main import app
 from dependencies.auth import get_current_user
 from services.payment_service import get_payment_service
+from routers.payment import get_service
 from models.user import User
 
 
@@ -43,6 +44,7 @@ def mock_current_user():
 def client(mock_payment_service, mock_current_user):
     """Test client with mocks."""
     app.dependency_overrides[get_payment_service] = lambda: mock_payment_service
+    app.dependency_overrides[get_service] = lambda: mock_payment_service
     app.dependency_overrides[get_current_user] = lambda: mock_current_user
     
     with TestClient(app) as client:
@@ -164,7 +166,9 @@ class TestPaymentHistoryEndpoints:
             "total_payments": 5,
             "successful_payments": 4,
             "failed_payments": 1,
-            "average_payment": 20.0
+            "pending_payments": 0,
+            "refunded_payments": 0,
+            "currency": "usd"
         })
         
         response = client.get("/api/v1/payment/history/stats")
