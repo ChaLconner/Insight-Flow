@@ -56,12 +56,25 @@ def set_auth_cookies(
         refresh_token: The refresh token to set
         log_user_info: Optional masked user info for logging
     """
+    # For cross-site requests (Vercel <-> Render), SameSite must be 'none' and Secure must be True
+    # If not in production (local dev), we can use 'lax' but 'none' is fine if secure is False (though 'none' usually requires secure=True)
+    # To be safe and compatible with deployed environments:
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
+    
+    # Critical: Cross-site cookies require Secure=True and SameSite=None
+    # But on localhost (http), Secure=True will fail.
+    # Logic: If Production -> Secure=True, SameSite=None
+    #        If Local -> Secure=False, SameSite=Lax (Standard)
+    
+    secure_flag = is_production
+    samesite_flag = "none" if is_production else "lax"
+
     response.set_cookie(
         key=ACCESS_TOKEN_KEY,
         value=access_token,
         httponly=True,
-        secure=COOKIE_SECURE,
-        samesite="lax",
+        secure=secure_flag,
+        samesite=samesite_flag,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -70,8 +83,8 @@ def set_auth_cookies(
         key=REFRESH_TOKEN_KEY,
         value=refresh_token,
         httponly=True,
-        secure=COOKIE_SECURE,
-        samesite="lax",
+        secure=secure_flag,
+        samesite=samesite_flag,
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/",
     )
