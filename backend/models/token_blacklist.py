@@ -2,11 +2,10 @@
 Token blacklist model for managing revoked tokens.
 """
 
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import UUID, DateTime, String
+from sqlalchemy import DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.logger import setup_logger
@@ -28,14 +27,8 @@ class TokenBlacklist(BaseModel):
 
     __tablename__ = "token_blacklist"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
     token_jti: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
 
     def __repr__(self):
         return f"<TokenBlacklist(jti={self.token_jti}, expires_at={self.expires_at})>"
@@ -99,6 +92,7 @@ class TokenBlacklist(BaseModel):
             # Check if it's a duplicate key error
             if "duplicate key" in str(e).lower():
                 return
+            else:
                 raise e
 
     # ==========================================

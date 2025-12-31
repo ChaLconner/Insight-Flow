@@ -133,7 +133,8 @@ class AsyncPasswordResetService:
             smtp_password = os.getenv("SMTP_PASSWORD")
             sender_email = os.getenv("SENDER_EMAIL", smtp_user)
 
-            reset_link = f"http://localhost:3000/auth/reset-password?token={token}"
+            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+            reset_link = f"{frontend_url}/auth/reset-password?token={token}"
 
             if smtp_host and smtp_port and smtp_user and smtp_password:
                 import smtplib
