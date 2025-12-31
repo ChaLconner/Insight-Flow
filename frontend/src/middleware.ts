@@ -24,8 +24,10 @@ const SKIP_ROUTES = [
   "/api",
   "/favicon.ico",
   "/manifest.json",
+  "/manifest.webmanifest",
   "/icon.svg",
   "/apple-icon.svg",
+  "/sw.js",
 ];
 
 /**
@@ -43,7 +45,9 @@ function isTokenValid(token: string): boolean {
 
     // Decode payload (base64url)
     const payload = parts[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const decoded = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+    );
 
     // Check expiration
     if (decoded.exp) {
@@ -71,15 +75,14 @@ export function middleware(request: NextRequest) {
   const accessToken = request.cookies.get("access_token")?.value;
   const isAuthenticated = accessToken ? isTokenValid(accessToken) : false;
 
-
   // Check if the current path is a public route
   const isPublicRoute = PUBLIC_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`),
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
 
   // Check if the current path is an auth route (login/register)
   const isAuthRoute = AUTH_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`),
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
 
   // If authenticated and trying to access auth routes, redirect to dashboard
@@ -121,6 +124,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

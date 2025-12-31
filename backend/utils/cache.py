@@ -102,6 +102,9 @@ def cache_dashboard_stats(ttl_seconds: int = 60):
     """
 
     def decorator(func):
+        import functools
+        
+        @functools.wraps(func)
         def wrapper(self, user_id, *args, **kwargs):
             cache_key = dashboard_cache._make_key(
                 f"dashboard_stats:{str(user_id)[:8]}", *args, **kwargs
@@ -118,7 +121,9 @@ def cache_dashboard_stats(ttl_seconds: int = 60):
 
             return result
 
-        return decorator
+        return wrapper
+
+    return decorator
 
 
 def invalidate_user_dashboard_cache(user_id: str) -> int:

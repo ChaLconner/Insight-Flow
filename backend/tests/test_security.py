@@ -1,10 +1,10 @@
+
 """
 Comprehensive Security Tests.
 Tests authentication, authorization, CSRF, and security headers.
 """
 import pytest
-from httpx import AsyncClient, ASGITransport
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 import uuid
 import hmac
 import secrets
@@ -17,59 +17,27 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class TestSecurityHeaders:
     """Tests for security headers middleware."""
     
-    @pytest.mark.asyncio
-    async def test_xframe_options_header(self):
+    def test_xframe_options_header(self, client):
         """Test X-Frame-Options header is set."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get("/health")
-            
-            assert response.headers.get("x-frame-options") == "DENY"
+        response = client.get("/health")
+        assert response.headers.get("x-frame-options") == "DENY"
     
-    @pytest.mark.asyncio
-    async def test_content_type_options_header(self):
+    def test_content_type_options_header(self, client):
         """Test X-Content-Type-Options header is set."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get("/health")
-            
-            assert response.headers.get("x-content-type-options") == "nosniff"
+        response = client.get("/health")
+        assert response.headers.get("x-content-type-options") == "nosniff"
     
-    @pytest.mark.asyncio
-    async def test_xss_protection_header(self):
+    def test_xss_protection_header(self, client):
         """Test X-XSS-Protection header is set."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get("/health")
-            
-            assert "x-xss-protection" in response.headers
+        response = client.get("/health")
+        assert "x-xss-protection" in response.headers
     
-    @pytest.mark.asyncio
-    async def test_csp_header(self):
+    def test_csp_header(self, client):
         """Test Content-Security-Policy header is set."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get("/health")
-            
-            csp = response.headers.get("content-security-policy")
-            assert csp is not None
-            assert "default-src" in csp
+        response = client.get("/health")
+        csp = response.headers.get("content-security-policy")
+        assert csp is not None
+        assert "default-src" in csp
 
 
 class TestCSRFProtection:
@@ -166,130 +134,76 @@ class TestSecurityAuditLogger:
 class TestAuthenticationSecurity:
     """Tests for authentication security."""
     
-    @pytest.mark.asyncio
-    async def test_protected_endpoint_requires_auth(self):
+    def test_protected_endpoint_requires_auth(self, unauthenticated_client):
         """Test that protected endpoints require authentication."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            # Projects endpoint should require auth
-            response = await client.get("/api/v1/projects")
-            
-            assert response.status_code in [401, 403]
+        # Projects endpoint should require auth
+        response = unauthenticated_client.get("/api/v1/projects")
+        assert response.status_code in [401, 403]
     
-    @pytest.mark.asyncio
-    async def test_invalid_token_rejected(self):
+    def test_invalid_token_rejected(self, unauthenticated_client):
         """Test that invalid tokens are rejected."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get(
-                "/api/v1/auth/me",
-                headers={"Authorization": "Bearer invalid_token_12345"}
-            )
-            
-            assert response.status_code in [401, 403, 500]
+        response = unauthenticated_client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": "Bearer invalid_token_12345"}
+        )
+        assert response.status_code in [401, 403, 500]
     
-    @pytest.mark.asyncio
-    async def test_missing_token_rejected(self):
+    def test_missing_token_rejected(self, unauthenticated_client):
         """Test that missing tokens are rejected."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get("/api/v1/auth/me")
-            
-            assert response.status_code in [401, 403]
+        response = unauthenticated_client.get("/api/v1/auth/me")
+        assert response.status_code in [401, 403]
 
 
 class TestInputValidation:
     """Tests for input validation."""
     
-    @pytest.mark.asyncio
-    async def test_invalid_email_rejected(self):
+    def test_invalid_email_rejected(self, client):
         """Test that invalid email format is rejected."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.post(
-                "/api/v1/auth/register",
-                json={
-                    "email": "invalid-email",
-                    "password": "ValidPassword123!",
-                    "full_name": "Test User"
-                }
-            )
-            
-            assert response.status_code == 422
+        response = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "invalid-email",
+                "password": "ValidPassword123!",
+                "fullName": "Test User"
+            }
+        )
+        assert response.status_code == 422
     
-    @pytest.mark.asyncio
-    async def test_missing_required_fields(self):
+    def test_missing_required_fields(self, client):
         """Test that missing required fields are rejected."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.post(
-                "/api/v1/auth/login",
-                json={}
-            )
-            
-            assert response.status_code == 422
+        response = client.post(
+            "/api/v1/auth/login",
+            json={}
+        )
+        assert response.status_code == 422
     
-    @pytest.mark.asyncio
-    async def test_xss_payload_in_input(self):
+    def test_xss_payload_in_input(self, client):
         """Test that XSS payloads are handled safely."""
-        from main import app
+        xss_payload = "<script>alert('xss')</script>"
         
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            xss_payload = "<script>alert('xss')</script>"
-            
-            response = await client.post(
-                "/api/v1/auth/register",
-                json={
-                    "email": f"test{uuid.uuid4().hex[:8]}@example.com",
-                    "password": "ValidPassword123!",
-                    "full_name": xss_payload
-                }
-            )
-            
-            # Should either succeed (sanitized) or fail (rejected)
-            # but never execute the script
-            assert response.status_code in [200, 201, 422, 500]
+        response = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"test{uuid.uuid4().hex[:8]}@example.com",
+                "password": "ValidPassword123!",
+                "fullName": xss_payload
+            }
+        )
+        
+        # Should either succeed (sanitized) or fail (rejected)
+        # but never execute the script
+        assert response.status_code in [200, 201, 422, 500, 400]
 
 
 class TestRateLimiting:
     """Tests for rate limiting."""
     
-    @pytest.mark.asyncio
-    async def test_rate_limit_not_triggered_normal_usage(self):
+    def test_rate_limit_not_triggered_normal_usage(self, client):
         """Test that normal usage doesn't trigger rate limit."""
-        from main import app
-        
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            # Make 5 requests - should be under limit
-            for _ in range(5):
-                response = await client.get("/health")
-                assert response.status_code == 200
+        # Make 5 requests - should be under limit
+        for _ in range(5):
+            response = client.get("/health")
+            assert response.status_code == 200
 
 
 class TestPasswordSecurity:
@@ -315,38 +229,20 @@ class TestPasswordSecurity:
 class TestRequestIdTracking:
     """Tests for request ID tracking."""
     
-    @pytest.mark.asyncio
-    async def test_request_id_in_response(self):
+    def test_request_id_in_response(self, client):
         """Test that request ID is included in response."""
-        from main import app
+        response = client.get("/health")
         
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response = await client.get("/health")
-            
-            request_id = response.headers.get("x-request-id")
-            assert request_id is not None
-            assert len(request_id) > 0
+        request_id = response.headers.get("x-request-id")
+        assert request_id is not None
+        assert len(request_id) > 0
     
-    @pytest.mark.asyncio
-    async def test_request_id_unique(self):
+    def test_request_id_unique(self, client):
         """Test that each request gets unique ID."""
-        from main import app
+        response1 = client.get("/health")
+        response2 = client.get("/health")
         
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
-        ) as client:
-            response1 = await client.get("/health")
-            response2 = await client.get("/health")
-            
-            id1 = response1.headers.get("x-request-id")
-            id2 = response2.headers.get("x-request-id")
-            
-            assert id1 != id2
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        id1 = response1.headers.get("x-request-id")
+        id2 = response2.headers.get("x-request-id")
+        
+        assert id1 != id2

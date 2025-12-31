@@ -169,6 +169,14 @@ class MockAsyncSession:
         result = self._session.execute(stmt, *args, **kwargs)
         return result.scalar()
     
+    async def flush(self):
+        """Flush changes to database."""
+        self._session.flush()
+
+    def add_all(self, instances):
+        """Add multiple objects."""
+        self._session.add_all(instances)
+
     async def __aenter__(self):
         return self
     

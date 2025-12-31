@@ -1,28 +1,45 @@
+# Core Framework
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
-python-multipart==0.0.19
-sqlalchemy==2.0.44
-pg8000==1.31.1
-asyncpg==0.29.0
-pydantic[email]==2.10.3
-pydantic-settings==2.6.1
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.45
+pg8000==1.31.2
+asyncpg==0.31.0
+alembic==1.14.1
+
+# Validation & Settings
+pydantic[email]==2.10.6
+pydantic-settings==2.7.1
+
+# Authentication & Security
 PyJWT[crypto]==2.10.1
 passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
-python-dotenv==1.0.0
-alembic==1.13.1
-pytest==7.4.3
-pytest-asyncio==0.21.1
-httpx==0.25.2
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-requests==2.31.0
-google-auth==2.26.1
-google-auth-oauthlib==1.2.0
+bcrypt==4.2.1
+python-dotenv==1.0.1
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.1
+httpx==0.28.1
+pytest-cov==6.0.0
+pytest-mock==3.14.0
+
+# HTTP & OAuth
+requests==2.32.3
+google-auth==2.37.0
+google-auth-oauthlib==1.2.1
 google-auth-httplib2==0.2.0
+
+# External Services
 cloudinary==1.41.0
-apscheduler==3.10.4
-psutil==5.9.8
-redis==5.0.1
-stripe==7.0.0
+stripe==11.4.1
+
+# Scheduling & Monitoring
+apscheduler==3.11.0
+psutil==6.1.1
+
+# Redis & Rate Limiting
+redis==5.2.1
 slowapi==0.1.9

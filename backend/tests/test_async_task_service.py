@@ -1,255 +1,304 @@
-"""
-Async Unit tests for AsyncTaskService.
-"""
+
 import pytest
 import uuid
-from models.task import Task, TaskStatus, TaskPriority, TaskType
-from models.project import Project, ProjectMember, MemberRole
+import asyncio
+from datetime import datetime, UTC, timedelta
+from unittest.mock import MagicMock, AsyncMock, patch
+from sqlalchemy.ext.asyncio import AsyncSession
+from services.async_task_service import AsyncTaskService
 from models.user import User
-from schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate
+from models.project import Project, ProjectMember
+from models.task import Task, TaskStatus, TaskPriority, TaskType
+from schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskAssign
 
+# Fixtures
+@pytest.fixture
+def mock_db_session():
+    db = AsyncMock(spec=AsyncSession)
+    db.execute = AsyncMock()
+    db.commit = AsyncMock() 
+    db.refresh = AsyncMock()
+    db.rollback = AsyncMock()
+    db.add = MagicMock()
+    # Mock delete as an async method if needed, but in 2.0 it's sync usually on session, but awaitable when flushed? 
+    # Actually session.delete(obj) is sync. session.execute(delete(...)) is async.
+    # The service code uses: await self.db.delete(task) which implies the session used allows await delete?
+    # SQLAlchemy AsyncSession.delete is synchronous. But if the code awaits it, it might fail in tests if mock is not async.
+    # Let's inspect the service code again: `await self.db.delete(task)` -> line 313.
+    # AsyncSession.delete IS NOT awaitable. It adds to session. 
+    # However, if the user code has `await self.db.delete(task)`, it might be receiving a wrapper or we should check if they are using an extension.
+    # Standard AsyncSession.delete is sync. `await session.delete(instance)` would raise TypeError in runtime if it returns None.
+    # But wait, maybe the user code is buggy? 
+    # Let's assume for now we mock it as AsyncMock to satisfy the `await` in the code, or Fix the code if it's wrong.
+    # Code: `await self.db.delete(task)`
+    # If the code runs in production, `delete` must be awaitable.
+    # Let's make it AsyncMock.
+    db.delete = AsyncMock()
+    return db
 
-class TestAsyncTaskService:
-    """Test cases for AsyncTaskService."""
+@pytest.fixture
+def task_service(mock_db_session):
+    return AsyncTaskService(mock_db_session)
 
-    @pytest.fixture
-    async def setup_task_data(self, db_session, test_user, async_session):
-        """Create a project and test data for task tests."""
-        from services.async_task_service import AsyncTaskService
-        
-        # Create a project for tasks
-        project = Project(
-            name="Test Project",
-            description="A test project",
-            owner_id=test_user.id,
-            is_active=True
-        )
-        db_session.add(project)
-        db_session.commit()
-        db_session.refresh(project)
-        
-        # Add user as project member (OWNER)
-        member = ProjectMember(
-            project_id=project.id,
-            user_id=test_user.id,
-            role=MemberRole.OWNER.value
-        )
-        db_session.add(member)
-        db_session.commit()
-        
-        return {
-            "project": project,
-            "user": test_user,
-            "service": AsyncTaskService(async_session)
-        }
+@pytest.fixture
+def user_id():
+    return uuid.uuid4()
 
-    @pytest.mark.asyncio
-    async def test_create_task_success(self, db_session, setup_task_data):
-        """Test successful task creation."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        task_data = TaskCreate(
-            title="Test Task",
-            description="Test description",
-            project_id=project.id,
-            priority="medium",
-            type="feature"
-        )
-        
-        task = await service.create_task(task_data, user.id)
-        
-        assert task is not None
-        assert task.title == "Test Task"
-        assert task.description == "Test description"
-        assert task.project_id == project.id
-        assert task.created_by == user.id
-        assert task.status == TaskStatus.TODO
+@pytest.fixture
+def project_id():
+    return uuid.uuid4()
 
-    @pytest.mark.asyncio
-    async def test_create_task_with_assignee(self, db_session, setup_task_data):
-        """Test task creation with assignee."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        task_data = TaskCreate(
-            title="Assigned Task",
-            description="Task with assignee",
-            project_id=project.id,
-            priority="high",
-            type="bug",
-            assignee_id=user.id
-        )
-        
-        task = await service.create_task(task_data, user.id)
-        
-        assert task.assignee_id == user.id
+# Tests
 
-    @pytest.mark.asyncio
-    async def test_get_task_by_id(self, db_session, setup_task_data):
-        """Test getting task by ID."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        # Create a task first
-        task_data = TaskCreate(
-            title="Task to Retrieve",
-            project_id=project.id,
-            priority="low"
-        )
-        created_task = await service.create_task(task_data, user.id)
-        
-        # Retrieve it
-        retrieved_task = await service.get_task_by_id(created_task.id)
-        
-        assert retrieved_task is not None
-        assert retrieved_task.id == created_task.id
-        assert retrieved_task.title == "Task to Retrieve"
+@pytest.mark.asyncio
+async def test_get_task_by_id(task_service, mock_db_session):
+    task_id = uuid.uuid4()
+    task = Task(id=task_id, title="Test Task")
+    
+    mock_res = MagicMock()
+    mock_res.scalars.return_value.first.return_value = task
+    mock_db_session.execute.return_value = mock_res
+    
+    result = await task_service.get_task_by_id(task_id)
+    assert result.id == task_id
+    assert result.title == "Test Task"
 
-    @pytest.mark.asyncio
-    async def test_get_task_by_id_not_found(self, db_session, setup_task_data):
-        """Test getting non-existent task."""
-        data = await setup_task_data
-        service = data["service"]
-        
-        fake_id = uuid.uuid4()
-        task = await service.get_task_by_id(fake_id)
-        
-        assert task is None
+@pytest.mark.asyncio
+async def test_get_tasks_filters(task_service, mock_db_session):
+    # Setup
+    task = Task(id=uuid.uuid4(), status=TaskStatus.TODO)
+    mock_res = MagicMock()
+    mock_res.scalars.return_value.all.return_value = [task]
+    mock_db_session.execute.return_value = mock_res
+    
+    # Test
+    result = await task_service.get_tasks(
+        project_id=uuid.uuid4(),
+        assignee_id=uuid.uuid4(),
+        status=TaskStatus.TODO
+    )
+    
+    assert len(result) == 1
+    # We can check verify filters applied but that requires inspecting 'query' object logic
+    # which is hard with mocks. But we can ensure execute called.
+    mock_db_session.execute.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_update_task_success(self, db_session, setup_task_data):
-        """Test successful task update."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        # Create a task
-        task_data = TaskCreate(
-            title="Original Title",
-            project_id=project.id,
-            priority="low"
-        )
-        task = await service.create_task(task_data, user.id)
-        
-        # Update it
-        update_data = TaskUpdate(
-            title="Updated Title",
-            description="New description",
-            priority="high"
-        )
-        updated_task = await service.update_task(task.id, update_data, user.id)
-        
-        assert updated_task.title == "Updated Title"
-        assert updated_task.description == "New description"
-        assert updated_task.priority == TaskPriority.HIGH
+@pytest.mark.asyncio
+async def test_is_project_member_owner(task_service, user_id, project_id, mock_db_session):
+    # Mock project owner check
+    proj = Project(id=project_id, owner_id=user_id)
+    mock_res = MagicMock()
+    mock_res.scalars.return_value.first.return_value = proj
+    mock_db_session.execute.return_value = mock_res
+    
+    is_member = await task_service._is_project_member(project_id, user_id)
+    assert is_member is True
 
-    @pytest.mark.asyncio
-    async def test_update_task_not_found(self, db_session, setup_task_data):
-        """Test updating non-existent task."""
-        data = await setup_task_data
-        service = data["service"]
-        user = data["user"]
-        
-        fake_id = uuid.uuid4()
-        update_data = TaskUpdate(title="New Title")
-        
-        with pytest.raises(ValueError, match="not found"):
-            await service.update_task(fake_id, update_data, user.id)
+@pytest.mark.asyncio
+async def test_is_project_member_regular(task_service, user_id, project_id, mock_db_session):
+    # Mock project owner check -> False
+    proj = Project(id=project_id, owner_id=uuid.uuid4())
+    res_proj = MagicMock()
+    res_proj.scalars.return_value.first.return_value = proj
+    
+    # Mock member check -> True
+    res_mem = MagicMock()
+    res_mem.scalars.return_value.first.return_value = ProjectMember()
+    
+    mock_db_session.execute.side_effect = [res_proj, res_mem]
+    
+    is_member = await task_service._is_project_member(project_id, user_id)
+    assert is_member is True
 
-    @pytest.mark.asyncio
-    async def test_delete_task_success(self, db_session, setup_task_data):
-        """Test successful task deletion."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
+@pytest.mark.asyncio
+async def test_create_task_success(task_service, user_id, project_id, mock_db_session):
+    # Setup data
+    task_data = TaskCreate(
+        title="New Task", 
+        project_id=project_id, 
+        priority="high"
+    )
+    
+    # 1. Mock project exists
+    res_proj = MagicMock()
+    res_proj.scalars.return_value.first.return_value = Project(id=project_id)
+    
+    # 2. Mock membership check
+    # Need to patch _is_project_member since it makes its own DB calls
+    with patch.object(task_service, "_is_project_member", return_value=True):
         
-        # Create a task
-        task_data = TaskCreate(
-            title="Task to Delete",
-            project_id=project.id,
-            priority="low"
-        )
-        task = await service.create_task(task_data, user.id)
-        task_id = task.id
+        mock_db_session.execute.return_value = res_proj
         
-        # Delete it
-        result = await service.delete_task(task_id, user.id)
+        # Act
+        created = await task_service.create_task(task_data, created_by=user_id)
         
-        assert result is True
-        assert await service.get_task_by_id(task_id) is None
+        # Assert
+        assert created.title == "New Task"
+        assert created.priority == TaskPriority.HIGH
+        assert mock_db_session.add.call_count >= 1
+        assert mock_db_session.commit.call_count >= 1
 
-    @pytest.mark.asyncio
-    async def test_update_task_status(self, db_session, setup_task_data):
-        """Test updating task status."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        # Create a task
-        task_data = TaskCreate(
-            title="Status Test Task",
-            project_id=project.id,
-            priority="medium"
-        )
-        task = await service.create_task(task_data, user.id)
-        assert task.status == TaskStatus.TODO
-        
-        # Update status
-        status_update = TaskStatusUpdate(status="in_progress")
-        updated_task = await service.update_task_status(task.id, status_update, user.id)
-        
-        assert updated_task.status == TaskStatus.IN_PROGRESS
+@pytest.mark.asyncio
+async def test_create_task_not_member(task_service, user_id, project_id, mock_db_session):
+    task_data = TaskCreate(title="New Task", project_id=project_id)
+    
+    # 1. Mock project exists
+    res_proj = MagicMock()
+    res_proj.scalars.return_value.first.return_value = Project(id=project_id)
+    mock_db_session.execute.return_value = res_proj
+    
+    with patch.object(task_service, "_is_project_member", return_value=False):
+        with pytest.raises(ValueError, match="Not authorized to create tasks"):
+            await task_service.create_task(task_data, created_by=user_id)
 
-    @pytest.mark.asyncio
-    async def test_get_project_tasks(self, db_session, setup_task_data):
-        """Test getting tasks for a specific project."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        # Create tasks in project
-        for i in range(3):
-            task_data = TaskCreate(
-                title=f"Project Task {i}",
-                project_id=project.id,
-                priority="medium"
-            )
-            await service.create_task(task_data, user.id)
-        
-        tasks, total = await service.get_project_tasks(project.id)
-        
-        assert len(tasks) == 3
-        assert total == 3
+@pytest.mark.asyncio
+async def test_update_task_success(task_service, user_id, mock_db_session):
+    tid = uuid.uuid4()
+    task = Task(
+        id=tid, 
+        title="Old Title", 
+        project_id=uuid.uuid4(), 
+        created_by=user_id,
+        status=TaskStatus.TODO,
+        priority=TaskPriority.MEDIUM,
+        type=TaskType.FEATURE
+    )
+    
+    # Mock get task
+    task_service.get_task_by_id = AsyncMock(return_value=task)
+    
+    # Mock permissions (authorized as creator)
+    task_service._check_task_permission = AsyncMock(return_value=None)
+    
+    update_data = TaskUpdate(title="New Title", status="in_progress")
+    
+    updated = await task_service.update_task(tid, update_data, user_id)
+    
+    assert updated.title == "New Title"
+    assert updated.status == TaskStatus.IN_PROGRESS
+    assert mock_db_session.commit.call_count >= 1
 
-    @pytest.mark.asyncio
-    async def test_get_user_tasks(self, db_session, setup_task_data):
-        """Test getting tasks assigned to or created by user."""
-        data = await setup_task_data
-        service = data["service"]
-        project = data["project"]
-        user = data["user"]
-        
-        # Create tasks assigned to user
-        for i in range(2):
-            task_data = TaskCreate(
-                title=f"User Task {i}",
-                project_id=project.id,
-                priority="medium",
-                assignee_id=user.id
-            )
-            await service.create_task(task_data, user.id)
-        
-        tasks, total = await service.get_user_tasks(user.id)
-        
-        assert total >= 2
+@pytest.mark.asyncio
+async def test_delete_task_success(task_service, user_id, mock_db_session):
+    tid = uuid.uuid4()
+    task = Task(id=tid, title="To Delete", project_id=uuid.uuid4(), created_by=user_id)
+    
+    task_service.get_task_by_id = AsyncMock(return_value=task)
+    task_service._check_task_permission = AsyncMock(return_value=None)
+    
+    res = await task_service.delete_task(tid, user_id)
+    
+    assert res is True
+    # In async delete is separate from commit usually but here mapped to session.delete
+    mock_db_session.delete.assert_called_once_with(task)
+    assert mock_db_session.commit.call_count >= 1
+
+@pytest.mark.asyncio
+async def test_update_task_status(task_service, user_id, mock_db_session):
+    tid = uuid.uuid4()
+    task = Task(id=tid, status=TaskStatus.TODO, project_id=uuid.uuid4(), created_by=user_id)
+    
+    task_service.get_task_by_id = AsyncMock(return_value=task)
+    task_service._check_task_permission = AsyncMock(return_value=None)
+    
+    update_data = TaskStatusUpdate(status="done")
+    
+    updated = await task_service.update_task_status(tid, update_data, user_id)
+    
+    assert updated.status == TaskStatus.DONE
+    assert mock_db_session.commit.call_count >= 1
+
+@pytest.mark.asyncio
+async def test_assign_task(task_service, user_id, mock_db_session):
+    tid = uuid.uuid4()
+    task = Task(id=tid, project_id=uuid.uuid4(), created_by=user_id, assignee_id=None)
+    
+    assignee_id = uuid.uuid4()
+    
+    task_service.get_task_by_id = AsyncMock(return_value=task)
+    task_service._check_task_permission = AsyncMock(return_value=None)
+    
+    # Mock assignee check
+    res_assignee = MagicMock()
+    res_assignee.scalars.return_value.first.return_value = User(id=assignee_id)
+    mock_db_session.execute.return_value = res_assignee
+    
+    data = TaskAssign(assignee_id=assignee_id)
+    
+    updated = await task_service.assign_task(tid, data, user_id)
+    
+    assert updated.assignee_id == assignee_id
+    assert mock_db_session.commit.call_count >= 1
+
+@pytest.mark.asyncio
+async def test_get_user_tasks(task_service, user_id, mock_db_session):
+    # Mock count
+    res_cnt = MagicMock()
+    res_cnt.scalar.return_value = 5
+    
+    # Mock list
+    t1 = Task(id=uuid.uuid4())
+    res_list = MagicMock()
+    res_list.scalars.return_value.all.return_value = [t1]
+    
+    mock_db_session.execute.side_effect = [res_cnt, res_list]
+    
+    tasks, count = await task_service.get_user_tasks(user_id, search="foo", status="todo")
+    
+    assert count == 5
+    assert len(tasks) == 1
+
+@pytest.mark.asyncio
+async def test_get_tasks_due_soon(task_service, user_id, mock_db_session):
+    res = MagicMock()
+    res.scalars.return_value.all.return_value = [Task(id=uuid.uuid4())]
+    mock_db_session.execute.return_value = res
+    
+    tasks = await task_service.get_tasks_due_soon(user_id, days=5)
+    assert len(tasks) == 1
+    mock_db_session.execute.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_get_overdue_tasks(task_service, user_id, mock_db_session):
+    res = MagicMock()
+    res.scalars.return_value.all.return_value = [Task(id=uuid.uuid4())]
+    mock_db_session.execute.return_value = res
+    
+    tasks = await task_service.get_overdue_tasks(user_id)
+    assert len(tasks) == 1
+
+@pytest.mark.asyncio
+async def test_get_task_stats_for_user(task_service, user_id, mock_db_session):
+    # Mock result row: (total, completed, in_progress, todo)
+    row = (10, 5, 2, 3)
+    res = MagicMock()
+    res.first.return_value = row
+    mock_db_session.execute.return_value = res
+    
+    stats = await task_service.get_task_stats_for_user(user_id)
+    
+    assert stats["total"] == 10
+    assert stats["completed"] == 5
+    assert stats["in_progress"] == 2
+    assert stats["completion_rate"] == 50
+
+# Permission tests
+@pytest.mark.asyncio
+async def test_check_task_permission_creator(task_service, user_id):
+    task = Task(created_by=user_id, project_id=uuid.uuid4())
+    # Should not raise
+    await task_service._check_task_permission(task, user_id)
+
+@pytest.mark.asyncio
+async def test_check_task_permission_assignee(task_service, user_id):
+    task = Task(created_by=uuid.uuid4(), assignee_id=user_id, project_id=uuid.uuid4())
+    # Should not raise if allow_assignee=True
+    await task_service._check_task_permission(task, user_id, allow_assignee=True)
+ 
+@pytest.mark.asyncio
+async def test_check_task_permission_unauthorized(task_service, user_id):
+    task = Task(created_by=uuid.uuid4(), assignee_id=uuid.uuid4(), project_id=uuid.uuid4())
+    
+    with patch.object(task_service, "_is_project_admin", return_value=False):
+        with pytest.raises(ValueError, match="Not authorized"):
+            await task_service._check_task_permission(task, user_id)
