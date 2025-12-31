@@ -75,6 +75,7 @@ async def db_health_check():
                 "pool_size": settings.database.pool_size,
                 "max_overflow": settings.database.max_overflow,
             },
+            "host": settings.database.url.split("@")[-1].split("/")[0] if "@" in settings.database.url else "unknown",
         }
     except Exception as e:
         logger.error(f"Database health check failed: {e}")

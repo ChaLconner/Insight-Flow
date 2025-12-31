@@ -143,5 +143,10 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
     if not is_active:
         logger.warning(f"User {user_email} is not active")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+        # Enhanced error message for debugging
+        verification_status = getattr(current_user, "is_verified", "unknown")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail=f"Inactive user account: {user_email}. Verified: {verification_status}"
+        )
     return current_user
