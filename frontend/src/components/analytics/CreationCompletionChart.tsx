@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { Activity } from "lucide-react";
 
 interface CreationCompletionChartProps {
   data: { date: string; created: number; completed: number }[];
@@ -35,12 +36,16 @@ const CreationCompletionChartComponent: React.FC<
     return (
       <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-foreground">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Activity className="w-5 h-5 text-emerald-400" />
             Creation vs Completion
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">No trend data available</p>
+          <div className="text-center">
+            <Activity className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No trend data available</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -49,7 +54,8 @@ const CreationCompletionChartComponent: React.FC<
   return (
     <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-foreground">
+        <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Activity className="w-5 h-5 text-emerald-400" />
           Creation vs Completion
         </CardTitle>
       </CardHeader>

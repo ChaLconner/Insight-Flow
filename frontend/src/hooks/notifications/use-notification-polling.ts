@@ -4,14 +4,18 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useNotifications } from "./use-notifications-core";
+import { useAuthStore } from "@/stores/auth-store";
 
 /**
  * Hook for polling notifications at regular intervals.
  * Automatically pauses when tab is hidden for performance.
  * Uses refs to prevent unnecessary re-fetching and flickering.
+ * Only fetches when user is authenticated to prevent 401 errors.
  */
 export const useNotificationPolling = (intervalMs = 30000) => {
   const { fetchNotifications, fetchUnreadCount } = useNotifications();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
   
   // Use refs to store stable function references
   const fetchNotificationsRef = useRef(fetchNotifications);
@@ -34,7 +38,12 @@ export const useNotificationPolling = (intervalMs = 30000) => {
   }, []);
 
   useEffect(() => {
-    // Only do initial fetch once
+    // Don't fetch if not authenticated or auth not initialized
+    if (!isAuthenticated || !isInitialized) {
+      return;
+    }
+
+    // Only do initial fetch once per authenticated session
     if (!hasFetchedRef.current) {
       hasFetchedRef.current = true;
       stableFetch();
@@ -86,6 +95,13 @@ export const useNotificationPolling = (intervalMs = 30000) => {
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [intervalMs, stableFetch, stableFetchUnreadCount]);
+  }, [intervalMs, stableFetch, stableFetchUnreadCount, isAuthenticated, isInitialized]);
+
+  // Reset hasFetchedRef when user logs out
+  useEffect(() => {
+    if (!isAuthenticated) {
+      hasFetchedRef.current = false;
+    }
+  }, [isAuthenticated]);
 };
 

@@ -28,7 +28,7 @@ function UserProfileDisplay() {
         {user.name ?? user.firstName}
       </span>
       <span className="text-xs text-muted-foreground truncate">
-        @{user.username}
+        {user.username ? `@${user.username}` : user.email}
       </span>
     </div>
   );

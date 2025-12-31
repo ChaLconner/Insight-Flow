@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -36,6 +36,12 @@ export function Header({ onMenuClick }: HeaderProps) {
   const { user } = useAuth();
   const pathname = usePathname();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Prevent hydration mismatch by only rendering dynamic content after mount
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const getPageTitle = (path: string) => {
     if (path === "/") {
@@ -59,7 +65,11 @@ export function Header({ onMenuClick }: HeaderProps) {
     return "Dashboard";
   };
 
-  const getGreeting = () => {
+  // Memoized greeting that only updates on client to prevent hydration mismatch
+  const greeting = useMemo(() => {
+    if (!isMounted) {
+      return "Welcome"; // Static fallback for SSR
+    }
     const hour = new Date().getHours();
     if (hour < 12) {
       return "Good morning";
@@ -68,7 +78,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       return "Good afternoon";
     }
     return "Good evening";
-  };
+  }, [isMounted]);
 
   return (
     <header
@@ -111,9 +121,9 @@ export function Header({ onMenuClick }: HeaderProps) {
             {getPageTitle(pathname)}
           </h1>
           <p className="text-sm text-muted-foreground hidden sm:block">
-            {getGreeting()},{" "}
+            {greeting},{" "}
             <span className="text-primary font-medium">
-              {user?.firstName ?? "User"}
+              {isMounted ? (user?.firstName ?? "User") : "User"}
             </span>
           </p>
         </div>
@@ -143,10 +153,10 @@ export function Header({ onMenuClick }: HeaderProps) {
         <div className="flex items-center gap-3 border-l border-border pl-4">
           <div className="flex-col items-end hidden md:flex">
             <span className="text-sm font-medium text-foreground">
-              {user?.firstName ?? user?.email ?? "User"}
+              {isMounted ? (user?.firstName ?? user?.email ?? "User") : "User"}
             </span>
             <span className="text-xs text-muted-foreground">
-              {user?.role ?? "User"}
+              {isMounted ? (user?.role ?? "User") : "User"}
             </span>
           </div>
           <Button
@@ -154,7 +164,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             size="icon"
             className="h-10 w-10 rounded-full bg-secondary ring-1 ring-border hover:ring-primary/50 overflow-hidden p-0"
           >
-            {user?.avatar ? (
+            {isMounted && user?.avatar ? (
               <div className="relative h-full w-full">
                 <Image
                   src={getAvatarUrl(user.avatar)}

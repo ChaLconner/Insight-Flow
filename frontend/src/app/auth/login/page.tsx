@@ -116,9 +116,6 @@ function LoginForm() {
         const data = response.data;
 
 
-        toast.success(`Welcome ${data.user.name ?? "User"}!`, {
-          description: `Logged in as @${data.user.username}`,
-        });
 
         await authActions.loginWithResponse(data);
 

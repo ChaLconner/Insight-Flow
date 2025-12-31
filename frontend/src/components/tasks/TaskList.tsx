@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import {
   Search,
   Plus,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   X,
@@ -436,9 +435,8 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
             ))
           ) : (
             <div className="text-center py-20 bg-card/10 rounded-2xl border border-dashed border-border animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="relative inline-flex mb-4">
-                <CheckCircle2 className="h-12 w-12 text-muted-foreground opacity-20" />
-                <Search className="h-6 w-6 text-primary absolute -bottom-1 -right-1" />
+              <div className="relative inline-flex items-center justify-center mb-4 h-16 w-16 rounded-full bg-muted/50">
+                <Search className="h-8 w-8 text-primary/60" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-2">No tasks found</h3>
               <p className="text-muted-foreground max-w-xs mx-auto mb-6">

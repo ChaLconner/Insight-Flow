@@ -368,16 +368,16 @@ async def github_login(
 async def logout(
     request: Request,
     response: Response,
-    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db),
 ) -> Any:
     """
     Logout user, clear cookies, and blacklist the current access token.
+    Always returns success to ensure cookies are cleared on the client.
     """
+    user_email = "unknown"
     try:
-        user_email = current_user.email
-
         # Clear cookies using centralized utility
+        # This is the most important part - it must run regardless of token validity
         clear_auth_cookies(response)
 
         # Get token from cookie or header
@@ -391,15 +391,21 @@ async def logout(
             # Get token payload to extract jti and expiration
             from utils.auth import verify_token
 
-            payload = verify_token(token)
-            token_jti = payload.get("jti")
+            try:
+                # We catch verification errors here to ensure logout proceeds
+                payload = verify_token(token)
+                token_jti = payload.get("jti")
+                user_email = payload.get("sub", "unknown")  # Usually sub is ID or email
 
-            if token_jti:
-                # Get token expiration
-                token_expiration = get_token_expiration(token)
-                if token_expiration:
-                    # Add token to blacklist (Async)
-                    await TokenBlacklist.async_blacklist_token(db, token_jti, token_expiration)
+                if token_jti:
+                    # Get token expiration
+                    token_expiration = get_token_expiration(token)
+                    if token_expiration:
+                        # Add token to blacklist (Async)
+                        await TokenBlacklist.async_blacklist_token(db, token_jti, token_expiration)
+            except Exception:
+                # Token might be expired or invalid already, we just ignore
+                pass
 
         return {"message": "Successfully logged out"}
 
@@ -450,6 +456,9 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token",
             )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like Token has been revoked) without logging as error
+        raise
     except Exception as e:
         logger.error(f"Token verification error: {e}")
         raise HTTPException(

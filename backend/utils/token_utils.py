@@ -97,13 +97,31 @@ def set_auth_cookies(
 def clear_auth_cookies(response: Response) -> None:
     """
     Clear authentication cookies from the response.
-
-    Args:
-        response: FastAPI Response object
+    Uses aggressive clearing (Max-Age=0) with matching flags.
     """
-    response.delete_cookie(ACCESS_TOKEN_KEY)
-    response.delete_cookie(REFRESH_TOKEN_KEY)
-    logger.debug("Auth cookies cleared")
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
+    secure_flag = is_production
+    samesite_flag = "none" if is_production else "lax"
+
+    for key in [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]:
+        response.delete_cookie(
+            key=key,
+            path="/",
+            secure=secure_flag,
+            samesite=samesite_flag,
+            httponly=True  # Important to match the set attributes
+        )
+        # Backup: explicit overwrite (just in case delete_cookie is finicky)
+        response.set_cookie(
+            key=key,
+            value="",
+            max_age=0,
+            path="/",
+            secure=secure_flag,
+            samesite=samesite_flag,
+            httponly=True
+        )
+    logger.debug("Auth cookies cleared aggressive")
 
 
 def create_and_set_auth_cookies(

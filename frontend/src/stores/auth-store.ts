@@ -145,58 +145,42 @@ export const useAuthStore = create<AuthState>()(
         }
 
         // 2. Start initialization
-        try {
           // If we are starting fresh, show loading
           setLoading(true);
 
           // Check environment
           if (typeof window === "undefined") {
+            setLoading(false);
+            set({ isInitialized: true });
             return;
           }
 
-          const apiUrl = (await import("@/lib/constants")).API_CONFIG.BASE_URL;
+          // Skip auth check on login/register pages - user is not expected to be authenticated
+          const isOnAuthPage = window.location.pathname.startsWith("/auth/");
+          if (isOnAuthPage) {
+            setLoading(false);
+            set({ isInitialized: true });
+            return;
+          }
 
           // Verify session via cookie using /auth/me endpoint
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-            // Fetch with credentials (cookies)
-            const resp = await fetch(`${apiUrl}/auth/me`, {
-              method: "GET",
-              // headers: { 'Authorization': ... }, // No header needed, cookies sent automatically?
-              // Wait, native fetch needs credentials: 'include'
-              credentials: "include",
-              signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-
-            if (resp.ok) {
-              const userData = await resp.json();
-              setUser(userData);
-            } else {
-              // 401 or 403 means cookies invalid or missing
-              if (resp.status === 401 || resp.status === 403) {
-                logout();
-              }
+            // Use apiClient to handle token refresh automatically
+            const { apiClient } = await import("@/lib/api-client");
+            
+            const response = await apiClient.get<User>("/auth/me");
+            
+            if (response.data) {
+              setUser(response.data);
             }
-          } catch (error) {
-            const fetchError = error as Error;
-            if (fetchError.name !== "AbortError") {
-              // Network error or other
-              console.warn(
-                "Auth check network error, assuming not authenticated",
-              );
-              logout();
-            }
+          } catch {
+            // If request fails (after retries/refresh), we are not authenticated
+            // We expect 401 if user is not logged in, which is fine - just clear state silently
+            logout();
+          } finally {
+             setLoading(false);
+             set({ isInitialized: true });
           }
-        } catch (error) {
-          console.error("🏪 AuthStore: Error initializing auth:", error);
-          logout();
-        } finally {
-          setLoading(false);
-          set({ isInitialized: true });
-        }
       },
 
       fetchUserProfile: async () => {

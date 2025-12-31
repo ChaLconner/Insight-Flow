@@ -106,10 +106,6 @@ export default function RegisterPage() {
 
         const data = response.data;
 
-        toast.success(`Welcome ${data.user.firstName ?? "User"}!`, {
-          description: "Successfully signed in with Google.",
-        });
-
         await authActions.loginWithResponse(data);
 
         const user = data.user;

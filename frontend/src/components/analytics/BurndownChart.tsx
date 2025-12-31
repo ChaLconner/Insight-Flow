@@ -11,6 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { TrendingDown } from "lucide-react";
 import type { BurndownDataPoint } from "@/app/analytics/types";
 
 import { AnalyticsPeriod } from "@/types";
@@ -41,23 +42,44 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({
     }
   }, [period]);
 
+  // Empty state when no data is available
+  if (!data || data.length === 0) {
+    return (
+      <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <TrendingDown className="w-5 h-5 text-indigo-400" />
+            {title}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <TrendingDown className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No progress data available</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card
-      className="border-border bg-card backdrop-blur-sm h-full"
+      className="border-border bg-card backdrop-blur-sm h-full flex flex-col overflow-hidden"
       role="figure"
       aria-label={`Burndown chart showing ${title}`}
     >
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg font-semibold text-foreground">
+        <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <TrendingDown className="w-5 h-5 text-indigo-400" />
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 overflow-hidden">
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}
-              margin={{ top: 10, right: 5, left: 0, bottom: 0 }}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             >
               <defs>
                 <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">

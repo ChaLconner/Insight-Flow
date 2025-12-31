@@ -36,8 +36,11 @@ export const authActions = {
     // Update store (store tokens as well for compatibility)
     login(user);
 
+    // Get display name with fallbacks
+    const displayName = user?.name || user?.firstName || user?.username || user?.email || "User";
+    
     toast.success(
-      `Welcome back, ${user?.firstName || user?.username || "User"}!`,
+      `Welcome back, ${displayName}!`,
       {
         description: "You have successfully logged in.",
       },
@@ -50,35 +53,44 @@ export const authActions = {
   },
 
   // Logout function
-  logout: () => {
-    const { logout } = useAuthStore.getState();
+  logout: async () => {
+    const { logout, setLoading } = useAuthStore.getState();
+    
+    // Set loading true to prevent premature redirects by useRequireAuth
+    setLoading(true);
+
+    // Attempt server-side logout to clear HttpOnly cookies
+    if (typeof window !== "undefined") {
+      try {
+        const { setLoggingOut } = await import("@/lib/api-client");
+        const { API_CONFIG } = await import("@/lib/constants");
+        
+        setLoggingOut(true);
+
+        await fetch(`${API_CONFIG.BASE_URL}/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+        });
+      } catch (_) {
+        // ignore errors during logout (e.g. network error)
+      }
+    }
+
+    // Clear client state
     logout();
 
-    // Attempt server-side logout to clear HttpOnly cookies, then dispatch event and redirect
     if (typeof window !== "undefined") {
-      (async () => {
-        try {
-          const { API_CONFIG } = await import("@/lib/constants");
-          await fetch(`${API_CONFIG.BASE_URL}/auth/logout`, {
-            method: "POST",
-            credentials: "include",
-          });
-        } catch (_) {
-          // ignore
-        }
-        window.dispatchEvent(new CustomEvent("auth:logout"));
-        toast.info("Logged out", {
-          description: "You have been safely logged out.",
-        });
-        window.location.href = "/auth/login";
-      })();
+      window.dispatchEvent(new CustomEvent("auth:logout"));
+      toast.info("Logged out", {
+        description: "You have been safely logged out.",
+      });
     }
   },
 
   // Alternative logout method for compatibility
-  logoutAndRedirect: (redirectPath?: string) => {
-    authActions.logout();
-    if (redirectPath) {
+  logoutAndRedirect: async (redirectPath: string = "/auth/login") => {
+    await authActions.logout();
+    if (typeof window !== "undefined") {
       window.location.href = redirectPath;
     }
   },

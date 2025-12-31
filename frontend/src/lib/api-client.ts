@@ -101,6 +101,15 @@ axiosRetry(apiClient, {
 // Request interceptor: No longer need to attach tokens manually
 apiClient.interceptors.request.use(
   (config) => {
+    if (isLoggingOut) {
+      // Cancel request if we are logging out
+      const controller = new AbortController();
+      controller.abort();
+      return {
+        ...config,
+        signal: controller.signal,
+      };
+    }
     return config;
   },
   (error) => {
@@ -108,19 +117,57 @@ apiClient.interceptors.request.use(
   },
 );
 
+// Queue for pending requests while refreshing
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value: unknown) => void;
+  reject: (reason?: unknown) => void;
+}> = [];
+
+const processQueue = (error: Error | null, token: unknown = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+
+  failedQueue = [];
+};
+
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
   async (error: AxiosError<unknown>) => {
+    // If we are logging out, suppress all errors to prevent UI flashes/toasts during transition
+    if (isLoggingOut) {
+      return new Promise(() => {});
+    }
+
     const originalRequest = error.config as AxiosRequestConfig & {
       _retry?: boolean;
     };
 
     // Handle 401 Unauthorized - attempt refresh using cookies
     if (error.response?.status === 401 && !originalRequest._retry) {
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => {
+            return apiClient(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
       originalRequest._retry = true;
+      isRefreshing = true;
 
       try {
         // Call refresh endpoint with cookies
@@ -132,11 +179,28 @@ apiClient.interceptors.response.use(
           },
         );
 
+        processQueue(null);
+        isRefreshing = false;
+
         // Retry original request
         return apiClient(originalRequest);
       } catch (refreshError) {
-        await clearAuthTokens();
-        return Promise.reject(refreshError);
+        processQueue(refreshError as Error);
+        isRefreshing = false;
+
+        // Final check: maybe another tab refreshed the token?
+        // If we can fetch the user, we are actually still logged in.
+        try {
+          await axios.get(`${API_CONFIG.BASE_URL}/auth/me`, {
+            withCredentials: true,
+          });
+          // If successful, retry the original request
+          return apiClient(originalRequest);
+        } catch (_finalError) {
+          // Truly unauthorized
+          await clearAuthTokens();
+          return Promise.reject(refreshError);
+        }
       }
     }
 
@@ -154,6 +218,13 @@ apiClient.interceptors.response.use(
 // Authentication Helpers
 // ===========================================
 
+// State to track if we are currently logging out to prevent loops
+let isLoggingOut = false;
+
+export const setLoggingOut = (status: boolean) => {
+  isLoggingOut = status;
+};
+
 // Callback storage
 let logoutCallback: (() => void) | null = null;
 
@@ -166,6 +237,16 @@ async function clearAuthTokens(): Promise<void> {
   if (typeof window === "undefined") {
     return;
   }
+
+  // Skip if already on auth pages to prevent loops
+  const isOnAuthPage = window.location.pathname.startsWith("/auth/");
+  if (isOnAuthPage) {
+    // Just clear the logging out flag and return - don't show toast or redirect
+    setLoggingOut(false);
+    return;
+  }
+
+  setLoggingOut(true);
 
   // Attempt server-side logout to clear HttpOnly cookies
   try {
@@ -186,6 +267,7 @@ async function clearAuthTokens(): Promise<void> {
 
   // Navigate to login page
   window.location.href = "/auth/login";
+  // Keep isLoggingOut true until the page unloads
 }
 
 // Helper function to get user-friendly error message

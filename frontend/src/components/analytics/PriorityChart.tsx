@@ -3,13 +3,14 @@
 import React, { memo, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  PieChart,
+  PieChart as RechartsPieChart,
   Pie,
   Cell,
   Tooltip,
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { Flag } from "lucide-react";
 
 interface PriorityChartProps {
   data: { name: string; value: number }[];
@@ -43,12 +44,16 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
     return (
       <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
         <CardHeader>
-          <CardTitle className="text-lg font-semibold text-foreground">
+          <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Flag className="w-5 h-5 text-orange-400" />
             Task Priority Distribution
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 flex items-center justify-center">
-          <p className="text-muted-foreground">No priority data available</p>
+          <div className="text-center">
+            <Flag className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No priority data available</p>
+          </div>
         </CardContent>
       </Card>
     );
@@ -57,14 +62,15 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
   return (
     <Card className="border-border bg-card backdrop-blur-sm h-full flex flex-col">
       <CardHeader>
-        <CardTitle className="text-lg font-semibold text-foreground">
+        <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Flag className="w-5 h-5 text-orange-400" />
           Task Priority Distribution
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1">
         <div className="h-full w-full min-h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+            <RechartsPieChart>
               <Pie
                 data={formattedData}
                 cx="50%"
@@ -106,7 +112,7 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
                   <span className="text-muted-foreground">{value}</span>
                 )}
               />
-            </PieChart>
+            </RechartsPieChart>
           </ResponsiveContainer>
         </div>
       </CardContent>

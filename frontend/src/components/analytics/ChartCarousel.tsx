@@ -223,7 +223,7 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
       <div className="relative h-[450px] overflow-hidden rounded-xl">
         {/* Left Navigation Zone */}
         <div
-          className="absolute top-24 bottom-12 left-0 w-12 z-10 cursor-pointer flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-accent/50 transition-all"
+          className="absolute top-24 bottom-12 left-0 w-12 z-10 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 text-muted-foreground/70 hover:text-foreground hover:bg-accent/30 rounded-r-lg transition-all duration-200"
           onClick={(e) => {
             e.stopPropagation();
             prevSlide();
@@ -231,12 +231,12 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
           role="button"
           aria-label="Previous slide"
         >
-          <ChevronLeft className="h-8 w-8" />
+          <ChevronLeft className="h-6 w-6" />
         </div>
 
         {/* Right Navigation Zone */}
         <div
-          className="absolute top-24 bottom-12 right-0 w-12 z-10 cursor-pointer flex items-center justify-center text-muted-foreground/50 hover:text-foreground hover:bg-accent/50 transition-all"
+          className="absolute top-24 bottom-12 right-0 w-12 z-10 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 text-muted-foreground/70 hover:text-foreground hover:bg-accent/30 rounded-l-lg transition-all duration-200"
           onClick={(e) => {
             e.stopPropagation();
             nextSlide();
@@ -244,7 +244,7 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
           role="button"
           aria-label="Next slide"
         >
-          <ChevronRight className="h-8 w-8" />
+          <ChevronRight className="h-6 w-6" />
         </div>
 
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
