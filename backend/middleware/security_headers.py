@@ -21,7 +21,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
         # Cross-Origin headers
-        response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+        # Use unsafe-none to allow OAuth popups to work correctly without COOP isolation issues
+        response.headers["Cross-Origin-Opener-Policy"] = "unsafe-none"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
 
         # HSTS (Strict-Transport-Security) - Enable in production
