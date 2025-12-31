@@ -142,7 +142,6 @@ jobs:
     needs: [backend-test, frontend-check]
     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: staging
 
     steps:
       - name: Checkout code
@@ -164,7 +163,6 @@ jobs:
     needs: [backend-test, frontend-check]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
       - name: Checkout code
