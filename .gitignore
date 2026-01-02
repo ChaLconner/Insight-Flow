@@ -203,6 +203,7 @@ jspm_packages/
 *.md
 !README.md
 !QA_REPORT.md
+!docs/adr/*.md
 
 # Specific markdown files to ensure they are ignored
 API_SPECIFICATION.md

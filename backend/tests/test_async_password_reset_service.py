@@ -148,14 +148,19 @@ async def test_send_reset_email_dev_mode(password_reset_service):
 
 @pytest.mark.asyncio
 async def test_send_reset_email_smtp_mode(password_reset_service):
+    """
+    Test that send_reset_email returns immediately (fire-and-forget pattern).
+    The actual email sending happens in background task.
+    """
     with patch("os.getenv") as mock_env, \
-         patch("asyncio.get_event_loop") as mock_loop:
+         patch("utils.background_tasks.fire_and_forget") as mock_fire_and_forget:
         
-        mock_env.return_value = "configured_value" # Return truthy for all env vars
-        
-        mock_loop.return_value.run_in_executor = AsyncMock(return_value=None)
+        mock_env.return_value = "configured_value"  # Return truthy for all env vars
         
         result = await password_reset_service.send_reset_email("test@example.com", "token")
         
+        # Should return True immediately (email queued, not sent)
         assert result is True
-        mock_loop.return_value.run_in_executor.assert_called_once()
+        # Should have called fire_and_forget with the internal email coroutine
+        mock_fire_and_forget.assert_called_once()
+

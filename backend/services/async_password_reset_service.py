@@ -116,16 +116,26 @@ class AsyncPasswordResetService:
 
     async def send_reset_email(self, email: str, token: str) -> bool:
         """
-        Send password reset email to user. (Same logic as Sync, but safe to run in async context as it is IO bound/blocking,
-        but strictly, smtp should be run in a threadpool or background task if we want true async,
-        however, for now we will keep it simple or wrap in run_in_executor if needed.
-        Given it's critical path for user flow, blocking briefly is often accepted or offloaded to celery/background tasks.
-        For now, we'll keep the logic identical.)
+        Send password reset email to user in the background (non-blocking).
+        
+        This method returns immediately and the email is sent asynchronously.
+        Any errors during email sending are logged but do not affect the caller.
         """
-        # Reuse the existing synchronous send logic or duplicate it.
-        # Since it uses smtplib which is blocking, we should strictly run it in a threadpool.
-        # But for migration simplicity, we will copy the logic.
+        from utils.background_tasks import fire_and_forget
+        
+        # Fire and forget - don't wait for email to be sent
+        fire_and_forget(self._send_reset_email_internal(email, token))
+        
+        # Always return True since we've queued the email
+        # Actual send errors will be logged in the background task
+        logger.info(f"Password reset email queued for {mask_email(email)}")
+        return True
 
+    async def _send_reset_email_internal(self, email: str, token: str) -> None:
+        """
+        Internal method that actually sends the reset email.
+        Called as a background task - errors are logged but not raised.
+        """
         try:
             smtp_host = os.getenv("SMTP_HOST")
             smtp_port = os.getenv("SMTP_PORT")
@@ -166,7 +176,7 @@ class AsyncPasswordResetService:
                 # Run blocking SMTP in thread
                 import asyncio
 
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
 
                 def send_email_sync():
                     server = smtplib.SMTP(smtp_host, int(smtp_port))
@@ -179,16 +189,14 @@ class AsyncPasswordResetService:
                 await loop.run_in_executor(None, send_email_sync)
 
                 logger.info(f"Password reset email sent successfully to {mask_email(email)}")
-                return True
+                return
 
             # Default/Fallback
             if os.getenv("ENVIRONMENT", "development") == "development":
                 logger.info(f"MOCK EMAIL: Password reset link generated for {mask_email(email)}")
-                return True
+                return
 
             logger.warning(f"Email service not configured for: {mask_email(email)}")
-            return True
 
         except Exception as e:
             logger.error(f"Error sending reset email to {mask_email(email)}: {e}")
-            return False
