@@ -153,13 +153,13 @@ function LoginForm() {
         <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-4 shadow-lg shadow-primary/25">
           <Layers className="h-7 w-7 text-primary-foreground" />
         </div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">Welcome back</h1>
-        <p className="text-muted-foreground">Sign in to your Insight Flow account</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Welcome back</h1>
+        <p className="text-gray-200">Sign in to your Insight Flow account</p>
       </div>
 
-      <Card className="bg-white/10 backdrop-blur-xl backdrop-saturate-[1.8] shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] border-white/20 ring-1 ring-white/10">
+      <Card className="bg-slate-950 shadow-2xl border-slate-800 ring-1 ring-slate-800">
         <CardHeader className="space-y-1 pb-6">
-          <CardTitle className="text-xl text-foreground text-center">
+          <CardTitle className="text-xl text-white text-center">
             Sign in
           </CardTitle>
         </CardHeader>
@@ -168,7 +168,7 @@ function LoginForm() {
           <div className="space-y-3">
             <Button
               variant="outline"
-              className="w-full bg-white/5 hover:bg-white/10 border-white/20 text-white transition-all hover:scale-[1.02] hover:bg-white/20"
+              className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
               onClick={() => handleGoogleLogin()}
               disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
               title={
@@ -209,7 +209,7 @@ function LoginForm() {
             </Button>
             <Button
               variant="outline"
-              className="w-full bg-white/5 hover:bg-white/10 border-white/20 text-white transition-all hover:scale-[1.02] hover:bg-white/20"
+              className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
               onClick={() => {
                 const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
                 if (!clientId) {
@@ -236,7 +236,7 @@ function LoginForm() {
               <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">
+              <span className="bg-transparent px-2 text-gray-200">
                 Or continue with
               </span>
             </div>
@@ -245,17 +245,18 @@ function LoginForm() {
           {/* Login Form */}
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground">
+              <Label htmlFor="email" className="text-white">
                 Email
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
                 <Input
                   id="email"
                   type="email"
                   placeholder="Enter your email"
                   autoComplete="email"
-                  className={`pl-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                  autoFocus
+                  className={`pl-10 bg-slate-900 border-slate-700 text-white placeholder:text-gray-200 focus:border-primary focus:bg-slate-800 transition-all ${
                     form.formState.errors.email ? "border-red-500" : ""
                   }`}
                   disabled={isLoading}
@@ -271,17 +272,17 @@ function LoginForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-foreground">
+              <Label htmlFor="password" className="text-white">
                 Password
               </Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   autoComplete="current-password"
-                  className={`pl-10 pr-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                  className={`pl-10 pr-10 bg-slate-900 border-slate-700 text-white placeholder:text-gray-200 focus:border-primary focus:bg-slate-800 transition-all ${
                     form.formState.errors.password ? "border-red-500" : ""
                   }`}
                   disabled={isLoading}
@@ -317,13 +318,13 @@ function LoginForm() {
                   className="rounded border-border bg-background text-primary focus:ring-primary focus:ring-offset-0"
                   {...form.register("rememberMe")}
                 />
-                <span className="ml-2 text-sm text-muted-foreground">
+                <span className="ml-2 text-sm text-gray-300">
                   Remember me
                 </span>
               </label>
               <Link
                 href="/auth/forgot-password"
-                className="text-sm text-primary hover:text-primary/80 transition-colors"
+                className="text-sm text-white hover:text-gray-200 transition-colors underline decoration-gray-500 hover:decoration-white"
               >
                 Forgot password?
               </Link>
@@ -331,7 +332,7 @@ function LoginForm() {
 
             <Button
               type="submit"
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5"
+              className="w-full bg-white hover:bg-gray-200 text-black font-bold py-2.5"
               disabled={isLoading}
             >
               {isLoading ? (
@@ -348,11 +349,11 @@ function LoginForm() {
       </Card>
 
       {/* Footer */}
-      <p className="text-center text-sm text-muted-foreground mt-6">
+      <p className="text-center text-sm text-white mt-6">
         Don't have an account?{" "}
         <Link
           href="/auth/register"
-          className="text-primary hover:text-primary/80 font-medium transition-colors"
+          className="text-white hover:text-gray-200 font-medium transition-colors underline"
         >
           Sign up
         </Link>

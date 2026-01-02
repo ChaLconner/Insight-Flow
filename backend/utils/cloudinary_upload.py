@@ -107,10 +107,8 @@ def upload_avatar(file_content: bytes, filename: str, user_id: str) -> dict[str,
         }
 
     except Exception as e:
-        import traceback
-
-        logger.error(f"Failed to upload avatar to Cloudinary: {e!s}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Use exc_info=True to properly log the stack trace
+        logger.error(f"Failed to upload avatar to Cloudinary: {e!s}", exc_info=True)
         return None
 
 

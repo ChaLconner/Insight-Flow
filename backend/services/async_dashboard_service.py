@@ -234,8 +234,6 @@ class AsyncDashboardService:
             task_stats.pending_review if task_stats and task_stats.pending_review else 0
         )
 
-
-
         # Trends processing
         previous_total_projects = total_projects - projects_created_last_30_days
         projects_change = self._calculate_percentage_change(total_projects, previous_total_projects)

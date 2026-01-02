@@ -236,7 +236,7 @@ class AsyncProjectService:
         logger.info(f"Async projects fetch optimized took {time.time() - start_time:.2f}s")
         return formatted_results
 
-    async def create_project(self, project_data: ProjectCreate, owner_id: uuid.UUID) -> Project:
+    async def create_project(self, project_data: ProjectCreate, owner_id: uuid.UUID) -> Project:  # noqa: PLR0912
         """Create a new project."""
         try:
             db_project = Project(
@@ -302,7 +302,9 @@ class AsyncProjectService:
         except IntegrityError as e:
             await self.db.rollback()
             logger.error(f"Integrity error creating project: {e}")
-            raise ValueError("Project with this name might already exist or violates other constraints.")
+            raise ValueError(
+                "Project with this name might already exist or violates other constraints."
+            )
         except SQLAlchemyError as e:
             await self.db.rollback()
             logger.error(f"Database error creating project: {e}")

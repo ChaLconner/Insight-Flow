@@ -1,10 +1,17 @@
+"""
+Seed Demo User Script.
+
+Creates or updates a demo user for testing purposes.
+
+Usage: python scripts/seed_demo_user.py
+"""
+
 import asyncio
 import os
 import sys
 import uuid
 from datetime import UTC, datetime
 
-from passlib.context import CryptContext
 from sqlalchemy import select
 
 # Add the backend directory to sys.path to import modules
@@ -12,32 +19,32 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import AsyncSessionLocal
 from models.user import User
+from utils.auth import get_password_hash
+from utils.logger import setup_logger
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
+# Use proper logging instead of print statements
+logger = setup_logger("seed_demo_user")
 
 
 async def seed_demo_user():
+    """Create or update demo user for testing."""
     session = AsyncSessionLocal()
     try:
         email = "demo@insightflow.com"
         password = "demo1234"
 
-        print(f"Checking for demo user: {email}")
+        logger.info(f"Checking for demo user: {email}")
         result = await session.execute(select(User).filter(User.email == email))
         existing_user = result.scalars().first()
 
         if existing_user:
-            print("Demo user already exists. Updating password...")
+            logger.info("Demo user already exists. Updating password...")
             existing_user.hashed_password = get_password_hash(password)
             existing_user.is_verified = True
             existing_user.is_active = True
             existing_user.role = "manager"
         else:
-            print("Creating demo user...")
+            logger.info("Creating demo user...")
             user = User(
                 id=uuid.uuid4(),
                 email=email,
@@ -53,10 +60,12 @@ async def seed_demo_user():
             session.add(user)
 
         await session.commit()
-        print(f"Demo user ready!\nEmail: {email}\nPassword: {password}")
+        logger.info(f"Demo user ready! Email: {email}")
+        # Security: Don't log the password, even in development
+        logger.debug("Password set successfully (not logged for security)")
 
     except Exception as e:
-        print(f"Error seeding demo user: {e}")
+        logger.error(f"Error seeding demo user: {e}", exc_info=True)
         await session.rollback()
     finally:
         await session.close()

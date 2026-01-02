@@ -1,3 +1,11 @@
+"""
+Seed Varied Tasks Script.
+
+Creates projects with varying task counts for testing list virtualization.
+
+Usage: python scripts/seed_varied_tasks.py
+"""
+
 import os
 import random
 import sys
@@ -11,10 +19,15 @@ from database import SessionLocal
 from models.project import MemberRole, Project, ProjectMember
 from models.task import Task, TaskPriority, TaskStatus, TaskType
 from models.user import User
+from utils.logger import setup_logger
+
+# Use proper logging instead of print statements
+logger = setup_logger("seed_varied_tasks")
 
 
 def seed_varied_tasks():
-    print("Seeding varied tasks...")
+    """Seed varied tasks for testing."""
+    logger.info("Seeding varied tasks...")
     db = SessionLocal()
 
     try:
@@ -24,10 +37,10 @@ def seed_varied_tasks():
             user = db.query(User).first()
 
         if not user:
-            print("No users found. Please run regular seed_data.py first.")
+            logger.warning("No users found. Please run regular seed_data.py first.")
             return
 
-        print(f"Seeding tasks for user: {user.email}")
+        logger.info(f"Seeding tasks for user: {user.email}")
 
         # Create 3 Projects with distinct task counts
         configs = [
@@ -59,7 +72,7 @@ def seed_varied_tasks():
             created_projects.append((project, config["count"]))
 
         db.commit()
-        print(f"Created {len(created_projects)} projects.")
+        logger.info(f"Created {len(created_projects)} projects.")
 
         # Create Tasks
         statuses = [s.value for s in TaskStatus]
@@ -67,7 +80,7 @@ def seed_varied_tasks():
         types = [t.value for t in TaskType]
 
         for project, count in created_projects:
-            print(f"Adding {count} tasks to '{project.name}'...")
+            logger.info(f"Adding {count} tasks to '{project.name}'...")
             for i in range(count):
                 task = Task(
                     id=uuid.uuid4(),
@@ -84,10 +97,10 @@ def seed_varied_tasks():
                 db.add(task)
 
         db.commit()
-        print("Done! Validated task counts.")
+        logger.info("Done! Validated task counts.")
 
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error seeding varied tasks: {e}", exc_info=True)
         db.rollback()
     finally:
         db.close()

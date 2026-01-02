@@ -14,8 +14,10 @@ from utils.logger import setup_logger
 logger = setup_logger("token_utils")
 
 # Configuration
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
-REFRESH_TOKEN_EXPIRE_DAYS = 30
+# Security: Short-lived access tokens (30 min), long-lived refresh tokens (30 days)
+# This allows seamless user experience while limiting exposure if access token is stolen
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 minutes (recommended security practice)
+REFRESH_TOKEN_EXPIRE_DAYS = 30  # 30 days (user stays logged in)
 ACCESS_TOKEN_KEY = "access_token"
 REFRESH_TOKEN_KEY = "refresh_token"
 
@@ -60,12 +62,12 @@ def set_auth_cookies(
     # If not in production (local dev), we can use 'lax' but 'none' is fine if secure is False (though 'none' usually requires secure=True)
     # To be safe and compatible with deployed environments:
     is_production = os.getenv("ENVIRONMENT", "development") == "production"
-    
+
     # Critical: Cross-site cookies require Secure=True and SameSite=None
     # But on localhost (http), Secure=True will fail.
     # Logic: If Production -> Secure=True, SameSite=None
     #        If Local -> Secure=False, SameSite=Lax (Standard)
-    
+
     secure_flag = is_production
     samesite_flag = "none" if is_production else "lax"
 
@@ -109,7 +111,7 @@ def clear_auth_cookies(response: Response) -> None:
             path="/",
             secure=secure_flag,
             samesite=samesite_flag,
-            httponly=True  # Important to match the set attributes
+            httponly=True,  # Important to match the set attributes
         )
         # Backup: explicit overwrite (just in case delete_cookie is finicky)
         response.set_cookie(
@@ -119,7 +121,7 @@ def clear_auth_cookies(response: Response) -> None:
             path="/",
             secure=secure_flag,
             samesite=samesite_flag,
-            httponly=True
+            httponly=True,
         )
     logger.debug("Auth cookies cleared aggressive")
 

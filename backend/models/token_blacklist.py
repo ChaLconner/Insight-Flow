@@ -46,7 +46,6 @@ class TokenBlacklist(BaseModel):
             bool: True if token is blacklisted, False otherwise
         """
 
-
         # Check if token exists in blacklist
         blacklisted_token = db_session.query(cls).filter(cls.token_jti == token_jti).first()
 
@@ -104,7 +103,6 @@ class TokenBlacklist(BaseModel):
         """
         Check if a token is blacklisted (Async).
         """
-
 
         result = await db_session.execute(select(cls).filter(cls.token_jti == token_jti))
         blacklisted_token = result.scalars().first()

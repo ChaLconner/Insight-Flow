@@ -13,8 +13,14 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import HTTPException, status
 from jwt.exceptions import ExpiredSignatureError, InvalidTokenError, PyJWTError
-from passlib.context import CryptContext
 
+# Import from advanced password security module
+from security.password import (
+    hash_password as _hash_password,
+)
+from security.password import (
+    verify_password as _verify_password,
+)
 from utils.logger import setup_logger
 
 if TYPE_CHECKING:
@@ -39,25 +45,25 @@ elif not SECRET_KEY and os.getenv("TESTING") == "true":
     SECRET_KEY = "test_secret_key_placeholder"
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))
-
-
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Security: Default to 30 minutes for access tokens (recommended practice)
+# Note: token_utils.py handles actual token creation with secure defaults
+# This value is kept for backwards compatibility with any direct usage
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a password against its hash.
+    Supports both bcrypt and argon2id hashes.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    return _verify_password(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """
-    Hash a password.
+    Hash a password using Argon2id (PHC winner).
     """
-    return pwd_context.hash(password)
+    return _hash_password(password)
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:

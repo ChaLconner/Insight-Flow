@@ -4,6 +4,7 @@ Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
 import asyncio
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,16 @@ from utils.validators import validate_password_strength
 
 # Thread pool for CPU-bound operations (password hashing)
 _password_executor = ThreadPoolExecutor(max_workers=4)
+
+
+def escape_like_pattern(pattern: str) -> str:
+    """
+    Escape special characters in SQL LIKE patterns to prevent wildcard injection.
+
+    Escapes: % (any chars), _ (single char), \\ (escape char)
+    """
+    # Escape backslash first, then % and _
+    return re.sub(r"([%_\\])", r"\\\1", pattern)
 
 
 class AsyncUserService:
@@ -448,9 +459,12 @@ class AsyncUserService:
         stmt = select(User)
 
         if query and len(query.strip()) > 0:
-            query = query.strip()
+            # Escape SQL LIKE wildcards to prevent pattern injection
+            escaped_query = escape_like_pattern(query.strip())
             # ilike equivalent for asyncpg/sqlite
-            stmt = stmt.filter(or_(User.email.ilike(f"%{query}%"), User.name.ilike(f"%{query}%")))
+            stmt = stmt.filter(
+                or_(User.email.ilike(f"%{escaped_query}%"), User.name.ilike(f"%{escaped_query}%"))
+            )
 
         if role and role != "all":
             stmt = stmt.filter(User.role == role)

@@ -252,10 +252,13 @@ verify_limits.py
 
 # Test results and reports
 e2e-results/
+e2e-results.json
 test-results/
 playwright-report/
 lighthouse-report.html
 *.lcov
+# Visual regression test snapshots (generated)
+*-snapshots/
 
 # AI Instructions and assistant files
 AI_INSTRUCTION.md

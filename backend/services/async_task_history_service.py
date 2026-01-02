@@ -166,7 +166,9 @@ class AsyncTaskHistoryService:
             task_id=task.id,
             task_title=task.title,
             description="Created task",
-            new_values={"status": task.status.value if hasattr(task.status, "value") else task.status},
+            new_values={
+                "status": task.status.value if hasattr(task.status, "value") else task.status
+            },
         )
 
     async def log_task_assigned(

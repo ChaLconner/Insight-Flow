@@ -2,7 +2,6 @@
 Database models for Insight-Flow application.
 """
 
-from .auth_audit import AuthAudit, AuthStatus
 from .analytics import (
     AnalyticsPeriod,
     ProjectAnalytics,
@@ -15,6 +14,7 @@ from .analytics import (
     TaskTimeTracking,
     UserProductivity,
 )
+from .auth_audit import AuthAudit, AuthStatus
 from .base import Base, BaseModel
 from .file import File
 from .notification import Notification, NotificationType

@@ -216,6 +216,7 @@ async def async_exchange_code_for_token(code: str) -> str | None:
     except ImportError:
         logger.warning("httpx not available, falling back to sync version")
         import asyncio
+
         return await asyncio.to_thread(exchange_code_for_token, code)
     except Exception as e:
         logger.error(f"Error exchanging code for token: {e}")

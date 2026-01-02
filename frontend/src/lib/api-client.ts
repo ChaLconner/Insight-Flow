@@ -238,9 +238,11 @@ async function clearAuthTokens(): Promise<void> {
     return;
   }
 
-  // Skip if already on auth pages to prevent loops
-  const isOnAuthPage = window.location.pathname.startsWith("/auth/");
-  if (isOnAuthPage) {
+  // Skip if already on auth pages or landing page to prevent loops/unwanted redirects
+  const path = window.location.pathname;
+  const isOnPublicPage = path.startsWith("/auth/") || path === "/";
+  
+  if (isOnPublicPage) {
     // Just clear the logging out flag and return - don't show toast or redirect
     setLoggingOut(false);
     return;

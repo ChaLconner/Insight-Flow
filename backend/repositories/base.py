@@ -5,7 +5,7 @@ Provides a clean separation between business logic and database operations.
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,7 @@ from models import BaseModel
 ModelType = TypeVar("ModelType", bound=BaseModel)
 
 
-class BaseRepository(ABC, Generic[ModelType]):
+class BaseRepository[ModelType: BaseModel](ABC):
     """
     Abstract base repository defining the interface for data access operations.
     Implements common CRUD operations that can be extended or overridden.
@@ -264,7 +264,7 @@ class AsyncSQLAlchemyRepository(BaseRepository[ModelType]):
         return list(result.scalars().all())
 
 
-class SyncSQLAlchemyRepository(Generic[ModelType]):
+class SyncSQLAlchemyRepository[ModelType: BaseModel]:
     """
     Synchronous SQLAlchemy implementation for legacy support.
     Use AsyncSQLAlchemyRepository for new code.

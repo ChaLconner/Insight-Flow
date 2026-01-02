@@ -247,7 +247,7 @@ class RedisCache(CacheBackend):
             latency_ms = round((time.time() - start) * 1000, 2)
 
             # Get Redis info
-            info: dict[str, Any] = self.client.info(section="memory") # type: ignore
+            info: dict[str, Any] = self.client.info(section="memory")  # type: ignore
 
             return {
                 "status": "healthy",

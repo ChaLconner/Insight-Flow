@@ -6,14 +6,13 @@ Configured for comprehensive Async I/O using SQLAlchemy 2.0+ and asyncpg.
 import logging
 from collections.abc import AsyncGenerator
 
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from fastapi import HTTPException
-
 
 from config import get_settings
 from models import Base
@@ -35,9 +34,7 @@ if database_url.startswith("postgresql://"):
 elif database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif database_url.startswith("postgresql+pg8000://"):
-    database_url = database_url.replace(
-        "postgresql+pg8000://", "postgresql+asyncpg://", 1
-    )
+    database_url = database_url.replace("postgresql+pg8000://", "postgresql+asyncpg://", 1)
 
 # Redact password from logged URL for security
 redacted_url = database_url
@@ -62,8 +59,8 @@ db_logger.info("=" * 50)
 # Disable SSL for localhost to avoid connection issues in local development
 is_localhost = "localhost" in database_url or "127.0.0.1" in database_url
 if "pg8000" in database_url or "?" in database_url:
-        # Clean potential leftovers if manual edits happened, though replaced above
-        database_url = database_url.split("?")[0]
+    # Clean potential leftovers if manual edits happened, though replaced above
+    database_url = database_url.split("?")[0]
 
 async_connect_args = {
     "ssl": "require" if not is_localhost else None,
@@ -92,7 +89,7 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_db() -> AsyncGenerator[AsyncSession]:
     """
     Dependency for getting async database session.
     Use this in FastAPI routers:
@@ -147,6 +144,6 @@ def drop_tables():
 
     async def _drop():
         async with async_engine.begin() as conn:
-             await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.drop_all)
 
     asyncio.run(_drop())

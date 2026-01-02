@@ -65,10 +65,8 @@ async def test_get_batch_recent_activity():
                     "limit": 5
                 })
                 
-            if response.status_code != 200:
-                print(f"Error Response: {response.text}")
-                
-            assert response.status_code == 200
+            # Use assertion message for debugging instead of print
+            assert response.status_code == 200, f"Error Response: {response.text}"
             data = response.json()
             assert len(data) == 1
             assert data[0]["projectId"] == str(activity.project_id)

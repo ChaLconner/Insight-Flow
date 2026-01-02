@@ -8,6 +8,7 @@ import type { NextRequest } from "next/server";
 
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = [
+  "/",
   "/auth/login",
   "/auth/register",
   "/auth/forgot-password",
@@ -103,14 +104,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Handle root path redirect
-  if (pathname === "/") {
-    if (isAuthenticated) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    } else {
-      return NextResponse.redirect(new URL("/auth/login", request.url));
-    }
-  }
+
 
   return NextResponse.next();
 }

@@ -16,5 +16,6 @@ async def check_enum():
         enum_values = [row[0] for row in result]
         print("Current enum values in database:", enum_values)
 
+
 if __name__ == "__main__":
     asyncio.run(check_enum())

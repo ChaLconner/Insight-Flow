@@ -36,6 +36,4 @@ class NotificationResponse(NotificationBase):
     is_read: bool = Field(alias="read", serialization_alias="read")
     created_at: datetime
 
-    model_config = ConfigDict(
-        from_attributes=True, alias_generator=to_camel, populate_by_name=True
-    )
+    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)

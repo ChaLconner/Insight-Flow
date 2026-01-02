@@ -1,3 +1,15 @@
+"""
+Seed Analytics Data Script.
+
+This script creates sample data for testing analytics features:
+- Team members
+- Projects with members
+- Tasks with various statuses
+- Task history for analytics tracking
+
+Usage: python scripts/seed_analytics.py
+"""
+
 import asyncio
 import os
 import random
@@ -16,10 +28,15 @@ from models.task import Task, TaskPriority, TaskStatus
 from models.task_history import ActivityType, TaskHistory
 from models.user import User
 from utils.auth import get_password_hash
+from utils.logger import setup_logger
+
+# Use proper logging instead of print statements
+logger = setup_logger("seed_analytics")
 
 
 async def seed_analytics_data():  # noqa: PLR0912, PLR0915
-    print("Starting analytics data seeding...")
+    """Seed the database with analytics test data."""
+    logger.info("Starting analytics data seeding...")
 
     # Initialize database
     await init_database()
@@ -28,7 +45,7 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
 
     try:
         # 1. Create Team Members
-        print("Creating team members...")
+        logger.info("Creating team members...")
         team_members = []
         member_names = [
             "Sarah Chen",
@@ -57,7 +74,7 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
                 db.add(user)
                 await db.commit()
                 await db.refresh(user)
-                print(f"Created user: {name}")
+                logger.info(f"Created user: {name}")
 
             team_members.append(user)
 
@@ -65,13 +82,15 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
         result = await db.execute(select(User).filter(User.email == "admin@example.com"))
         admin_user = result.scalars().first()
         if not admin_user:
-            print("Admin user not found, please run seed_data.py first or create admin user.")
+            logger.warning(
+                "Admin user not found, please run seed_data.py first or create admin user."
+            )
             return
 
         team_members.append(admin_user)
 
         # 2. Create Projects
-        print("Creating analytics projects...")
+        logger.info("Creating analytics projects...")
         project_names = [
             "Q4 Financial Report",
             "Customer Portal V2",
@@ -94,7 +113,7 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
                 db.add(project)
                 await db.commit()
                 await db.refresh(project)
-                print(f"Created project: {p_name}")
+                logger.info(f"Created project: {p_name}")
 
                 # Add random members to project
                 members_to_add = random.sample(team_members, k=random.randint(2, len(team_members)))
@@ -112,7 +131,7 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
             projects.append(project)
 
         # 3. Create Tasks and History
-        print("Generating tasks and history...")
+        logger.info("Generating tasks and history...")
 
         # Time range: Past 60 days
         end_date = datetime.now()
@@ -187,13 +206,11 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
                     task.updated_at = updated_at
 
         await db.commit()
-        print("Analytics data seeding completed successfully!")
+        logger.info("Analytics data seeding completed successfully!")
 
     except Exception as e:
-        print(f"An error occurred during seeding: {e}")
-        import traceback
-
-        traceback.print_exc()
+        # Use proper logging for errors instead of traceback.print_exc()
+        logger.error(f"An error occurred during seeding: {e}", exc_info=True)
         await db.rollback()
     finally:
         await db.close()

@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .user_favorite import UserFavorite
 
 
-
 class Project(BaseModel):
     """
     Project model representing team projects.

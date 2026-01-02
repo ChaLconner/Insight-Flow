@@ -71,9 +71,7 @@ class PaymentMethod(BaseModel):
     card_exp_year: Mapped[int] = mapped_column(Integer, nullable=False)
     card_funding: Mapped[str | None] = mapped_column(String(20), nullable=True)
     card_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
-    card_fingerprint: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    card_fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     # Status
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -116,9 +114,7 @@ class Subscription(BaseModel):
     stripe_subscription_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, index=True
     )
-    stripe_customer_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
 
     # Plan details
     plan: Mapped[SubscriptionPlan] = mapped_column(
@@ -144,9 +140,7 @@ class Subscription(BaseModel):
 
     # Pricing
     price_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    price_currency: Mapped[str | None] = mapped_column(
-        String(3), default="usd", nullable=True
-    )
+    price_currency: Mapped[str | None] = mapped_column(String(3), default="usd", nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", backref="subscription")
@@ -212,6 +206,4 @@ class PaymentHistory(BaseModel):
         "PaymentMethod", back_populates="transactions"
     )
 
-    __table_args__ = (
-        Index("ix_payment_history_user_created_at", "user_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_payment_history_user_created_at", "user_id", "created_at"),)

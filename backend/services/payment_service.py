@@ -363,10 +363,10 @@ class PaymentService:
         # Extract billing address from request
         billing_address: dict[str, Any] = {}
         if data.billing_address:
-             if hasattr(data.billing_address, "model_dump"):
-                 billing_address = data.billing_address.model_dump() or {}
-             else:
-                 billing_address = {}
+            if hasattr(data.billing_address, "model_dump"):
+                billing_address = data.billing_address.model_dump() or {}
+            else:
+                billing_address = {}
 
         # Create payment method record with all available info
         payment_method = PaymentMethod(
@@ -923,7 +923,9 @@ class PaymentService:
                         modify_kwargs["default_payment_method"] = stripe_payment_method_id
 
                     stripe_sub = await self._run_stripe_cmd(
-                        stripe.Subscription.modify, existing.stripe_subscription_id, **modify_kwargs_typed
+                        stripe.Subscription.modify,
+                        existing.stripe_subscription_id,
+                        **modify_kwargs_typed,
                     )
 
                     # Record payment immediately

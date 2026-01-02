@@ -425,7 +425,9 @@ async def run_audit():  # noqa: PLR0912, PLR0915
         print("-" * 40)
         if recommendations:
             migration_content = generate_migration_file(recommendations)
-            print(f"  Migration file content generated ({len(migration_content)} chars). Run with --generate-migration to save.")
+            print(
+                f"  Migration file content generated ({len(migration_content)} chars). Run with --generate-migration to save."
+            )
 
         print("\n" + "=" * 60)
         print("AUDIT COMPLETE")

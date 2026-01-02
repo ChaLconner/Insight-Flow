@@ -37,9 +37,7 @@ class AuthAudit(BaseModel):
     )  # Store email in case user_id is null (user not found)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False
-    )  # success, failure, locked
+    status: Mapped[str] = mapped_column(String(50), nullable=False)  # success, failure, locked
     attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Optional relationship

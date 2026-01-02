@@ -129,11 +129,8 @@ def test_create_project(client, mock_project_service):
     payload = {"name": "New Project", "description": "Desc"}
     response = client.post("/api/v1/projects", json=payload)
     
-    # Debug info if failed
-    if response.status_code != 200:
-        print(response.json())
-        
-    assert response.status_code == 200
+    # Use assertion message for debugging instead of print
+    assert response.status_code == 200, f"Create project failed: {response.json()}"
     data = response.json()
     assert data["name"] == "Mock" # Comes from build_project_response mock
     # Verify service calls

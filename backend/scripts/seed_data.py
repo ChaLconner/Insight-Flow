@@ -24,7 +24,7 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-async def seed_data():
+async def seed_data():  # noqa: PLR0912, PLR0915
     session = AsyncSessionLocal()
     try:
         print("Seeding data...")
@@ -69,9 +69,21 @@ async def seed_data():
 
         # 2. Create Projects
         projects_data = [
-            {"name": "Frontend Redesign", "desc": "Modernizing the UI/UX", "owner_email": "alice@example.com"},
-            {"name": "API Optimization", "desc": "Improving backend performance", "owner_email": "bob@example.com"},
-            {"name": "Mobile App V2", "desc": "New features for iOS/Android", "owner_email": "charlie@example.com"},
+            {
+                "name": "Frontend Redesign",
+                "desc": "Modernizing the UI/UX",
+                "owner_email": "alice@example.com",
+            },
+            {
+                "name": "API Optimization",
+                "desc": "Improving backend performance",
+                "owner_email": "bob@example.com",
+            },
+            {
+                "name": "Mobile App V2",
+                "desc": "New features for iOS/Android",
+                "owner_email": "charlie@example.com",
+            },
         ]
 
         # Ensure we have owners available

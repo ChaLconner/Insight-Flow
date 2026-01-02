@@ -3,6 +3,7 @@ Async Task service layer for task management.
 Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
+import re
 import uuid
 from datetime import UTC
 from typing import Any
@@ -17,6 +18,15 @@ from models.task import Task, TaskPriority, TaskStatus, TaskType
 from models.user import User
 from schemas.task import TaskAssign, TaskCreate, TaskStatusUpdate, TaskUpdate
 from utils.logger import logger
+
+
+def escape_like_pattern(pattern: str) -> str:
+    """
+    Escape special characters in SQL LIKE patterns to prevent wildcard injection.
+
+    Escapes: % (any chars), _ (single char), \\ (escape char)
+    """
+    return re.sub(r"([%_\\])", r"\\\1", pattern)
 
 
 class AsyncTaskService:
@@ -426,7 +436,9 @@ class AsyncTaskService:
 
         # Apply search filter
         if search:
-            search_term = f"%{search}%"
+            # Escape SQL LIKE wildcards to prevent pattern injection
+            escaped_search = escape_like_pattern(search)
+            search_term = f"%{escaped_search}%"
             query = query.filter(
                 or_(Task.title.ilike(search_term), Task.description.ilike(search_term))
             )
@@ -471,7 +483,9 @@ class AsyncTaskService:
 
         # Apply search filter
         if search:
-            search_term = f"%{search}%"
+            # Escape SQL LIKE wildcards to prevent pattern injection
+            escaped_search = escape_like_pattern(search)
+            search_term = f"%{escaped_search}%"
             query = query.filter(
                 or_(Task.title.ilike(search_term), Task.description.ilike(search_term))
             )

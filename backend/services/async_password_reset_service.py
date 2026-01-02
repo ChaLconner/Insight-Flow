@@ -51,7 +51,7 @@ class AsyncPasswordResetService:
         reset_token.raw_token = raw_token
         # Validate type
         if not isinstance(reset_token, PasswordReset):
-             raise ValueError("Invalid token type")
+            raise ValueError("Invalid token type")
         return reset_token
 
     async def validate_reset_token(self, token: str) -> PasswordReset | None:
@@ -117,15 +117,15 @@ class AsyncPasswordResetService:
     async def send_reset_email(self, email: str, token: str) -> bool:
         """
         Send password reset email to user in the background (non-blocking).
-        
+
         This method returns immediately and the email is sent asynchronously.
         Any errors during email sending are logged but do not affect the caller.
         """
         from utils.background_tasks import fire_and_forget
-        
+
         # Fire and forget - don't wait for email to be sent
         fire_and_forget(self._send_reset_email_internal(email, token))
-        
+
         # Always return True since we've queued the email
         # Actual send errors will be logged in the background task
         logger.info(f"Password reset email queued for {mask_email(email)}")

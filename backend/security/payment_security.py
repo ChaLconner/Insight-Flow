@@ -85,23 +85,13 @@ class PaymentSecurityLogger:
 
 def _get_client_ip(request: Request) -> str:
     """
-    Extract real client IP, handling proxies.
+    Extract real client IP securely, handling proxies with validation.
+
+    Uses the centralized request_security utility for proper trusted proxy handling.
     """
-    # Check for common proxy headers
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        # Take the first IP (original client)
-        return forwarded_for.split(",")[0].strip()
+    from utils.request_security import get_client_ip
 
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip
-
-    # Fallback to direct client
-    if request.client:
-        return request.client.host
-
-    return "unknown"
+    return get_client_ip(request)
 
 
 def validate_payment_amount(amount: float, currency: str = "usd") -> tuple[bool, str]:

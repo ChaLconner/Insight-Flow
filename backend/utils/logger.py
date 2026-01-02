@@ -18,10 +18,30 @@ def clear_request_context() -> None:
     request_context.set({})
 
 
+def _get_trace_context() -> dict:
+    """
+    Get trace and span IDs from OpenTelemetry if available.
+
+    Returns dict with trace_id and span_id if available.
+    """
+    try:
+        from middleware.tracing import get_current_span_id, get_current_trace_id
+
+        trace_id = get_current_trace_id()
+        span_id = get_current_span_id()
+        if trace_id:
+            return {"trace_id": trace_id, "span_id": span_id}
+    except ImportError:
+        pass
+    except Exception:
+        pass
+    return {}
+
+
 class JsonFormatter(logging.Formatter):
     """
-    JSON formatter for structured logging.
-    Supports request_id, user_id, and additional context from ContextVar.
+    JSON formatter for structured logging with OpenTelemetry trace correlation.
+    Supports request_id, user_id, trace_id, span_id, and additional context.
     """
 
     def format(self, record):
@@ -33,6 +53,8 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
+            "service": os.getenv("OTEL_SERVICE_NAME", "insight-flow"),
+            "environment": os.getenv("ENVIRONMENT", "development"),
         }
 
         # Add request context if available
@@ -44,6 +66,11 @@ class JsonFormatter(logging.Formatter):
             log_record["path"] = ctx["path"]
         if ctx.get("method"):
             log_record["method"] = ctx["method"]
+
+        # Add OpenTelemetry trace context for correlation
+        trace_ctx = _get_trace_context()
+        if trace_ctx:
+            log_record.update(trace_ctx)
 
         # Add extra fields from record
         if hasattr(record, "extra_fields"):

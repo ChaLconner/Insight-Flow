@@ -229,7 +229,6 @@ class AsyncAnalyticsService:
                 }
             )
 
-
         return projects
 
     async def _get_team_stats(self, project_ids: Any) -> list[dict[str, Any]]:
@@ -319,9 +318,7 @@ class AsyncAnalyticsService:
             },
         ]
 
-    async def _get_daily_trends(
-        self, project_ids: Any, days: int
-    ) -> list[dict[str, Any]]:
+    async def _get_daily_trends(self, project_ids: Any, days: int) -> list[dict[str, Any]]:
         """Get daily trends for task creation and completion."""
         # Calculate start date
         start_date = datetime.now(UTC) - timedelta(days=days)
@@ -377,9 +374,7 @@ class AsyncAnalyticsService:
 
         return trends
 
-    async def _get_distributions(
-        self, project_ids: Any
-    ) -> dict[str, list[dict[str, Any]]]:
+    async def _get_distributions(self, project_ids: Any) -> dict[str, list[dict[str, Any]]]:
         """Get status, priority, and workload distributions."""
         # Status distribution
         status_result = await self.db.execute(
@@ -514,8 +509,7 @@ class AsyncAnalyticsService:
             "dailyTrends": [],
         }
 
-
-# Extend AsyncAnalyticsService with additional methods
+    # Extend AsyncAnalyticsService with additional methods
     async def get_team_workload_paginated(
         self,
         user_id: uuid.UUID,
@@ -697,7 +691,9 @@ class AsyncAnalyticsService:
         # Calculate percentages
         for contributor in contributors:
             if total_tasks > 0:
-                contributor["percentage"] = round(float(contributor.get("tasks", 0) or 0) / total_tasks * 100)
+                contributor["percentage"] = round(
+                    float(contributor.get("tasks", 0) or 0) / total_tasks * 100
+                )
 
         contributors.sort(key=lambda x: int(x.get("tasks", 0) or 0), reverse=True)
 

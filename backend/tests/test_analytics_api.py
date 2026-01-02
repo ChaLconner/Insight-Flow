@@ -70,10 +70,8 @@ async def test_get_recent_activity_optimized():
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
                 response = await ac.get(f"/api/v1/analytics/projects/{project_id}/activity")
                 
-            if response.status_code != 200:
-                print(f"Error Response: {response.text}")
-                
-            assert response.status_code == 200
+            # Use assertion message for debugging instead of print
+            assert response.status_code == 200, f"Error Response: {response.text}"
             data = response.json()
             assert len(data) == 2
     finally:

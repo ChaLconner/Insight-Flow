@@ -4,7 +4,7 @@ Provides consistent response format across all API endpoints.
 """
 
 from datetime import UTC, datetime
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from fastapi import status
 from fastapi.responses import JSONResponse
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 T = TypeVar("T")
 
 
-class APIResponse(BaseModel, Generic[T]):
+class APIResponse[T](BaseModel):
     """
     Standard API response wrapper.
     All API responses should use this format for consistency.
@@ -31,7 +31,7 @@ class APIResponse(BaseModel, Generic[T]):
     )
 
 
-class PaginatedResponse(APIResponse[list[T]], Generic[T]):
+class PaginatedResponse[T](APIResponse[list[T]]):
     """
     Paginated API response for list endpoints.
     """

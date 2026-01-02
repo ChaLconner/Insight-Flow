@@ -2,7 +2,7 @@
 Comprehensive tests for utils/auth.py
 
 Tests follow best practices:
-- Test password hashing is secure (bcrypt)
+- Test password hashing is secure (argon2id - PHC winner)
 - Test JWT token creation and verification
 - Test error handling for invalid tokens
 - No secrets in test code
@@ -32,15 +32,15 @@ class TestPasswordHashing:
         assert len(hashed) > 0
         assert hashed != password  # Hash should differ from original
     
-    def test_password_hash_is_bcrypt(self):
-        """Test password hash uses bcrypt format."""
+    def test_password_hash_is_argon2(self):
+        """Test password hash uses argon2id format (Staff-level security)."""
         from utils.auth import get_password_hash
         
         # Act
         hashed = get_password_hash("password")
         
-        # Assert - bcrypt hashes start with $2b$
-        assert hashed.startswith("$2b$")
+        # Assert - argon2id hashes start with $argon2id$
+        assert hashed.startswith("$argon2id$")
     
     def test_same_password_different_hashes(self):
         """Test same password produces different hashes (salt)."""

@@ -159,7 +159,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <Card className="bg-white/10 backdrop-blur-xl backdrop-saturate-[1.8] shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] border-white/20 ring-1 ring-white/10">
+        <Card className="bg-slate-950 shadow-2xl border-slate-800 ring-1 ring-slate-800">
           <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-xl text-foreground text-center">
               Sign up
@@ -177,7 +177,7 @@ export default function RegisterPage() {
             <div className="space-y-3">
               <Button
                 variant="outline"
-                className="w-full bg-white/5 hover:bg-white/10 border-white/20 text-white transition-all hover:scale-[1.02] hover:bg-white/20"
+                className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
                 onClick={() => handleGoogleLogin()}
                 disabled={
                   isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
@@ -220,7 +220,7 @@ export default function RegisterPage() {
               </Button>
               <Button
                 variant="outline"
-                className="w-full bg-white/5 hover:bg-white/10 border-white/20 text-white transition-all hover:scale-[1.02] hover:bg-white/20"
+                className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
                 onClick={() => {
                   const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
                   if (!clientId) {
@@ -248,10 +248,10 @@ export default function RegisterPage() {
             {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+                <div className="w-full border-t border-slate-800" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">
+                <span className="bg-transparent px-2 text-gray-200">
                   Or continue with
                 </span>
               </div>
@@ -261,14 +261,15 @@ export default function RegisterPage() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               {/* Full Name */}
               <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-foreground">
+                <Label htmlFor="fullName" className="text-white">
                   Full Name
                 </Label>
                 <Input
                   id="fullName"
                   placeholder="John Doe"
                   autoComplete="name"
-                  className={`bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                  autoFocus
+                  className={`bg-slate-900 border-slate-700 text-white placeholder:text-gray-200 focus:border-primary focus:bg-slate-800 transition-all ${
                     form.formState.errors.fullName ? "border-red-500" : ""
                   }`}
                   disabled={isLoading}
@@ -282,17 +283,17 @@ export default function RegisterPage() {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground">
+                <Label htmlFor="email" className="text-white">
                   Email
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="john@example.com"
                     autoComplete="email"
-                    className={`pl-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                    className={`pl-10 bg-slate-900 border-slate-700 text-white placeholder:text-gray-200 focus:border-primary focus:bg-slate-800 transition-all ${
                       form.formState.errors.email ? "border-red-500" : ""
                     }`}
                     disabled={isLoading}
@@ -309,16 +310,16 @@ export default function RegisterPage() {
 
               {/* Password */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-foreground">
+                <Label htmlFor="password" className="text-white">
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Create a strong password"
-                    className={`pl-10 pr-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                    className={`pl-10 pr-10 bg-slate-900 border-slate-700 text-white placeholder:text-gray-200 focus:border-primary focus:bg-slate-800 transition-all ${
                       form.formState.errors.password ? "border-red-500" : ""
                     }`}
                     disabled={isLoading}
@@ -353,16 +354,16 @@ export default function RegisterPage() {
 
               {/* Confirm Password */}
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-foreground">
+                <Label htmlFor="confirmPassword" className="text-white">
                   Confirm Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" aria-hidden="true" />
                   <Input
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm your password"
-                    className={`pl-10 pr-10 bg-black/50 border-white/10 text-white placeholder:text-gray-400 focus:border-primary focus:bg-black/70 transition-all ${
+                    className={`pl-10 pr-10 bg-slate-900 border-slate-700 text-white placeholder:text-gray-200 focus:border-primary focus:bg-slate-800 transition-all ${
                       form.formState.errors.confirmPassword ? "border-red-500" : ""
                     }`}
                     disabled={isLoading}
@@ -405,14 +406,14 @@ export default function RegisterPage() {
                     I agree to{" "}
                     <Link
                       href="/terms"
-                      className="text-primary hover:text-primary/80"
+                      className="text-blue-300 hover:text-blue-200"
                     >
                       Terms of Service
                     </Link>{" "}
                     and{" "}
                     <Link
                       href="/privacy"
-                      className="text-primary hover:text-primary/80"
+                      className="text-blue-300 hover:text-blue-200"
                     >
                       Privacy Policy
                     </Link>
@@ -425,7 +426,7 @@ export default function RegisterPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2.5"
+                className="w-full bg-white hover:bg-gray-200 text-black font-bold py-2.5"
                 disabled={isLoading || !form.formState.isValid}
               >
                 {isLoading ? (
@@ -446,7 +447,7 @@ export default function RegisterPage() {
           Already have an account?{" "}
           <Link
             href="/auth/login"
-            className="text-primary hover:text-primary/80 font-medium transition-colors"
+            className="text-white hover:text-gray-200 font-medium transition-colors underline"
           >
             Sign in
           </Link>

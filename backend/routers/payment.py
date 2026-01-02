@@ -326,7 +326,9 @@ async def delete_payment_method(
 async def list_payment_history(
     limit: int = 20,
     offset: int = 0,
-    status_filter: str | None = Query(None, alias="status"),  # Filter by status: 'succeeded', 'failed', 'pending', 'refunded'
+    status_filter: str | None = Query(
+        None, alias="status"
+    ),  # Filter by status: 'succeeded', 'failed', 'pending', 'refunded'
     start_date: str | None = None,  # Filter by start date (ISO format: YYYY-MM-DD)
     end_date: str | None = None,  # Filter by end date (ISO format: YYYY-MM-DD)
     db: AsyncSession = Depends(get_async_db),
@@ -509,6 +511,76 @@ async def resume_subscription(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+# =============================================================================
+# Stripe Webhook IP Allowlist
+# Reference: https://docs.stripe.com/ips
+# =============================================================================
+
+# Stripe webhook source IP ranges (CIDR notation)
+# These are Stripe's published webhook IP addresses
+STRIPE_WEBHOOK_IPS: set[str] = {
+    # Stripe webhook IPs (as of 2024)
+    "3.18.12.63",
+    "3.130.192.163",
+    "13.235.14.237",
+    "13.235.122.149",
+    "18.211.135.69",
+    "35.154.171.200",
+    "52.15.183.38",
+    "54.88.130.119",
+    "54.88.130.237",
+    "54.187.174.169",
+    "54.187.205.235",
+    "54.187.216.72",
+}
+
+# CIDR ranges for Stripe (for more comprehensive matching)
+STRIPE_WEBHOOK_CIDRS: list[str] = [
+    "3.18.12.63/32",
+    "3.130.192.163/32",
+    "13.235.14.237/32",
+    "13.235.122.149/32",
+    "18.211.135.69/32",
+    "35.154.171.200/32",
+    "52.15.183.38/32",
+    "54.88.130.0/24",
+    "54.187.174.0/24",
+    "54.187.205.0/24",
+    "54.187.216.0/24",
+]
+
+
+def get_client_ip(request: Request) -> str:
+    """
+    Extract real client IP securely, handling proxies with validation.
+
+    Uses the centralized request_security utility for proper trusted proxy handling.
+    """
+    from utils.request_security import get_client_ip as secure_get_client_ip
+
+    return secure_get_client_ip(request)
+
+
+def is_ip_in_cidr(ip: str, cidr: str) -> bool:
+    """Check if an IP address is within a CIDR range."""
+    import ipaddress
+
+    try:
+        return ipaddress.ip_address(ip) in ipaddress.ip_network(cidr, strict=False)
+    except ValueError:
+        return False
+
+
+def is_stripe_ip(ip: str) -> bool:
+    """Check if the IP is from Stripe's webhook servers."""
+    # Direct IP match
+    if ip in STRIPE_WEBHOOK_IPS:
+        return True
+
+    # CIDR range match
+    return any(is_ip_in_cidr(ip, cidr) for cidr in STRIPE_WEBHOOK_CIDRS)
+
+
 @router.post("/webhook", include_in_schema=False)
 async def stripe_webhook(
     request: Request,
@@ -517,13 +589,39 @@ async def stripe_webhook(
 ):
     """
     Handle Stripe webhooks.
-    Verifies signature and processes events idempotently.
+    Verifies IP allowlist, signature, and processes events idempotently.
+
+    Security:
+    - IP allowlist for Stripe webhook servers (production only)
+    - Stripe signature verification
+    - Idempotent event processing
     """
+    import os
+
     import stripe
 
     from config import get_settings
 
     settings = get_settings()
+
+    # ==========================================================================
+    # IP Allowlist Check (Production only)
+    # ==========================================================================
+    if settings.is_production:
+        # Allow bypass for testing if explicitly configured
+        skip_ip_check = os.getenv("STRIPE_WEBHOOK_SKIP_IP_CHECK", "false").lower() == "true"
+
+        if not skip_ip_check:
+            client_ip = get_client_ip(request)
+
+            if not is_stripe_ip(client_ip):
+                logger.warning(f"Webhook request from non-Stripe IP rejected: {client_ip}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Unauthorized webhook source",
+                )
+
+            logger.debug(f"Webhook request from verified Stripe IP: {client_ip}")
 
     # Check if webhook secret is configured
     if not settings.stripe.webhook_secret:

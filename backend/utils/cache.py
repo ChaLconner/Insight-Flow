@@ -103,7 +103,7 @@ def cache_dashboard_stats(ttl_seconds: int = 60):
 
     def decorator(func):
         import functools
-        
+
         @functools.wraps(func)
         def wrapper(self, user_id, *args, **kwargs):
             cache_key = dashboard_cache._make_key(

@@ -35,7 +35,9 @@ class User(BaseModel):
     )
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    google_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    google_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
     github_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, index=True, nullable=True
     )
@@ -43,13 +45,8 @@ class User(BaseModel):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     verification_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0)
-    locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # role field is optional to support existing databases without the field
     # will be set to default value "user" if not present

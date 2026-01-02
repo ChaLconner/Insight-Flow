@@ -1,6 +1,11 @@
 """
 User management router for CRUD operations.
 Refactored for Async operations with proper Dependency Injection.
+
+Security features:
+- Avatar upload validation (extension, MIME type, size)
+- Role-based access control for sensitive endpoints
+- Rate limiting integration
 """
 
 import logging
@@ -23,6 +28,11 @@ from schemas.user import (
 from services.async_user_service import AsyncUserService
 from utils.cloudinary_upload import init_cloudinary, is_cloudinary_configured
 from utils.cloudinary_upload import upload_avatar as cloudinary_upload_avatar
+from utils.file_security import (
+    FileSecurityError,
+    validate_avatar_upload,
+    validate_file_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +112,10 @@ async def update_current_user_profile(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
+        logger.error(f"Error updating user profile: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {e!s}",
+            detail="Failed to update profile",
         )
 
 
@@ -114,9 +125,25 @@ async def search_user_by_email(
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    """Search user by email."""
+    """
+    Search user by email.
+
+    Security: This endpoint is rate-limited and requires authentication.
+    The current user must be admin/manager to search other users by exact email.
+    Regular users can only search for their own email.
+    """
+    # Security: Regular users can only search for themselves
+    if (
+        current_user.role not in ["admin", "manager"]
+        and email.lower() != current_user.email.lower()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to search other users"
+        )
+
     user = await user_service.get_user_by_email(email)
     if not user:
+        # Security: Use consistent error message to prevent email enumeration
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user
 
@@ -131,7 +158,17 @@ async def search_users(
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
 ) -> list[UserResponse]:
-    """Search users by email or name with filters."""
+    """
+    Search users by email or name with filters.
+
+    Security: Admins and managers can search all users.
+    Regular users have limited search capabilities.
+    """
+    # Security: Limit what non-admin users can search
+    if current_user.role not in ["admin", "manager"]:
+        # Non-admins can only do limited searches
+        limit = min(limit, 10)
+
     is_active = None
     if status == "active":
         is_active = True
@@ -167,7 +204,7 @@ async def update_current_user_settings(
 
 
 @router.post("/me/avatar", response_model=UserResponse)
-async def upload_user_avatar(
+async def upload_user_avatar(  # noqa: PLR0912, PLR0915
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
     user_service: AsyncUserService = Depends(get_user_service),
@@ -175,9 +212,30 @@ async def upload_user_avatar(
     """
     Upload and update user avatar.
     Uses Cloudinary for cloud storage if configured, otherwise falls back to local storage.
+
+    Security:
+    - Only image files allowed (jpg, jpeg, png, gif, webp)
+    - MIME type must match file extension
+    - Maximum file size: 5 MB
+    - Path traversal protection
     """
     try:
+        # Read file content
         file_content = await file.read()
+
+        # Security: Validate file upload (extension, MIME type, size)
+        try:
+            file_extension, _file_size = validate_avatar_upload(
+                filename=file.filename,
+                content_type=file.content_type,
+                content=file_content,
+            )
+        except FileSecurityError as e:
+            logger.warning(
+                f"Avatar upload security violation for user {current_user.id}: {e.message}"
+            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
+
         avatar_url = None
         old_avatar_url = current_user.avatar_url
 
@@ -198,12 +256,14 @@ async def upload_user_avatar(
                 if old_avatar_url and old_avatar_url.startswith("/static/uploads/"):
                     old_filename = os.path.basename(old_avatar_url)
                     old_file_path = os.path.join(UPLOAD_DIR, old_filename)
-                    if os.path.exists(old_file_path):
-                        try:
-                            os.remove(old_file_path)
-                            logger.info(f"Deleted old local avatar: {old_file_path}")
-                        except Exception as e:
-                            logger.warning(f"Error deleting old local avatar: {e}")
+                    # Security: Validate path before deletion
+                    try:
+                        validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
+                        if os.path.exists(validated_old_path):
+                            os.remove(validated_old_path)
+                            logger.info(f"Deleted old local avatar: {validated_old_path}")
+                    except Exception as e:
+                        logger.warning(f"Error deleting old local avatar: {e}")
             else:
                 logger.warning("Cloudinary upload failed, falling back to local storage")
 
@@ -215,20 +275,22 @@ async def upload_user_avatar(
             if current_user.avatar_url and current_user.avatar_url.startswith("/static/uploads/"):
                 old_filename = os.path.basename(current_user.avatar_url)
                 old_file_path = os.path.join(UPLOAD_DIR, old_filename)
-                if os.path.exists(old_file_path):
-                    try:
-                        os.remove(old_file_path)
-                    except Exception as e:
-                        logger.warning(f"Error deleting old avatar: {e}")
+                try:
+                    validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
+                    if os.path.exists(validated_old_path):
+                        os.remove(validated_old_path)
+                except Exception as e:
+                    logger.warning(f"Error deleting old avatar: {e}")
 
-            # Generate unique filename
-            filename = file.filename or "avatar.png"
-            file_extension = os.path.splitext(filename)[1]
+            # Generate unique filename with validated extension
             unique_filename = f"{uuid.uuid4()}{file_extension}"
             file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
+            # Security: Validate final path
+            validated_path = validate_file_path(UPLOAD_DIR, file_path)
+
             # Save file locally
-            with open(file_path, "wb") as buffer:
+            with open(validated_path, "wb") as buffer:
                 buffer.write(file_content)
 
             avatar_url = f"/static/uploads/{unique_filename}"
@@ -240,9 +302,11 @@ async def upload_user_avatar(
         logger.info(f"Avatar updated for user {current_user.id}: {avatar_url}")
         return updated_user  # type: ignore[return-value]
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to upload avatar: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload avatar: {e!s}",
+            detail="Failed to upload avatar",
         )

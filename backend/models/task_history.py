@@ -38,7 +38,9 @@ class TaskHistory(BaseModel):
 
     __tablename__ = "task_history"
 
-    activity_type: Mapped[ActivityType] = mapped_column(Enum(ActivityType), nullable=False, index=True)
+    activity_type: Mapped[ActivityType] = mapped_column(
+        Enum(ActivityType), nullable=False, index=True
+    )
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
     )
