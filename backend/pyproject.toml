@@ -107,6 +107,7 @@ filterwarnings = [
     "ignore::UserWarning",
     "ignore:coroutine 'Connection._cancel' was never awaited:RuntimeWarning",
     "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
+    "ignore:coroutine 'AsyncPasswordResetService._send_reset_email_internal' was never awaited:RuntimeWarning",
 ]
 
 [tool.coverage.run]

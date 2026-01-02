@@ -161,9 +161,14 @@ async def prometheus_metrics():
     Returns metrics in Prometheus text format.
     """
     from database import async_engine
+    from middleware.monitoring import get_request_metrics
     from services.cache_service import cache_service
 
     metrics = []
+
+    # HTTP request metrics (latency, count, errors)
+    request_metrics = get_request_metrics()
+    metrics.extend(request_metrics.get_prometheus_metrics())
 
     # Database pool metrics
     metrics.extend(_get_database_metrics(async_engine.pool))
