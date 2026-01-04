@@ -1,3 +1,8 @@
+"""
+Rate limiting middleware for FastAPI.
+Implements per-endpoint rate limiting with stricter limits for auth endpoints.
+"""
+
 import logging
 import threading
 import time
@@ -6,8 +11,53 @@ from collections import defaultdict, deque
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from database import AsyncSessionLocal
+from services.security_log_service import SecurityLogService
 
 logger = logging.getLogger("rate_limit")
+
+# Per-endpoint rate limit configuration
+# Format: path_prefix -> (calls, period_seconds)
+RATE_LIMIT_CONFIG = {
+    # Auth endpoints - stricter limits to prevent brute force
+    "/auth/login": (10, 60),  # 10 attempts per minute
+    "/auth/register": (5, 60),  # 5 registrations per minute
+    "/auth/forgot-password": (3, 60),  # 3 attempts per minute
+    "/auth/reset-password": (5, 60),  # 5 attempts per minute
+    "/api/v1/auth/login": (10, 60),
+    "/api/v1/auth/register": (5, 60),
+    "/api/v1/auth/forgot-password": (3, 60),
+    "/api/v1/auth/reset-password": (5, 60),
+    # Payment endpoints - moderate limits
+    "/payment": (20, 60),  # 20 requests per minute
+    "/api/v1/payment": (20, 60),
+}
+
+
+def get_rate_limit_for_path(
+    path: str, default_calls: int, default_period: int
+) -> tuple[int, int]:
+    """
+    Get rate limit configuration for a given path.
+
+    Args:
+        path: Request path
+        default_calls: Default number of calls allowed
+        default_period: Default period in seconds
+
+    Returns:
+        Tuple of (calls, period)
+    """
+    # Check for exact match first
+    if path in RATE_LIMIT_CONFIG:
+        return RATE_LIMIT_CONFIG[path]
+
+    # Check for prefix match
+    for prefix, limits in RATE_LIMIT_CONFIG.items():
+        if path.startswith(prefix):
+            return limits
+
+    return (default_calls, default_period)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -20,11 +70,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.calls = calls
         self.period = period
-        # Dictionary to store request timestamps per IP
-        # Value is a deque of timestamps
+        # Dictionary to store request timestamps per IP per path
+        # Key format: "{ip}:{rate_key}" where rate_key groups similar paths
         self.request_history: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
         self._last_cleanup = time.time()
+
+    def _get_rate_key(self, request: Request) -> str:
+        """Get rate limiting key for the request."""
+        client_ip = request.client.host if request.client else "unknown"
+        path = request.url.path
+
+        # Check if this path has a specific rate limit
+        for prefix in RATE_LIMIT_CONFIG:
+            if path.startswith(prefix):
+                return f"{client_ip}:{prefix}"
+
+        # Default: use IP only for general rate limiting
+        return f"{client_ip}:default"
 
     async def dispatch(self, request: Request, call_next):
         # Skip rate limiting for static files or health checks
@@ -32,42 +95,140 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"
+
+        # A+ Security: Check if IP is blocked first
+        try:
+            from security.ip_blocking import get_ip_blocker
+
+            blocker = get_ip_blocker()
+            is_blocked, blocked_until = await blocker.is_blocked(client_ip)
+
+            if is_blocked:
+                remaining = 0
+                if blocked_until:
+                    # Calculate remaining time securely
+                    now = __import__('datetime').datetime.now(
+                        __import__('datetime').UTC
+                    )
+                    remaining = int((blocked_until - now).total_seconds())
+
+                logger.warning(f"Blocked IP {client_ip} attempted access")
+
+                # Log blocked access attempt
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await SecurityLogService.log_event(
+                            db=db,
+                            event_type="ip_bound_blocked_access",
+                            severity="warning",
+                            details={
+                                "retry_after": remaining,
+                                "reason": "IP Blocked"
+                            },
+                            request=request,
+                            ip_address=client_ip
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to log blocked access: {e}")
+
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False,
+                        "message": (
+                            "Access temporarily blocked due to "
+                            "suspicious activity."
+                        ),
+                        "code": "IP_BLOCKED",
+                        "retry_after": remaining,
+                    },
+                    headers={"Retry-After": str(remaining)},
+                )
+        except ImportError:
+            pass  # IP blocking not available
+        except Exception as e:
+            logger.debug(f"IP blocking check skipped: {e}")
+
+        # Get rate limit key and limits for this request
+        rate_key = self._get_rate_key(request)
+        path = request.url.path
+        calls, period = get_rate_limit_for_path(path, self.calls, self.period)
+
         now = time.time()
 
         # Periodic cleanup of old entries to prevent memory leak
         self._maybe_cleanup(now)
 
         with self._lock:
-            # Get history for this IP
-            history = self.request_history[client_ip]
+            # Get history for this rate key
+            history = self.request_history[rate_key]
 
             # Remove timestamps older than the period
-            while history and history[0] < now - self.period:
+            while history and history[0] < now - period:
                 history.popleft()
 
             # Check if limit exceeded
-            if len(history) >= self.calls:
-                logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+            if len(history) >= calls:
+                logger.warning(
+                    f"Rate limit exceeded for IP: {client_ip}, path: {path} "
+                    f"(limit: {calls}/{period}s)"
+                )
+
+                # A+ Security: Record violation for potential blocking
+                try:
+                    from security.ip_blocking import get_ip_blocker
+
+                    blocker = get_ip_blocker()
+                    # Use fire_and_forget to not block the response
+                    import asyncio
+                    asyncio.create_task(
+                        blocker.record_violation(
+                            client_ip, f"rate_limit:{path}"
+                        )
+                    )
+                except Exception:
+                    pass
+
+                # Log rate limit violation
+                try:
+                    async with AsyncSessionLocal() as db:
+                        await SecurityLogService.log_event(
+                            db=db,
+                            event_type="rate_limit_exceeded",
+                            severity="warning",
+                            details={
+                                "limit": calls,
+                                "period": period,
+                                "path": path
+                            },
+                            request=request,
+                            ip_address=client_ip
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to log rate limit: {e}")
+
                 return JSONResponse(
                     status_code=429,
                     content={
                         "success": False,
-                        "message": "Too many requests. Please try again later.",
+                        "message": (
+                            "Too many requests. Please try again later."
+                        ),
                         "code": "RATE_LIMIT_EXCEEDED",
                     },
-                    headers={"Retry-After": str(self.period)},
+                    headers={"Retry-After": str(period)},
                 )
 
             # Add current timestamp
             history.append(now)
-            remaining = self.calls - len(history)
+            remaining = calls - len(history)
 
         response = await call_next(request)
 
         # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(self.calls)
+        response.headers["X-RateLimit-Limit"] = str(calls)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
-        response.headers["X-RateLimit-Reset"] = str(int(now + self.period))
+        response.headers["X-RateLimit-Reset"] = str(int(now + period))
 
         return response
 
@@ -102,13 +263,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if len(self.request_history) > self.MAX_TRACKED_IPS:
                 # Sort by last activity and remove oldest half
                 sorted_ips = sorted(
-                    self.request_history.items(), key=lambda x: x[1][-1] if x[1] else 0
+                    self.request_history.items(),
+                    key=lambda x: x[1][-1] if x[1] else 0
                 )
                 for ip, _ in sorted_ips[: len(sorted_ips) // 2]:
                     del self.request_history[ip]
                 logger.warning(
-                    f"Rate limiter forced cleanup: reduced from {len(sorted_ips)} to {len(self.request_history)} IPs"
+                    f"Rate limiter forced cleanup: reduced from "
+                    f"{len(sorted_ips)} to {len(self.request_history)} IPs"
                 )
 
             if ips_to_remove:
-                logger.debug(f"Rate limiter cleanup: removed {len(ips_to_remove)} inactive IPs")
+                msg = (
+                    f"Rate limiter cleanup: removed "
+                    f"{len(ips_to_remove)} inactive IPs"
+                )
+                logger.debug(msg)

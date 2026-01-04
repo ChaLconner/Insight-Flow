@@ -5,7 +5,7 @@ Token blacklist model for managing revoked tokens.
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, String, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.logger import setup_logger
@@ -17,7 +17,6 @@ logger = setup_logger("token_blacklist")
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm import Session
-from sqlalchemy import delete, select
 
 
 class TokenBlacklist(BaseModel):

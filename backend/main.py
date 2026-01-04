@@ -26,6 +26,7 @@ from routers import (
     payment,
     project_tasks,
     projects,
+    security_logs,
     tasks,
     usage,
     users,
@@ -179,6 +180,7 @@ app.include_router(project_tasks.router, prefix=API_V1_PREFIX, tags=["project ta
 app.include_router(payment.router, prefix=API_V1_PREFIX, tags=["payment"])
 app.include_router(usage.router, prefix=API_V1_PREFIX, tags=["usage"])
 app.include_router(favorites.router, prefix=API_V1_PREFIX, tags=["favorites"])
+app.include_router(security_logs.router, prefix=API_V1_PREFIX, tags=["security"])
 
 # Include health router (no prefix - these are root-level endpoints)
 app.include_router(health.router)

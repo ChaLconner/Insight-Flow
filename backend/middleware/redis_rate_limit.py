@@ -9,6 +9,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from middleware.rate_limit import RATE_LIMIT_CONFIG, get_rate_limit_for_path
 from utils.logger import setup_logger
 
 logger = setup_logger("redis_rate_limit")
@@ -61,11 +62,12 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
             logger.error(f"Redis connection failed for rate limiting: {e}")
             raise RuntimeError("Redis is required for distributed rate limiting")
 
-    def _get_rate_limit_key(self, request: Request) -> str:
+    def _get_rate_limit_key(self, request: Request) -> tuple[str, int, int]:
         """
-        Generate a unique rate limit key for the request.
+        Generate a unique rate limit key for the request and get rate limits.
 
-        Key format: {prefix}:{client_ip}:{path}
+        Returns:
+            Tuple of (key, calls, period)
         """
         client_ip = request.client.host if request.client else "unknown"
         path = request.url.path
@@ -73,27 +75,32 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         # Normalize path (remove query parameters)
         path = path.split("?")[0]
 
-        # Use a shorter path for rate limiting (group similar endpoints)
-        # For example: /api/v1/projects/123 -> /api/v1/projects/*
-        parts = path.split("/")
-        if len(parts) > 4 and parts[3].isdigit():
-            parts[3] = "*"
-            path = "/".join(parts)
+        # Get rate limit for this path
+        calls, period = get_rate_limit_for_path(path, self.calls, self.period)
 
-        return f"{self.key_prefix}:{client_ip}:{path}"
+        # Check if this path has a specific rate limit
+        rate_key_path = path
+        for prefix in RATE_LIMIT_CONFIG:
+            if path.startswith(prefix):
+                rate_key_path = prefix
+                break
 
-    def _check_rate_limit(self, key: str) -> tuple[bool, int]:
+        return f"{self.key_prefix}:{client_ip}:{rate_key_path}", calls, period
+
+    def _check_rate_limit(self, key: str, calls: int, period: int) -> tuple[bool, int]:
         """
         Check if the request should be rate limited using sliding window algorithm.
 
         Args:
             key: Redis key for rate limiting
+            calls: Maximum number of calls allowed
+            period: Time period in seconds
 
         Returns:
             Tuple of (is_allowed, remaining_requests)
         """
         now = time.time()
-        window_start = now - self.period
+        window_start = now - period
 
         try:
             # Use Redis pipeline for atomic operations
@@ -109,23 +116,23 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
             pipe.zadd(key, {str(now): now})
 
             # Set TTL to period + 1 second buffer
-            pipe.expire(key, self.period + 1)
+            pipe.expire(key, period + 1)
 
             # Execute pipeline
             results = pipe.execute()
 
             # results[1] is the count after removing old entries
             current_count = results[1]
-            remaining = max(0, self.calls - current_count)
+            remaining = max(0, calls - current_count)
 
-            is_allowed = current_count <= self.calls
+            is_allowed = current_count <= calls
 
             return is_allowed, remaining
 
         except Exception as e:
             logger.error(f"Redis rate limit check failed: {e}")
             # Fail open: allow request if Redis fails
-            return True, self.calls
+            return True, calls
 
     async def dispatch(self, request: Request, call_next):
         """
@@ -141,15 +148,18 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         if any(request.url.path.startswith(path) for path in self.skip_paths):
             return await call_next(request)
 
-        # Get rate limit key
-        key = self._get_rate_limit_key(request)
+        # Get rate limit key and limits for this request
+        key, calls, period = self._get_rate_limit_key(request)
 
         # Check rate limit
-        is_allowed, remaining = self._check_rate_limit(key)
+        is_allowed, remaining = self._check_rate_limit(key, calls, period)
 
         if not is_allowed:
             client_host = request.client.host if request.client else "unknown"
-            logger.warning(f"Rate limit exceeded for {client_host} on {request.url.path}")
+            logger.warning(
+                f"Rate limit exceeded for {client_host} on {request.url.path} "
+                f"(limit: {calls}/{period}s)"
+            )
             return JSONResponse(
                 status_code=429,
                 content={
@@ -158,10 +168,10 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
                     "code": "RATE_LIMIT_EXCEEDED",
                 },
                 headers={
-                    "Retry-After": str(self.period),
-                    "X-RateLimit-Limit": str(self.calls),
+                    "Retry-After": str(period),
+                    "X-RateLimit-Limit": str(calls),
                     "X-RateLimit-Remaining": "0",
-                    "X-RateLimit-Reset": str(int(time.time() + self.period)),
+                    "X-RateLimit-Reset": str(int(time.time() + period)),
                 },
             )
 
@@ -169,9 +179,9 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(self.calls)
+        response.headers["X-RateLimit-Limit"] = str(calls)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
-        response.headers["X-RateLimit-Reset"] = str(int(time.time() + self.period))
+        response.headers["X-RateLimit-Reset"] = str(int(time.time() + period))
 
         return response
 

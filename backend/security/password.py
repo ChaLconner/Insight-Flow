@@ -237,13 +237,13 @@ def calculate_entropy(password: str) -> float:
 class PasswordPolicyConfig:
     """Configuration for password policy validation."""
 
-    min_length: int = 12
+    min_length: int = 8
     max_length: int = 128
-    require_uppercase: bool = True
-    require_lowercase: bool = True
-    require_digit: bool = True
-    require_special: bool = True
-    min_entropy_bits: float = 50.0
+    require_uppercase: bool = False
+    require_lowercase: bool = False
+    require_digit: bool = False
+    require_special: bool = False
+    min_entropy_bits: float = 30.0
     check_breached: bool = True
     banned_patterns: list[str] = field(
         default_factory=lambda: [

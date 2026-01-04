@@ -69,6 +69,29 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
         logger.info("Using in-memory rate limiting (Redis not configured)")
 
 
+def setup_csrf_middleware(app: FastAPI) -> None:
+    """
+    Configure CSRF protection middleware.
+    Uses double-submit cookie pattern for CSRF protection.
+    """
+    from middleware.csrf import CSRFMiddleware
+
+    # Skip CSRF in testing environment
+    if settings.is_testing:
+        logger.info("Skipping CSRF middleware in testing environment")
+        return
+
+    # In development, use less strict settings
+    cookie_secure = settings.is_production
+
+    app.add_middleware(
+        CSRFMiddleware,
+        enabled=True,
+        cookie_secure=cookie_secure,
+    )
+    logger.info(f"CSRF middleware enabled (secure cookies: {cookie_secure})")
+
+
 def setup_security_middleware(app: FastAPI) -> None:
     """Configure security-related middleware."""
     from middleware.security_headers import SecurityHeadersMiddleware
@@ -114,6 +137,9 @@ def setup_all_middleware(app: FastAPI) -> None:
 
     # Rate limiting
     setup_rate_limit_middleware(app)
+
+    # CSRF protection
+    setup_csrf_middleware(app)
 
     # Security headers
     setup_security_middleware(app)

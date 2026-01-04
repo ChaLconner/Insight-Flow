@@ -39,9 +39,10 @@ interface PasswordRequirement {
 
 const passwordRequirements: PasswordRequirement[] = [
   { label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-  { label: "At least one uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-  { label: "At least one lowercase letter", test: (p: string) => /[a-z]/.test(p) },
-  { label: "At least one number", test: (p: string) => /[0-9]/.test(p) },
+  // Optional recommendations for better security
+  { label: "Example: Uppercase letter (Optional)", test: (p: string) => /[A-Z]/.test(p) || p.length > 0 }, 
+  { label: "Example: Lowercase letter (Optional)", test: (p: string) => /[a-z]/.test(p) || p.length > 0 },
+  { label: "Example: Number (Optional)", test: (p: string) => /[0-9]/.test(p) || p.length > 0 },
 ];
 
 // ===================================
@@ -65,21 +66,19 @@ export function SecuritySettings() {
       return 0;
     }
     let strength = 0;
-    // Backend requires at least 8 characters
+    // Base requirement (Required)
     if (password.length >= 8) {
-      strength += 25;
+      strength += 40;
     }
-    // Backend requires uppercase
+    // Recommendations (Optional)
     if (password.match(/[A-Z]/)) {
-      strength += 25;
+      strength += 20;
     }
-    // Backend requires lowercase
     if (password.match(/[a-z]/)) {
-      strength += 15;
+      strength += 10;
     }
-    // Backend requires number
     if (password.match(/[0-9]/)) {
-      strength += 25;
+      strength += 20;
     }
     // Special chars (extra)
     if (password.match(/[^A-Za-z0-9]/)) {

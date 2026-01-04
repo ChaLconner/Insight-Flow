@@ -7,7 +7,7 @@ import os
 from functools import lru_cache
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, FieldValidationInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,8 +49,33 @@ class AuthSettings(BaseSettings):
     @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
+        # Forbidden default/weak values that should never be used
+        forbidden_values = [
+            "your_jwt_secret_key_here",
+            "test_secret_key_placeholder",
+            "dev",
+            "secret",
+            "development",
+            "changeme",
+            "your-secret-key",
+            "supersecret",
+            "mysecretkey",
+        ]
+
         if len(v) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters long")
+
+        # Check against forbidden values (case-insensitive)
+        if v.lower() in [f.lower() for f in forbidden_values]:
+            raise ValueError(
+                "SECRET_KEY must be changed from default value. "
+                "Generate a secure key using: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            )
+
+        # Check for simple patterns that might indicate a weak key
+        if v == v[0] * len(v):  # All same character
+            raise ValueError("SECRET_KEY cannot be a repeated single character")
+
         return v
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -203,6 +228,20 @@ class AppSettings(BaseSettings):
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=False, alias="DEBUG")
     app_name: str = Field(default="Insight-Flow", alias="APP_NAME")
+
+    @field_validator("debug")
+    @classmethod
+    def validate_debug(cls, v: bool, info: FieldValidationInfo) -> bool:
+        """Security: Prevent DEBUG=True in production environment."""
+        if v:
+            # Check if environment is production
+            env_value = info.data.get("environment") if info.data else None
+            if env_value and env_value.lower() == "production":
+                raise ValueError(
+                    "DEBUG cannot be True in production environment. "
+                    "Set ENVIRONMENT=development or remove DEBUG flag."
+                )
+        return v
     api_version: str = Field(default="1.0.0", alias="API_VERSION")
 
     # Server settings
@@ -225,6 +264,7 @@ class AppSettings(BaseSettings):
     cache: CacheSettings = Field(default_factory=lambda: CacheSettings())
     logging: LoggingSettings = Field(default_factory=lambda: LoggingSettings())
     stripe: StripeSettings = Field(default_factory=lambda: StripeSettings())
+    security_report_uri: str | None = Field(default=None, alias="SECURITY_REPORT_URI")
 
     @property
     def is_production(self) -> bool:

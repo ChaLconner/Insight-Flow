@@ -15,7 +15,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
         # Content-Security-Policy for API
-        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+        from config import get_settings
+
+        settings = get_settings()
+
+        csp_policy = "default-src 'none'; frame-ancestors 'none'"
+
+        # Add reporting if configured (or default to our own endpoint)
+        report_uri = settings.security_report_uri or "/api/v1/security/csp-report"
+        csp_policy += f"; report-uri {report_uri}; report-to csp-endpoint"
+
+        response.headers["Content-Security-Policy"] = csp_policy
+        report_to_header = (
+            f'{{"group":"csp-endpoint","max_age":10886400,'
+            f'"endpoints":[{{"url":"{report_uri}"}}]}}'
+        )
+        response.headers["Report-To"] = report_to_header
 
         # Permissions-Policy - restrict browser features for API
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"

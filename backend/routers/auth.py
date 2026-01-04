@@ -68,6 +68,7 @@ async def register(
     """
     Register a new user and send verification email.
     """
+    from security.password import validate_password
 
     # Check if user already exists
     existing_user = await user_service.get_user_by_email(user_data.email)
@@ -82,6 +83,32 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Either password or Google ID is required",
         )
+
+    # Validate password strength using advanced password policy
+    if user_data.password:
+        user_context = {
+            "email": user_data.email,
+            "username": user_data.username,
+            "first_name": user_data.first_name,
+            "last_name": user_data.last_name,
+        }
+
+        violations = await validate_password(user_data.password, user_context)
+
+        if violations:
+            # Collect error messages from violations
+            error_messages = [v.message for v in violations]
+            logger.warning(
+                f"Password validation failed for {mask_email(user_data.email)}: "
+                f"{len(violations)} violations"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Password does not meet security requirements",
+                    "violations": error_messages,
+                },
+            )
 
     try:
         user = await user_service.create_user(user_data)
@@ -152,8 +179,12 @@ async def login(
         await user_service.update_last_login(user.id)
 
         # Create and set auth tokens using centralized utility
+        # A+ Security: Pass request for token fingerprinting (device binding)
         create_and_set_auth_cookies(
-            response=response, user_id=str(user.id), log_user_info=mask_email(login_data.email)
+            response=response,
+            user_id=str(user.id),
+            log_user_info=mask_email(login_data.email),
+            request=request,
         )
         logger.debug(
             f"Cookie settings: secure={COOKIE_SECURE}, samesite='lax', httponly=True, path='/'"
@@ -199,6 +230,7 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)) -
 
 @router.post("/google")
 async def google_login(
+    request: Request,
     response: Response,
     google_data: GoogleAuth,
     user_service: AsyncUserService = Depends(get_user_service),
@@ -251,8 +283,12 @@ async def google_login(
         await user_service.update_last_login(user.id)
 
         # Create and set auth tokens using centralized utility
+        # A+ Security: Pass request for token fingerprinting (device binding)
         create_and_set_auth_cookies(
-            response=response, user_id=str(user.id), log_user_info=mask_email(user.email)
+            response=response,
+            user_id=str(user.id),
+            log_user_info=mask_email(user.email),
+            request=request,
         )
 
         return {
@@ -278,6 +314,7 @@ async def google_login(
 
 @router.post("/github")
 async def github_login(
+    request: Request,
     response: Response,
     github_data: GithubAuth,
     user_service: AsyncUserService = Depends(get_user_service),
@@ -336,8 +373,12 @@ async def github_login(
         await user_service.update_last_login(user.id)
 
         # Create and set auth tokens using centralized utility
+        # A+ Security: Pass request for token fingerprinting (device binding)
         create_and_set_auth_cookies(
-            response=response, user_id=str(user.id), log_user_info=mask_email(user.email)
+            response=response,
+            user_id=str(user.id),
+            log_user_info=mask_email(user.email),
+            request=request,
         )
 
         return {
@@ -486,7 +527,8 @@ async def refresh_token(
             await TokenBlacklist.async_blacklist_token(db, token_jti, old_token_expiration)
 
     # Create and set new tokens using centralized utility
-    create_and_set_auth_cookies(response=response, user_id=str(user.id))
+    # A+ Security: Pass request for token fingerprinting (device binding)
+    create_and_set_auth_cookies(response=response, user_id=str(user.id), request=request)
 
     return {"message": "Token refreshed successfully", "expires_in": 1800}
 
@@ -553,7 +595,21 @@ async def reset_password(
     """
     Reset user's password using a valid token.
     """
+    from security.password import validate_password
+
     try:
+        # Validate new password strength
+        violations = await validate_password(request_data.new_password)
+        if violations:
+            error_messages = [v.message for v in violations]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Password does not meet security requirements",
+                    "violations": error_messages,
+                },
+            )
+
         # Validate token and reset password
         success = await password_reset_service.reset_password(
             request_data.token, request_data.new_password
@@ -629,6 +685,8 @@ async def change_password(
     """
     Change current user's password.
     """
+    from security.password import validate_password
+
     try:
         logger.info(f"Password change attempt for user: {mask_email(current_user.email)}")
 
@@ -641,6 +699,24 @@ async def change_password(
             )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect"
+            )
+
+        # Validate new password strength
+        user_context = {
+            "email": current_user.email,
+            "username": current_user.username,
+            "first_name": getattr(current_user, "first_name", None),
+            "last_name": getattr(current_user, "last_name", None),
+        }
+        violations = await validate_password(password_data.new_password, user_context)
+        if violations:
+            error_messages = [v.message for v in violations]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Password does not meet security requirements",
+                    "violations": error_messages,
+                },
             )
 
         await user_service.change_password(
