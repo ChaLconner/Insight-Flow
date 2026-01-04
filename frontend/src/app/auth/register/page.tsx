@@ -104,7 +104,7 @@ function RegisterPageContent() {
 
       // Registration successful - redirect to login
       toast.success("Account created successfully", {
-        description: "Please sign in with your new account.",
+        description: "Please check your email to verify your account before logging in.",
       });
       router.push("/auth/login");
     } catch (error: unknown) {

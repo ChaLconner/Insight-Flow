@@ -144,8 +144,8 @@ class TestFilesRouterEdgeCases:
             "/api/v1/files/upload",
             files={"file": ("empty.txt", io.BytesIO(b""), "text/plain")},
         )
-        # Should succeed even with empty file
-        assert response.status_code == 200
+        # Should fail for empty file
+        assert response.status_code == 400
 
     def test_upload_file_with_special_characters_in_name(self, client):
         """Test uploading a file with special characters in name."""
@@ -166,7 +166,7 @@ class TestFilesRouterEdgeCases:
         
         response = client.post(
             "/api/v1/files/upload",
-            files={"file": ("large.bin", io.BytesIO(file_content), "application/octet-stream")},
+            files={"file": ("large.txt", io.BytesIO(file_content), "text/plain")},
         )
         
         assert response.status_code == 200

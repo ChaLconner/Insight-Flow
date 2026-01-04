@@ -120,6 +120,13 @@ async def delete_file(
     - Filename sanitization
     """
     try:
+        # Security: Check for path traversal in the input URL immediately
+        if ".." in url:
+            logger.warning(
+                f"Path traversal attempt by user {mask_user_id(str(current_user.id))}: {url[:50]}"
+            )
+            raise HTTPException(status_code=400, detail="Invalid file path")
+
         # Extract filename from URL (only basename, strips any path components)
         filename = os.path.basename(url)
 

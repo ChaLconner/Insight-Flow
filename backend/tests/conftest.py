@@ -305,3 +305,22 @@ def async_analytics_service(async_session):
     """Create async analytics service for tests."""
     from services.async_analytics_service import AsyncAnalyticsService
     return AsyncAnalyticsService(async_session)
+
+
+@pytest.fixture(autouse=True)
+def mock_payment_lock_manager():
+    """
+    Force use of InMemoryLockManager for all tests to prevent
+    Redis connection sharing across event loops.
+    """
+    from security.distributed_locks import set_lock_manager, InMemoryLockManager, reset_lock_manager
+    
+    # Force in-memory lock
+    manager = InMemoryLockManager()
+    set_lock_manager(manager)
+    
+    yield
+    
+    # Cleanup
+    reset_lock_manager()
+

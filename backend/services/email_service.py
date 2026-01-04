@@ -65,44 +65,209 @@ class EmailService:
     def _get_base_template(subject: str, content: str, action_url: str, action_text: str) -> str:
         return f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{subject}</title>
+            <!--[if mso]>
+            <noscript>
+            <xml>
+              <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+              </o:OfficeDocumentSettings>
+            </xml>
+            </noscript>
+            <![endif]-->
             <style>
-                body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #374151; margin: 0; padding: 0; background-color: #f3f4f6; }}
-                .container {{ max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }}
-                .header {{ background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); padding: 32px 24px; text-align: center; }}
-                .header h1 {{ color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.025em; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-                .content {{ padding: 40px 32px; background-color: #ffffff; }}
-                .button-container {{ text-align: center; margin: 32px 0; }}
-                .button {{ display: inline-block; background-color: #4f46e5; color: #ffffff !important; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); transition: background-color 0.2s; }}
-                .button:hover {{ background-color: #4338ca; }}
-                .footer {{ background: #f9fafb; padding: 24px; text-align: center; font-size: 13px; color: #9ca3af; border-top: 1px solid #e5e7eb; }}
-                .link-text {{ color: #4f46e5; word-break: break-all; }}
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+                
+                body {{
+                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #374151;
+                    margin: 0;
+                    padding: 0;
+                    background-color: #f9fafb;
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
+                }}
+                
+                table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                }}
+                
+                .wrapper {{
+                    width: 100%;
+                    background-color: #f9fafb;
+                    padding: 40px 20px;
+                }}
+                
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background-color: #ffffff;
+                    border-radius: 16px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                    border: 1px solid #e5e7eb;
+                }}
+                
+                .header {{
+                    padding: 32px 40px;
+                    background-color: #ffffff;
+                    border-bottom: 1px solid #f3f4f6;
+                    text-align: center;
+                }}
+                
+                .logo-text {{
+                    font-size: 24px;
+                    font-weight: 800;
+                    color: #4f46e5;
+                    text-decoration: none;
+                    letter-spacing: -0.5px;
+                }}
+                
+                .content {{
+                    padding: 40px 40px 32px;
+                    background-color: #ffffff;
+                }}
+                
+                h1 {{
+                    margin-top: 0;
+                    color: #111827;
+                    font-size: 24px;
+                    font-weight: 700;
+                    margin-bottom: 16px;
+                    text-align: center;
+                }}
+                
+                .text-body {{
+                    font-size: 16px;
+                    color: #4b5563;
+                    margin-bottom: 24px;
+                    text-align: left;
+                }}
+
+                .text-body p {{
+                    margin-bottom: 16px;
+                }}
+                
+                .button-container {{
+                    text-align: center;
+                    margin: 32px 0;
+                }}
+                
+                .button {{
+                    display: inline-block;
+                    background-color: #4f46e5;
+                    color: #ffffff !important;
+                    padding: 16px 36px;
+                    border-radius: 8px;
+                    text-decoration: none;
+                    font-weight: 600;
+                    font-size: 16px;
+                    box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+                    transition: all 0.2s ease;
+                }}
+                
+                .button:hover {{
+                    background-color: #4338ca;
+                    box-shadow: 0 6px 8px -1px rgba(79, 70, 229, 0.3);
+                    transform: translateY(-1px);
+                }}
+                
+                .divider {{
+                    height: 1px;
+                    background-color: #e5e7eb;
+                    margin: 32px 0;
+                }}
+                
+                .footer {{
+                    background-color: #f9fafb;
+                    padding: 32px 40px;
+                    text-align: center;
+                    border-top: 1px solid #f3f4f6;
+                }}
+                
+                .footer-text {{
+                    font-size: 13px;
+                    color: #6b7280;
+                    margin-bottom: 12px;
+                }}
+                
+                .link-text {{
+                    color: #4f46e5;
+                    word-break: break-all;
+                    font-weight: 500;
+                }}
+                
+                .help-text {{
+                    font-size: 14px;
+                    color: #9ca3af;
+                    margin-top: 24px;
+                }}
+
+                @media only screen and (max-width: 600px) {{
+                    .wrapper {{
+                        padding: 20px 10px;
+                    }}
+                    .container {{
+                        width: 100% !important;
+                        border-radius: 12px;
+                    }}
+                    .header {{
+                        padding: 24px 20px;
+                    }}
+                    .content {{
+                        padding: 32px 24px;
+                    }}
+                    .button {{
+                        display: block;
+                        width: auto;
+                        text-align: center;
+                    }}
+                }}
             </style>
         </head>
         <body>
-            <div class="container">
-                <div class="header">
-                    <h1>Insight Flow</h1>
-                </div>
-                <div class="content">
-                    <h2 style="margin-top: 0; color: #111827; font-size: 20px; font-weight: 600; margin-bottom: 24px;">{subject}</h2>
-                    <div style="font-size: 16px; color: #4b5563;">
-                        {content}
+            <div class="wrapper">
+                <div class="container">
+                    <div class="header">
+                        <a href="https://insightflow.app" class="logo-text">Insight Flow</a>
                     </div>
-                    <div class="button-container">
-                        <a href="{action_url}" class="button">{action_text}</a>
+                    
+                    <div class="content">
+                        <!-- Hero Icon (Optional, can be added if we have a hosted image) -->
+                        
+                        <h1>{subject}</h1>
+                        
+                        <div class="text-body">
+                            {content}
+                        </div>
+                        
+                        <div class="button-container">
+                            <a href="{action_url}" class="button">{action_text}</a>
+                        </div>
+                        
+                        <div class="divider"></div>
+                        
+                        <p style="font-size: 14px; color: #6b7280;">
+                            Having trouble clicking the button? Copy and paste this link into your browser:
+                            <br>
+                            <a href="{action_url}" class="link-text">{action_url}</a>
+                        </p>
                     </div>
-                    <p style="font-size: 14px; color: #6b7280; margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 24px;">
-                        Or open this link in your browser:<br>
-                        <a href="{action_url}" class="link-text">{action_url}</a>
-                    </p>
-                </div>
-                <div class="footer">
-                    <p>&copy; 2024 Insight Flow. All rights reserved.</p>
-                    <p>Designed for efficiency developers.</p>
+                    
+                    <div class="footer">
+                        <p class="footer-text">&copy; {datetime.now().year} Insight Flow. All rights reserved.</p>
+                        <p class="footer-text">
+                            You received this email because you signed up for Insight Flow.
+                            <br>
+                            If you didn't request this, you can safely ignore this email.
+                        </p>
+                    </div>
                 </div>
             </div>
         </body>
