@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   Layout,
   GitBranch,
-  Lock
+  Lock,
+  ArrowDown
 } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 
@@ -183,10 +184,10 @@ const FeatureCard = ({ feature, index }: { feature: FeatureData, index: number }
       className="flex-shrink-0 w-[85vw] md:w-[70vw] lg:w-[60vw] snap-center"
       initial={{ opacity: 0, scale: 0.9 }}
       whileInView={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5, delay: index * 0.1 }}
+      transition={{ duration: 0.5 }}
       viewport={{ once: true }}
     >
-      <div className="h-full flex flex-col md:grid md:grid-cols-2 gap-8 md:gap-16 bg-gradient-to-br from-zinc-800/90 via-zinc-900/95 to-zinc-950 border border-zinc-700/50 rounded-[2.5rem] p-8 md:p-12 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden">
+      <div className="group h-full flex flex-col md:grid md:grid-cols-2 gap-8 md:gap-16 bg-gradient-to-br from-zinc-800/90 via-zinc-900/95 to-zinc-950 border border-zinc-700/50 rounded-[2.5rem] p-8 md:p-12 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden">
         
         {/* Top highlight line */}
         <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-zinc-500/50 to-transparent" />
@@ -210,12 +211,27 @@ const FeatureCard = ({ feature, index }: { feature: FeatureData, index: number }
         </div>
 
         {/* Visual Content */}
-        <div className="flex items-center justify-center z-10">
-             <div className="w-full relative rounded-2xl overflow-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)] border-2 border-zinc-600/80 bg-zinc-950">
+        <div className="flex items-center justify-center z-10 relative group-hover/card">
+             {/* Dynamic Back Glow */}
+             {/* Diffused Glowing Border Effect */}
+             <div className={`absolute -inset-0.5 rounded-[18px] blur-md opacity-60 transition-all duration-500 group-hover:opacity-100 group-hover:blur-xl group-hover:-inset-2 ${
+               index % 4 === 0 ? "bg-gradient-to-br from-indigo-600 via-indigo-400 to-blue-500" : 
+               index % 4 === 1 ? "bg-gradient-to-br from-purple-600 via-purple-400 to-pink-500" : 
+               index % 4 === 2 ? "bg-gradient-to-br from-cyan-600 via-cyan-400 to-teal-500" : 
+               "bg-gradient-to-br from-orange-600 via-orange-400 to-red-500"
+             }`} />
+             
+             <motion.div 
+               whileHover={{ scale: 1.03, rotateY: 2 }}
+               transition={{ type: "spring", stiffness: 200, damping: 25 }}
+               className="w-full relative rounded-2xl overflow-hidden shadow-[0_30px_60px_-10px_rgba(0,0,0,0.9)] border border-zinc-500/30 bg-zinc-950/80 backdrop-blur-sm z-10"
+             >
                 {feature.visual}
-                {/* Glossy overlay */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
-             </div>
+                {/* Enhanced Glossy overlay */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-white/5 to-transparent pointer-events-none mix-blend-overlay" />
+                {/* Border highlight */}
+                <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10 pointer-events-none" />
+             </motion.div>
         </div>
       </div>
     </motion.div>
@@ -468,8 +484,8 @@ export default function LandingPage() {
             <span>Insight Flow</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <Link href="/features" className="hover:text-foreground transition-colors">Features</Link>
-            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
+            <Link href="#features" className="hover:text-foreground transition-colors" scroll={true}>Features</Link>
+            <Link href="#pricing" className="hover:text-foreground transition-colors" scroll={true}>Pricing</Link>
           </div>
           <div className="flex items-center gap-4">
             <Link 
@@ -519,10 +535,13 @@ export default function LandingPage() {
               >
                 Start for free
               </Link>
-              <button className="px-8 py-3.5 bg-secondary hover:bg-secondary/80 text-foreground font-semibold rounded-full transition-all flex items-center gap-2 border border-border">
-                <div className="w-5 h-5 rounded-full border-2 border-current flex items-center justify-center text-[10px]">▶</div>
-                Watch Demo
-              </button>
+              <Link 
+                href="#features"
+                className="px-8 py-3.5 bg-secondary hover:bg-secondary/80 text-foreground font-semibold rounded-full transition-all flex items-center gap-2 border border-border"
+              >
+                <ArrowDown size={20} />
+                Explore Features
+              </Link>
             </motion.div>
             
             <motion.div variants={itemVariants} className="pt-8 flex items-center gap-6 text-sm text-muted-foreground">
