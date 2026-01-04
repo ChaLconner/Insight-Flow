@@ -62,21 +62,24 @@ export const authActions = {
     // Attempt server-side logout to clear HttpOnly cookies
     if (typeof window !== "undefined") {
       try {
-        const { setLoggingOut } = await import("@/lib/api-client");
-        const { API_CONFIG } = await import("@/lib/constants");
+        const { apiClient, setLoggingOut } = await import("@/lib/api-client");
         
+        // First, call the logout API (CSRF token is auto-attached by apiClient)
+        // Do NOT set loggingOut flag before this, or the request will be aborted
+        await apiClient.post("/auth/logout");
+        
+        // After successful logout API call, prevent any further API requests
         setLoggingOut(true);
-
-        await fetch(`${API_CONFIG.BASE_URL}/auth/logout`, {
-          method: "POST",
-          credentials: "include",
-        });
       } catch (_) {
-        // ignore errors during logout (e.g. network error)
+        // ignore errors during logout (e.g. network error, 401, etc.)
+        // We still want to clear client state and redirect
+        // Set loggingOut to prevent further requests even on error
+        const { setLoggingOut } = await import("@/lib/api-client");
+        setLoggingOut(true);
       }
     }
 
-    // Clear client state
+    // Clear client state (always do this, even if server logout failed)
     logout();
 
     if (typeof window !== "undefined") {

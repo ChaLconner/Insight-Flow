@@ -58,8 +58,12 @@ export const useNotifications = () => {
       setNotifications(data);
       const count = await notificationsApi.getUnreadCount();
       setUnreadCount(count);
-    } catch (error) {
-      console.error("Failed to fetch notifications", error);
+    } catch (error: unknown) {
+      // Silently ignore 401 errors - they're expected when user isn't authenticated
+      const axiosError = error as { response?: { status?: number } };
+      if (axiosError?.response?.status !== 401) {
+        console.error("Failed to fetch notifications", error);
+      }
     } finally {
       setLoading(false);
     }
@@ -73,8 +77,12 @@ export const useNotifications = () => {
         return true;
       }
       return false;
-    } catch (error) {
-      console.error("Failed to fetch unread count", error);
+    } catch (error: unknown) {
+      // Silently ignore 401 errors - they're expected when user isn't authenticated
+      const axiosError = error as { response?: { status?: number } };
+      if (axiosError?.response?.status !== 401) {
+        console.error("Failed to fetch unread count", error);
+      }
       return false;
     }
   }, [unreadCount, setUnreadCount]);

@@ -94,7 +94,6 @@ def _init_opentelemetry():
 
 def get_tracer():
     """Get the configured tracer, initializing if necessary."""
-    global _tracer
     if _tracer is None:
         _init_opentelemetry()
     return _tracer

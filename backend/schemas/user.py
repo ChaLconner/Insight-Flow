@@ -35,6 +35,7 @@ class UserCreate(UserBase):
     password: str | None = None
     google_id: str | None = None
     github_id: str | None = None
+    plan: str | None = None
 
     @field_validator("name")
     @classmethod

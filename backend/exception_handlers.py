@@ -9,6 +9,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from config import get_settings
 from utils.exceptions import AppError
 from utils.logger import app_logger
+from database import AsyncSessionLocal
+from services.security_log_service import SecurityLogService
 
 
 def add_exception_handlers(app: FastAPI):
@@ -25,6 +27,20 @@ def add_exception_handlers(app: FastAPI):
         """
         Standardize HTTP exceptions to match API response format.
         """
+        if exc.status_code == 403:
+            try:
+                # Log audit event for 403 Forbidden
+                async with AsyncSessionLocal() as db:
+                    await SecurityLogService.log_event(
+                        db=db,
+                        event_type="access_denied",
+                        severity="warning",
+                        details={"detail": str(exc.detail)},
+                        request=request,
+                    )
+            except Exception as e:
+                app_logger.error(f"Failed to log 403 error: {e}")
+
         return JSONResponse(
             status_code=exc.status_code,
             content={"success": False, "message": str(exc.detail), "code": exc.status_code},

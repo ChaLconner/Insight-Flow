@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from models.task import TaskPriority, TaskType
 from utils.schema_utils import to_camel
+from utils.validators import validate_priority_value, validate_status_value, validate_type_value
 
 from .project import ProjectSummary
 from .user import UserResponse
@@ -34,9 +35,6 @@ class TaskBase(BaseModel):
         return validate_type_value(v) or TaskType.FEATURE.value
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-from utils.validators import validate_priority_value, validate_status_value, validate_type_value
 
 
 class TaskCreate(TaskBase):

@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.auth_audit import AuthAudit, AuthStatus
+from models.payment import Subscription, SubscriptionPlan, SubscriptionStatus
 from models.user import User
 from models.user_settings import UserSettings
 from schemas.user import UserCreate, UserInvite, UserLogin, UserSettingsUpdate, UserUpdate
@@ -95,6 +96,25 @@ class AsyncUserService:
             await self.db.commit()
             await self.db.refresh(db_user)
 
+            # Handle Trial Subscription
+            if user_data.plan and user_data.plan.lower() in ["starter", "pro", "enterprise"]:
+                try:
+                    trial_end = datetime.now(UTC) + timedelta(days=14)
+                    new_sub = Subscription(
+                        user_id=db_user.id,
+                        plan=SubscriptionPlan(user_data.plan.lower()),
+                        status=SubscriptionStatus.TRIALING,
+                        current_period_start=datetime.now(UTC).isoformat(),
+                        current_period_end=trial_end.isoformat(),
+                        cancel_at_period_end=False
+                    )
+                    self.db.add(new_sub)
+                    await self.db.commit()
+                    logger.info(f"Created trial subscription ({user_data.plan}) for user {db_user.email}")
+                except Exception as e:
+                    logger.error(f"Failed to create trial subscription for user {db_user.email}: {e}")
+                    # Continue without failing user creation
+
             # Send verification email in background (fire and forget for now, or await)
             # Since create_user is async, we can await it.
             await EmailService.send_verification_email(db_user.email, verification_token)
@@ -172,10 +192,26 @@ class AsyncUserService:
             # Increment failed attempts
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
 
-            # Lock if > 5 attempts
+            # Lock if >= 5 attempts
             if user.failed_login_attempts >= 5:
                 user.locked_until = datetime.now(UTC) + timedelta(minutes=15)
                 logger.warning(f"Locking account for user: {mask_email(user.email)}")
+                
+                # A+ Security: Send account lockout notification email
+                try:
+                    from utils.background_tasks import fire_and_forget
+                    
+                    async def send_lockout_notification():
+                        await EmailService.send_account_lockout_notification(
+                            email=user.email,
+                            locked_until=user.locked_until,
+                            ip_address=ip_address,
+                            user_agent=user_agent,
+                        )
+                    
+                    fire_and_forget(send_lockout_notification())
+                except Exception as e:
+                    logger.debug(f"Lockout notification skipped: {e}")
 
             await self.db.commit()
 

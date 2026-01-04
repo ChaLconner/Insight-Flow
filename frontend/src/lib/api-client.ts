@@ -98,7 +98,20 @@ axiosRetry(apiClient, {
   },
 });
 
-// Request interceptor: No longer need to attach tokens manually
+// Helper to get CSRF token from cookie
+function getCSRFToken(): string | null {
+  if (!isBrowser()) {
+    return null;
+  }
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; csrf_token=`);
+  if (parts.length === 2) {
+    return parts.pop()?.split(';').shift() ?? null;
+  }
+  return null;
+}
+
+// Request interceptor: Attach CSRF token and handle logout
 apiClient.interceptors.request.use(
   (config) => {
     if (isLoggingOut) {
@@ -110,6 +123,13 @@ apiClient.interceptors.request.use(
         signal: controller.signal,
       };
     }
+
+    // Attach CSRF token if available (required for state-changing requests)
+    const csrfToken = getCSRFToken();
+    if (csrfToken) {
+      config.headers["X-CSRF-Token"] = csrfToken;
+    }
+
     return config;
   },
   (error) => {

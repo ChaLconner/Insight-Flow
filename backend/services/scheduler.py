@@ -97,8 +97,6 @@ def start_scheduler():
 
 def shutdown_scheduler():
     """Shutdown the scheduler gracefully."""
-    global scheduler
-
     # Skip in test environment
     import os
 

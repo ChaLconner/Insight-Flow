@@ -3,6 +3,8 @@ import uuid
 
 from fastapi import HTTPException, status
 
+from models.task import TaskPriority, TaskType
+
 
 def validate_uuid(id_string: str, detail: str = "Invalid ID format") -> uuid.UUID:
     """
@@ -42,9 +44,6 @@ def validate_password_strength(password: str) -> str:
         )
 
     return password
-
-
-from models.task import TaskPriority, TaskType
 
 
 def validate_status_value(v: str | None) -> str | None:

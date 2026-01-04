@@ -40,6 +40,13 @@ jobs:
           safety check --full-report || echo "::warning::Some vulnerabilities detected"
         continue-on-error: true
 
+      - name: Run pip-audit (Python dependencies)
+        working-directory: ./backend
+        run: |
+          pip install pip-audit
+          pip-audit || echo "::warning::pip-audit found vulnerabilities"
+        continue-on-error: true
+
       - name: Run bandit security linter
         working-directory: ./backend
         run: |
@@ -180,6 +187,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high || echo "::warning::npm audit found high severity vulnerabilities"
+        continue-on-error: true
 
       - name: Lint
         run: npm run lint

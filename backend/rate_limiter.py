@@ -7,12 +7,15 @@ Development: Falls back to in-memory storage for simplicity.
 """
 
 import logging
+import time
 
-from fastapi import Request
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+
+from services.cache_service import cache_service
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +147,6 @@ class RateLimits:
 # Async Rate Limiter for FastAPI Dependencies (e.g., auth routes)
 # Uses cache_service for rate limiting with async support
 # =============================================================================
-
-import time
-
-from fastapi import HTTPException, status
-
-from services.cache_service import cache_service
 
 
 class AuthRateLimiter:
