@@ -186,22 +186,24 @@ const FeatureCard = ({ feature, index }: { feature: FeatureData, index: number }
       transition={{ duration: 0.5, delay: index * 0.1 }}
       viewport={{ once: true }}
     >
-      <div className="h-full flex flex-col md:grid md:grid-cols-2 gap-8 md:gap-16 bg-[#0B0B0F] border border-white/10 rounded-[2.5rem] p-8 md:p-12 hover:border-indigo-500/30 transition-all duration-500 group relative overflow-hidden">
+      <div className="h-full flex flex-col md:grid md:grid-cols-2 gap-8 md:gap-16 bg-gradient-to-br from-zinc-800/90 via-zinc-900/95 to-zinc-950 border border-zinc-700/50 rounded-[2.5rem] p-8 md:p-12 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden">
         
-        {/* Subtle Glow Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+        {/* Top highlight line */}
+        <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-zinc-500/50 to-transparent" />
+        
+
 
         {/* Text Content */}
         <div className="flex flex-col justify-center space-y-8 z-10">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-900/80 border border-white/10 flex items-center justify-center text-indigo-400 shadow-xl backdrop-blur-sm">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-600/50 flex items-center justify-center text-indigo-400 shadow-lg">
             {feature.icon}
           </div>
           
           <div className="space-y-4">
-             <h3 className="text-3xl md:text-5xl font-black tracking-tight text-white leading-tight">
+             <h3 className="text-3xl md:text-5xl font-black tracking-tight text-white leading-tight drop-shadow-[0_2px_10px_rgba(255,255,255,0.1)]">
                {feature.title}
              </h3>
-             <p className="text-lg md:text-xl text-zinc-400 leading-relaxed font-light">
+             <p className="text-lg md:text-xl text-zinc-300 leading-relaxed font-light">
                {feature.description}
              </p>
           </div>
@@ -209,7 +211,7 @@ const FeatureCard = ({ feature, index }: { feature: FeatureData, index: number }
 
         {/* Visual Content */}
         <div className="flex items-center justify-center z-10">
-             <div className="w-full relative rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-zinc-900 group-hover:scale-[1.03]   transition-transform duration-500 ease-out">
+             <div className="w-full relative rounded-2xl overflow-hidden shadow-[0_20px_50px_-12px_rgba(0,0,0,0.9)] border-2 border-zinc-600/80 bg-zinc-950">
                 {feature.visual}
                 {/* Glossy overlay */}
                 <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
@@ -261,11 +263,7 @@ const PricingCard = ({ plan, index }: { plan: PlanData, index: number }) => {
       </ul>
 
       <Link 
-        href={
-          plan.name === "Enterprise" 
-            ? "/contact" 
-            : `/auth/register${plan.name !== "Free" ? `?plan=${plan.name.toLowerCase()}` : ""}`
-        }
+        href={`/auth/register${plan.name !== "Free" ? `?plan=${plan.name.toLowerCase()}` : ""}`}
         className={`w-full inline-flex justify-center items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 ${
           plan.popular 
             ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/25' 
@@ -409,7 +407,7 @@ export default function LandingPage() {
         "Read-only API access",
         "Email support"
       ],
-      cta: "Get Started"
+      cta: "Start Free Trial"
     },
     {
       name: "Pro",
@@ -449,7 +447,7 @@ export default function LandingPage() {
         "Audit logs",
         "24/7 support"
       ],
-      cta: "Contact Sales"
+      cta: "Start Free Trial"
     }
   ];
 
@@ -470,8 +468,8 @@ export default function LandingPage() {
             <span>Insight Flow</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
+            <Link href="/features" className="hover:text-foreground transition-colors">Features</Link>
+            <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
           </div>
           <div className="flex items-center gap-4">
             <Link 
@@ -643,7 +641,7 @@ export default function LandingPage() {
                       <div className="flex-1 mx-6">
                          <div className="bg-zinc-800/80 rounded-xl px-5 py-2 text-sm text-zinc-300 flex items-center gap-3 border border-white/5">
                             <Lock size={12} className="text-green-400" />
-                            <span className="font-medium">insightflow.app</span>
+                            <span className="font-medium">insightflow</span>
                          </div>
                       </div>
                    </div>
@@ -746,13 +744,19 @@ export default function LandingPage() {
         {/* Features Carousel Section */}
         <div 
           id="features" 
-          className="scroll-mt-20 py-20 overflow-hidden relative group cursor-grab active:cursor-grabbing"
+          className="scroll-mt-20 py-20 overflow-hidden relative"
           onMouseDown={() => { isPaused.current = true; }}
           onMouseUp={() => { isPaused.current = false; }}
           onMouseLeave={() => { isPaused.current = false; }}
           onTouchStart={() => { isPaused.current = true; }}
           onTouchEnd={() => { isPaused.current = false; }}
         >
+           {/* Aura Background Glow */}
+           <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[150px]" />
+              <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-purple-500/15 rounded-full blur-[130px]" />
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-cyan-500/10 rounded-full blur-[120px]" />
+           </div>
            <div className="max-w-7xl mx-auto px-6 text-center mb-12">
               <h2 className="text-3xl md:text-5xl font-bold mb-6">Built for high-performance teams</h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
@@ -774,7 +778,13 @@ export default function LandingPage() {
         </div>
 
         {/* Pricing Section */}
-        <div id="pricing" className="scroll-mt-20 max-w-7xl mx-auto py-20">
+        <div id="pricing" className="scroll-mt-20 max-w-7xl mx-auto py-20 relative">
+            {/* Aura Background Glow for Pricing */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+               <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-amber-500/15 rounded-full blur-[140px]" />
+               <div className="absolute top-1/2 right-0 -translate-y-1/2 w-[400px] h-[400px] bg-rose-500/12 rounded-full blur-[120px]" />
+               <div className="absolute bottom-0 left-0 w-[450px] h-[350px] bg-emerald-500/10 rounded-full blur-[130px]" />
+            </div>
             <div className="text-center mb-16">
                <h2 className="text-3xl md:text-5xl font-bold mb-4">Simple, transparent pricing</h2>
                <p className="text-xl text-muted-foreground max-w-2xl mx-auto">

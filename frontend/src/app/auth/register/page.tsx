@@ -1,8 +1,8 @@
 "use client";
 
 import { useGoogleLogin } from "@react-oauth/google";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,36 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+// Wrapper component to handle Suspense for useSearchParams
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterPageSkeleton />}>
+      <RegisterPageContent />
+    </Suspense>
+  );
+}
+
+// Loading skeleton for the register page
+function RegisterPageSkeleton() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="animate-pulse">
+          <div className="h-12 w-12 bg-muted rounded-xl mx-auto mb-4" />
+          <div className="h-8 bg-muted rounded w-3/4 mx-auto mb-2" />
+          <div className="h-4 bg-muted rounded w-1/2 mx-auto mb-8" />
+          <div className="h-96 bg-muted rounded-lg" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RegisterPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const plan = searchParams.get("plan");
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -69,6 +97,7 @@ export default function RegisterPage() {
         username: username,
         name: values.fullName.trim(),
         password: values.password,
+        plan: plan ?? undefined, // Send plan if it exists
       };
 
       await apiClient.post("/auth/register", backendUserData);
@@ -344,7 +373,7 @@ export default function RegisterPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground mt-2">
-                  Use 8 or more characters with a mix of letters, numbers & symbols
+                  At least 8 characters
                 </p>
 
                 {form.formState.errors.password && (
