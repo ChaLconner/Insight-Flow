@@ -18,8 +18,8 @@ export function Footer() {
           <div>
              <h4 className="font-semibold mb-4 text-white">Product</h4>
              <ul className="space-y-2 text-sm text-zinc-400">
-                <li><a href="/features" className="hover:text-indigo-400">Features</a></li>
-                <li><a href="/pricing" className="hover:text-indigo-400">Pricing</a></li>
+                <li><a href="/#features" className="hover:text-indigo-400">Features</a></li>
+                <li><a href="/#pricing" className="hover:text-indigo-400">Pricing</a></li>
                 <li><a href="/auth/login" className="hover:text-indigo-400">Log In</a></li>
              </ul>
           </div>
