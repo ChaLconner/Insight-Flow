@@ -7,6 +7,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from datetime import datetime
 
 from utils.logger import mask_email, setup_logger
 
@@ -321,8 +322,6 @@ class EmailService:
         due to multiple failed login attempts, providing details about the 
         suspicious activity.
         """
-        from datetime import datetime
-        
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         support_link = f"{frontend_url}/support"
         
