@@ -74,13 +74,11 @@ async def get_current_user(
                 if FINGERPRINT_ENABLED:
                     is_valid, reason = verify_fingerprint_claim(request, stored_fingerprint)
                     if not is_valid:
-                        logger.warning(
-                            f"Token fingerprint mismatch for user {user_id}: {reason}"
-                        )
+                        logger.warning(f"Token fingerprint mismatch for user {user_id}: {reason}")
                         # Log as security audit event
                         try:
-                            from utils.security_audit import security_audit
                             from utils.request_security import get_client_ip
+                            from utils.security_audit import security_audit
 
                             security_audit.log_suspicious_activity(
                                 ip_address=get_client_ip(request),

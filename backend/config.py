@@ -4,10 +4,11 @@ Provides type-safe, validated configuration with environment variable support.
 """
 
 import os
+from typing import Any
 from functools import lru_cache
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator, FieldValidationInfo
+from pydantic import Field, FieldValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,7 +70,7 @@ class AuthSettings(BaseSettings):
         if v.lower() in [f.lower() for f in forbidden_values]:
             raise ValueError(
                 "SECRET_KEY must be changed from default value. "
-                "Generate a secure key using: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+                'Generate a secure key using: python -c "import secrets; print(secrets.token_urlsafe(64))"'
             )
 
         # Check for simple patterns that might indicate a weak key
@@ -231,7 +232,7 @@ class AppSettings(BaseSettings):
 
     @field_validator("debug")
     @classmethod
-    def validate_debug(cls, v: bool, info: FieldValidationInfo) -> bool:
+    def validate_debug(cls, v: bool, info: Any) -> bool:
         """Security: Prevent DEBUG=True in production environment."""
         if v:
             # Check if environment is production
@@ -242,6 +243,7 @@ class AppSettings(BaseSettings):
                     "Set ENVIRONMENT=development or remove DEBUG flag."
                 )
         return v
+
     api_version: str = Field(default="1.0.0", alias="API_VERSION")
 
     # Server settings

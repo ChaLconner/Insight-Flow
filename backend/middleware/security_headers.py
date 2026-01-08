@@ -27,8 +27,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         response.headers["Content-Security-Policy"] = csp_policy
         report_to_header = (
-            f'{{"group":"csp-endpoint","max_age":10886400,'
-            f'"endpoints":[{{"url":"{report_uri}"}}]}}'
+            f'{{"group":"csp-endpoint","max_age":10886400,"endpoints":[{{"url":"{report_uri}"}}]}}'
         )
         response.headers["Report-To"] = report_to_header
 

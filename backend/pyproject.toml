@@ -1,5 +1,5 @@
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = false
@@ -46,7 +46,7 @@ init_typed = true
 warn_required_dynamic_aliases = true
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py312"
 line-length = 100
 exclude = [
     ".git",
@@ -54,7 +54,6 @@ exclude = [
     ".venv",
     "venv",
     "alembic/versions",
-    "tests",
 ]
 
 [tool.ruff.lint]
@@ -109,6 +108,7 @@ filterwarnings = [
     "ignore:coroutine 'AsyncMockMixin._execute_mock_call' was never awaited:RuntimeWarning",
     "ignore:coroutine 'AsyncPasswordResetService._send_reset_email_internal' was never awaited:RuntimeWarning",
 ]
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
 source = ["."]
@@ -128,6 +128,12 @@ omit = [
     "services/scheduler.py",
     # Cloudinary requires external service
     "utils/cloudinary_upload.py",
+    # Utility/debug scripts - not production code
+    "check_payments.py",
+    "fix_missing_dates.py",
+    "list_subs.py",
+    "migration_helpers.py",
+    "add_stripe_customer_id.py",
     # Deadline reminder runs in background job
     "services/async_deadline_reminder.py",
     # Rate limit middleware requires Redis integration
@@ -136,11 +142,6 @@ omit = [
     # Notification rate limiter requires Redis
     "services/notification_rate_limiter.py",
     # OAuth modules require external services to fully test
-    "utils/google_oauth.py",
-    "utils/github_oauth.py",
-    # Payment service requires Stripe integration
-    "services/payment_service.py",
-    "routers/payment.py",
     # Query optimizer rarely used directly 
     "utils/query_optimizer.py",
     # Distributed locks require Redis
@@ -149,17 +150,16 @@ omit = [
     # Cache service requires Redis
     "services/cache_service.py",
     # Project tasks router requires complex database mocking
-    "routers/project_tasks.py",
+    # "routers/project_tasks.py",
     # Analytics router requires complex mocking
     "routers/analytics.py",
     # Tasks router requires real database for full coverage
     "routers/tasks.py",
     # Auth router has OAuth flows requiring external services
-    "routers/auth.py",
+    # Auth router has OAuth flows requiring external services
     # Logger module - utility code
     "utils/logger.py",
     # User service uses database heavily
-    "services/async_user_service.py",
     # Services requiring complex database mocking
     "services/async_project_service.py",
     "services/async_task_service.py",
@@ -189,7 +189,6 @@ omit = [
     "models/token_blacklist.py",
     # Auth dependencies are mocked in conformance tests
     "dependencies/auth.py",
-    "services/email_service.py",
     # Complex services requiring heavy integration/E2E testing
     "services/async_task_history_service.py",
     "services/async_analytics_service.py",

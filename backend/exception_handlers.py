@@ -7,10 +7,10 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import get_settings
-from utils.exceptions import AppError
-from utils.logger import app_logger
 from database import AsyncSessionLocal
 from services.security_log_service import SecurityLogService
+from utils.exceptions import AppError
+from utils.logger import app_logger
 
 
 def add_exception_handlers(app: FastAPI):

@@ -181,7 +181,8 @@ class FeatureFlagRegistry:
                 # Code here sees new_dashboard as True
                 pass
         """
-        current = self._override_context.get().copy()
+        ctx = self._override_context.get()
+        current = ctx.copy() if ctx else {}
         token = self._override_context.set({**current, **overrides})
         try:
             yield

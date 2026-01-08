@@ -1,9 +1,10 @@
 """
 Async User service layer for authentication and user management.
-Refactored for SQLAlchemy 2.0+ Async operations.
+Refactored for SQLAlchemy 2.0+ Async operations with Enhanced Security.
 """
 
 import asyncio
+import hashlib
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -20,7 +21,7 @@ from models.user_settings import UserSettings
 from schemas.user import UserCreate, UserInvite, UserLogin, UserSettingsUpdate, UserUpdate
 from services.email_service import EmailService
 from utils.auth import authenticate_user, get_password_hash, verify_password
-from utils.logger import logger, mask_email, mask_user_id
+from utils.logger import logger, mask_email, mask_token, mask_user_id
 from utils.validators import validate_password_strength
 
 # Thread pool for CPU-bound operations (password hashing)
@@ -30,18 +31,19 @@ _password_executor = ThreadPoolExecutor(max_workers=4)
 def escape_like_pattern(pattern: str) -> str:
     """
     Escape special characters in SQL LIKE patterns to prevent wildcard injection.
-
-    Escapes: % (any chars), _ (single char), \\ (escape char)
     """
-    # Escape backslash first, then % and _
     return re.sub(r"([%_\\])", r"\\\1", pattern)
 
 
 class AsyncUserService:
-    """Async Service class for user operations."""
+    """Async Service class for user operations with A+ Security features."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    def _hash_token(self, token: str) -> str:
+        """Create SHA256 hash of the token."""
+        return hashlib.sha256(token.encode()).hexdigest()
 
     async def get_user_by_google_id(self, google_id: str) -> User | None:
         """Get user by Google ID."""
@@ -59,7 +61,7 @@ class AsyncUserService:
         return await loop.run_in_executor(_password_executor, get_password_hash, password)
 
     async def create_user(self, user_data: UserCreate) -> User:
-        """Create a new user."""
+        """Create a new user with secure verification token."""
         try:
             name = user_data.name
             if not name and (user_data.first_name or user_data.last_name):
@@ -85,11 +87,14 @@ class AsyncUserService:
                 validate_password_strength(user_data.password)
                 db_user.hashed_password = await self.hash_password(user_data.password)
 
-            # Verification Logic
-            verification_token = str(uuid.uuid4())
-            db_user.verification_token = verification_token
+            # Verification Logic (A+ Security)
+            # Create raw token (sent via email)
+            raw_token = str(uuid.uuid4())
+            # Store hashed token in DB
+            db_user.verification_token = self._hash_token(raw_token)
+            # Set expiration (24 hours)
+            db_user.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=24)
             db_user.is_verified = False
-            # Assuming is_active means 'not banned'. Using is_verified for email check.
             db_user.is_active = True
 
             self.db.add(db_user)
@@ -106,18 +111,20 @@ class AsyncUserService:
                         status=SubscriptionStatus.TRIALING,
                         current_period_start=datetime.now(UTC).isoformat(),
                         current_period_end=trial_end.isoformat(),
-                        cancel_at_period_end=False
+                        cancel_at_period_end=False,
                     )
                     self.db.add(new_sub)
                     await self.db.commit()
-                    logger.info(f"Created trial subscription ({user_data.plan}) for user {db_user.email}")
+                    logger.info(
+                        f"Created trial subscription ({user_data.plan}) for user {db_user.email}"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to create trial subscription for user {db_user.email}: {e}")
-                    # Continue without failing user creation
+                    logger.error(
+                        f"Failed to create trial subscription for user {db_user.email}: {e}"
+                    )
 
-            # Send verification email in background (fire and forget for now, or await)
-            # Since create_user is async, we can await it.
-            await EmailService.send_verification_email(db_user.email, verification_token)
+            # Send verification email with raw token (not hashed)
+            await EmailService.send_verification_email(db_user.email, raw_token)
 
             return db_user
 
@@ -131,6 +138,66 @@ class AsyncUserService:
                 raise ValueError("Username already taken")
             else:
                 raise ValueError("User creation failed")
+
+    async def verify_email(self, token: str) -> bool:
+        """Verify user email with secure token check."""
+        # Hash input token to match stored hash
+        hashed_token = self._hash_token(token)
+
+        result = await self.db.execute(select(User).filter(User.verification_token == hashed_token))
+        user = result.scalars().first()
+
+        if not user:
+            # Try to match legacy unhashed tokens (backward compatibility)
+            # In case old tokens are pending
+            legacy_result = await self.db.execute(
+                select(User).filter(User.verification_token == token)
+            )
+            user = legacy_result.scalars().first()
+
+        if not user:
+            logger.warning(f"Verification failed: Invalid token {mask_token(token)}")
+            return False
+
+        # Check expiration
+        if user.verification_token_expires_at and user.verification_token_expires_at < datetime.now(
+            UTC
+        ):
+            logger.warning(f"Verification failed: Token expired for user {mask_email(user.email)}")
+            return False
+
+        user.is_verified = True
+        user.verification_token = None
+        user.verification_token_expires_at = None
+        await self.db.commit()
+
+        logger.info(f"Email verified successfully for {mask_email(user.email)}")
+        return True
+
+    async def resend_verification_email(self, email: str) -> bool:
+        """Resend verification email with new token."""
+        user = await self.get_user_by_email(email)
+        if not user:
+            # Don't reveal user existence
+            return True
+
+        if user.is_verified:
+            logger.info(
+                f"Resend verification requested for already verified user: {mask_email(email)}"
+            )
+            return True
+
+        # Generate new token
+        raw_token = str(uuid.uuid4())
+        user.verification_token = self._hash_token(raw_token)
+        user.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=24)
+
+        await self.db.commit()
+
+        # Send email
+        await EmailService.send_verification_email(email, raw_token)
+        logger.info(f"Verification email resent to {mask_email(email)}")
+        return True
 
     async def log_auth_attempt(
         self,
@@ -154,12 +221,13 @@ class AsyncUserService:
             await self.db.commit()
         except Exception as e:
             logger.error(f"Failed to log auth attempt: {e}")
-            # Rollback to ensure session is clean and usable for subsequent operations
             await self.db.rollback()
-            # Don't fail the request if logging fails
 
     async def authenticate_user(
-        self, login_data: UserLogin, ip_address: str | None = None, user_agent: str | None = None
+        self,
+        login_data: UserLogin,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> User | None:
         """Authenticate user with email and password, handling lockout and audit logs."""
         logger.info(f"authenticate_user called for email: {mask_email(login_data.email)}")
@@ -169,7 +237,6 @@ class AsyncUserService:
         # 1. Check if user exists
         if not user:
             logger.warning(f"User not found for email: {mask_email(login_data.email)}")
-            # Log failure (user not found)
             await self.log_auth_attempt(
                 login_data.email, AuthStatus.FAILURE, ip_address, user_agent
             )
@@ -196,11 +263,11 @@ class AsyncUserService:
             if user.failed_login_attempts >= 5:
                 user.locked_until = datetime.now(UTC) + timedelta(minutes=15)
                 logger.warning(f"Locking account for user: {mask_email(user.email)}")
-                
+
                 # A+ Security: Send account lockout notification email
                 try:
                     from utils.background_tasks import fire_and_forget
-                    
+
                     async def send_lockout_notification():
                         await EmailService.send_account_lockout_notification(
                             email=user.email,
@@ -208,7 +275,7 @@ class AsyncUserService:
                             ip_address=ip_address,
                             user_agent=user_agent,
                         )
-                    
+
                     fire_and_forget(send_lockout_notification())
                 except Exception as e:
                     logger.debug(f"Lockout notification skipped: {e}")
@@ -221,7 +288,6 @@ class AsyncUserService:
             return None
 
         # 4. Success
-        # Reset failed attempts on success
         if (user.failed_login_attempts or 0) > 0 or user.locked_until:
             user.failed_login_attempts = 0
             user.locked_until = None
@@ -232,19 +298,6 @@ class AsyncUserService:
             login_data.email, AuthStatus.SUCCESS, ip_address, user_agent, user.id
         )
         return user
-
-    async def verify_email(self, token: str) -> bool:
-        """Verify user email with token."""
-        result = await self.db.execute(select(User).filter(User.verification_token == token))
-        user = result.scalars().first()
-
-        if not user:
-            return False
-
-        user.is_verified = True
-        user.verification_token = None  # Clear token
-        await self.db.commit()
-        return True
 
     async def verify_password(self, password: str, hashed_password: str) -> bool:
         """Verify password against hash using run_in_executor to avoid blocking."""
@@ -267,14 +320,12 @@ class AsyncUserService:
             logger.error(f"User not found for ID: {mask_user_id(str(user_id))}")
             raise ValueError("User not found")
 
-        # Verify current password
         if not verify_password(current_password, user.hashed_password or ""):
             logger.warning(
                 f"Current password verification failed for user: {mask_email(user.email)}"
             )
             raise ValueError("Incorrect current password")
 
-        # Update password
         validate_password_strength(new_password)
         user.hashed_password = await self.hash_password(new_password)
         logger.info(f"Password updated for user: {mask_email(user.email)}")
@@ -399,7 +450,6 @@ class AsyncUserService:
 
         update_data = user_update.model_dump(exclude_unset=True)
 
-        # Logic mirroring Sync service name handling
         if "first_name" in update_data:
             user.first_name = update_data["first_name"]
         if "last_name" in update_data:
@@ -476,7 +526,7 @@ class AsyncUserService:
         return {
             "total": stats.total or 0,
             "active": stats.active or 0,
-            "verified": stats.active or 0,  # Same as active in original logic
+            "verified": stats.active or 0,
             "admins": stats.admins or 0,
             "managers": stats.managers or 0,
             "members": stats.members or 0,
@@ -495,11 +545,12 @@ class AsyncUserService:
         stmt = select(User)
 
         if query and len(query.strip()) > 0:
-            # Escape SQL LIKE wildcards to prevent pattern injection
             escaped_query = escape_like_pattern(query.strip())
-            # ilike equivalent for asyncpg/sqlite
             stmt = stmt.filter(
-                or_(User.email.ilike(f"%{escaped_query}%"), User.name.ilike(f"%{escaped_query}%"))
+                or_(
+                    User.email.ilike(f"%{escaped_query}%"),
+                    User.name.ilike(f"%{escaped_query}%"),
+                )
             )
 
         if role and role != "all":
@@ -524,7 +575,6 @@ class AsyncUserService:
                 await self.db.refresh(settings)
             except IntegrityError:
                 await self.db.rollback()
-                # Retry fetch if race condition occurred
                 result = await self.db.execute(
                     select(UserSettings).filter(UserSettings.user_id == user_id)
                 )

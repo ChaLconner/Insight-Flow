@@ -6,6 +6,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  /* Configure snapshot path to be platform agnostic */
+  snapshotPathTemplate: './e2e/{testFileDir}/{testFileName}-snapshots/{arg}-{projectName}{ext}',
+
   
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -89,8 +92,8 @@ export default defineConfig({
   /* Folder for test artifacts such as screenshots, videos, traces, etc. */
   outputDir: 'e2e-results/',
   
-  /* Global setup */
-  globalSetup: undefined,
+  /* Global setup for authentication */
+  globalSetup: './e2e/global-setup.ts',
   
   /* Global teardown */
   globalTeardown: undefined,

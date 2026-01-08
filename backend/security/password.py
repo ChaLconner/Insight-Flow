@@ -127,7 +127,7 @@ async def check_password_breach(password: str, timeout: float = 2.0) -> tuple[bo
     """
     try:
         # Create SHA1 hash of password
-        sha1_hash = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+        sha1_hash = hashlib.sha1(password.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
         prefix, suffix = sha1_hash[:5], sha1_hash[5:]
 
         # Query HIBP API with hash prefix (k-Anonymity)
@@ -415,17 +415,17 @@ class PasswordPolicy:
 
         # Context-aware check (username, email in password)
         if self.config.block_context_words:
-            for field in ["username", "email", "first_name", "last_name"]:
-                context_value = user_context.get(field, "")
+            for field_name in ["username", "email", "first_name", "last_name"]:
+                context_value = user_context.get(field_name, "")
                 if context_value and len(context_value) >= 3:
                     # For email, also check the local part
-                    if field == "email" and "@" in context_value:
+                    if field_name == "email" and "@" in context_value:
                         email_local = context_value.split("@")[0].lower()
                         if email_local in password_lower:
                             violations.append(
                                 PolicyViolation(
                                     PasswordPolicyViolation.CONTEXT_WORD,
-                                    f"Password cannot contain your {field}",
+                                    f"Password cannot contain your {field_name}",
                                 )
                             )
                             break
@@ -433,7 +433,7 @@ class PasswordPolicy:
                         violations.append(
                             PolicyViolation(
                                 PasswordPolicyViolation.CONTEXT_WORD,
-                                f"Password cannot contain your {field}",
+                                f"Password cannot contain your {field_name}",
                             )
                         )
                         break

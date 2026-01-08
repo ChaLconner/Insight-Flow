@@ -65,7 +65,9 @@ async def db_health_check():
             await session.execute(text("SELECT 1"))
 
         # Get pool statistics
-        pool_stats = _get_pool_stats(async_engine.pool)
+        pool_stats = {}
+        if async_engine:
+            pool_stats = _get_pool_stats(async_engine.pool)
 
         return {
             "status": "healthy",
@@ -128,7 +130,7 @@ async def full_health_check():
         health_status["components"]["database"] = {
             "status": "healthy",
             "latency_ms": db_latency,
-            "pool": _get_pool_stats(async_engine.pool),
+            "pool": _get_pool_stats(async_engine.pool) if async_engine else {},
         }
     except Exception as e:
         health_status["status"] = "degraded"
@@ -173,7 +175,8 @@ async def prometheus_metrics():
     metrics.extend(request_metrics.get_prometheus_metrics())
 
     # Database pool metrics
-    metrics.extend(_get_database_metrics(async_engine.pool))
+    if async_engine:
+        metrics.extend(_get_database_metrics(async_engine.pool))
 
     # Cache metrics
     metrics.extend(_get_cache_metrics(cache_service))

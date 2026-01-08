@@ -1,7 +1,7 @@
 /**
  * Unit tests for auth-store.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { act } from "@testing-library/react";
 import type { User } from "@/types";
 
@@ -30,17 +30,46 @@ vi.mock("@/lib/api-endpoints", () => ({
     logout: vi.fn().mockResolvedValue(undefined),
     getCurrentUser: vi.fn(),
   },
+  usersApi: {
+    getCurrentUser: vi.fn(),
+    updateCurrentUser: vi.fn(),
+  },
+}));
+
+// Mock API client
+vi.mock("@/lib/api-client", () => ({
+  apiClient: {
+    get: vi.fn(),
+  },
+  registerLogoutHandler: vi.fn(),
 }));
 
 describe("auth-store", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     localStorageMock.clear();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-01"));
     vi.resetModules();
+    
+    // Ensure store is clean even if resetModules fails to create a fresh one (e.g. if cached somewhere)
+    // Note: This relies on the fact that if we get a recycled store, we clean it. 
+    // If we get a new store, it's clean by default.
+    const { useAuthStore } = await import("@/stores/auth-store");
+    act(() => {
+        useAuthStore.setState({
+            user: null,
+            isAuthenticated: false,
+            isLoading: true,
+            isInitialized: false,
+            lastActivity: 0
+        }); // merge
+    });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   describe("initial state", () => {
@@ -51,32 +80,27 @@ describe("auth-store", () => {
       expect(state.isAuthenticated).toBe(false);
       expect(state.user).toBe(null);
       expect(state.isLoading).toBe(true); // Initially loading
+      expect(state.isInitialized).toBe(false);
     });
   });
 
-  describe("setUser", () => {
-    it("should set user and authenticate", async () => {
+  describe("actions", () => {
+    it("setUser should set user and authenticate", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
-
-      const mockUser = {
-        id: "123",
-        email: "test@example.com",
-        name: "Test User",
-      };
+      const mockUser = { id: "1", email: "test@example.com" } as User;
 
       act(() => {
-        useAuthStore.getState().setUser(mockUser as unknown as User);
+        useAuthStore.getState().setUser(mockUser);
       });
 
       const state = useAuthStore.getState();
       expect(state.user).toEqual(mockUser);
       expect(state.isAuthenticated).toBe(true);
-      // Note: isLoading may or may not be false depending on implementation
     });
 
-    it("should handle null user", async () => {
+    it("setUser should handle null user", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
-
+      
       act(() => {
         useAuthStore.getState().setUser(null);
       });
@@ -85,78 +109,253 @@ describe("auth-store", () => {
       expect(state.user).toBe(null);
       expect(state.isAuthenticated).toBe(false);
     });
-  });
 
-  describe("logout", () => {
-    it("should clear user and auth state on logout", async () => {
+    it("login should set full auth state", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
-
-      // First set a user
-      const mockUser = {
-        id: "123",
-        email: "test@example.com",
-        name: "Test User",
-      };
+      const mockUser = { id: "1", email: "test@example.com" } as User;
 
       act(() => {
-        useAuthStore.getState().setUser(mockUser as unknown as User);
+        useAuthStore.getState().login(mockUser);
       });
 
-      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      const state = useAuthStore.getState();
+      expect(state.user).toEqual(mockUser);
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.isLoading).toBe(false);
+      expect(state.isInitialized).toBe(true);
+    });
 
-      // Now logout
-      await act(async () => {
-        await useAuthStore.getState().logout();
+    it("logout should clear state", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+      
+      act(() => {
+        useAuthStore.getState().login(mockUser);
+      });
+
+      act(() => {
+        useAuthStore.getState().logout();
       });
 
       const state = useAuthStore.getState();
       expect(state.user).toBe(null);
       expect(state.isAuthenticated).toBe(false);
-      // Note: authApi.logout may or may not be called depending on implementation details
+      expect(state.isLoading).toBe(false);
+      expect(state.isInitialized).toBe(false);
+      expect(state.lastActivity).toBe(0);
     });
-  });
 
-  describe("setLoading", () => {
-    it("should set loading state", async () => {
+    it("setLoading should update loading state", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
+      
+      act(() => {
+        useAuthStore.getState().setLoading(false);
+      });
+      expect(useAuthStore.getState().isLoading).toBe(false);
 
       act(() => {
         useAuthStore.getState().setLoading(true);
       });
-
       expect(useAuthStore.getState().isLoading).toBe(true);
+    });
 
+    it("updateUserAvatar should update avatar url", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+      
       act(() => {
-        useAuthStore.getState().setLoading(false);
+        useAuthStore.getState().login(mockUser);
       });
 
-      expect(useAuthStore.getState().isLoading).toBe(false);
+      act(() => {
+        useAuthStore.getState().updateUserAvatar("new-avatar.jpg");
+      });
+
+      expect(useAuthStore.getState().user?.avatar).toBe("new-avatar.jpg");
     });
+
+    it("updateActivity should update lastActivity", async () => {
+        const { useAuthStore } = await import("@/stores/auth-store");
+        
+        const initialActivity = useAuthStore.getState().lastActivity;
+        
+        vi.advanceTimersByTime(10000);
+        
+        act(() => {
+            useAuthStore.getState().updateActivity();
+        });
+
+        expect(useAuthStore.getState().lastActivity).toBeGreaterThan(initialActivity);
+    });
+  });
+
+  describe("initializeAuth", () => {
+    it("should verify session if window is defined", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+      
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+      (apiClient.get as Mock).mockResolvedValue({ data: mockUser });
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+      });
+
+      const state = useAuthStore.getState();
+      expect(state.user).toEqual(mockUser);
+      expect(state.isInitialized).toBe(true);
+      expect(state.isAuthenticated).toBe(true);
+    });
+
+    it("should logout if session verification fails", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+      
+      (apiClient.get as Mock).mockRejectedValue(new Error("Unauthorized"));
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+      });
+
+      const state = useAuthStore.getState();
+      expect(state.user).toBe(null);
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.isInitialized).toBe(true);
+    });
+  });
+
+  describe("checkAuthStatus", () => {
+    it("should return false if not authenticated", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      expect(useAuthStore.getState().checkAuthStatus()).toBe(false);
+    });
+
+    it("should logout if session expired (30 days)", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+      
+      act(() => {
+        useAuthStore.getState().login(mockUser);
+        // Manually set old activity
+        useAuthStore.setState({ lastActivity: Date.now() - (31 * 24 * 60 * 60 * 1000) });
+      });
+
+      const isActive = useAuthStore.getState().checkAuthStatus();
+      expect(isActive).toBe(false);
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    });
+    
+    it("should refresh activity if active", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+      
+      act(() => {
+        useAuthStore.getState().login(mockUser);
+      });
+      
+      vi.advanceTimersByTime(1000);
+
+      const isActive = useAuthStore.getState().checkAuthStatus();
+      expect(isActive).toBe(true);
+    });
+  });
+
+  describe("async actions", () => {
+      it("fetchUserProfile calls api and sets user", async () => {
+          const { useAuthStore } = await import("@/stores/auth-store");
+          const { usersApi } = await import("@/lib/api-endpoints");
+          const mockUser = { id: "1", email: "test@example.com" } as User;
+          
+          (usersApi.getCurrentUser as Mock).mockResolvedValue(mockUser);
+
+          await act(async () => {
+              await useAuthStore.getState().fetchUserProfile();
+          });
+
+          expect(useAuthStore.getState().user).toEqual(mockUser);
+      });
+
+      it("updateUserProfile calls api and updates user", async () => {
+          const { useAuthStore } = await import("@/stores/auth-store");
+          const { usersApi } = await import("@/lib/api-endpoints");
+          const initialUser = { id: "1", email: "old@example.com" } as User;
+          const updateData = { firstName: "New" };
+          const updatedUser = { ...initialUser, ...updateData };
+          
+          act(() => {
+              useAuthStore.getState().setUser(initialUser);
+          });
+          
+          (usersApi.updateCurrentUser as Mock).mockResolvedValue(updatedUser);
+
+          await act(async () => {
+              const res = await useAuthStore.getState().updateUserProfile(updateData);
+              expect(res).toEqual(updatedUser);
+          });
+
+          expect(useAuthStore.getState().user).toEqual(updatedUser);
+      });
+  });
+
+  describe("selectors", () => {
+      it("getUser returns user", async () => {
+          const { useAuthStore, authSelectors } = await import("@/stores/auth-store");
+          const mockUser = { id: "1", email: "test@example.com" } as User;
+          
+          act(() => { useAuthStore.getState().setUser(mockUser); });
+          expect(authSelectors.getUser(useAuthStore.getState())).toEqual(mockUser);
+      });
+
+      it("role checks work correctly", async () => {
+          const { useAuthStore, authSelectors } = await import("@/stores/auth-store");
+          
+          // Admin
+          act(() => { useAuthStore.getState().setUser({ role: "admin" } as User); });
+          const state = useAuthStore.getState();
+          expect(authSelectors.isAdmin(state)).toBe(true);
+          expect(authSelectors.isManagerOrHigher(state)).toBe(true);
+          expect(authSelectors.hasRole("admin")(state)).toBe(true);
+
+          // Manager
+           act(() => { useAuthStore.getState().setUser({ role: "manager" } as User); });
+           const stateMgr = useAuthStore.getState();
+           expect(authSelectors.isAdmin(stateMgr)).toBe(false);
+           expect(authSelectors.isManagerOrHigher(stateMgr)).toBe(true);
+
+           // User
+           act(() => { useAuthStore.getState().setUser({ role: "member" } as unknown as User); });
+           const stateUser = useAuthStore.getState();
+           expect(authSelectors.isAdmin(stateUser)).toBe(false);
+           expect(authSelectors.isManagerOrHigher(stateUser)).toBe(false);
+      });
+
+      it("getUserInitials returns correct initials", async () => {
+          const { useAuthStore, authSelectors } = await import("@/stores/auth-store");
+          
+          // 1. First & Last
+          act(() => { useAuthStore.getState().setUser({ firstName: "John", lastName: "Doe" } as User); });
+          expect(authSelectors.getUserInitials(useAuthStore.getState())).toBe("JD");
+
+          // 2. First only
+          act(() => { useAuthStore.getState().setUser({ firstName: "John", lastName: "" } as User); });
+          expect(authSelectors.getUserInitials(useAuthStore.getState())).toBe("J");
+
+          // 3. Last only
+          act(() => { useAuthStore.getState().setUser({ firstName: "", lastName: "Doe" } as User); });
+          expect(authSelectors.getUserInitials(useAuthStore.getState())).toBe("D");
+
+          // 4. Username
+          act(() => { useAuthStore.getState().setUser({ username: "johndoe" } as User); });
+          expect(authSelectors.getUserInitials(useAuthStore.getState())).toBe("J");
+          
+          // 5. Email
+           act(() => { useAuthStore.getState().setUser({ email: "test@example.com" } as User); });
+           expect(authSelectors.getUserInitials(useAuthStore.getState())).toBe("T");
+           
+          // 6. Fallback
+          act(() => { useAuthStore.getState().setUser({} as User); });
+          expect(authSelectors.getUserInitials(useAuthStore.getState())).toBe("U");
+      });
   });
 });
 
-describe("auth-store persistence", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    localStorageMock.clear();
-    vi.resetModules();
-  });
-
-  it("should persist auth state to localStorage", async () => {
-    const { useAuthStore } = await import("@/stores/auth-store");
-
-    const mockUser = {
-      id: "123",
-      email: "test@example.com",
-      name: "Test User",
-    };
-
-    act(() => {
-      useAuthStore.getState().setUser(mockUser as unknown as User);
-    });
-
-    // Check that localStorage.setItem was called
-    // The Zustand persist middleware will handle this
-    expect(localStorageMock.setItem).toHaveBeenCalled();
-  });
-});

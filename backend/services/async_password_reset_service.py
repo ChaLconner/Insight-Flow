@@ -3,8 +3,6 @@ Async Password reset service for handling password reset operations.
 Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
-import os
-
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +33,7 @@ class AsyncPasswordResetService:
         # Invalidate any existing tokens for this email
         await self.db.execute(
             update(PasswordReset)
-            .where(PasswordReset.email == email, PasswordReset.used == False)
+            .where(PasswordReset.email == email, PasswordReset.used.is_(False))
             .values(used=True)
         )
 
@@ -62,7 +60,7 @@ class AsyncPasswordResetService:
 
         result = await self.db.execute(
             select(PasswordReset).filter(
-                PasswordReset.token == hashed_token, PasswordReset.used == False
+                PasswordReset.token == hashed_token, PasswordReset.used.is_(False)
             )
         )
         reset_token = result.scalars().first()
@@ -137,66 +135,14 @@ class AsyncPasswordResetService:
         Called as a background task - errors are logged but not raised.
         """
         try:
-            smtp_host = os.getenv("SMTP_HOST")
-            smtp_port = os.getenv("SMTP_PORT")
-            smtp_user = os.getenv("SMTP_USER")
-            smtp_password = os.getenv("SMTP_PASSWORD")
-            sender_email = os.getenv("SENDER_EMAIL", smtp_user)
+            from services.email_service import EmailService
 
-            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-            reset_link = f"{frontend_url}/auth/reset-password?token={token}"
+            result = await EmailService.send_password_reset_email(email, token)
 
-            if smtp_host and smtp_port and smtp_user and smtp_password:
-                import smtplib
-                from email.mime.multipart import MIMEMultipart
-                from email.mime.text import MIMEText
-
-                if not sender_email:
-                    sender_email = "noreply@example.com"
-
-                msg = MIMEMultipart()
-                msg["From"] = sender_email
-                msg["To"] = email
-                msg["Subject"] = "Insight-Flow Password Reset Request"
-
-                body = f"""
-                <p>Hello,</p>
-                <p>You have requested to reset your password for Insight-Flow.</p>
-                <p>Please click the link below to verify your email and reset your password:</p>
-                <p><a href="{reset_link}">{reset_link}</a></p>
-                <p>If you did not request this, please ignore this email.</p>
-                <p>This link will expire in 30 minutes.</p>
-                <br>
-                <p>Best regards,</p>
-                <p>The Insight-Flow Team</p>
-                """
-
-                msg.attach(MIMEText(body, "html"))
-
-                # Run blocking SMTP in thread
-                import asyncio
-
-                loop = asyncio.get_running_loop()
-
-                def send_email_sync():
-                    server = smtplib.SMTP(smtp_host, int(smtp_port))
-                    server.starttls()
-                    server.login(smtp_user, smtp_password)
-                    text = msg.as_string()
-                    server.sendmail(sender_email, email, text)
-                    server.quit()
-
-                await loop.run_in_executor(None, send_email_sync)
-
+            if result:
                 logger.info(f"Password reset email sent successfully to {mask_email(email)}")
-                return
-
-            # Default/Fallback
-            if os.getenv("ENVIRONMENT", "development") == "development":
-                logger.info(f"MOCK EMAIL: Password reset link generated for {mask_email(email)}")
-                return
-
-            logger.warning(f"Email service not configured for: {mask_email(email)}")
+            else:
+                logger.warning(f"Failed to send password reset email to {mask_email(email)}")
 
         except Exception as e:
             logger.error(f"Error sending reset email to {mask_email(email)}: {e}")

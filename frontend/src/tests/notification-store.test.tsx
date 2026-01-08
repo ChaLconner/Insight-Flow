@@ -480,4 +480,155 @@ describe("NotificationStore", () => {
       expect(result.current.notifications[0].title).toBe("Unread");
     });
   });
+
+  describe("Selectors", () => {
+    it("should select notifications correctly using exported selectors", async () => {
+      const { notificationSelectors } = await import("@/stores/notification-selectors");
+      // Create a mock state
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mockState: any = {
+        notifications: [
+          {
+            id: "1",
+            title: "N1",
+            message: "M1",
+            type: "system",
+            priority: "high",
+            read: false,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: "2",
+            title: "N2",
+            message: "M2",
+            type: "task_assigned",
+            priority: "low",
+            read: true,
+            createdAt: new Date(Date.now() - 100000).toISOString(),
+          },
+        ],
+        unreadCount: 1,
+        isPermissionGranted: true,
+        pushEnabled: true,
+        soundEnabled: true,
+        vibrationEnabled: true,
+        isLoading: false,
+        isConnected: true,
+        filters: {
+          type: "all",
+          priority: "all",
+          readStatus: "all",
+          search: "",
+        },
+      };
+
+      // Test core selectors
+      expect(notificationSelectors.getNotifications(mockState)).toHaveLength(2);
+      expect(notificationSelectors.getUnreadCount(mockState)).toBe(1);
+      expect(notificationSelectors.isLoading(mockState)).toBe(false);
+      expect(notificationSelectors.isConnected(mockState)).toBe(true);
+      expect(notificationSelectors.getFilters(mockState)).toEqual(mockState.filters);
+
+      // Test filtered views
+      expect(notificationSelectors.getUnreadNotifications(mockState)).toHaveLength(1);
+      expect(notificationSelectors.getUnreadNotifications(mockState)[0].id).toBe("1");
+      
+      expect(notificationSelectors.getReadNotifications(mockState)).toHaveLength(1);
+      expect(notificationSelectors.getReadNotifications(mockState)[0].id).toBe("2");
+
+      // Test grouped views
+      const byPriority = notificationSelectors.getNotificationsByPriority(mockState);
+      expect(byPriority["high"]).toHaveLength(1);
+      expect(byPriority["low"]).toHaveLength(1);
+
+      const byType = notificationSelectors.getNotificationsByType(mockState);
+      expect(byType["system"]).toHaveLength(1);
+      expect(byType["task_assigned"]).toHaveLength(1);
+
+      // Test latest
+      expect(notificationSelectors.getLatestNotifications(mockState)(1)).toHaveLength(1);
+
+      // Test settings
+      const settings = notificationSelectors.getSettings(mockState);
+      expect(settings.pushEnabled).toBe(true);
+
+      // Test utilities
+      expect(notificationSelectors.hasUnread(mockState)).toBe(true);
+      expect(notificationSelectors.getUnread(mockState)).toHaveLength(1);
+      
+      // Test getRecent (assuming both are recent enough)
+      expect(notificationSelectors.getRecent(mockState)).toHaveLength(2);
+
+      // Test getByType curry
+      expect(notificationSelectors.getByType(mockState)("system")).toHaveLength(1);
+
+      // Test getHighPriority
+      expect(notificationSelectors.getHighPriority(mockState)).toHaveLength(1);
+    });
+
+    it("should filter notifications based on search and other filters", async () => {
+        const { notificationSelectors } = await import("@/stores/notification-selectors");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mockState: any = {
+          notifications: [
+            {
+                id: "1",
+                title: "Alert",
+                message: "System Alert occurred",
+                type: "system",
+                priority: "high",
+                read: false,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                id: "2",
+                title: "Info",
+                message: "Just some info",
+                type: "info",
+                priority: "low",
+                read: true,
+                createdAt: new Date().toISOString(),
+            }
+          ],
+          filters: {
+              type: "all",
+              priority: "all",
+              readStatus: "all",
+              search: "Alert", // Should match first one
+          }
+        };
+
+        const filtered = notificationSelectors.getFilteredNotifications(mockState);
+        expect(filtered).toHaveLength(1);
+        expect(filtered[0].id).toBe("1");
+
+        // Test Type Filter
+        mockState.filters.search = "";
+        mockState.filters.type = "info";
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(1);
+        expect(notificationSelectors.getFilteredNotifications(mockState)[0].id).toBe("2");
+
+        // Test Priority Filter
+        mockState.filters.type = "all";
+        mockState.filters.priority = "high";
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(1);
+        expect(notificationSelectors.getFilteredNotifications(mockState)[0].id).toBe("1");
+
+        // Test Read Status Filter
+        mockState.filters.priority = "all";
+        mockState.filters.readStatus = "read";
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(1);
+        expect(notificationSelectors.getFilteredNotifications(mockState)[0].id).toBe("2");
+
+        // Test Date Range
+        mockState.filters.readStatus = "all";
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        mockState.filters.dateRange = { start: yesterday, end: tomorrow };
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(2);
+        
+        mockState.filters.dateRange = { start: tomorrow };
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(0);
+    });
+  });
 });

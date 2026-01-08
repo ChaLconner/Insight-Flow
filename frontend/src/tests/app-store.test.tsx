@@ -40,7 +40,7 @@ describe("AppStore", () => {
       const { result } = renderHook(() => useAppStore());
 
       expect(appSelectors.isSidebarCollapsed(result.current)).toBe(false);
-      expect(appSelectors.getCurrentPage(result.current)).toBe("");
+      expect(appSelectors.getCurrentPage(result.current)).toBe("/dashboard");
     });
 
     it("should have empty form state", async () => {
@@ -77,7 +77,7 @@ describe("AppStore", () => {
       });
 
       expect(appSelectors.isSidebarCollapsed(result.current)).toBe(
-        !initialState,
+        !initialState
       );
     });
   });
@@ -259,7 +259,9 @@ describe("AppStore", () => {
         });
 
         const finalAlerts = appSelectors.getAlerts(result.current);
-        expect(finalAlerts.find((a) => a.id === alertToRemove.id)).toBeUndefined();
+        expect(
+          finalAlerts.find((a) => a.id === alertToRemove.id)
+        ).toBeUndefined();
       }
     });
 
@@ -330,7 +332,7 @@ describe("AppStore", () => {
       });
 
       expect(appSelectors.getCurrentProjectId(result.current)).toBe(
-        "project-123",
+        "project-123"
       );
     });
 

@@ -11,7 +11,9 @@ class SecurityLog(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_type = Column(String(50), nullable=False, index=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    timestamp = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
     severity = Column(String(20), nullable=False, default="info")
 
     # Context
@@ -26,4 +28,3 @@ class SecurityLog(Base):
 
     def __repr__(self):
         return f"<SecurityLog {self.event_type} at {self.timestamp}>"
-

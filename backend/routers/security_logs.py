@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
@@ -17,7 +17,7 @@ class CSPReport(BaseModel):
     but exact fields can vary slightly by browser version.
     We accept generic dict to be safe and store it."""
 
-    csp_report: Dict[str, Any]
+    csp_report: dict[str, Any]
 
 
 @router.post("/csp-report", status_code=204)
@@ -46,4 +46,3 @@ async def report_csp_violation(
         logger.error(f"Error processing CSP report: {e}")
         # Return 204 anyway to not upset the browser
         return None
-

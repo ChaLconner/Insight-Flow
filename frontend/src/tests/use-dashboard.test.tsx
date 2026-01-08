@@ -125,6 +125,36 @@ describe("useDashboard Hook", () => {
     // Data should be defined after loading
     expect(result.current.data).toBeDefined();
   });
+
+  it("should handle missing stats with default values", async () => {
+      const { dashboardApi } = await import("@/lib/api-endpoints");
+      // Mock with minimal/empty stats to trigger null coalescing
+      vi.mocked(dashboardApi.getOverview).mockResolvedValue({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          stats: {} as any, 
+          recentProjects: [],
+          recentActivities: [],
+          upcomingDeadlines: [],
+          charts: [],
+      });
+
+      const { useDashboard } = await import("@/hooks/use-dashboard");
+      const { result } = renderHook(() => useDashboard(), {
+          wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+          expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.data?.stats.totalProjects).toBe(0);
+      expect(result.current.data?.stats.totalTasks).toBe(0);
+      expect(result.current.data?.stats.completedTasks).toBe(0);
+      expect(result.current.data?.stats.pendingReviewTasks).toBe(0);
+      expect(result.current.data?.stats.teamVelocity).toBe(0);
+      // Ensure it doesn't crash
+      expect(result.current.data?.recentProjects).toEqual([]);
+  });
 });
 
 describe("useDashboard - Data Structure", () => {

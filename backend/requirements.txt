@@ -36,6 +36,7 @@ google-auth-httplib2==0.2.0
 # External Services
 cloudinary==1.41.0
 stripe==11.4.1
+resend==2.6.0
 
 # Scheduling & Monitoring
 apscheduler==3.11.0

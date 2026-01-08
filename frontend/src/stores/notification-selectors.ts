@@ -52,10 +52,10 @@ export const notificationSelectors = {
       if (filters.priority !== "all" && notification.priority !== filters.priority) {
         return false;
       }
-      if (filters.readStatus === "read" && notification.read) {
+      if (filters.readStatus === "read" && !notification.read) {
         return false;
       }
-      if (filters.readStatus === "unread" && !notification.read) {
+      if (filters.readStatus === "unread" && notification.read) {
         return false;
       }
       if (

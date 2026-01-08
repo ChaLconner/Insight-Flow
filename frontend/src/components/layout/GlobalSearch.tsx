@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useId } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Folder, CheckSquare, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,6 @@ interface SearchResults {
 export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
-  const searchId = useId();
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -159,7 +158,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}
-        name={`global-search-${searchId}`}
+        name="global-search"
         id="global-search-input"
         aria-autocomplete="none"
         data-1p-ignore="true"

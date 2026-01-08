@@ -22,7 +22,7 @@ test.describe('Dashboard Page', () => {
     await page.goto('/dashboard');
     
     // Wait for either dashboard content or login redirect
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     const currentUrl = page.url();
     
@@ -41,23 +41,24 @@ test.describe('Projects Page', () => {
   test('should display projects page or redirect to login', async ({ page }) => {
     await page.goto('/projects');
     
-    await page.waitForTimeout(1000);
-    
-    const currentUrl = page.url();
+    await page.waitForLoadState('networkidle');
     
     // Either shows projects or redirects to login
-    expect(currentUrl).toMatch(/projects|login/);
+    await expect(page).toHaveURL(/projects|login/);
   });
 
   test('should have create project button when authenticated', async ({ page }) => {
     await page.goto('/projects');
     
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     if (page.url().includes('projects')) {
-      // Look for create button
+      // Look for create button - it may or may not be visible depending on auth
       const createButton = page.getByRole('button', { name: /create|new|add/i });
-      // Button may or may not be visible depending on auth
+      // Only assert if visible
+      if (await createButton.isVisible()) {
+        await expect(createButton).toBeEnabled();
+      }
     }
   });
 });
@@ -66,10 +67,9 @@ test.describe('Tasks Page', () => {
   test('should display tasks page or redirect to login', async ({ page }) => {
     await page.goto('/tasks');
     
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
-    const currentUrl = page.url();
-    expect(currentUrl).toMatch(/tasks|login/);
+    await expect(page).toHaveURL(/tasks|login/);
   });
 });
 
@@ -77,16 +77,15 @@ test.describe('Settings Page', () => {
   test('should display settings page or redirect to login', async ({ page }) => {
     await page.goto('/settings');
     
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
-    const currentUrl = page.url();
-    expect(currentUrl).toMatch(/settings|login/);
+    await expect(page).toHaveURL(/settings|login/);
   });
 
   test('should have profile section when authenticated', async ({ page }) => {
     await page.goto('/settings');
     
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     if (page.url().includes('settings')) {
       // Look for profile-related content
@@ -210,11 +209,11 @@ test.describe('Error Handling', () => {
     await page.goto('/nonexistent-page-12345');
     
     // Should show 404 page or redirect
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     // Page should not crash
     const body = page.locator('body');
-    expect(await body.count()).toBe(1);
+    await expect(body).toBeVisible();
   });
 
   test('should handle network errors gracefully', async ({ page }) => {
@@ -254,7 +253,7 @@ test.describe('Performance', () => {
     });
     
     await page.goto('/auth/login');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
     
     // Filter out expected errors (like network errors in CI)
     const criticalErrors = consoleErrors.filter(

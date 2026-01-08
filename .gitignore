@@ -248,7 +248,7 @@ check_sync.py
 fix_missing_dates.py
 list_subs.py
 test_db_write.py
-verify_limits.py
+
 
 # Test results and reports
 e2e-results/
@@ -257,8 +257,9 @@ test-results/
 playwright-report/
 lighthouse-report.html
 *.lcov
-# Visual regression test snapshots (generated)
-*-snapshots/
+# Visual regression test snapshots
+# Allow baseline snapshots (needed for CI visual regression tests)
+!frontend/e2e/**/*-snapshots/
 
 # AI Instructions and assistant files
 AI_INSTRUCTION.md
@@ -287,3 +288,11 @@ site/
 # Local development
 *.local
 .env*.local
+
+# Coverage reports
+*_coverage_report.txt
+*_coverage_summary.txt
+
+# Debug/verification scripts
+verify_*.py
+coverage_report.txt

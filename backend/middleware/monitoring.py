@@ -113,12 +113,12 @@ class RequestMetrics:
                 for bucket in self.BUCKETS:
                     cumulative += buckets.get(bucket, 0)
                     metrics.append(
-                        f'http_request_duration_seconds_bucket'
+                        f"http_request_duration_seconds_bucket"
                         f'{{method="{method}",path="{path}",le="{bucket}"}} {cumulative}'
                     )
                 cumulative += buckets.get(float("inf"), 0) - cumulative
                 metrics.append(
-                    f'http_request_duration_seconds_bucket'
+                    f"http_request_duration_seconds_bucket"
                     f'{{method="{method}",path="{path}",le="+Inf"}} {self.request_count[key]}'
                 )
 

@@ -11,6 +11,7 @@ from collections import defaultdict, deque
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+
 from database import AsyncSessionLocal
 from services.security_log_service import SecurityLogService
 
@@ -34,9 +35,7 @@ RATE_LIMIT_CONFIG = {
 }
 
 
-def get_rate_limit_for_path(
-    path: str, default_calls: int, default_period: int
-) -> tuple[int, int]:
+def get_rate_limit_for_path(path: str, default_calls: int, default_period: int) -> tuple[int, int]:
     """
     Get rate limit configuration for a given path.
 
@@ -107,9 +106,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 remaining = 0
                 if blocked_until:
                     # Calculate remaining time securely
-                    now = __import__('datetime').datetime.now(
-                        __import__('datetime').UTC
-                    )
+                    now = __import__("datetime").datetime.now(__import__("datetime").UTC)
                     remaining = int((blocked_until - now).total_seconds())
 
                 logger.warning(f"Blocked IP {client_ip} attempted access")
@@ -121,12 +118,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                             db=db,
                             event_type="ip_bound_blocked_access",
                             severity="warning",
-                            details={
-                                "retry_after": remaining,
-                                "reason": "IP Blocked"
-                            },
+                            details={"retry_after": remaining, "reason": "IP Blocked"},
                             request=request,
-                            ip_address=client_ip
+                            ip_address=client_ip,
                         )
                 except Exception as e:
                     logger.error(f"Failed to log blocked access: {e}")
@@ -135,10 +129,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     status_code=403,
                     content={
                         "success": False,
-                        "message": (
-                            "Access temporarily blocked due to "
-                            "suspicious activity."
-                        ),
+                        "message": ("Access temporarily blocked due to suspicious activity."),
                         "code": "IP_BLOCKED",
                         "retry_after": remaining,
                     },
@@ -181,11 +172,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     blocker = get_ip_blocker()
                     # Use fire_and_forget to not block the response
                     import asyncio
-                    asyncio.create_task(
-                        blocker.record_violation(
-                            client_ip, f"rate_limit:{path}"
-                        )
-                    )
+
+                    asyncio.create_task(blocker.record_violation(client_ip, f"rate_limit:{path}"))
                 except Exception:
                     pass
 
@@ -196,13 +184,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                             db=db,
                             event_type="rate_limit_exceeded",
                             severity="warning",
-                            details={
-                                "limit": calls,
-                                "period": period,
-                                "path": path
-                            },
+                            details={"limit": calls, "period": period, "path": path},
                             request=request,
-                            ip_address=client_ip
+                            ip_address=client_ip,
                         )
                 except Exception as e:
                     logger.error(f"Failed to log rate limit: {e}")
@@ -211,9 +195,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     status_code=429,
                     content={
                         "success": False,
-                        "message": (
-                            "Too many requests. Please try again later."
-                        ),
+                        "message": ("Too many requests. Please try again later."),
                         "code": "RATE_LIMIT_EXCEEDED",
                     },
                     headers={"Retry-After": str(period)},
@@ -263,8 +245,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if len(self.request_history) > self.MAX_TRACKED_IPS:
                 # Sort by last activity and remove oldest half
                 sorted_ips = sorted(
-                    self.request_history.items(),
-                    key=lambda x: x[1][-1] if x[1] else 0
+                    self.request_history.items(), key=lambda x: x[1][-1] if x[1] else 0
                 )
                 for ip, _ in sorted_ips[: len(sorted_ips) // 2]:
                     del self.request_history[ip]
@@ -274,8 +255,5 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 )
 
             if ips_to_remove:
-                msg = (
-                    f"Rate limiter cleanup: removed "
-                    f"{len(ips_to_remove)} inactive IPs"
-                )
+                msg = f"Rate limiter cleanup: removed {len(ips_to_remove)} inactive IPs"
                 logger.debug(msg)

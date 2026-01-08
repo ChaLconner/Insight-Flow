@@ -96,7 +96,7 @@ class SoftDeleteMixin:
         """Check if the record is soft-deleted."""
         return self.deleted_at is not None
 
-    @is_deleted.expression
+    @is_deleted.expression  # type: ignore[no-redef]
     def is_deleted(cls):
         """SQL expression for is_deleted."""
         return cls.deleted_at.isnot(None)
@@ -152,7 +152,7 @@ class AuditMixin:
         """Relationship to user who created the record."""
         return relationship(
             "User",
-            foreign_keys=[cls.created_by_id],
+            foreign_keys=[cls.created_by_id],  # type: ignore
             lazy="select",
         )
 
@@ -161,7 +161,7 @@ class AuditMixin:
         """Relationship to user who last updated the record."""
         return relationship(
             "User",
-            foreign_keys=[cls.updated_by_id],
+            foreign_keys=[cls.updated_by_id],  # type: ignore
             lazy="select",
         )
 
@@ -349,6 +349,10 @@ class ChangeHistory:
     # Additional metadata
     request_id: Mapped[str | None]  # For correlation
     ip_address: Mapped[str | None]
+
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 # =============================================================================

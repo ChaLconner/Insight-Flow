@@ -191,6 +191,26 @@ describe("useTasks hook", () => {
       expect(tasksApi.getMyTasks).not.toHaveBeenCalled();
       expect(tasksApi.getProjectTasks).not.toHaveBeenCalled();
     });
+    it("should not fetch when not authenticated", async () => {
+       const { useAuthStore } = await import("@/stores/auth-store");
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: false } as any);
+
+       const { result } = renderHook(() => useTasks(), {
+         wrapper: createWrapper(),
+       });
+
+       await waitFor(() => {
+         expect(result.current.isLoading).toBe(false);
+       });
+
+       expect(tasksApi.getMyTasks).not.toHaveBeenCalled();
+       expect(result.current.tasks).toEqual([]);
+       
+       // Reset mock
+       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: true } as any);
+    });
   });
 
   describe("initial state", () => {
@@ -287,7 +307,8 @@ describe("useTasks mutations", () => {
     });
   });
 
-  it("should provide updateTask mutation", async () => {
+  it("should update task and invalidate queries", async () => {
+    const { toast } = await import("sonner");
     const { result } = renderHook(() => useTasks(), {
       wrapper: createWrapper(),
     });
@@ -296,10 +317,41 @@ describe("useTasks mutations", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(typeof result.current.updateTask).toBe("function");
+    const updateData = { id: "1", title: "Updated Task" };
+    (tasksApi.updateTask as ReturnType<typeof vi.fn>).mockResolvedValue(updateData);
+
+    await result.current.updateTask(updateData);
+
+    await waitFor(() => {
+        expect(tasksApi.updateTask).toHaveBeenCalledWith("1", { title: "Updated Task" });
+    });
+    // Invalidate queries is called
+    // We can't easily check cache invalidation without peeking into queryClient, 
+    // but we can check if toast error was NOT called (success is silent in code? No, code doesn't toast success)
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("should provide deleteTask mutation", async () => {
+  it("should update project task when projectId is present", async () => {
+      const { result } = renderHook(() => useTasks(), {
+          wrapper: createWrapper(),
+      });
+  
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+  
+      const updateData = { id: "1", title: "Updated Project Task", projectId: "p1" };
+      (tasksApi.updateProjectTask as ReturnType<typeof vi.fn>).mockResolvedValue(updateData);
+  
+      await result.current.updateTask(updateData);
+  
+      await waitFor(() => {
+          expect(tasksApi.updateProjectTask).toHaveBeenCalledWith("p1", "1", expect.objectContaining({ title: "Updated Project Task" }));
+      });
+  });
+
+  it("should delete task and show success toast", async () => {
+    const { toast } = await import("sonner");
     const { result } = renderHook(() => useTasks(), {
       wrapper: createWrapper(),
     });
@@ -308,6 +360,37 @@ describe("useTasks mutations", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(typeof result.current.deleteTask).toBe("function");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const taskToDelete = { id: "1", title: "To Delete", projectId: null } as any;
+    (tasksApi.deleteTask as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+    await result.current.deleteTask(taskToDelete);
+
+    await waitFor(() => {
+        expect(tasksApi.deleteTask).toHaveBeenCalledWith("1");
+        expect(toast.success).toHaveBeenCalled();
+    });
+  });
+
+  it("should delete project task when projectId is present", async () => {
+      const { toast } = await import("sonner");
+      const { result } = renderHook(() => useTasks(), {
+        wrapper: createWrapper(),
+      });
+  
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+  
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const taskToDelete = { id: "2", title: "To Delete", projectId: "p1" } as any;
+      (tasksApi.deleteProjectTask as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+  
+      await result.current.deleteTask(taskToDelete);
+  
+      await waitFor(() => {
+          expect(tasksApi.deleteProjectTask).toHaveBeenCalledWith("p1", "2");
+          expect(toast.success).toHaveBeenCalled();
+      });
   });
 });

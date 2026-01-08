@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,10 +15,10 @@ class SecurityLogService:
         db: AsyncSession,
         event_type: str,
         severity: str = "info",
-        details: Optional[Dict[str, Any]] = None,
-        user_id: Optional[str] = None,
-        request: Optional[Request] = None,
-        ip_address: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        user_id: str | None = None,
+        request: Request | None = None,
+        ip_address: str | None = None,
     ):
         """
         Log a security event to the database.

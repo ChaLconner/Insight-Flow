@@ -134,10 +134,33 @@ describe("useCreateProject Hook", () => {
       wrapper: createWrapper(),
     });
 
-    // useMutation returns mutate, mutateAsync, etc
     expect(result.current).toHaveProperty("mutate");
     expect(result.current).toHaveProperty("mutateAsync");
     expect(typeof result.current.mutate).toBe("function");
+  });
+
+  it("should call createProject API and invalidate queries on success", async () => {
+      const { useCreateProject } = await import("@/hooks/use-projects");
+      const { projectsApi } = await import("@/lib/api-endpoints");
+      const { toast } = await import("sonner");
+
+      const newProjectData = { name: "New Project", description: "Desc", memberIds: ["u1"], color: "#000000" };
+      const createdProject = { id: "p1", ...newProjectData, members: [{ userId: "u1", role: "member" }] };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(projectsApi.createProject).mockResolvedValue(createdProject as any);
+
+      const { result } = renderHook(() => useCreateProject(), {
+          wrapper: createWrapper(),
+      });
+
+      await result.current.mutateAsync(newProjectData);
+
+      expect(projectsApi.createProject).toHaveBeenCalledWith(expect.objectContaining({
+          name: "New Project",
+          members: [{ userId: "u1", role: "member" }]
+      }));
+      expect(toast.success).toHaveBeenCalled();
   });
 });
 
@@ -156,6 +179,51 @@ describe("useUpdateProject Hook", () => {
     expect(result.current).toHaveProperty("mutate");
     expect(typeof result.current.mutate).toBe("function");
   });
+
+  it("should call updateProject API and show success toast", async () => {
+      const { useUpdateProject } = await import("@/hooks/use-projects");
+      const { projectsApi } = await import("@/lib/api-endpoints");
+      const { toast } = await import("sonner");
+
+      const updateData = { id: "p1", data: { name: "Updated Name", status: ProjectStatus.ACTIVE } };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(projectsApi.updateProject).mockResolvedValue({ id: "p1", name: "Updated Name" } as any);
+
+      const { result } = renderHook(() => useUpdateProject(), {
+          wrapper: createWrapper(),
+      });
+
+      await result.current.mutateAsync(updateData);
+
+      expect(projectsApi.updateProject).toHaveBeenCalledWith("p1", expect.objectContaining({
+          name: "Updated Name",
+          is_active: true
+      }));
+      expect(toast.success).toHaveBeenCalled();
+  });
+});
+
+describe("useArchiveProject Hook", () => {
+    it("should call updateProject API with is_active: false", async () => {
+        const { useArchiveProject } = await import("@/hooks/use-projects");
+        const { projectsApi } = await import("@/lib/api-endpoints");
+        const { toast } = await import("sonner");
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const projectToArchive = { id: "p1", name: "To Archive" } as any;
+        vi.mocked(projectsApi.updateProject).mockResolvedValue({ ...projectToArchive, is_active: false });
+
+        const { result } = renderHook(() => useArchiveProject(), {
+            wrapper: createWrapper(),
+        });
+
+        await result.current.mutateAsync(projectToArchive);
+
+        expect(projectsApi.updateProject).toHaveBeenCalledWith("p1", expect.objectContaining({
+            is_active: false
+        }));
+        expect(toast.success).toHaveBeenCalled();
+    });
 });
 
 describe("useProjects - Error Handling", () => {
