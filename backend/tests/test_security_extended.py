@@ -5,9 +5,11 @@ Tests for OWASP Top 10 vulnerabilities and security best practices
 These tests use the TestClient from conftest.py which properly handles
 database mocking and async lifecycle.
 """
-import pytest
-import time
+
 import re
+import time
+
+import pytest
 
 
 class TestAuthenticationSecurity:
@@ -26,11 +28,7 @@ class TestAuthenticationSecurity:
 
         for payload in payloads:
             response = unauthenticated_client.post(
-                "/api/v1/auth/login",
-                json={
-                    "email": payload,
-                    "password": "password123"
-                }
+                "/api/v1/auth/login", json={"email": payload, "password": "password123"}
             )
             # Should return validation error, not server error
             assert response.status_code in [400, 401, 422, 500]
@@ -46,8 +44,8 @@ class TestAuthenticationSecurity:
             json={
                 "email": f"security_test_{int(time.time())}@example.com",
                 "password": "SecurePass123!",
-                "full_name": "Security Test"
-            }
+                "full_name": "Security Test",
+            },
         )
 
         if response.status_code in [200, 201]:
@@ -65,10 +63,7 @@ class TestAuthenticationSecurity:
             start = time.time()
             unauthenticated_client.post(
                 "/api/v1/auth/login",
-                json={
-                    "email": "nonexistent@example.com",
-                    "password": "password123"
-                }
+                json={"email": "nonexistent@example.com", "password": "password123"},
             )
             times.append(time.time() - start)
 
@@ -99,8 +94,8 @@ class TestXSSPrevention:
                 json={
                     "email": "xss_test@example.com",
                     "password": "Password123!",
-                    "full_name": payload
-                }
+                    "full_name": payload,
+                },
             )
 
             # If response is successful, check output is sanitized
@@ -117,20 +112,15 @@ class TestRateLimiting:
 
     def test_login_rate_limiting(self, unauthenticated_client):
         """Test that excessive login attempts are rate limited."""
-        rate_limited = False
 
         # Make many rapid requests
         for i in range(20):
             response = unauthenticated_client.post(
                 "/api/v1/auth/login",
-                json={
-                    "email": "ratelimit@example.com",
-                    "password": f"wrong_password_{i}"
-                }
+                json={"email": "ratelimit@example.com", "password": f"wrong_password_{i}"},
             )
 
             if response.status_code == 429:
-                rate_limited = True
                 break
 
         # Note: Rate limiting may not be enabled in test environment
@@ -163,11 +153,7 @@ class TestSecurityHeaders:
     def test_cors_configuration(self, unauthenticated_client):
         """Test that CORS is properly configured."""
         response = unauthenticated_client.options(
-            "/health",
-            headers={
-                "Origin": "http://evil.com",
-                "Access-Control-Request-Method": "GET"
-            }
+            "/health", headers={"Origin": "http://evil.com", "Access-Control-Request-Method": "GET"}
         )
 
         # Should not allow arbitrary origins
@@ -191,11 +177,7 @@ class TestInputValidation:
         for email in invalid_emails:
             response = unauthenticated_client.post(
                 "/api/v1/auth/register",
-                json={
-                    "email": email,
-                    "password": "Password123!",
-                    "full_name": "Test User"
-                }
+                json={"email": email, "password": "Password123!", "full_name": "Test User"},
             )
             # Should reject invalid emails
             assert response.status_code in [400, 422]
@@ -203,20 +185,20 @@ class TestInputValidation:
     def test_password_strength_validation(self, unauthenticated_client):
         """Test that weak passwords are rejected."""
         weak_passwords = [
-            "123",           # Too short
-            "password",      # Common password
-            "12345678",      # Only numbers
-            "abcdefgh",      # Only lowercase
+            "123",  # Too short
+            "password",  # Common password
+            "12345678",  # Only numbers
+            "abcdefgh",  # Only lowercase
         ]
 
         for password in weak_passwords:
-            response = unauthenticated_client.post(
+            unauthenticated_client.post(
                 "/api/v1/auth/register",
                 json={
                     "email": f"weak_pass_{int(time.time())}@example.com",
                     "password": password,
-                    "full_name": "Test User"
-                }
+                    "full_name": "Test User",
+                },
             )
             # Should reject weak passwords (if validation is enabled)
             # Note: Implementation may vary
@@ -237,8 +219,7 @@ class TestJWTSecurity:
 
         for token in invalid_tokens:
             response = unauthenticated_client.get(
-                "/api/v1/projects",
-                headers={"Authorization": f"Bearer {token}"}
+                "/api/v1/projects", headers={"Authorization": f"Bearer {token}"}
             )
             # Should reject invalid tokens
             assert response.status_code in [400, 401, 403]
@@ -247,11 +228,12 @@ class TestJWTSecurity:
         """Test that expired JWTs are rejected."""
         # This is a pre-generated expired token (for testing purposes)
         # In production, generate a real expired token
-        expired_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZXhwIjoxfQ.abc"
+        expired_token = (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwiZXhwIjoxfQ.abc"
+        )
 
         response = unauthenticated_client.get(
-            "/api/v1/projects",
-            headers={"Authorization": f"Bearer {expired_token}"}
+            "/api/v1/projects", headers={"Authorization": f"Bearer {expired_token}"}
         )
         # Should reject expired tokens
         assert response.status_code in [400, 401, 403]
@@ -298,7 +280,7 @@ class TestSensitiveDataExposure:
 
         response_text = response.text.lower()
         for pattern in sensitive_patterns:
-            matches = re.findall(pattern, response_text, re.IGNORECASE)
+            re.findall(pattern, response_text, re.IGNORECASE)
             # Should not expose sensitive information in errors
             # Note: Some may be acceptable in development mode
 
@@ -309,9 +291,7 @@ class TestIDORPrevention:
     def test_cannot_access_other_users_data(self, unauthenticated_client):
         """Test that users cannot access other users' data."""
         # Try to access another user's data with invalid/missing auth
-        response = unauthenticated_client.get(
-            "/users/other-user-id/projects"
-        )
+        response = unauthenticated_client.get("/users/other-user-id/projects")
         # Should be rejected
         assert response.status_code in [400, 401, 403, 404]
 

@@ -64,7 +64,7 @@ def run_in_background[T](func: Callable[..., T], *args: Any, **kwargs: Any) -> N
     """
     Run a blocking function in a background thread without waiting for result.
 
-    Use this for blocking I/O operations like SMTP email sending.
+    Use this for blocking I/O operations like file processing.
 
     Args:
         func: The blocking function to run
@@ -72,7 +72,7 @@ def run_in_background[T](func: Callable[..., T], *args: Any, **kwargs: Any) -> N
         **kwargs: Keyword arguments to pass to the function
 
     Example:
-        run_in_background(send_smtp_email, to, subject, body)
+        run_in_background(process_file, path, options)
     """
 
     async def wrapper():

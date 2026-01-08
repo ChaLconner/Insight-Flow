@@ -2,23 +2,25 @@
 Performance and Load Testing Configuration
 Advanced performance benchmarks for Insight-Flow
 """
-import pytest
-from httpx import AsyncClient, ASGITransport
-import asyncio
-import time
-import statistics
-from typing import List, Dict, Any
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
 
-import sys
+import asyncio
 import os
+import statistics
+import sys
+import time
+from dataclasses import dataclass
+from typing import Any
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @dataclass
 class PerformanceResult:
     """Result of a performance test."""
+
     endpoint: str
     method: str
     requests_count: int
@@ -38,8 +40,8 @@ class PerformanceTester:
 
     def __init__(self, base_url: str = "http://localhost"):
         self.base_url = base_url
-        self.results: List[float] = []
-        self.errors: List[str] = []
+        self.results: list[float] = []
+        self.errors: list[str] = []
 
     async def benchmark_endpoint(
         self,
@@ -48,10 +50,10 @@ class PerformanceTester:
         method: str = "GET",
         num_requests: int = 100,
         concurrent: int = 10,
-        payload: Dict[str, Any] = None
+        payload: dict[str, Any] | None = None,
     ) -> PerformanceResult:
         """Benchmark an endpoint with multiple requests."""
-        response_times: List[float] = []
+        response_times: list[float] = []
         success_count = 0
         error_count = 0
 
@@ -76,16 +78,13 @@ class PerformanceTester:
                 else:
                     error_count += 1
                 return elapsed
-            except Exception as e:
+            except Exception:
                 error_count += 1
                 return time.time() - start
 
         start_time = time.time()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url=self.base_url
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=self.base_url) as client:
             # Run requests in batches
             for batch_start in range(0, num_requests, concurrent):
                 batch_size = min(concurrent, num_requests - batch_start)
@@ -109,7 +108,7 @@ class PerformanceTester:
             p95_response_time=sorted_times[int(len(sorted_times) * 0.95)],
             p99_response_time=sorted_times[int(len(sorted_times) * 0.99)],
             success_rate=(success_count / num_requests) * 100,
-            requests_per_second=num_requests / total_time
+            requests_per_second=num_requests / total_time,
         )
 
 
@@ -122,12 +121,7 @@ class TestEndpointPerformance:
         from main import app
 
         tester = PerformanceTester()
-        result = await tester.benchmark_endpoint(
-            app,
-            "/health",
-            num_requests=100,
-            concurrent=10
-        )
+        result = await tester.benchmark_endpoint(app, "/health", num_requests=100, concurrent=10)
 
         # Health endpoint should be fast
         assert result.avg_response_time < 0.2  # <200ms average
@@ -141,12 +135,7 @@ class TestEndpointPerformance:
         from main import app
 
         tester = PerformanceTester()
-        result = await tester.benchmark_endpoint(
-            app,
-            "/health/full",
-            num_requests=50,
-            concurrent=5
-        )
+        result = await tester.benchmark_endpoint(app, "/health/full", num_requests=50, concurrent=5)
 
         # Full health check can be slower (includes DB check)
         assert result.avg_response_time < 1.0  # <1s average
@@ -159,12 +148,7 @@ class TestEndpointPerformance:
         from main import app
 
         tester = PerformanceTester()
-        result = await tester.benchmark_endpoint(
-            app,
-            "/metrics",
-            num_requests=50,
-            concurrent=5
-        )
+        result = await tester.benchmark_endpoint(app, "/metrics", num_requests=50, concurrent=5)
 
         # Metrics should be relatively fast
         assert result.avg_response_time < 0.2  # <200ms average
@@ -182,12 +166,7 @@ class TestConcurrencyHandling:
         tester = PerformanceTester()
 
         # High concurrency test
-        result = await tester.benchmark_endpoint(
-            app,
-            "/health",
-            num_requests=200,
-            concurrent=50
-        )
+        result = await tester.benchmark_endpoint(app, "/health", num_requests=200, concurrent=50)
 
         # Should handle high concurrency
         assert result.success_rate > 90
@@ -198,11 +177,8 @@ class TestConcurrencyHandling:
         """Test handling of burst traffic."""
         from main import app
 
-        results = []
-
         async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
+            transport=ASGITransport(app=app), base_url="http://localhost"
         ) as client:
             # Simulate burst: many requests at once
             start = time.time()
@@ -211,8 +187,7 @@ class TestConcurrencyHandling:
             elapsed = time.time() - start
 
             success_count = sum(
-                1 for r in responses
-                if hasattr(r, 'status_code') and r.status_code == 200
+                1 for r in responses if hasattr(r, "status_code") and r.status_code == 200
             )
 
         # Should handle burst traffic
@@ -231,12 +206,7 @@ class TestDatabasePerformance:
         tester = PerformanceTester()
 
         # Test endpoint that queries database
-        result = await tester.benchmark_endpoint(
-            app,
-            "/health/db",
-            num_requests=50,
-            concurrent=10
-        )
+        result = await tester.benchmark_endpoint(app, "/health/db", num_requests=50, concurrent=10)
 
         # Database health check
         assert result.avg_response_time < 0.5  # <500ms average
@@ -260,17 +230,14 @@ class TestResponseTimes:
         tester = PerformanceTester()
 
         for endpoint, sla in sla_requirements.items():
-            result = await tester.benchmark_endpoint(
-                app,
-                endpoint,
-                num_requests=50,
-                concurrent=5
-            )
+            result = await tester.benchmark_endpoint(app, endpoint, num_requests=50, concurrent=5)
 
-            assert result.p95_response_time < sla["p95"], \
+            assert result.p95_response_time < sla["p95"], (
                 f"{endpoint} p95 ({result.p95_response_time:.3f}s) exceeds SLA ({sla['p95']}s)"
-            assert result.p99_response_time < sla["p99"], \
+            )
+            assert result.p99_response_time < sla["p99"], (
                 f"{endpoint} p99 ({result.p99_response_time:.3f}s) exceeds SLA ({sla['p99']}s)"
+            )
 
 
 class TestThroughput:
@@ -282,16 +249,12 @@ class TestThroughput:
         from main import app
 
         tester = PerformanceTester()
-        result = await tester.benchmark_endpoint(
-            app,
-            "/health",
-            num_requests=200,
-            concurrent=20
-        )
+        result = await tester.benchmark_endpoint(app, "/health", num_requests=200, concurrent=20)
 
         # Should achieve minimum throughput
-        assert result.requests_per_second > 50, \
+        assert result.requests_per_second > 50, (
             f"Throughput ({result.requests_per_second:.1f} RPS) below minimum (50 RPS)"
+        )
 
 
 class TestResourceUsage:
@@ -300,8 +263,9 @@ class TestResourceUsage:
     @pytest.mark.asyncio
     async def test_memory_stability(self):
         """Test that memory usage is stable over many requests."""
-        from main import app
         import gc
+
+        from main import app
 
         # Force garbage collection before test
         gc.collect()
@@ -309,12 +273,9 @@ class TestResourceUsage:
         tester = PerformanceTester()
 
         # Run multiple batches
-        for batch in range(3):
+        for _batch in range(3):
             result = await tester.benchmark_endpoint(
-                app,
-                "/health",
-                num_requests=100,
-                concurrent=10
+                app, "/health", num_requests=100, concurrent=10
             )
             assert result.success_rate > 95
 
@@ -333,12 +294,7 @@ class TestErrorHandling:
         tester = PerformanceTester()
 
         # Heavy load test
-        result = await tester.benchmark_endpoint(
-            app,
-            "/health",
-            num_requests=500,
-            concurrent=100
-        )
+        result = await tester.benchmark_endpoint(app, "/health", num_requests=500, concurrent=100)
 
         # System should still respond, even if some requests fail
         assert result.success_rate > 80  # At least 80% success
@@ -355,13 +311,12 @@ class TestCachingEffectiveness:
         from main import app
 
         async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://localhost"
+            transport=ASGITransport(app=app), base_url="http://localhost"
         ) as client:
             # First request (cold)
             start = time.time()
             await client.get("/health")
-            cold_time = time.time() - start
+            time.time() - start
 
             # Subsequent requests (should be from cache if enabled)
             warm_times = []
@@ -370,7 +325,7 @@ class TestCachingEffectiveness:
                 await client.get("/health")
                 warm_times.append(time.time() - start)
 
-            avg_warm_time = statistics.mean(warm_times)
+            statistics.mean(warm_times)
 
             # Warm requests should not be significantly slower
             # (Caching may not apply to health endpoint)

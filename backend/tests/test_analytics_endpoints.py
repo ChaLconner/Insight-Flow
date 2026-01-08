@@ -4,16 +4,16 @@ Tests for routers/analytics.py
 Tests for analytics router authentication.
 """
 
+
 import pytest
 from fastapi.testclient import TestClient
-from uuid import uuid4
 
 from main import app
-
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def unauthenticated_client():
@@ -25,6 +25,7 @@ def unauthenticated_client():
 # ============================================================================
 # Tests for Analytics Authentication
 # ============================================================================
+
 
 class TestAnalyticsAuthentication:
     def test_overview_requires_auth(self, unauthenticated_client):

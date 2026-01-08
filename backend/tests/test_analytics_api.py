@@ -2,13 +2,16 @@
 Tests for analytics API endpoints.
 Updated to work with async services.
 """
-from fastapi.testclient import TestClient
-from main import app
-from unittest.mock import MagicMock, patch, AsyncMock
-import pytest
+
 import uuid
-from routers.auth import get_current_active_user
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
 from database import get_async_db
+from main import app
+from routers.auth import get_current_active_user
 
 client = TestClient(app)
 
@@ -25,20 +28,21 @@ async def test_get_recent_activity_optimized():
     """
     Test recent activity endpoint with optimized async service.
     """
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
+
     from async_dependencies import require_project_member
-    
+
     project_id = str(uuid.uuid4())
     mock_project = MagicMock()
     mock_project.id = uuid.UUID(project_id)
     mock_project.name = "Test Project"
-    
+
     async def mock_permission(project_id: str):
         return mock_project
-    
+
     app.dependency_overrides[get_current_active_user] = mock_get_current_active_user
     app.dependency_overrides[require_project_member] = mock_permission
-    
+
     # Mock async session
     mock_session = AsyncMock()
     mock_result = MagicMock()
@@ -47,18 +51,18 @@ async def test_get_recent_activity_optimized():
     mock_result.scalar.return_value = 0
     mock_session.execute = AsyncMock(return_value=mock_result)
     app.dependency_overrides[get_async_db] = lambda: mock_session
-    
+
     try:
-        with patch('services.async_task_history_service.AsyncTaskHistoryService') as MockService:
+        with patch("services.async_task_history_service.AsyncTaskHistoryService") as MockService:
             mock_service = MockService.return_value
-            
+
             # Mock async activities
             activity1 = MagicMock()
             activity1.user_id = uuid.uuid4()
             activity1.activity_type.value = "task_created"
             activity1.timestamp.isoformat.return_value = "2023-01-01T00:00:00"
             activity1.project_id = mock_project.id
-            
+
             activity2 = MagicMock()
             activity2.user_id = uuid.uuid4()
             activity2.activity_type.value = "task_updated"
@@ -66,10 +70,12 @@ async def test_get_recent_activity_optimized():
             activity2.project_id = mock_project.id
 
             mock_service.get_recent_activities = AsyncMock(return_value=[activity1, activity2])
-            
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://testserver"
+            ) as ac:
                 response = await ac.get(f"/api/v1/analytics/projects/{project_id}/activity")
-                
+
             # Use assertion message for debugging instead of print
             assert response.status_code == 200, f"Error Response: {response.text}"
             data = response.json()

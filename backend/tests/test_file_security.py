@@ -1,19 +1,16 @@
 
 import pytest
-from unittest.mock import Mock, MagicMock
-from io import BytesIO
+
 from utils.file_security import (
-    validate_extension,
-    validate_mime_type,
-    validate_file_size,
-    validate_file_path,
-    sanitize_filename,
-    validate_avatar_upload,
-    validate_general_upload,
     FileSecurityError,
-    ALLOWED_EXTENSIONS,
-    ALLOWED_MIME_TYPES
+    sanitize_filename,
+    validate_extension,
+    validate_file_path,
+    validate_file_size,
+    validate_general_upload,
+    validate_mime_type,
 )
+
 
 class TestFileSecurity:
     """Tests for file security utilities."""
@@ -21,7 +18,7 @@ class TestFileSecurity:
     def test_validate_extension_success(self):
         """Test valid extension."""
         assert validate_extension("test.jpg") == ".jpg"
-        assert validate_extension("TEST.PDF") == ".pdf" # Case insensitive
+        assert validate_extension("TEST.PDF") == ".pdf"  # Case insensitive
 
     def test_validate_extension_failure(self):
         """Test invalid extension."""
@@ -78,12 +75,14 @@ class TestFileSecurity:
     def test_sanitize_filename(self):
         """Test filename sanitization."""
         assert sanitize_filename("test.txt") == "test.txt"
-        assert sanitize_filename("../test.txt") == "test.txt" # Traversal removed
-        assert sanitize_filename("test/file.txt") == "testfile.txt" # Separators removed by dangerous pattern check
+        assert sanitize_filename("../test.txt") == "test.txt"  # Traversal removed
+        assert (
+            sanitize_filename("test/file.txt") == "testfile.txt"
+        )  # Separators removed by dangerous pattern check
         assert sanitize_filename("test\\file.txt") == "testfile.txt"
         assert sanitize_filename("weird<name>.txt") == "weirdname.txt"
         assert sanitize_filename("") == ""
-        
+
         # Long filename truncation
         long_name = "a" * 300 + ".txt"
         sanitized = sanitize_filename(long_name)
@@ -93,15 +92,16 @@ class TestFileSecurity:
     def test_validate_file_path(self):
         """Test path traversal prevention."""
         import os
+
         base = os.path.abspath("/tmp/uploads")
-        
+
         # Valid
         valid_path = os.path.join(base, "file.txt")
         assert validate_file_path(base, valid_path) == valid_path
 
         # Traversal attempt
         invalid_path = os.path.abspath("/tmp/secret.txt")
-        if not invalid_path.startswith(base): # Only if actually outside
+        if not invalid_path.startswith(base):  # Only if actually outside
             with pytest.raises(FileSecurityError) as exc:
                 validate_file_path(base, invalid_path)
             assert "Invalid file path" in str(exc.value)
@@ -116,4 +116,3 @@ class TestFileSecurity:
         # Failure
         with pytest.raises(FileSecurityError):
             validate_general_upload("test.exe", "application/octet-stream", b"abc")
-

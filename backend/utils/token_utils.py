@@ -10,6 +10,8 @@ Security Enhancements:
 import os
 from datetime import timedelta
 
+from typing import Literal, cast
+
 from fastapi import Request, Response
 
 from utils.auth import create_access_token
@@ -44,11 +46,11 @@ def create_auth_tokens(user_id: str, fingerprint: str | None = None) -> tuple[st
     """
     # Base token data
     token_data: dict[str, str] = {"sub": user_id}
-    
+
     # Add fingerprint if provided (device binding for A+ security)
     if fingerprint:
         token_data["fp"] = fingerprint
-    
+
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
@@ -91,7 +93,7 @@ def set_auth_cookies(
         value=access_token,
         httponly=True,
         secure=secure_flag,
-        samesite=samesite_flag,
+        samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -101,7 +103,7 @@ def set_auth_cookies(
         value=refresh_token,
         httponly=True,
         secure=secure_flag,
-        samesite=samesite_flag,
+        samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/",
     )
@@ -125,7 +127,7 @@ def clear_auth_cookies(response: Response) -> None:
             key=key,
             path="/",
             secure=secure_flag,
-            samesite=samesite_flag,
+            samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
             httponly=True,  # Important to match the set attributes
         )
         # Backup: explicit overwrite (just in case delete_cookie is finicky)
@@ -135,15 +137,15 @@ def clear_auth_cookies(response: Response) -> None:
             max_age=0,
             path="/",
             secure=secure_flag,
-            samesite=samesite_flag,
+            samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
             httponly=True,
         )
     logger.debug("Auth cookies cleared aggressive")
 
 
 def create_and_set_auth_cookies(
-    response: Response, 
-    user_id: str, 
+    response: Response,
+    user_id: str,
     log_user_info: str | None = None,
     request: Request | None = None,
 ) -> tuple[str, str]:

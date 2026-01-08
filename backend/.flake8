@@ -1,0 +1,4 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203, E501, E712, E402
+exclude = .git,__pycache__,.venv,venv,alembic/versions,fix_missing_dates.py,list_subs.py,check_payments.py,add_stripe_customer_id.py

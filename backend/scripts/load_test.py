@@ -13,7 +13,7 @@ import random
 import string
 from typing import ClassVar
 
-from locust import HttpUser, between, events, task
+from locust import HttpUser, between, events, task  # type: ignore
 
 
 def random_string(length: int = 8) -> str:

@@ -152,7 +152,7 @@ jobs:
           TESTING: "true"
         run: |
           coverage run -m pytest -v -W ignore::RuntimeWarning
-          coverage report --fail-under=75
+          coverage report --fail-under=85
           coverage xml -o coverage.xml
 
       - name: Upload coverage report
@@ -200,7 +200,6 @@ jobs:
 
       - name: Run Unit Tests
         run: npm run test -- --run --coverage
-        continue-on-error: true
 
       - name: Build
         run: npm run build
@@ -245,9 +244,10 @@ jobs:
       - name: Run Playwright tests
         working-directory: ./frontend
         run: npx playwright test --project=chromium
-        continue-on-error: true
         env:
           CI: true
+          GOOGLE_CLIENT_ID: "mock-google-client-id"
+          GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4

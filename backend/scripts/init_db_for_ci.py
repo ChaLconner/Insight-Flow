@@ -85,12 +85,12 @@ async def init_database():
             """)
             )
 
-            # Stamp to the latest revision (9cd1cf9585b5 is current head)
+            # Stamp to the latest revision (v_token_expiry_001 is current head)
             await conn.execute(text("DELETE FROM alembic_version"))
             await conn.execute(
-                text("INSERT INTO alembic_version (version_num) VALUES ('9cd1cf9585b5')")
+                text("INSERT INTO alembic_version (version_num) VALUES ('v_token_expiry_001')")
             )
-            print("✓ Alembic stamped to version: 9cd1cf9585b5 (head)")
+            print("✓ Alembic stamped to version: v_token_expiry_001 (head)")
 
             # Verify critical tables exist
             print("\n[4/4] Verifying table creation...")

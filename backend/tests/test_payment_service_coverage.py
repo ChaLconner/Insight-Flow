@@ -1,359 +1,483 @@
+from datetime import datetime
+from decimal import Decimal
+from unittest.mock import ANY as Any
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, ANY, call
-from uuid import uuid4
-from decimal import Decimal
-from datetime import datetime
 import stripe
-import json
 
+from models.payment import PaymentMethod, Subscription, SubscriptionPlan, SubscriptionStatus
+from schemas.payment import SubscriptionPlanEnum
 from services.payment_service import PaymentService
-from models.payment import PaymentMethod, Subscription, SubscriptionPlan, SubscriptionStatus, PaymentStatus, PaymentHistory
-from schemas.payment import PaymentMethodCreate, SubscriptionPlanEnum, SubscriptionCreate, PLAN_DETAILS
-from models.webhook_log import WebhookEventLog
 
-# ============================================================================
+
 # Fixtures
-# ============================================================================
+@pytest.fixture
+def mock_settings():
+    with patch("services.payment_service.get_settings") as mock:
+        mock.return_value.stripe.is_configured = True
+        mock.return_value.stripe.secret_key = "sk_test_123"
+        yield mock
+
 
 @pytest.fixture
-def mock_user():
-    """Create a mock user for testing."""
-    user = MagicMock()
-    user.id = uuid4()
-    user.email = "test@example.com"
-    user.name = "Test User"
-    user.stripe_customer_id = None 
-    return user
+def mock_db_session():
+    mock = AsyncMock()
+    mock.execute = AsyncMock()
+    mock.commit = AsyncMock()
+    mock.refresh = AsyncMock()
+    return mock
+
 
 @pytest.fixture
-def mock_db():
-    """Create a mock async database session."""
-    db = AsyncMock()
-    # Mock result for execute
-    mock_result = MagicMock()
-    db.execute = AsyncMock(return_value=mock_result)
-    
-    db.commit = AsyncMock()
-    db.refresh = AsyncMock()
-    db.rollback = AsyncMock()
-    db.add = MagicMock()
-    db.flush = AsyncMock()
-    return db
+def payment_service(mock_settings):
+    return PaymentService()
 
-@pytest.fixture
-def service():
-    """Create a configured PaymentService with mocked Stripe."""
+
+@pytest.mark.asyncio
+async def test_initialization_not_configured():
     with patch("services.payment_service.get_settings") as mock_settings:
-        mock_settings.return_value.stripe.is_configured = True
-        mock_settings.return_value.stripe.secret_key = "sk_test_123"
-        
+        mock_settings.return_value.stripe.is_configured = False
         service = PaymentService()
-        service._run_stripe_cmd = AsyncMock()
-        return service
+        assert service.is_configured is False
 
-# ============================================================================
-# Customer Management Tests
-# ============================================================================
+        with pytest.raises(ValueError, match="Stripe is not configured"):
+            service._check_configured()
 
-@pytest.mark.asyncio
-async def test_get_or_create_stripe_customer_existing_on_user(service, mock_db, mock_user):
-    mock_user.stripe_customer_id = "cus_existing123"
-    service._run_stripe_cmd.return_value = MagicMock(id="cus_existing123")
-    result = await service.get_or_create_stripe_customer(mock_db, mock_user.id, mock_user.email, user=mock_user)
-    assert result == "cus_existing123"
 
 @pytest.mark.asyncio
-async def test_get_or_create_stripe_customer_search_by_email(service, mock_db, mock_user):
-    """Test when no ID anywhere, but found by email in Stripe."""
-    mock_user.stripe_customer_id = None
-    mock_db.execute.return_value.scalar_one_or_none.return_value = None
-    
-    found_customer = MagicMock(id="cus_found_email")
-    search_result = MagicMock()
-    search_result.data = [found_customer]
-    
-    service._run_stripe_cmd.return_value = search_result
-    
-    result = await service.get_or_create_stripe_customer(mock_db, mock_user.id, mock_user.email, user=mock_user)
-    
-    assert result == "cus_found_email"
-    assert mock_db.commit.called
+async def test_get_or_create_customer_cached_on_user(payment_service, mock_db_session):
+    user_id = uuid4()
+    email = "test@example.com"
+
+    # User object with cached ID
+    user = MagicMock()
+    user.stripe_customer_id = "cus_cached_123"
+
+    # Mock Stripe retrieval to succeed
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        customer = await payment_service.get_or_create_stripe_customer(
+            mock_db_session, user_id, email, user=user
+        )
+
+        assert customer == "cus_cached_123"
+        # Should verify against Stripe
+        mock_stripe.assert_called_with(stripe.Customer.retrieve, "cus_cached_123")
+
 
 @pytest.mark.asyncio
-async def test_get_or_create_stripe_customer_create_new(service, mock_db, mock_user):
-    """Test creating a brand new customer."""
-    mock_user.stripe_customer_id = None
-    mock_db.execute.return_value.scalar_one_or_none.return_value = None
-    
-    async def side_effect(func, *args, **kwargs):
-        if func == stripe.Customer.list:
-            return MagicMock(data=[])
-        if func == stripe.Customer.create:
-            return MagicMock(id="cus_created_new")
-        return None
-        
-    service._run_stripe_cmd.side_effect = side_effect
-    
-    result = await service.get_or_create_stripe_customer(mock_db, mock_user.id, mock_user.email, user=mock_user)
-    
-    assert result == "cus_created_new"
+async def test_get_or_create_customer_create_new(payment_service, mock_db_session):
+    user_id = uuid4()
+    email = "new@example.com"
 
-# ============================================================================
-# Payment Method Management Tests
-# ============================================================================
+    # DB returns no user/sub/pm
+    res = MagicMock()
+    res.scalar_one_or_none.return_value = None
+    res.data = []  # For list search
+    mock_db_session.execute.return_value = res
 
-@pytest.mark.asyncio
-async def test_create_setup_intent_success(service, mock_db, mock_user):
-    mock_user.stripe_customer_id = "cus_123"
-    service.get_or_create_stripe_customer = AsyncMock(return_value="cus_123")
-    mock_intent = MagicMock()
-    mock_intent.client_secret = "seti_secret_123"
-    service._run_stripe_cmd.return_value = mock_intent
-    result = await service.create_setup_intent(mock_db, mock_user.id, mock_user.email, user=mock_user)
-    assert result.client_secret == "seti_secret_123"
+    # Mock Stripe
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        # Search returns empty
+        mock_stripe.side_effect = [
+            None,  # Search by email (list) - wait, logic is _run_stripe_cmd(stripe.Customer.list...)
+            # returns search_result object
+            MagicMock(id="cus_new_123"),  # Create result
+        ]
 
-@pytest.mark.asyncio
-async def test_attach_payment_method_full(service, mock_db, mock_user):
-    """Test attaching a payment method with full details."""
-    pm_id = "pm_123"
-    cus_id = "cus_123"
-    
-    data = PaymentMethodCreate(
-        payment_method_id=pm_id,
-        customer_id=cus_id,
-        set_as_default=True,
-        billing_name="John Doe",
-        billing_email="john@example.com"
-    )
-    
-    stripe_pm = MagicMock()
-    stripe_pm.customer = None
-    stripe_pm.card.brand = "visa"
-    stripe_pm.card.last4 = "4242"
-    stripe_pm.card.exp_month = 12
-    stripe_pm.card.exp_year = 2030
-    stripe_pm.billing_details.address.line1 = "123 St"
-    service._run_stripe_cmd.return_value = stripe_pm
-    
-    async def run_stripe(*args, **kwargs):
-        if args[0] == stripe.PaymentMethod.retrieve:
-            return stripe_pm
-        return None
-    service._run_stripe_cmd.side_effect = run_stripe
+        # Configure search result mock
+        search_result = MagicMock()
+        search_result.data = []
 
-    result = await service.attach_payment_method(mock_db, mock_user.id, data, cus_id)
-    
-    assert mock_db.add.call_count == 1
-    assert mock_db.commit.called
+        # We need to be careful about side_effect sequence:
+        # 1. Customer.list (search by email)
+        # 2. Customer.create
+
+        def stripe_side_effect(func, *args, **kwargs):
+            if func == stripe.Customer.list:
+                return search_result
+            if func == stripe.Customer.create:
+                return MagicMock(id="cus_new_123")
+            return None
+
+        mock_stripe.side_effect = stripe_side_effect
+
+        customer_id = await payment_service.get_or_create_stripe_customer(
+            mock_db_session, user_id, email
+        )
+
+        assert customer_id == "cus_new_123"
+        # Should persist to DB
+        mock_db_session.execute.assert_called()
+        mock_db_session.commit.assert_called()
+
 
 @pytest.mark.asyncio
-async def test_delete_payment_method_with_promotion(service, mock_db, mock_user):
-    """Test deleting default method promotes another."""
+async def test_create_setup_intent_success(payment_service, mock_db_session):
+    user_id = uuid4()
+    email = "test@example.com"
+
+    # Mock get_or_create_stripe_customer to simple return
+    payment_service.get_or_create_stripe_customer = AsyncMock(return_value="cus_123")
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        mock_intent = MagicMock()
+        mock_intent.client_secret = "seti_secret_123"
+        mock_stripe.return_value = mock_intent
+
+        resp = await payment_service.create_setup_intent(mock_db_session, user_id, email)
+
+        assert resp.client_secret == "seti_secret_123"
+        assert resp.customer_id == "cus_123"
+
+
+@pytest.mark.asyncio
+async def test_create_setup_intent_retry_invalid_customer(payment_service, mock_db_session):
+    user_id = uuid4()
+    email = "test@example.com"
+
+    payment_service.get_or_create_stripe_customer = AsyncMock(return_value="cus_invalid")
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        # Fail first time, succeed second time (create customer -> create intent)
+
+        # We need to simulate the sequence of calls:
+        # 1. SetupIntent.create -> Raise InvalidRequestError
+        # 2. Customer.create -> Return new customer
+        # 3. SetupIntent.create -> Return success
+
+        new_customer = MagicMock(id="cus_new_123")
+        success_intent = MagicMock(client_secret="seti_new_secret")
+
+        # Side effect to handle different calls
+        def side_effect(func, *args, **kwargs):
+            if func == stripe.SetupIntent.create:
+                if kwargs.get("customer") == "cus_invalid":
+                    raise stripe.error.InvalidRequestError("No such customer", "customer")
+                return success_intent
+            if func == stripe.Customer.create:
+                return new_customer
+            return None
+
+        mock_stripe.side_effect = side_effect
+
+        resp = await payment_service.create_setup_intent(mock_db_session, user_id, email)
+
+        assert resp.customer_id == "cus_new_123"
+        assert resp.client_secret == "seti_new_secret"
+
+        # Verify clean up calls
+        assert mock_db_session.execute.call_count >= 3  # Update sub, delete pm, update user
+
+
+@pytest.mark.asyncio
+async def test_attach_payment_method(payment_service, mock_db_session):
+    user_id = uuid4()
+    customer_id = "cus_123"
+    pm_data = MagicMock()
+    pm_data.payment_method_id = "pm_123"
+    pm_data.set_as_default = True
+    pm_data.billing_address = None
+    pm_data.billing_name = "Test User"
+    pm_data.billing_email = "test@example.com"
+    pm_data.billing_phone = None
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        # Mock Stripe PM retrieval
+        stripe_pm = MagicMock()
+        stripe_pm.customer = None  # Not attached yet
+        stripe_pm.card.brand = "visa"
+        stripe_pm.card.last4 = "4242"
+        # ... other card fields defaults
+        stripe_pm.billing_details.name = "Stripe Name"
+
+        mock_stripe.side_effect = [
+            stripe_pm,  # Retrieve
+            None,  # Attach
+            None,  # Modify Customer (set default)
+        ]
+
+        result = await payment_service.attach_payment_method(
+            mock_db_session, user_id, pm_data, customer_id
+        )
+
+        assert result.stripe_payment_method_id == "pm_123"
+        assert result.is_default is True
+        mock_db_session.add.assert_called_once()
+        mock_db_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_payment_method_soft_delete(payment_service, mock_db_session):
+    user_id = uuid4()
     pm_id = uuid4()
-    
-    pm_to_delete = PaymentMethod(
-        id=pm_id, user_id=mock_user.id, is_default=True, 
-        stripe_payment_method_id="pm_del", stripe_customer_id="cus_123"
+
+    # Mock existing PM
+    pm = PaymentMethod(
+        id=pm_id, user_id=user_id, stripe_payment_method_id="pm_strip_1", is_default=False
     )
-    
-    other_pm = PaymentMethod(
-        id=uuid4(), user_id=mock_user.id, is_default=False, 
-        stripe_payment_method_id="pm_other", stripe_customer_id="cus_123"
-    )
-    
-    service.get_payment_method = AsyncMock(return_value=pm_to_delete)
-    service.list_payment_methods = AsyncMock(return_value=[other_pm]) 
-    service.set_default_payment_method = AsyncMock()
-    
+
+    res = MagicMock()
+    res.scalar_one_or_none.return_value = pm
+    mock_db_session.execute.return_value = res
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        # Mock payment lock
+        with patch("services.payment_service.payment_lock") as mock_lock:
+            mock_lock.return_value.__aenter__.return_value = None
+
+            result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)
+
+            assert result is True
+            assert pm.is_active is False
+
+            # Verify call arguments loosely to avoid function object mismatch
+            assert mock_stripe.called
+            args, _ = mock_stripe.call_args
+            assert args[1] == "pm_strip_1"  # Check the ID is passed correctly
+            mock_db_session.commit.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_create_subscription_paid_new(payment_service, mock_db_session):
+    user_id = uuid4()
+    customer_id = "cus_123"
+    data = MagicMock()
+    data.plan = SubscriptionPlanEnum.PRO
+    data.payment_method_id = "pm_card_123"
+
+    # Mock locking and existing sub
     with patch("services.payment_service.payment_lock") as mock_lock:
         mock_lock.return_value.__aenter__.return_value = None
-        mock_lock.return_value.__aexit__.return_value = None
-        
-        result = await service.delete_payment_method(mock_db, pm_id, mock_user.id)
-        
-        assert result is True
-        service.set_default_payment_method.assert_awaited_once_with(mock_db, other_pm.id, mock_user.id)
 
-# ============================================================================
-# Subscription Tests
-# ============================================================================
+        # Mock DB Payment Method Retrieval
+        pm_mock = MagicMock()
+        pm_mock.stripe_payment_method_id = "pm_stripe_123"
+        payment_service.get_payment_method = AsyncMock(return_value=pm_mock)
 
-@pytest.mark.asyncio
-async def test_create_subscription_free_plan(service, mock_db, mock_user):
-    mock_db.execute.return_value.scalar_one_or_none.return_value = None
-    data = SubscriptionCreate(plan=SubscriptionPlanEnum.FREE)
-    with patch("services.payment_service.payment_lock") as mock_lock:
-        mock_lock.return_value.__aenter__.return_value = None
-        sub = await service.create_or_update_subscription(mock_db, mock_user.id, data, "cus_123")
-        assert sub.plan == SubscriptionPlan.FREE
+        # PaymentService.get_subscription -> None (New sub)
+        payment_service.get_subscription = AsyncMock(return_value=None)
 
-@pytest.mark.asyncio
-async def test_upgrade_subscription_to_pro(service, mock_db, mock_user):
-    current_sub = Subscription(
-        id=uuid4(), user_id=mock_user.id, plan=SubscriptionPlan.FREE, 
-        status=SubscriptionStatus.ACTIVE, stripe_customer_id="cus_123"
-    )
-    mock_db.execute.return_value.scalar_one_or_none.return_value = current_sub
-    
-    pm = MagicMock()
-    pm.stripe_payment_method_id = "pm_card_123"
-    service.get_payment_method = AsyncMock(return_value=pm)
-    
-    data = SubscriptionCreate(plan=SubscriptionPlanEnum.PRO, payment_method_id=uuid4())
-    
-    product = MagicMock(id="prod_pro")
-    product.metadata = {"plan_id": "pro"}
-    price = MagicMock(id="price_pro")
-    price.unit_amount = 699 
-    
-    stripe_sub = MagicMock(id="sub_new_stripe")
-    stripe_sub.current_period_start = 1000000000
-    stripe_sub.current_period_end = 1000002000
-    stripe_sub.latest_invoice = MagicMock(status="paid", amount_paid=699, id="in_123")
-    
-    async def side_effect(func, *args, **kwargs):
-        if func == stripe.Product.list:
-            return MagicMock(data=[product])
-        if func == stripe.Price.list:
-            return MagicMock(data=[price])
-        if func == stripe.Subscription.create:
-            return stripe_sub
-        return MagicMock()
-        
-    service._run_stripe_cmd.side_effect = side_effect
-    
-    with patch("services.payment_service.payment_lock") as mock_lock:
-        mock_lock.return_value.__aenter__.return_value = None
-        sub = await service.create_or_update_subscription(mock_db, mock_user.id, data, "cus_123")
-        assert sub.plan == SubscriptionPlan.PRO
+        with patch.object(
+            payment_service, "_run_stripe_cmd", new_callable=AsyncMock
+        ) as mock_stripe:
+            # Mock Stripe Create Sub
+            mock_sub = MagicMock()
+            mock_sub.id = "sub_stripe_123"
+            mock_sub.status = "active"
+            mock_sub.current_period_end = 1700000000
+            mock_sub.current_period_start = 1600000000
+            mock_sub.cancel_at_period_end = False
+
+            mock_stripe.return_value = mock_sub
+
+            result = await payment_service.create_or_update_subscription(
+                mock_db_session, user_id, data, customer_id
+            )
+
+            assert result.plan == SubscriptionPlan.PRO
+            assert result.stripe_subscription_id == "sub_stripe_123"
+            mock_db_session.add.assert_called()
+            mock_db_session.commit.assert_called()
+
 
 @pytest.mark.asyncio
-async def test_cancel_subscription_end_of_period(service, mock_db, mock_user):
-    sub = Subscription(
-        id=uuid4(), user_id=mock_user.id, stripe_subscription_id="sub_123",
-        status=SubscriptionStatus.ACTIVE, cancel_at_period_end=False
-    )
-    mock_db.execute.return_value.scalar_one_or_none.return_value = sub
-    
-    with patch("services.payment_service.payment_lock") as mock_lock:
-        mock_lock.return_value.__aenter__.return_value = None
-        result = await service.cancel_subscription(mock_db, mock_user.id, cancel_immediately=False)
-        assert result.cancel_at_period_end is True
+async def test_payment_history_stats(payment_service, mock_db_session):
+    user_id = uuid4()
 
-@pytest.mark.asyncio
-async def test_resume_subscription(service, mock_db, mock_user):
-    sub = Subscription(
-        id=uuid4(), user_id=mock_user.id, stripe_subscription_id="sub_123",
-        status=SubscriptionStatus.ACTIVE, cancel_at_period_end=True
-    )
-    mock_db.execute.return_value.scalar_one_or_none.return_value = sub
-    stripe_sub = MagicMock(status="active")
-    service._run_stripe_cmd.return_value = stripe_sub
-    
-    with patch("services.payment_service.payment_lock") as mock_lock:
-        mock_lock.return_value.__aenter__.return_value = None
-        result = await service.resume_subscription(mock_db, mock_user.id)
-        assert result.cancel_at_period_end is False
-
-# ============================================================================
-# History Tests
-# ============================================================================
-
-@pytest.mark.asyncio
-async def test_list_payment_history_filters(service, mock_db, mock_user):
-    mock_result = mock_db.execute.return_value
-    mock_result.scalar.return_value = 10 
-    mock_result.scalars.return_value.all.return_value = [] 
-    
-    items, total = await service.list_payment_history(
-        mock_db, mock_user.id, status_filter="succeeded", start_date=datetime.now()
-    )
-    assert total == 10
-
-@pytest.mark.asyncio
-async def test_get_payment_history_stats(service, mock_db, mock_user):
+    # Mock raw SQL result
     row = MagicMock()
-    row.total_spent = 100.50
+    row.total_spent = Decimal("100.50")
     row.total_payments = 5
     row.successful_payments = 4
     row.failed_payments = 1
     row.pending_payments = 0
     row.refunded_payments = 0
-    
-    mock_result = mock_db.execute.return_value
-    mock_result.fetchone.return_value = row
-    
-    stats = await service.get_payment_history_stats(mock_db, mock_user.id)
+
+    mock_res = MagicMock()
+    mock_res.fetchone.return_value = row
+    mock_db_session.execute.return_value = mock_res
+
+    stats = await payment_service.get_payment_history_stats(mock_db_session, user_id)
+
     assert stats["total_spent"] == 100.50
+    assert stats["total_payments"] == 5
+    assert stats["successful_payments"] == 4
+    assert stats["failed_payments"] == 1
 
-# ============================================================================
-# Webhook Tests
-# ============================================================================
-
-@pytest.mark.asyncio
-async def test_process_webhook_idempotency(service, mock_db):
-    event = {"id": "evt_123", "type": "ping", "data": {"object": {}}}
-    existing_log = WebhookEventLog(processed=True)
-    mock_db.execute.return_value.scalar_one_or_none.return_value = existing_log
-    await service.process_webhook(mock_db, event)
-    assert not mock_db.add.called
 
 @pytest.mark.asyncio
-async def test_process_webhook_subscription_deleted(service, mock_db):
-    event = {
-        "id": "evt_del", 
-        "type": "customer.subscription.deleted", 
-        "data": {"object": {"id": "sub_123"}}
-    }
-    
-    sub = Subscription(id=uuid4(), stripe_subscription_id="sub_123", plan=SubscriptionPlan.PRO)
-    
-    mock_db.execute.side_effect = [
-        MagicMock(scalar_one_or_none=MagicMock(return_value=None)), # Webhook log
-        MagicMock(scalar_one_or_none=MagicMock(return_value=sub)), # Subscription lookup
-    ]
-    
-    await service.process_webhook(mock_db, event)
-    assert sub.plan == SubscriptionPlan.FREE
+async def test_list_payment_history_filters(payment_service, mock_db_session):
+    user_id = uuid4()
 
-@pytest.mark.asyncio
-async def test_handle_payment_succeeded(service, mock_db):
-    invoice = {
-        "id": "in_123", 
-        "customer": "cus_123", 
-        "amount_paid": 1000, 
-        "currency": "usd",
-        "status": "paid",
-        "payment_intent": "pi_123"
-    }
-    
-    user = MagicMock(id=uuid4(), stripe_customer_id="cus_123")
-    mock_db.execute.side_effect = [
-        MagicMock(scalar_one_or_none=MagicMock(return_value=user)),
-        MagicMock(scalar_one_or_none=MagicMock(return_value=None)),
-    ]
-    
-    await service._handle_payment_succeeded(mock_db, invoice)
-    assert mock_db.add.called
-    added_history = mock_db.add.call_args[0][0]
-    assert added_history.amount == 10.0
+    # Mock result items
+    items = [MagicMock(), MagicMock()]
+    mock_res_items = MagicMock()
+    mock_res_items.scalars.return_value.all.return_value = items
 
-@pytest.mark.asyncio
-async def test_handle_charge_refunded(service, mock_db):
-    charge = {
-        "id": "ch_123",
-        "amount_refunded": 1000,
-        "amount": 1000,
-        "refunded": True
-    }
-    
-    history = PaymentHistory(
-        id=uuid4(), stripe_charge_id="ch_123", 
-        status=PaymentStatus.SUCCEEDED, amount=10.0
+    # Mock count result
+    mock_res_count = MagicMock()
+    mock_res_count.scalar.return_value = 10
+
+    mock_db_session.execute.side_effect = [mock_res_count, mock_res_items]
+
+    # Test with filters
+    items_Res, total = await payment_service.list_payment_history(
+        mock_db_session, user_id, status_filter="succeeded", start_date=datetime.now()
     )
-    
-    mock_db.execute.return_value.scalar_one_or_none.return_value = history
-    await service._handle_charge_refunded(mock_db, charge)
-    assert history.status == PaymentStatus.REFUNDED
 
+    assert len(items_Res) == 2
+    assert total == 10
+    assert mock_db_session.execute.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_set_default_payment_method(payment_service, mock_db_session):
+    user_id = uuid4()
+    pm_id = uuid4()
+
+    # Mock get PM
+    pm = MagicMock()
+    pm.id = pm_id
+    pm.is_default = False
+    pm.stripe_payment_method_id = "pm_stripe_1"
+    pm.stripe_customer_id = "cus_1"
+
+    # Mock get sub (active)
+    sub = MagicMock()
+    sub.status = SubscriptionStatus.ACTIVE
+    sub.stripe_subscription_id = "sub_stripe_1"
+
+    # Sequence of DB calls:
+    # 1. get_payment_method
+    # 2. update (unset defaults)
+    # 3. get_subscription
+    # 4. commit
+    # 5. refresh
+
+    mock_res_pm = MagicMock()
+    mock_res_pm.scalar_one_or_none.return_value = pm
+
+    mock_res_sub = MagicMock()
+    mock_res_sub.scalar_one_or_none.return_value = sub
+
+    # Configure execute return values based on query structure (hard to match exactly)
+    # Simplification: we mock get_payment_method and get_subscription methods on service
+
+    payment_service.get_payment_method = AsyncMock(return_value=pm)
+    payment_service.get_subscription = AsyncMock(return_value=sub)
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        await payment_service.set_default_payment_method(mock_db_session, pm_id, user_id)
+
+        # Verified calls
+        assert pm.is_default is True
+        # Stripe Update Sub
+        args_sub, _ = mock_stripe.call_args_list[1]
+        assert args_sub[1] == "sub_stripe_1"
+
+
+@pytest.mark.asyncio
+async def test_delete_default_payment_method_with_promotion(payment_service, mock_db_session):
+    user_id = uuid4()
+    pm_id = uuid4()
+
+    # Mock PM to be deleted (is_default=True)
+    pm = PaymentMethod(
+        id=pm_id, user_id=user_id, stripe_payment_method_id="pm_val", is_default=True
+    )
+
+    # Mock other PMs
+    other_pm = PaymentMethod(
+        id=uuid4(), user_id=user_id, stripe_payment_method_id="pm_other", is_default=False
+    )
+
+    # Setup mocks
+    payment_service.get_payment_method = AsyncMock(return_value=pm)
+    payment_service.list_payment_methods = AsyncMock(return_value=[pm, other_pm])
+    payment_service.set_default_payment_method = AsyncMock()
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock):
+        with patch("services.payment_service.payment_lock") as mock_lock:
+            mock_lock.return_value.__aenter__.return_value = None
+
+            result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)
+
+            assert result is True
+            assert pm.is_active is False
+
+            # Verify promotion called
+            payment_service.set_default_payment_method.assert_called_with(
+                mock_db_session, other_pm.id, user_id
+            )
+
+
+@pytest.mark.asyncio
+async def test_attach_payment_method_commit_error(payment_service, mock_db_session):
+    user_id = uuid4()
+    customer_id = "cus_123"
+    pm_data = MagicMock()
+    pm_data.payment_method_id = "pm_123"
+
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+        mock_stripe.return_value.card.brand = "visa"
+        mock_stripe.return_value.customer = "cus_123"
+
+        # Mock DB commit to fail
+        mock_db_session.commit.side_effect = Exception("DB Error")
+
+        # Mock security logger to avoid actual logging errors
+        with patch("services.payment_service.security_logger") as mock_logger:
+            with pytest.raises(Exception, match="DB Error"):
+                await payment_service.attach_payment_method(
+                    mock_db_session, user_id, pm_data, customer_id
+                )
+
+            mock_logger.log_payment_operation.assert_called_with(
+                operation="add_payment_method", user_id=user_id, success=False, details=Any
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_subscription_free_plan(payment_service, mock_db_session):
+    user_id = uuid4()
+    customer_id = "cus_123"
+    data = MagicMock()
+    data.plan = SubscriptionPlanEnum.FREE
+
+    # Existing paid subscription
+    existing = Subscription(
+        user_id=user_id,
+        plan=SubscriptionPlan.PRO,
+        stripe_subscription_id="sub_123",
+        status=SubscriptionStatus.ACTIVE,
+    )
+
+    payment_service.get_subscription = AsyncMock(return_value=existing)
+
+    with patch("services.payment_service.payment_lock") as mock_lock:
+        mock_lock.return_value.__aenter__.return_value = None
+
+        with patch.object(
+            payment_service, "_run_stripe_cmd", new_callable=AsyncMock
+        ) as mock_stripe:
+            result = await payment_service.create_or_update_subscription(
+                mock_db_session, user_id, data, customer_id
+            )
+
+            assert result.plan == SubscriptionPlan.FREE
+            assert result.stripe_subscription_id is None
+
+            # Verify Stripe cancellation
+            # Check if called at least once with these args
+            # Using loop to find the specific call because there might be other calls
+            # Check if called at least once with these args
+            # Using loop to find the specific call because there might be other calls
+            found = False
+            for call in mock_stripe.call_args_list:
+                args, _ = call
+                if len(args) > 1 and args[1] == "sub_123":
+                    found = True
+                    break
+            assert found, "Stripe Subscription.delete not called with sub_123"

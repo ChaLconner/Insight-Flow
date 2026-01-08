@@ -2,21 +2,18 @@
 Tests for utils/response_helpers.py
 """
 
-import pytest
+from datetime import datetime
 from unittest.mock import MagicMock
 from uuid import uuid4
-from datetime import datetime
 
 from utils.response_helpers import (
-    build_member_summary,
     build_member_summaries,
-    build_user_response,
-    build_project_member_response,
-    build_project_member_responses,
-    build_project_response,
-    build_project_with_members_response,
-    build_task_response,
+    build_member_summary,
     build_notification_response,
+    build_project_member_response,
+    build_project_response,
+    build_task_response,
+    build_user_response,
 )
 
 
@@ -31,9 +28,9 @@ class TestBuildMemberSummary:
         member.user.name = "Test User"
         member.user.email = "test@example.com"
         member.user.avatar_url = "https://example.com/avatar.png"
-        
+
         result = build_member_summary(member)
-        
+
         assert result["id"] == str(member.id)
         assert result["user_id"] == str(member.user_id)
         assert result["name"] == "Test User"
@@ -47,9 +44,9 @@ class TestBuildMemberSummary:
         member.user_id = uuid4()
         member.role = "member"
         member.user = None
-        
+
         result = build_member_summary(member)
-        
+
         assert result["name"] == "Unknown"
         assert result["email"] == ""
 
@@ -65,7 +62,7 @@ class TestBuildMemberSummaries:
         member1.user.name = "User 1"
         member1.user.email = "user1@example.com"
         member1.user.avatar_url = None
-        
+
         member2 = MagicMock()
         member2.id = uuid4()
         member2.user_id = uuid4()
@@ -74,9 +71,9 @@ class TestBuildMemberSummaries:
         member2.user.name = "User 2"
         member2.user.email = "user2@example.com"
         member2.user.avatar_url = None
-        
+
         result = build_member_summaries([member1, member2])
-        
+
         assert len(result) == 2
         assert result[0]["name"] == "User 1"
         assert result[1]["name"] == "User 2"
@@ -94,9 +91,9 @@ class TestBuildUserResponse:
         user.role = "admin"
         user.created_at = datetime.now()
         user.updated_at = datetime.now()
-        
+
         result = build_user_response(user)
-        
+
         assert result["id"] == user.id
         assert result["email"] == "test@example.com"
         assert result["name"] == "Test User"
@@ -114,9 +111,9 @@ class TestBuildUserResponse:
         user.role = None
         user.created_at = datetime.now()
         user.updated_at = datetime.now()
-        
+
         result = build_user_response(user)
-        
+
         assert result["role"] == "user"  # Default
 
 
@@ -138,9 +135,9 @@ class TestBuildProjectMemberResponse:
         member.user.role = "user"
         member.user.created_at = datetime.now()
         member.user.updated_at = datetime.now()
-        
+
         result = build_project_member_response(member)
-        
+
         assert result["id"] == member.id
         assert result["project_id"] == member.project_id
         assert result["role"] == "owner"
@@ -155,9 +152,9 @@ class TestBuildProjectMemberResponse:
         member.role = "member"
         member.joined_at = datetime.now()
         member.user = None
-        
+
         result = build_project_member_response(member)
-        
+
         assert result["user"] is None
 
 
@@ -172,17 +169,17 @@ class TestBuildProjectResponse:
         project.is_active = True
         project.created_at = datetime.now()
         project.updated_at = datetime.now()
-        
+
         details = {
             "task_count": 10,
             "completed_tasks": 5,
             "overdue_tasks": 2,
             "recent_activity": None,
-            "member_count": 3
+            "member_count": 3,
         }
-        
+
         result = build_project_response(project, details)
-        
+
         assert result["name"] == "Test Project"
         assert result["task_count"] == 10
         assert result["completed_tasks"] == 5
@@ -198,9 +195,9 @@ class TestBuildProjectResponse:
         project.is_active = True
         project.created_at = datetime.now()
         project.updated_at = datetime.now()
-        
+
         result = build_project_response(project)
-        
+
         assert result["task_count"] == 0
         assert result["completed_tasks"] == 0
         assert result["member_count"] == 0
@@ -215,7 +212,7 @@ class TestBuildProjectResponse:
         project.is_active = True
         project.created_at = datetime.now()
         project.updated_at = datetime.now()
-        
+
         member = MagicMock()
         member.id = uuid4()
         member.user_id = uuid4()
@@ -224,9 +221,9 @@ class TestBuildProjectResponse:
         member.user.name = "Owner"
         member.user.email = "owner@example.com"
         member.user.avatar_url = None
-        
+
         result = build_project_response(project, members=[member])
-        
+
         assert "member_summaries" in result
         assert len(result["member_summaries"]) == 1
 
@@ -248,9 +245,9 @@ class TestBuildTaskResponse:
         task.due_date = None
         task.created_at = datetime.now()
         task.updated_at = datetime.now()
-        
+
         result = build_task_response(task, include_relations=False)
-        
+
         assert result["title"] == "Test Task"
         assert result["status"] == "todo"
         assert result["priority"] == "medium"
@@ -269,7 +266,7 @@ class TestBuildTaskResponse:
         task.due_date = None
         task.created_at = datetime.now()
         task.updated_at = datetime.now()
-        
+
         task.assignee = MagicMock()
         task.assignee.id = task.assignee_id
         task.assignee.email = "assignee@example.com"
@@ -279,7 +276,7 @@ class TestBuildTaskResponse:
         task.assignee.role = "user"
         task.assignee.created_at = datetime.now()
         task.assignee.updated_at = datetime.now()
-        
+
         task.creator = MagicMock()
         task.creator.id = task.creator_id
         task.creator.email = "creator@example.com"
@@ -289,12 +286,12 @@ class TestBuildTaskResponse:
         task.creator.role = "user"
         task.creator.created_at = datetime.now()
         task.creator.updated_at = datetime.now()
-        
+
         task.project = MagicMock()
         task.project.name = "Project"
-        
+
         result = build_task_response(task, include_relations=True)
-        
+
         assert result["title"] == "Test Task"
         assert "assignee" in result
         assert "creator" in result
@@ -313,9 +310,9 @@ class TestBuildNotificationResponse:
         notification.data = {"task_id": str(uuid4())}
         notification.is_read = False
         notification.created_at = datetime.now()
-        
+
         result = build_notification_response(notification)
-        
+
         assert result["type"] == "task_assigned"
         assert result["title"] == "New Task"
         assert result["is_read"] is False
