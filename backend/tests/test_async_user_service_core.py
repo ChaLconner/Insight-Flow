@@ -269,8 +269,14 @@ async def test_get_or_create_settings_new(user_service, mock_db_session):
 async def test_update_settings(user_service, mock_db_session):
     uid = uuid.uuid4()
     settings = UserSettings(user_id=uid, theme="light")
+    # Object that would be returned by UPDATE ... RETURNING
+    updated_settings = UserSettings(user_id=uid, theme="dark", notification_preferences={"enabled": True})
 
-    # Mock get_or_create returning settings
+    # Mock UPDATE result returning the settings (success path)
+    res = MagicMock()
+    res.scalars.return_value.first.return_value = updated_settings
+    mock_db_session.execute.return_value = res
+
     user_service.get_or_create_settings = AsyncMock(return_value=settings)
 
     update_data = UserSettingsUpdate(theme="dark", notification_preferences={"enabled": True})

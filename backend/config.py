@@ -4,11 +4,11 @@ Provides type-safe, validated configuration with environment variable support.
 """
 
 import os
-from typing import Any
 from functools import lru_cache
+from typing import Any
 from urllib.parse import urlparse
 
-from pydantic import Field, FieldValidationInfo, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 

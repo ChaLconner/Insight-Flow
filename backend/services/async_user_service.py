@@ -10,7 +10,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -587,17 +587,39 @@ class AsyncUserService:
     async def update_settings(
         self, user_id: uuid.UUID, settings_data: UserSettingsUpdate
     ) -> UserSettings:
-        """Update user settings."""
-        settings = await self.get_or_create_settings(user_id)
-
+        """
+        Update user settings using direct UPDATE for performance.
+        Falls back to create if settings don't exist.
+        """
         update_data = settings_data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            setattr(settings, key, value)
+        if not update_data:
+            return await self.get_or_create_settings(user_id)
 
         try:
+            # Try direct update first (faster, less locking)
+            stmt = (
+                update(UserSettings)
+                .where(UserSettings.user_id == user_id)
+                .values(**update_data)
+                .returning(UserSettings)
+            )
+            result = await self.db.execute(stmt)
+            settings = result.scalars().first()
+
+            if settings:
+                await self.db.commit()
+                return settings
+
+            # If no row updated, it doesn't exist -> Create it
+            settings = await self.get_or_create_settings(user_id)
+
+            # Apply updates to the newly created settings
+            for key, value in update_data.items():
+                setattr(settings, key, value)
+
             await self.db.commit()
-            await self.db.refresh(settings)
             return settings
+
         except Exception as e:
             await self.db.rollback()
             logger.error(f"Error updating settings for user {user_id}: {e}")

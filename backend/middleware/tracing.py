@@ -33,10 +33,15 @@ def _init_opentelemetry():
 
     try:
         from opentelemetry import trace  # type: ignore
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter  # type: ignore
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,  # type: ignore
+        )
         from opentelemetry.sdk.resources import Resource  # type: ignore
         from opentelemetry.sdk.trace import TracerProvider  # type: ignore
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter  # type: ignore
+        from opentelemetry.sdk.trace.export import (  # type: ignore
+            BatchSpanProcessor,
+            ConsoleSpanExporter,
+        )
         from opentelemetry.semconv.resource import ResourceAttributes  # type: ignore
 
         _otel_available = True
@@ -158,17 +163,17 @@ class TracingMiddleware(BaseHTTPMiddleware):
 
         # Skip excluded paths
         if request.url.path in self.excluded_paths:
-            return cast(Response, await call_next(request))
+            return cast("Response", await call_next(request))
 
         # If OpenTelemetry is not available, just pass through
         if not _otel_available or _tracer is None:
-            return cast(Response, await call_next(request))
+            return cast("Response", await call_next(request))
 
         try:
             from opentelemetry.semconv.trace import SpanAttributes  # type: ignore
             from opentelemetry.trace import SpanKind, Status, StatusCode  # type: ignore
         except ImportError:
-            return cast(Response, await call_next(request))
+            return cast("Response", await call_next(request))
 
         # Create span name
         span_name = f"{request.method} {self._normalize_path(request.url.path)}"
@@ -229,7 +234,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
                 else:
                     span.set_status(Status(StatusCode.OK))
 
-                return cast(Response, response)
+                return cast("Response", response)
 
             except Exception as e:
                 # Record exception

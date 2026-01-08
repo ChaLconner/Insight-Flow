@@ -26,27 +26,32 @@ export function useBillingData(): UseBillingDataReturn {
     setIsLoading(true);
     setError(null);
     try {
-      // Parallel fetching for performance
-      const [plansRes, usageRes] = await Promise.all([
+      // Parallel fetching for performance with fault tolerance
+      const [plansResult, usageResult] = await Promise.allSettled([
         apiClient.get("/payment/plans"),
         apiClient.get("/usage/stats")
       ]);
 
-      // Process Plans
-      if (plansRes.data?.plans) {
+      // Process Plans (Critical)
+      if (plansResult.status === "fulfilled" && plansResult.value.data?.plans) {
         const plansMap: Record<string, PlanInfo> = {};
-        plansRes.data.plans.forEach((p: PlanInfo) => {
+        plansResult.value.data.plans.forEach((p: PlanInfo) => {
           plansMap[p.plan] = p;
         });
         setPlans(plansMap);
+      } else if (plansResult.status === "rejected") {
+        throw plansResult.reason; // Re-throw to trigger catch block for critical data
       }
 
-      // Process Usage
-      if (usageRes.data) {
+      // Process Usage (Non-critical)
+      if (usageResult.status === "fulfilled" && usageResult.value.data) {
         setUsageStats({
-          projects: usageRes.data.projects_used ?? 0,
-          seats: usageRes.data.seats_used ?? 0
+          projects: usageResult.value.data.projects_used ?? 0,
+          seats: usageResult.value.data.seats_used ?? 0
         });
+      } else if (usageResult.status === "rejected") {
+        console.warn("Failed to load usage stats:", usageResult.reason);
+        // Do not throw, allow page to render with 0 usage
       }
     } catch (err) {
       setError(err as Error);

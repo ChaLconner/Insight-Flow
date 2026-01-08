@@ -5,8 +5,7 @@ Configured for comprehensive Async I/O using SQLAlchemy 2.0+ and asyncpg.
 
 import logging
 import os
-from collections.abc import AsyncGenerator
-from typing import Callable
+from collections.abc import AsyncGenerator, Callable
 
 from fastapi import HTTPException
 from sqlalchemy import text

@@ -9,7 +9,6 @@ Security Enhancements:
 
 import os
 from datetime import timedelta
-
 from typing import Literal, cast
 
 from fastapi import Request, Response
@@ -93,7 +92,7 @@ def set_auth_cookies(
         value=access_token,
         httponly=True,
         secure=secure_flag,
-        samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
+        samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -103,7 +102,7 @@ def set_auth_cookies(
         value=refresh_token,
         httponly=True,
         secure=secure_flag,
-        samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
+        samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
         path="/",
     )
@@ -127,7 +126,7 @@ def clear_auth_cookies(response: Response) -> None:
             key=key,
             path="/",
             secure=secure_flag,
-            samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
+            samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
             httponly=True,  # Important to match the set attributes
         )
         # Backup: explicit overwrite (just in case delete_cookie is finicky)
@@ -137,7 +136,7 @@ def clear_auth_cookies(response: Response) -> None:
             max_age=0,
             path="/",
             secure=secure_flag,
-            samesite=cast(Literal["lax", "strict", "none"], samesite_flag),
+            samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
             httponly=True,
         )
     logger.debug("Auth cookies cleared aggressive")

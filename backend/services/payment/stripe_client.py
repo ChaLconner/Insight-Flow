@@ -122,20 +122,20 @@ class StripeClient:
         if metadata:
             params["metadata"] = metadata
 
-        return cast(Customer, await self._run_stripe(
+        return cast("Customer", await self._run_stripe(
             stripe.Customer.create, idempotency_key=idempotency_key, **params
         ))
 
     async def get_customer(self, customer_id: str) -> Customer | None:
         """Get a Stripe customer by ID."""
         try:
-            return cast(Customer | None, await self._run_stripe(stripe.Customer.retrieve, customer_id))
+            return cast("Customer | None", await self._run_stripe(stripe.Customer.retrieve, customer_id))
         except stripe.error.InvalidRequestError:
             return None
 
     async def update_customer(self, customer_id: str, **kwargs) -> Customer:
         """Update a Stripe customer."""
-        return cast(Customer, await self._run_stripe(stripe.Customer.modify, customer_id, **kwargs))
+        return cast("Customer", await self._run_stripe(stripe.Customer.modify, customer_id, **kwargs))
 
     # ===========================================
     # Payment Method Operations
@@ -154,7 +154,7 @@ class StripeClient:
         Returns:
             SetupIntent with client_secret for frontend
         """
-        return cast(SetupIntent, await self._run_stripe(
+        return cast("SetupIntent", await self._run_stripe(
             stripe.SetupIntent.create,
             customer=customer_id,
             payment_method_types=["card"],
@@ -165,13 +165,13 @@ class StripeClient:
         self, payment_method_id: str, customer_id: str
     ) -> PaymentMethod:
         """Attach a payment method to a customer."""
-        return cast(PaymentMethod, await self._run_stripe(
+        return cast("PaymentMethod", await self._run_stripe(
             stripe.PaymentMethod.attach, payment_method_id, customer=customer_id
         ))
 
     async def detach_payment_method(self, payment_method_id: str) -> PaymentMethod:
         """Detach a payment method from its customer."""
-        return cast(PaymentMethod, await self._run_stripe(stripe.PaymentMethod.detach, payment_method_id))
+        return cast("PaymentMethod", await self._run_stripe(stripe.PaymentMethod.detach, payment_method_id))
 
     async def list_payment_methods(
         self, customer_id: str, type: str = "card"
@@ -184,7 +184,7 @@ class StripeClient:
         self, customer_id: str, payment_method_id: str
     ) -> Customer:
         """Set the default payment method for a customer."""
-        return cast(Customer, await self._run_stripe(
+        return cast("Customer", await self._run_stripe(
             stripe.Customer.modify,
             customer_id,
             invoice_settings={"default_payment_method": payment_method_id},
@@ -222,26 +222,26 @@ class StripeClient:
             # Stripe expects a list of items for subscription creation
             # We cast to Any here because Stripe's type definitions are strict about Sequence[Collection[str]]
             # but accept list of dicts at runtime for 'items'
-            params["items"] = cast(Any, [{"price": price_id}])
+            params["items"] = cast("Any", [{"price": price_id}])
         if default_payment_method:
             params["default_payment_method"] = default_payment_method
         if metadata:
             params["metadata"] = metadata
 
-        return cast(Subscription, await self._run_stripe(
+        return cast("Subscription", await self._run_stripe(
             stripe.Subscription.create, idempotency_key=idempotency_key, **params
         ))
 
     async def get_subscription(self, subscription_id: str) -> Subscription | None:
         """Get a subscription by ID."""
         try:
-            return cast(Subscription, await self._run_stripe(stripe.Subscription.retrieve, subscription_id))
+            return cast("Subscription", await self._run_stripe(stripe.Subscription.retrieve, subscription_id))
         except stripe.error.InvalidRequestError:
             return None
 
     async def update_subscription(self, subscription_id: str, **kwargs) -> Subscription:
         """Update a subscription."""
-        return cast(Subscription, await self._run_stripe(stripe.Subscription.modify, subscription_id, **kwargs))
+        return cast("Subscription", await self._run_stripe(stripe.Subscription.modify, subscription_id, **kwargs))
 
     async def cancel_subscription(
         self, subscription_id: str, at_period_end: bool = True
@@ -257,11 +257,11 @@ class StripeClient:
             Updated subscription
         """
         if at_period_end:
-            return cast(Subscription, await self._run_stripe(
+            return cast("Subscription", await self._run_stripe(
                 stripe.Subscription.modify, subscription_id, cancel_at_period_end=True
             ))
         else:
-            return cast(Subscription, await self._run_stripe(stripe.Subscription.delete, subscription_id))
+            return cast("Subscription", await self._run_stripe(stripe.Subscription.delete, subscription_id))
 
     # ===========================================
     # Webhook Verification

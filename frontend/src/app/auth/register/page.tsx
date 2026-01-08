@@ -106,7 +106,13 @@ function RegisterPageContent() {
       toast.success("Account created successfully", {
         description: "Please check your email to verify your account before logging in.",
       });
-      router.push("/auth/login");
+      
+      const isPaidPlan = plan && plan !== "free";
+      const redirectPath = isPaidPlan 
+        ? `/auth/login?callbackUrl=${encodeURIComponent("/settings?tab=billing")}`
+        : "/auth/login";
+
+      router.push(redirectPath);
     } catch (error: unknown) {
       console.error("Registration error:", error);
 
@@ -139,7 +145,12 @@ function RegisterPageContent() {
 
         const user = data.user;
         let redirectUrl = "/dashboard";
-        if (user?.role === "member" || user?.role === "user") {
+        
+        const isPaidPlan = plan && plan !== "free";
+
+        if (isPaidPlan) {
+            redirectUrl = "/settings?tab=billing";
+        } else if (user?.role === "member" || user?.role === "user") {
           redirectUrl = "/projects?tab=tasks";
         } else if (user?.role === "manager" || user?.role === "viewer") {
           redirectUrl = "/projects";

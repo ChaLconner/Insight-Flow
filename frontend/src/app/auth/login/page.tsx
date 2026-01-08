@@ -64,9 +64,9 @@ function LoginForm() {
 
       // Construct redirect URL
       const user = data.user;
-      let redirectUrl = "/dashboard";
+      let redirectUrl = searchParams.get("callbackUrl") || "/dashboard";
 
-      if (user?.role) {
+      if (!searchParams.get("callbackUrl") && user?.role) {
         switch (user.role) {
           case "admin":
             redirectUrl = "/dashboard";
@@ -120,11 +120,14 @@ function LoginForm() {
         await authActions.loginWithResponse(data);
 
         const user = data.user;
-        let redirectUrl = "/dashboard";
-        if (user?.role === "member" || user?.role === "user") {
-          redirectUrl = "/projects?tab=tasks";
-        } else if (user?.role === "manager" || user?.role === "viewer") {
-          redirectUrl = "/projects";
+        let redirectUrl = searchParams.get("callbackUrl") || "/dashboard";
+
+        if (!searchParams.get("callbackUrl")) {
+           if (user?.role === "member" || user?.role === "user") {
+            redirectUrl = "/projects?tab=tasks";
+          } else if (user?.role === "manager" || user?.role === "viewer") {
+            redirectUrl = "/projects";
+          }
         }
 
         window.location.href = redirectUrl;
