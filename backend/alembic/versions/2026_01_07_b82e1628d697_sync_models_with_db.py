@@ -35,43 +35,6 @@ revision: str = 'b82e1628d697'
 down_revision: Union[str, None] = 'v_token_expiry_001'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-"""sync_models_with_db
-
-Revision ID: b82e1628d697
-Revises: v_token_expiry_001
-Create Date: 2026-01-07 09:08:20.789659+00:00
-
-Migration Description:
-    TODO: Add a detailed description of what this migration does.
-
-WARNING: Always test migrations in a development environment before production!
-"""
-import os
-import sys
-from typing import Sequence, Union
-
-from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
-# Add backend directory to path for migration_helpers import
-backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
-from migration_helpers import (
-    safe_add_column, safe_drop_column,
-    safe_create_index, safe_drop_index,
-    safe_create_table, safe_drop_table,
-    safe_create_foreign_key, safe_drop_constraint,
-    column_exists, table_exists, index_exists
-)
-
-# revision identifiers, used by Alembic.
-revision: str = 'b82e1628d697'
-down_revision: Union[str, None] = 'v_token_expiry_001'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
