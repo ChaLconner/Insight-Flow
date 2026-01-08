@@ -1,1 +1,108 @@
-Generic single-database configuration.
+Alembic Database Migrations - Insight-Flow
+==========================================
+
+This directory contains database migration scripts for the Insight-Flow project.
+
+QUICK START
+-----------
+
+Common Commands:
+
+    # Create a new migration (auto-detect changes)
+    alembic revision --autogenerate -m "add user preferences table"
+
+    # Apply all pending migrations
+    alembic upgrade head
+
+    # Rollback one migration
+    alembic downgrade -1
+
+    # View migration history
+    alembic history --verbose
+
+    # Check current revision
+    alembic current
+
+    # Validate migrations
+    python scripts/validate_migrations.py
+
+
+BEST PRACTICES
+--------------
+
+1. USE SAFE MIGRATION HELPERS
+   Always use functions from migration_helpers.py:
+   - safe_add_column(), safe_drop_column()
+   - safe_create_index(), safe_drop_index()
+   - safe_create_table(), safe_drop_table()
+   - safe_create_unique_constraint(), safe_drop_constraint()
+   - safe_create_foreign_key()
+   
+2. ALWAYS TEST DOWNGRADE
+   Every migration should have a working downgrade() function.
+
+3. KEEP MIGRATIONS SMALL
+   One logical change per migration.
+
+4. NEVER EDIT APPLIED MIGRATIONS
+   Create a new migration to fix issues instead.
+
+5. AVOID SILENT EXCEPTION HANDLING
+   Use safe_* helper functions instead of try/except with pass.
+
+6. ADD MIGRATION DESCRIPTIONS
+   Include a "Migration Description:" section in docstrings.
+
+
+FILE NAMING CONVENTION
+----------------------
+
+New migrations will be created with date-prefixed format:
+
+    YYYY_MM_DD_<revision_hash>_<slug>.py
+
+Example: 2026_01_07_abc123de_add_user_settings.py
+
+Note: Existing migrations may have different naming patterns
+(hash-prefix, custom-prefix, or other). Do NOT rename existing 
+migrations as this could cause version control issues. The 
+revision chain uses revision IDs, not file names.
+
+
+FILE STRUCTURE
+--------------
+
+alembic/
+├── versions/           # Migration files
+├── env.py              # Environment configuration  
+├── script.py.mako      # Migration file template
+└── README              # This file
+
+alembic.ini             # Alembic configuration
+migration_helpers.py    # Safe migration utilities
+scripts/
+└── validate_migrations.py  # Migration validation script
+
+
+TROUBLESHOOTING
+---------------
+
+"Target database is not up to date":
+    alembic current
+    alembic stamp <revision_id>
+
+"Can't locate revision":
+    alembic stamp head
+
+"Multiple heads detected":
+    alembic heads
+    alembic merge heads -m "merge heads"
+
+"Transaction aborted" error (asyncpg):
+    Use safe_* functions from migration_helpers.py
+    These functions check if objects exist before creating/dropping
+
+
+For more information, see:
+- https://alembic.sqlalchemy.org/en/latest/
+- migration_helpers.py for safe utility functions

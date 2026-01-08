@@ -26,7 +26,7 @@ def upgrade() -> None:
         create_type=False
     )
     subscription_status.create(op.get_bind(), checkfirst=True)
-    
+
     # Create subscription_plan enum
     subscription_plan = postgresql.ENUM(
         'free', 'starter', 'pro', 'enterprise',
@@ -34,7 +34,7 @@ def upgrade() -> None:
         create_type=False
     )
     subscription_plan.create(op.get_bind(), checkfirst=True)
-    
+
     # Create payment_status enum
     payment_status = postgresql.ENUM(
         'pending', 'succeeded', 'failed', 'refunded', 'canceled',
@@ -42,7 +42,7 @@ def upgrade() -> None:
         create_type=False
     )
     payment_status.create(op.get_bind(), checkfirst=True)
-    
+
     # Create payment_methods table
     op.create_table(
         'payment_methods',
@@ -67,7 +67,7 @@ def upgrade() -> None:
     op.create_index('ix_payment_methods_user_id', 'payment_methods', ['user_id'])
     op.create_index('ix_payment_methods_stripe_payment_method_id', 'payment_methods', ['stripe_payment_method_id'], unique=True)
     op.create_index('ix_payment_methods_stripe_customer_id', 'payment_methods', ['stripe_customer_id'])
-    
+
     # Create subscriptions table
     op.create_table(
         'subscriptions',
@@ -93,7 +93,7 @@ def upgrade() -> None:
     op.create_index('ix_subscriptions_user_id', 'subscriptions', ['user_id'], unique=True)
     op.create_index('ix_subscriptions_stripe_subscription_id', 'subscriptions', ['stripe_subscription_id'], unique=True)
     op.create_index('ix_subscriptions_stripe_customer_id', 'subscriptions', ['stripe_customer_id'])
-    
+
     # Create payment_history table
     op.create_table(
         'payment_history',
@@ -129,7 +129,7 @@ def downgrade() -> None:
     op.drop_table('payment_history')
     op.drop_table('subscriptions')
     op.drop_table('payment_methods')
-    
+
     # Drop enums
     op.execute('DROP TYPE IF EXISTS paymentstatus')
     op.execute('DROP TYPE IF EXISTS subscriptionplan')

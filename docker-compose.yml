@@ -17,7 +17,7 @@ services:
       - .env.docker
     environment:
       # Override or add environment-specific values
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-insightflow}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-insightflow}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-insightflow}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-insightflow}
     depends_on:
       db:
         condition: service_healthy
