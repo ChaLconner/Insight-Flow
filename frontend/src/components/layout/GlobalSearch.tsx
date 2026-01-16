@@ -74,7 +74,10 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
         ? tasksData
         : ((tasksData as Record<string, unknown>).items as Task[]) ?? [];
 
-      setCachedData({ projects, tasks });
+      setCachedData({
+        projects: Array.from(new Map(projects.map(p => [p.id, p])).values()),
+        tasks: Array.from(new Map(tasks.map(t => [t.id, t])).values())
+      });
     } catch (error) {
       console.error("Failed to load search data:", error);
     } finally {
@@ -111,14 +114,20 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const handleSelectProject = (project: Project) => {
     setIsOpen(false);
     setQuery("");
-    router.push(`/projects?search=${encodeURIComponent(project.name)}`);
+    router.push(`/projects/${project.id}`);
     onSelect?.();
   };
 
   const handleSelectTask = (task: Task) => {
     setIsOpen(false);
     setQuery("");
-    router.push(`/projects?tab=tasks&search=${encodeURIComponent(task.title)}`);
+    // Redirect to task details if possible, or specialized view
+    if (task.projectId) {
+      router.push(`/projects/${task.projectId}/tasks/${task.id}`);
+    } else {
+       // Fallback for tasks with no project (if any)
+       router.push(`/projects?tab=tasks&search=${encodeURIComponent(task.title)}`);
+    }
     onSelect?.();
   };
 

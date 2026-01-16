@@ -10,7 +10,19 @@ import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# Import models securely
+try:
+    from models.security_log import SecurityLog
+except ImportError:
+    SecurityLog = None
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 # Setup dedicated security audit logger
 AUDIT_LOG_FILE = os.getenv("SECURITY_AUDIT_LOG_FILE", "logs/security_audit.log")
@@ -134,7 +146,7 @@ class SecurityAuditLogger:
         # Prevent propagation to root logger
         self.logger.propagate = False
 
-    def log_event(self, event: AuditEvent):
+    def log_event(self, event: AuditEvent, db: AsyncSession | None = None):
         """Log an audit event."""
         log_level = {
             "info": logging.INFO,
@@ -144,6 +156,23 @@ class SecurityAuditLogger:
 
         self.logger.log(log_level, event.to_json())
 
+        # Log to Database if session is provided
+        if db and SecurityLog:
+            try:
+                db_chat = SecurityLog(
+                    event_type=event.event_type.value,
+                    severity=event.severity,
+                    user_id=event.user_id,
+                    ip_address=event.ip_address,
+                    user_agent=event.user_agent[:255] if event.user_agent else None,
+                    request_path=event.details.get("endpoint") if event.details else None,
+                    details=event.details,
+                    timestamp=datetime.fromisoformat(event.timestamp)
+                )
+                db.add(db_chat)
+            except Exception as e:
+                self.logger.error(f"Failed to log to database: {e}")
+
     def log_login_success(
         self,
         user_id: str,
@@ -152,6 +181,7 @@ class SecurityAuditLogger:
         user_agent: str | None = None,
         request_id: str | None = None,
         auth_method: str = "password",
+        db: AsyncSession | None = None,
     ):
         """Log successful login."""
         self.log_event(
@@ -166,7 +196,8 @@ class SecurityAuditLogger:
                 action="login",
                 status="success",
                 details={"auth_method": auth_method},
-            )
+            ),
+            db=db,
         )
 
     def log_login_failed(
@@ -176,6 +207,7 @@ class SecurityAuditLogger:
         user_agent: str | None = None,
         request_id: str | None = None,
         reason: str = "invalid_credentials",
+        db: AsyncSession | None = None,
     ):
         """Log failed login attempt."""
         self.log_event(
@@ -190,7 +222,8 @@ class SecurityAuditLogger:
                 status="failure",
                 severity="warning",
                 details={"reason": reason},
-            )
+            ),
+            db=db,
         )
 
     def log_logout(
@@ -199,6 +232,7 @@ class SecurityAuditLogger:
         user_email: str,
         ip_address: str | None = None,
         request_id: str | None = None,
+        db: AsyncSession | None = None,
     ):
         """Log user logout."""
         self.log_event(
@@ -211,7 +245,8 @@ class SecurityAuditLogger:
                 request_id=request_id,
                 action="logout",
                 status="success",
-            )
+            ),
+            db=db,
         )
 
     def log_access_denied(
@@ -222,6 +257,7 @@ class SecurityAuditLogger:
         ip_address: str | None = None,
         request_id: str | None = None,
         reason: str = "insufficient_permissions",
+        db: AsyncSession | None = None,
     ):
         """Log access denied event."""
         self.log_event(
@@ -237,7 +273,8 @@ class SecurityAuditLogger:
                 status="failure",
                 severity="warning",
                 details={"reason": reason},
-            )
+            ),
+            db=db,
         )
 
     def log_password_change(
@@ -246,6 +283,7 @@ class SecurityAuditLogger:
         user_email: str,
         ip_address: str | None = None,
         request_id: str | None = None,
+        db: AsyncSession | None = None,
     ):
         """Log password change."""
         self.log_event(
@@ -259,7 +297,8 @@ class SecurityAuditLogger:
                 action="password_change",
                 status="success",
                 severity="info",
-            )
+            ),
+            db=db,
         )
 
     def log_rate_limit_exceeded(
@@ -267,6 +306,7 @@ class SecurityAuditLogger:
         ip_address: str,
         endpoint: str,
         request_id: str | None = None,
+        db: AsyncSession | None = None,
     ):
         """Log rate limit exceeded event."""
         self.log_event(
@@ -281,7 +321,8 @@ class SecurityAuditLogger:
                 status="failure",
                 severity="warning",
                 details={"endpoint": endpoint},
-            )
+            ),
+            db=db,
         )
 
     def log_csrf_failed(
@@ -289,6 +330,7 @@ class SecurityAuditLogger:
         ip_address: str,
         endpoint: str,
         request_id: str | None = None,
+        db: AsyncSession | None = None,
     ):
         """Log CSRF validation failure."""
         self.log_event(
@@ -302,7 +344,8 @@ class SecurityAuditLogger:
                 action="csrf_validation",
                 status="failure",
                 severity="warning",
-            )
+            ),
+            db=db,
         )
 
     def log_suspicious_activity(
@@ -311,6 +354,7 @@ class SecurityAuditLogger:
         description: str,
         user_id: str | None = None,
         request_id: str | None = None,
+        db: AsyncSession | None = None,
     ):
         """Log suspicious activity."""
         self.log_event(
@@ -324,7 +368,8 @@ class SecurityAuditLogger:
                 status="warning",
                 severity="critical",
                 details={"description": description},
-            )
+            ),
+            db=db,
         )
 
     def log_account_created(
@@ -334,6 +379,7 @@ class SecurityAuditLogger:
         ip_address: str | None = None,
         request_id: str | None = None,
         registration_method: str = "email",
+        db: AsyncSession | None = None,
     ):
         """Log account creation."""
         self.log_event(
@@ -347,7 +393,8 @@ class SecurityAuditLogger:
                 action="account_create",
                 status="success",
                 details={"registration_method": registration_method},
-            )
+            ),
+            db=db,
         )
 
     def log_role_change(
@@ -360,6 +407,7 @@ class SecurityAuditLogger:
         resource_id: str | None = None,
         ip_address: str | None = None,
         request_id: str | None = None,
+        db: AsyncSession | None = None,
     ):
         """Log role change."""
         self.log_event(
@@ -379,7 +427,8 @@ class SecurityAuditLogger:
                     "old_role": old_role,
                     "new_role": new_role,
                 },
-            )
+            ),
+            db=db,
         )
 
     @staticmethod

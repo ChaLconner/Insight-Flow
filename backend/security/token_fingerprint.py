@@ -11,13 +11,27 @@ Security Features:
 """
 
 import hashlib
+import ipaddress
 import logging
+import os
 from dataclasses import dataclass
 from enum import Enum
 
 from fastapi import Request
 
 logger = logging.getLogger("token_fingerprint")
+
+# =============================================================================
+# Configuration - can be changed via environment variables
+# =============================================================================
+
+# IP prefix configuration - /16 network (2 octets) is best practice for mobile users
+# This allows users to stay authenticated even if their ISP rotates their IP within the same network
+# Examples:
+#   - 2 octets (/16): 171.4.248.x and 171.4.217.x both match as "171.4" ✓ (recommended)
+#   - 3 octets (/24): 171.4.248.x != 171.4.217.x (too strict for mobile)
+#   - 1 octet (/8):   171.x.x.x (too lenient, not recommended)
+IP_PREFIX_OCTETS = int(os.getenv("TOKEN_IP_PREFIX_OCTETS", "2"))
 
 
 class FingerprintStrictness(str, Enum):
@@ -38,7 +52,7 @@ class ClientFingerprint:
     """Client device fingerprint data."""
 
     user_agent_hash: str  # SHA256 of User-Agent (privacy-preserving)
-    ip_prefix: str | None  # First 3 octets of IPv4 or /48 of IPv6
+    ip_prefix: str | None  # First N octets of IPv4 (configurable, default /16)
     full_ip: str | None  # Full IP address (only used in strict mode)
 
     def to_string(self, strictness: FingerprintStrictness = FingerprintStrictness.NORMAL) -> str:
@@ -95,26 +109,45 @@ def _hash_user_agent(user_agent: str | None) -> str:
     return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
-def _get_ip_prefix(ip: str | None) -> str | None:
+def _get_ip_prefix(ip: str | None, octets: int | None = None) -> str | None:
     """
     Extract network prefix from IP address.
 
-    IPv4: First 3 octets (e.g., 192.168.1.xxx -> 192.168.1)
-    IPv6: First 48 bits (e.g., 2001:db8:1234:: /48)
+    IPv4: First N octets (configurable via IP_PREFIX_OCTETS, default 2 for /16 network)
+          This is best practice for mobile users who may have IP changes within same ISP network.
+          Example: 171.4.248.x and 171.4.217.x will both match as "171.4"
+    IPv6: First N segments (default 2 for /32)
+
+    Args:
+        ip: IP address string
+        octets: Number of octets to use (None = use IP_PREFIX_OCTETS env var)
     """
     if not ip or ip == "unknown":
         return None
 
     try:
+        # Check for loopback/localhost addresses
+        # This handles the case where simple string splitting produces different
+        # prefixes for 127.0.0.1 and ::1, which often switch on localhost
+        ip_obj = ipaddress.ip_address(ip)
+        if ip_obj.is_loopback:
+            return "127.0"  # Consistent prefix for all local traffic
+    except ValueError:
+        pass
+
+    # Use configured octets or default (2 for /16 - mobile friendly)
+    num_octets = octets if octets is not None else IP_PREFIX_OCTETS
+
+    try:
         if ":" in ip:
-            # IPv6: Take first 3 segments (/48)
+            # IPv6: Take first N segments
             parts = ip.split(":")
-            return ":".join(parts[:3])
+            return ":".join(parts[:num_octets])
         else:
-            # IPv4: Take first 3 octets
+            # IPv4: Take first N octets
             parts = ip.split(".")
-            if len(parts) >= 3:
-                return ".".join(parts[:3])
+            if len(parts) >= num_octets:
+                return ".".join(parts[:num_octets])
     except Exception:
         pass
 
@@ -228,9 +261,7 @@ def verify_fingerprint_claim(
         return False, "strict_mismatch"
 
 
-# Configuration - can be changed via environment variable
-import os
-
+# Strictness configuration
 _strictness_str = os.getenv("TOKEN_FINGERPRINT_STRICTNESS", "normal").lower()
 if _strictness_str == "lenient":
     DEFAULT_STRICTNESS = FingerprintStrictness.LENIENT
@@ -239,5 +270,5 @@ elif _strictness_str == "strict":
 else:
     DEFAULT_STRICTNESS = FingerprintStrictness.NORMAL
 
-# Feature flag
+# Feature flag to enable/disable fingerprinting
 FINGERPRINT_ENABLED = os.getenv("TOKEN_FINGERPRINT_ENABLED", "true").lower() == "true"

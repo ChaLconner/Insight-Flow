@@ -64,7 +64,7 @@ function LoginForm() {
 
       // Construct redirect URL
       const user = data.user;
-      let redirectUrl = searchParams.get("callbackUrl") || "/dashboard";
+        let redirectUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
       if (!searchParams.get("callbackUrl") && user?.role) {
         switch (user.role) {
@@ -120,7 +120,7 @@ function LoginForm() {
         await authActions.loginWithResponse(data);
 
         const user = data.user;
-        let redirectUrl = searchParams.get("callbackUrl") || "/dashboard";
+          let redirectUrl = searchParams.get("callbackUrl") ?? "/dashboard";
 
         if (!searchParams.get("callbackUrl")) {
            if (user?.role === "member" || user?.role === "user") {

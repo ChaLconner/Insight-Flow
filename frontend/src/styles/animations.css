@@ -30,7 +30,6 @@
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -42,7 +41,6 @@
 
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -54,7 +52,6 @@
 
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
@@ -88,4 +85,24 @@
     transparent
   );
   animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Infinite Scroll / Marquee Animation */
+@keyframes infinite-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-infinite-scroll {
+  animation: infinite-scroll 60s linear infinite;
+  /* Ensure it uses GPU acceleration */
+  will-change: transform;
+}
+
+.animate-infinite-scroll:hover {
+  animation-play-state: paused;
 }

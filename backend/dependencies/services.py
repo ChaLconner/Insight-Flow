@@ -17,6 +17,7 @@ from services.async_password_reset_service import AsyncPasswordResetService
 from services.async_project_service import AsyncProjectService
 from services.async_task_history_service import AsyncTaskHistoryService
 from services.async_task_service import AsyncTaskService
+from services.async_usage_service import AsyncUsageService
 from services.async_user_service import AsyncUserService
 
 
@@ -125,6 +126,13 @@ async def get_async_notification_service(
     return AsyncNotificationService(db)
 
 
+async def get_usage_service(db: AsyncSession = Depends(get_async_db)) -> AsyncUsageService:
+    """
+    Dependency to get AsyncUsageService instance.
+    """
+    return AsyncUsageService(db)
+
+
 # Convenience function to get multiple services at once
 class ServiceContainer:
     """Container for multiple services with shared session."""
@@ -139,6 +147,7 @@ class ServiceContainer:
         self._analytics_service: AsyncAnalyticsService | None = None
         self._task_history_service: AsyncTaskHistoryService | None = None
         self._async_notification_service: AsyncNotificationService | None = None
+        self._usage_service: AsyncUsageService | None = None
 
     @property
     def project(self) -> AsyncProjectService:
@@ -187,6 +196,12 @@ class ServiceContainer:
         if self._async_notification_service is None:
             self._async_notification_service = AsyncNotificationService(self.db)
         return self._async_notification_service
+
+    @property
+    def usage(self) -> AsyncUsageService:
+        if self._usage_service is None:
+            self._usage_service = AsyncUsageService(self.db)
+        return self._usage_service
 
 
 async def get_services(db: AsyncSession = Depends(get_async_db)) -> ServiceContainer:

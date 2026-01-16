@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api-client";
 import type { PlanInfo } from "@/types";
 import { toast } from "sonner";
@@ -16,13 +16,14 @@ interface UseBillingDataReturn {
   refresh: () => Promise<void>;
 }
 
-export function useBillingData(): UseBillingDataReturn {
+export function useBillingData(options: { silent?: boolean } = {}): UseBillingDataReturn {
+  const { silent } = options;
   const [plans, setPlans] = useState<Record<string, PlanInfo>>({});
   const [usageStats, setUsageStats] = useState<UsageStats>({ projects: 0, seats: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -55,17 +56,19 @@ export function useBillingData(): UseBillingDataReturn {
       }
     } catch (err) {
       setError(err as Error);
-      toast.error("Failed to load billing information", {
-        description: "Please check your internet connection or try again later."
-      });
+      if (!silent) {
+        toast.error("Failed to load billing information", {
+          description: "Please check your internet connection or try again later."
+        });
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [silent]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   return {
     plans,

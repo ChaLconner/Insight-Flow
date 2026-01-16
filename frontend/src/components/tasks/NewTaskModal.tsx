@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Tag,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -140,6 +141,7 @@ export function NewTaskModal({
         await tasksApi.createTask(projectId, createData);
       }
       onTaskCreated();
+      toast.success(task ? "Task updated successfully" : "Task created successfully");
       onClose();
       // Reset form only if creating a new task
       if (!task) {

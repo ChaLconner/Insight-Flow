@@ -62,7 +62,14 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  manifest: "/manifest.json",
+// Google Verification
+  verification: {
+    google: "google-site-verification=YOUR_VERIFICATION_CODE",
+    yandex: "yandex-verification=YOUR_VERIFICATION_CODE",
+  },
+  alternates: {
+    canonical: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  },
 };
 
 export const viewport = {
@@ -86,8 +93,31 @@ export default function RootLayout({
       ? process.env.NEXT_PUBLIC_API_URL
       : "http://localhost:8000";
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+  // JSON-LD for Organization
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Insight Flow",
+    applicationCategory: "ProjectManagementApplication",
+    operatingSystem: "Web",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    author: {
+      "@type": "Organization",
+      name: "Insight Flow Team",
+      url: appUrl,
+    },
+    description: "Modern project management platform with glassmorphism design",
+    image: `${appUrl}/og-image.png`,
+  };
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         {/* Preload critical resources */}
         <link
@@ -120,6 +150,12 @@ export default function RootLayout({
           rel="preconnect"
           href="https://ui-avatars.com"
           crossOrigin="anonymous"
+        />
+
+        {/* JSON-LD Structured Data */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
 
         {/* Theme initialization script - prevents flash */}

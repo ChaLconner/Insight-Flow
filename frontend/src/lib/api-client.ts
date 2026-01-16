@@ -172,7 +172,17 @@ apiClient.interceptors.response.use(
     };
 
     // Handle 401 Unauthorized - attempt refresh using cookies
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // BUT skip refresh for auth endpoints (login, register, etc.) since 401 there
+    // means credentials are wrong, not that token needs refresh
+    const requestUrl = originalRequest.url ?? '';
+    const isAuthEndpoint = requestUrl.includes('/auth/login') || 
+                           requestUrl.includes('/auth/register') ||
+                           requestUrl.includes('/auth/forgot-password') ||
+                           requestUrl.includes('/auth/reset-password') ||
+                           requestUrl.includes('/auth/google') ||
+                           requestUrl.includes('/auth/github');
+    
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
 
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

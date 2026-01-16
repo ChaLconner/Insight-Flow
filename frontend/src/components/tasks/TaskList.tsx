@@ -138,6 +138,14 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       setPage(1);
     }, [localSearchQuery, statusFilter]);
 
+    // Update local search when URL param changes (e.g. from GlobalSearch)
+    useEffect(() => {
+      const urlSearch = searchParams.get("search");
+      if (typeof urlSearch === "string" && urlSearch !== localSearchQuery) {
+        setLocalSearchQuery(urlSearch);
+      }
+    }, [searchParams, localSearchQuery]);
+
     useEffect(() => {
       isMounted.current = true;
       return () => {

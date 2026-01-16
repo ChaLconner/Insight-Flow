@@ -239,6 +239,7 @@ analysis_*.json
 # Backup files
 *.backup
 
+
 # Migration and utility scripts
 migrate_*.py
 reset_*.py
@@ -248,6 +249,10 @@ check_sync.py
 fix_missing_dates.py
 list_subs.py
 test_db_write.py
+
+# Redundant manual migration scripts (Alembic is source of truth)
+backend/migrations/*.sql
+backend/scripts/create_security_logs.py
 
 
 # Test results and reports

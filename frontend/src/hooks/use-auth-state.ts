@@ -65,7 +65,7 @@ export const useAuthState = () => {
       const safetyTimeout = setTimeout(() => {
         console.warn("⚠️ Auth check timed out, forcing loading to false");
         setLoading(false);
-      }, 7000);
+      }, 15000);
 
       return () => clearTimeout(safetyTimeout);
     }

@@ -84,7 +84,10 @@ async def get_current_user(
                                 ip_address=get_client_ip(request),
                                 description=f"Token used from different device/network: {reason}",
                                 user_id=user_id,
+                                db=db,
                             )
+                            # Commit to ensure log is saved before raising 401
+                            await db.commit()
                         except Exception:
                             pass
 

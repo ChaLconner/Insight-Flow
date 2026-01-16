@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Task } from "@/types";
 import { transformProjectData } from "@/lib/project-utils";
 
@@ -10,19 +10,30 @@ async function fetchServer<T>(
   options: RequestInit = {},
 ): Promise<T> {
   const cookieStore = await cookies();
+  const headersStore = await headers();
+  
   const allCookies = cookieStore
     .getAll()
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
 
+  // Forward critical headers for fingerprint validation (User-Agent, IP)
+  const userAgent = headersStore.get("user-agent") ?? "";
+  const xForwardedFor = headersStore.get("x-forwarded-for") ?? "";
+
   // Standardize path to ensure it starts with / but doesn't duplicate
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
+
+  /* console.log(`[fetchServer] Requesting: ${SERVER_BASE_URL}${cleanPath}`);
+  console.log(`[fetchServer] Cookies present: ${cookieStore.getAll().map(c => c.name).join(', ')}`); */
 
   const res = await fetch(`${SERVER_BASE_URL}${cleanPath}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       Cookie: allCookies,
+      "User-Agent": userAgent,
+      "X-Forwarded-For": xForwardedFor,
       ...options.headers,
     },
     cache: "no-store", // Default to dynamic for authenticated data
