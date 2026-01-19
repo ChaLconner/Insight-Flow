@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { motion } from "framer-motion";
 import { Layout, GitBranch, BarChart3, Users } from "lucide-react";
 import { useMemo } from "react";
 
@@ -20,15 +19,19 @@ const FeatureCard = ({
   feature: FeatureData;
   index: number;
 }) => {
+  const glowColors = [
+    "from-indigo-600 via-indigo-400 to-blue-500",
+    "from-purple-600 via-purple-400 to-pink-500",
+    "from-cyan-600 via-cyan-400 to-teal-500",
+    "from-orange-600 via-orange-400 to-red-500",
+  ];
+
   return (
-    <motion.div
-      className="flex-shrink-0 w-[85vw] md:w-[70vw] lg:w-[60vw] snap-center"
-      initial={{ opacity: 0, scale: 0.9 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5 }}
-      viewport={{ once: true }}
-    >
-      <div className="group h-full flex flex-col md:grid md:grid-cols-2 gap-8 md:gap-16 bg-gradient-to-br from-zinc-800/90 via-zinc-900/95 to-zinc-950 border border-zinc-700/50 rounded-[2.5rem] p-8 md:p-12 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden">
+    <div className="flex-shrink-0 w-[85vw] md:w-[70vw] lg:w-[60vw] snap-center">
+      <div 
+        className="group h-full flex flex-col md:grid md:grid-cols-2 gap-8 md:gap-16 bg-gradient-to-br from-zinc-800/90 via-zinc-900/95 to-zinc-950 border border-zinc-700/50 rounded-[2.5rem] p-8 md:p-12 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden" 
+        style={{ contain: 'layout paint' }}
+      >
         {/* Top highlight line */}
         <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-zinc-500/50 to-transparent" />
 
@@ -49,40 +52,33 @@ const FeatureCard = ({
         </div>
 
         {/* Visual Content */}
-        <div className="flex items-center justify-center z-10 relative group-hover/card">
-          {/* Dynamic Back Glow */}
-          {/* Diffused Glowing Border Effect */}
+        <div className="flex items-center justify-center z-10 relative">
+          {/* Diffused Glowing Border Effect - Hidden on mobile */}
           <div
-            className={`absolute -inset-0.5 rounded-[18px] blur-md opacity-60 transition-all duration-500 group-hover:opacity-100 group-hover:blur-xl group-hover:-inset-2 ${
-              index % 4 === 0
-                ? "bg-gradient-to-br from-indigo-600 via-indigo-400 to-blue-500"
-                : index % 4 === 1
-                ? "bg-gradient-to-br from-purple-600 via-purple-400 to-pink-500"
-                : index % 4 === 2
-                ? "bg-gradient-to-br from-cyan-600 via-cyan-400 to-teal-500"
-                : "bg-gradient-to-br from-orange-600 via-orange-400 to-red-500"
-            }`}
+            className={`absolute inset-0 rounded-[18px] blur-md opacity-40 transition-opacity duration-500 group-hover:opacity-80 hidden md:block bg-gradient-to-br ${glowColors[index % 4]}`}
           />
 
-          <motion.div
-            whileHover={{ scale: 1.03, rotateY: 2 }}
-            transition={{ type: "spring", stiffness: 200, damping: 25 }}
-            className="w-full relative rounded-2xl overflow-hidden shadow-[0_30px_60px_-10px_rgba(0,0,0,0.9)] border border-zinc-500/30 bg-zinc-950/80 backdrop-blur-sm z-10"
-          >
+          <div className="w-full relative rounded-2xl overflow-hidden shadow-[0_30px_60px_-10px_rgba(0,0,0,0.9)] border border-zinc-500/30 bg-zinc-950/80 z-10 transition-transform duration-300 hover:scale-[1.02]">
             {feature.visual}
             {/* Enhanced Glossy overlay */}
             <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-white/5 to-transparent pointer-events-none mix-blend-overlay" />
             {/* Border highlight */}
             <div className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10 pointer-events-none" />
-          </motion.div>
+          </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 
+import { useElementOnScreen } from "@/hooks/use-element-on-screen";
+
+// ... feature data interface and FeatureCard component ...
+
 export function FeaturesSection() {
-const features = useMemo(() => [
+  const [ref, isVisible] = useElementOnScreen({ threshold: 0.1 });
+  
+  const features = useMemo(() => [
     {
       title: "Centralized Dashboard",
       description:
@@ -102,6 +98,7 @@ const features = useMemo(() => [
             height={800}
             className="w-full h-auto rounded-xl shadow-2xl"
             sizes="(max-width: 768px) 85vw, (max-width: 1200px) 50vw, 33vw"
+            loading="lazy"
           />
         </div>
       ),
@@ -121,6 +118,7 @@ const features = useMemo(() => [
             height={800}
             className="w-full h-auto rounded-xl shadow-2xl"
             sizes="(max-width: 768px) 85vw, (max-width: 1200px) 50vw, 33vw"
+            loading="lazy"
           />
         </div>
       ),
@@ -144,6 +142,7 @@ const features = useMemo(() => [
             height={800}
             className="w-full h-auto rounded-xl shadow-2xl"
             sizes="(max-width: 768px) 85vw, (max-width: 1200px) 50vw, 33vw"
+            loading="lazy"
           />
         </div>
       ),
@@ -163,6 +162,7 @@ const features = useMemo(() => [
             height={800}
             className="w-full h-auto rounded-xl shadow-2xl"
             sizes="(max-width: 768px) 85vw, (max-width: 1200px) 50vw, 33vw"
+            loading="lazy"
           />
         </div>
       ),
@@ -173,14 +173,16 @@ const features = useMemo(() => [
     <div
       id="features"
       className="scroll-mt-20 py-20 overflow-hidden relative"
+      style={{ contain: 'layout style' }}
+      ref={ref}
     >
-      {/* Aura Background Glow */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[150px]" />
-        <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-purple-500/15 rounded-full blur-[130px]" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-cyan-500/10 rounded-full blur-[120px]" />
+      {/* Aura Background Glow - Hidden on mobile */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden hidden md:block">
+        <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[60px]" />
+        <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[60px]" />
       </div>
-      <div className="max-w-7xl mx-auto px-6 text-center mb-12">
+      
+      <div className={`max-w-7xl mx-auto px-6 text-center mb-12 duration-700 transition-all ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
         <h2 className="text-3xl md:text-5xl font-bold mb-6">
           Built for high-performance teams
         </h2>
@@ -195,7 +197,7 @@ const features = useMemo(() => [
         <div className="absolute left-0 top-0 bottom-0 w-20 z-10 bg-gradient-to-r from-background to-transparent pointer-events-none" />
         <div className="absolute right-0 top-0 bottom-0 w-20 z-10 bg-gradient-to-l from-background to-transparent pointer-events-none" />
         
-        <div className="flex w-max gap-6 animate-infinite-scroll hover:pause">
+        <div className="flex w-max gap-6 animate-infinite-scroll hover:pause will-change-transform">
           {/* Double mapping for seamless infinite loop */}
           {[...features, ...features].map((feature, i) => (
             <FeatureCard key={i} feature={feature} index={i} />

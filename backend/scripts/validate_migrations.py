@@ -93,6 +93,31 @@ def parse_migration_file(filepath: Path) -> dict | None:
         return None
 
 
+
+def _check_broken_chains(migrations: list[dict], all_revisions: set[str]) -> list[str]:
+    errors = []
+    for migration in migrations:
+        down_rev = migration["down_revision"]
+        if down_rev is None:
+            continue
+        if isinstance(down_rev, tuple):
+            for parent in down_rev:
+                if parent not in all_revisions:
+                    errors.append(f"Broken chain: '{migration['revision']}' references non-existent parent '{parent}'")
+        elif down_rev not in all_revisions:
+            errors.append(f"Broken chain: '{migration['revision']}' references non-existent parent '{down_rev}'")
+    return errors
+
+def _check_missing_functions(migrations: list[dict]) -> tuple[list[str], list[str]]:
+    errors = []
+    warnings = []
+    for migration in migrations:
+        if not migration["has_upgrade"]:
+            errors.append(f"Missing upgrade() function in {migration['file']}")
+        if not migration["has_downgrade"]:
+            warnings.append(f"Missing downgrade() function in {migration['file']}")
+    return errors, warnings
+
 def validate_migration_chain(migrations: list[dict]) -> tuple[bool, list[str]]:
     """
     Validate the migration chain for issues.
@@ -118,33 +143,12 @@ def validate_migration_chain(migrations: list[dict]) -> tuple[bool, list[str]]:
         revision_to_migration[rev] = migration
 
     # Check for broken chains
-    for migration in migrations:
-        down_rev = migration["down_revision"]
-
-        if down_rev is None:
-            # Initial migration - should only have one
-            continue
-
-        if isinstance(down_rev, tuple):
-            # Merge migration
-            for parent in down_rev:
-                if parent not in all_revisions:
-                    errors.append(
-                        f"Broken chain: '{migration['revision']}' references "
-                        f"non-existent parent '{parent}'"
-                    )
-        elif down_rev not in all_revisions:
-            errors.append(
-                f"Broken chain: '{migration['revision']}' references "
-                f"non-existent parent '{down_rev}'"
-            )
+    errors.extend(_check_broken_chains(migrations, all_revisions))
 
     # Check for missing upgrade/downgrade
-    for migration in migrations:
-        if not migration["has_upgrade"]:
-            errors.append(f"Missing upgrade() function in {migration['file']}")
-        if not migration["has_downgrade"]:
-            warnings.append(f"Missing downgrade() function in {migration['file']}")
+    missing_errors, missing_warnings = _check_missing_functions(migrations)
+    errors.extend(missing_errors)
+    warnings.extend(missing_warnings)
 
     # Count initial migrations (should be exactly 1)
     initial_migrations = [m for m in migrations if m["down_revision"] is None]

@@ -109,6 +109,14 @@ class TokenBlacklist(BaseModel):
         return blacklisted_token is not None
 
     @classmethod
+    async def async_get_blacklisted_token(cls, db_session: "AsyncSession", token_jti: str) -> "TokenBlacklist | None":
+        """
+        Get blacklisted token details (Async).
+        """
+        result = await db_session.execute(select(cls).filter(cls.token_jti == token_jti))
+        return result.scalars().first()
+
+    @classmethod
     async def async_cleanup_expired_tokens(cls, db_session: "AsyncSession"):
         """
         Remove expired tokens from blacklist (Async).
@@ -124,8 +132,10 @@ class TokenBlacklist(BaseModel):
         """
         Add a token to the blacklist (Async).
         """
-        # Clean up expired tokens first
-        await cls.async_cleanup_expired_tokens(db_session)
+        # Clean up expired tokens probabilistically (10% chance) to reduce DB load
+        import random
+        if random.random() < 0.1:
+           await cls.async_cleanup_expired_tokens(db_session)
 
         # Check if already blacklisted
         result = await db_session.execute(select(cls).filter(cls.token_jti == token_jti))

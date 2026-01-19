@@ -100,7 +100,7 @@ if os.environ.get("TESTING") == "true":
         async def __aenter__(self):
             return self
 
-        async def __aexit__(self, *args):
+        async def __aexit__(self, *_args):
             pass
 
         async def commit(self):
@@ -112,25 +112,25 @@ if os.environ.get("TESTING") == "true":
         async def close(self):
             pass
 
-        async def execute(self, *args, **kwargs):
+        async def execute(self, *_args, **_kwargs):
             return DummyResult()
 
-        async def scalar(self, *args, **kwargs):
+        async def scalar(self, *_args, **_kwargs):
             return None
 
-        async def scalars(self, *args, **kwargs):
+        async def scalars(self, *_args, **_kwargs):
             return DummyResult()
 
-        def add(self, *args, **kwargs):
+        def add(self, *_args, **_kwargs):
             pass
 
-        async def refresh(self, *args, **kwargs):
+        async def refresh(self, *_args, **_kwargs):
             pass
 
-        async def get(self, *args, **kwargs):
+        async def get(self, *_args, **_kwargs):
             return None
 
-        async def delete(self, *args, **kwargs):
+        async def delete(self, *_args, **_kwargs):
             pass
 
     AsyncSessionLocal: Callable[..., AsyncSession] = DummySession  # type: ignore

@@ -177,11 +177,13 @@ async def test_attach_payment_method_commit_fail(payment_service, mock_db_sessio
         )
         mock_db_session.commit.side_effect = Exception("DB Fail")
 
-        with patch("services.payment_service.security_logger"):
-            with pytest.raises(Exception, match="DB Fail"):
-                await payment_service.attach_payment_method(
-                    mock_db_session, test_user.id, pm_create, "cus_1"
-                )
+        with (
+            patch("services.payment_service.security_logger"),
+            pytest.raises(Exception, match="DB Fail"),
+        ):
+            await payment_service.attach_payment_method(
+                mock_db_session, test_user.id, pm_create, "cus_1"
+            )
 
 
 @pytest.mark.asyncio

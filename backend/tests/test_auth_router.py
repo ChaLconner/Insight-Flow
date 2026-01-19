@@ -198,15 +198,17 @@ class TestAuthRouterEdgeCases:
     @pytest.mark.asyncio
     async def test_google_login_invalid_token(self, mock_db):
         """Test Google login with invalid token."""
-        with patch("routers.auth.is_google_oauth_configured", return_value=True):
-            with patch("routers.auth.async_verify_google_id_token", return_value=None):
-                with TestClient(app) as client:
-                    response = client.post("/api/v1/auth/google", json={"idToken": "invalid_token"})
-                    try:
-                        assert response.status_code == 401
-                        assert "Invalid Google token" in response.json()["message"]
-                    except Exception:
-                        raise
+        with (
+            patch("routers.auth.is_google_oauth_configured", return_value=True),
+            patch("routers.auth.async_verify_google_id_token", return_value=None),
+            TestClient(app) as client,
+        ):
+            response = client.post("/api/v1/auth/google", json={"idToken": "invalid_token"})
+            try:
+                assert response.status_code == 401
+                assert "Invalid Google token" in response.json()["message"]
+            except Exception:
+                raise
 
     @pytest.mark.asyncio
     async def test_google_login_email_not_verified(self, mock_db):

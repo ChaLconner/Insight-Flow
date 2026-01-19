@@ -101,6 +101,22 @@ def verify_token(token: str) -> dict[str, Any]:
             raise ValueError("Invalid token structure")
 
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+        # Absolute Session Timeout Policy (A+ Security)
+        # Force re-login after 365 days even if user is active
+        # This prevents sessions from living forever
+        iat = payload.get("iat")
+        if iat:
+            session_start = datetime.fromtimestamp(iat, tz=UTC)
+            now = datetime.now(UTC)
+            MAX_SESSION_DAYS = 365
+            if (now - session_start).days > MAX_SESSION_DAYS:
+                 raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session limit exceeded. Please log in again.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
         return dict(payload)
     except ExpiredSignatureError:
         raise HTTPException(
@@ -174,12 +190,17 @@ async def async_verify_token_with_blacklist(
 
     token_jti = payload.get("jti")
 
-    if token_jti and await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # Check if token is blacklisted
+    # Note: Grace period logic removed temporarily due to DB schema migration requirement
+    if token_jti:
+        is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
+
+        if is_revoked:
+             raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     return payload
 

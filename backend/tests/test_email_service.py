@@ -119,28 +119,30 @@ class TestEmailServiceSending:
         """Test email uses default sender when SENDER_EMAIL not explicitly set."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "RESEND_API_KEY": "re_test_api_key",
-                "SENDER_EMAIL": "",  # Empty, should use default
-            },
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RESEND_API_KEY": "re_test_api_key",
+                    "SENDER_EMAIL": "",  # Empty, should use default
+                },
+            ),
+            patch("httpx.AsyncClient") as mock_client,
         ):
-            with patch("httpx.AsyncClient") as mock_client:
-                mock_response = AsyncMock()
-                mock_response.status_code = 200
+            mock_response = AsyncMock()
+            mock_response.status_code = 200
 
-                mock_instance = AsyncMock()
-                mock_instance.post = AsyncMock(return_value=mock_response)
-                mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
-                mock_instance.__aexit__ = AsyncMock(return_value=None)
-                mock_client.return_value = mock_instance
+            mock_instance = AsyncMock()
+            mock_instance.post = AsyncMock(return_value=mock_response)
+            mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_instance.__aexit__ = AsyncMock(return_value=None)
+            mock_client.return_value = mock_instance
 
-                result = await EmailService.send_email(
-                    "recipient@example.com", "Test Subject", "<p>Test content</p>"
-                )
+            result = await EmailService.send_email(
+                "recipient@example.com", "Test Subject", "<p>Test content</p>"
+            )
 
-                assert result is True
+            assert result is True
 
 
 class TestEmailTemplates:

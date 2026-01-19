@@ -13,6 +13,7 @@ interface AuthState {
   isLoading: boolean;
   lastActivity: number;
   isInitialized: boolean;
+  lastVerified: number; // Timestamp of last server-side verification
 
   // Actions
   setUser: (user: User | null) => void;
@@ -31,6 +32,7 @@ interface PersistedAuthState {
   user: User | null;
   isAuthenticated: boolean;
   lastActivity: number;
+  lastVerified: number;
 }
 
 
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
       lastActivity: Date.now(),
       isInitialized: false,
+      lastVerified: 0,
 
       // Actions
       setUser: (user) => {
@@ -88,6 +91,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           isLoading: false,
           lastActivity: Date.now(),
+          lastVerified: Date.now(),
           isInitialized: true,
         });
       },
@@ -99,6 +103,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           isLoading: false,
           lastActivity: 0,
+          lastVerified: 0,
           isInitialized: false,
         });
       },
@@ -133,54 +138,99 @@ export const useAuthStore = create<AuthState>()(
       // refreshAuthToken action removed
 
       initializeAuth: async () => {
-        const { setLoading, setUser, logout, isInitialized } = get();
-        const state = get();
+        const { setLoading, setUser, logout, isInitialized, user, isAuthenticated, lastVerified } = get();
 
         // 1. If already initialized, ensure loading is false and return
         if (isInitialized) {
-          if (state.isLoading) {
+          if (get().isLoading) {
             setLoading(false);
           }
           return;
         }
 
-        // 2. Start initialization
-          // If we are starting fresh, show loading
-          setLoading(true);
+        // Check environment
+        if (typeof window === "undefined") {
+          setLoading(false);
+          set({ isInitialized: true });
+          return;
+        }
 
-          // Check environment
-          if (typeof window === "undefined") {
-            setLoading(false);
-            set({ isInitialized: true });
-            return;
-          }
+        // Skip auth check on login/register pages - user is not expected to be authenticated
+        const isOnAuthPage = window.location.pathname.startsWith("/auth/");
+        if (isOnAuthPage) {
+          setLoading(false);
+          set({ isInitialized: true });
+          return;
+        }
 
-          // Skip auth check on login/register pages - user is not expected to be authenticated
-          const isOnAuthPage = window.location.pathname.startsWith("/auth/");
-          if (isOnAuthPage) {
-            setLoading(false);
-            set({ isInitialized: true });
-            return;
-          }
+        // 2. OPTIMISTIC: If we have cached user data that was verified recently, use it immediately
+        const FRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+        const now = Date.now();
+        const isFreshSession = lastVerified && (now - lastVerified) < FRESH_THRESHOLD;
 
-          // Verify session via cookie using /auth/me endpoint
+        if (isAuthenticated && user && isFreshSession) {
+          // User data is fresh - use cache immediately, no loading state needed
+          console.log("✅ Using cached auth (verified", Math.round((now - lastVerified) / 1000), "seconds ago)");
+          setLoading(false);
+          set({ isInitialized: true });
+          
+          // Background refresh to update user data silently (non-blocking)
+          import("@/lib/api-client").then(({ apiClient }) => {
+            apiClient.get<User>("/auth/me").then((response) => {
+              if (response.data) {
+                setUser(response.data);
+                set({ lastVerified: Date.now() });
+              }
+            }).catch(() => {
+              // Silent fail - user might have been logged out on server
+              // Will be caught on next navigation
+            });
+          });
+          return;
+        }
+
+        // 3. If we have stale cached data, show optimistic UI but verify
+        if (isAuthenticated && user) {
+          // Show cached user immediately (optimistic)
+          setLoading(false);
+          set({ isInitialized: true });
+          console.log("⏳ Using stale cache, verifying with server...");
+          
+          // Verify with server
           try {
-            // Use apiClient to handle token refresh automatically
             const { apiClient } = await import("@/lib/api-client");
-            
             const response = await apiClient.get<User>("/auth/me");
             
             if (response.data) {
               setUser(response.data);
+              set({ lastVerified: Date.now() });
             }
           } catch {
-            // If request fails (after retries/refresh), we are not authenticated
-            // We expect 401 if user is not logged in, which is fine - just clear state silently
+            // Session is invalid - logout
+            console.warn("⚠️ Cached session invalid, logging out");
             logout();
-          } finally {
-             setLoading(false);
-             set({ isInitialized: true });
           }
+          return;
+        }
+
+        // 4. No cached data - need to fetch from server (show loading)
+        setLoading(true);
+
+        try {
+          const { apiClient } = await import("@/lib/api-client");
+          const response = await apiClient.get<User>("/auth/me");
+          
+          if (response.data) {
+            setUser(response.data);
+            set({ lastVerified: Date.now() });
+          }
+        } catch {
+          // Not authenticated - clear state silently
+          logout();
+        } finally {
+          setLoading(false);
+          set({ isInitialized: true });
+        }
       },
 
       fetchUserProfile: async () => {
@@ -245,6 +295,7 @@ export const useAuthStore = create<AuthState>()(
           user: validatedUser,
           isAuthenticated: state.isAuthenticated,
           lastActivity: state.lastActivity,
+          lastVerified: state.lastVerified,
         };
       },
     },

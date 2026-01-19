@@ -41,7 +41,7 @@ class TestAsyncUserService:
             email="duplicate@example.com", password="AnotherPassword123!", name="User Two"
         )
 
-        with pytest.raises(ValueError, match="already registered|[Aa]lready exists|[Dd]uplicate"):
+        with pytest.raises(ValueError, match=r"already registered|[Aa]lready exists|[Dd]uplicate"):
             await async_user_service.create_user(duplicate_data)
 
     @pytest.mark.asyncio

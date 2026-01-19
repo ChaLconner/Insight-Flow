@@ -55,6 +55,7 @@ function LoginForm() {
       const response = await apiClient.post("/auth/login", {
         email: values.email,
         password: values.password,
+        remember_me: values.rememberMe,
       });
 
       const data = response.data;

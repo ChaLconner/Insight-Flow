@@ -10,7 +10,7 @@ import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +20,7 @@ try:
 except ImportError:
     SecurityLog = None
 
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+
 
 
 # Setup dedicated security audit logger

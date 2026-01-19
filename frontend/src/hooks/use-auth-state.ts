@@ -162,7 +162,7 @@ export const useRequireAuth = () => {
             console.warn(
               "🔒 useRequireAuth: Redirecting to login (missing auth)",
             );
-            window.location.replace("/auth/login");
+            window.location.replace("/auth/login?logout=true");
           }
         }
 

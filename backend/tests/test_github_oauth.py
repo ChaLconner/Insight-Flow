@@ -26,81 +26,91 @@ class TestExchangeCodeForToken:
 
     def test_exchange_code_no_credentials(self):
         """Test returns None when credentials not configured."""
-        with patch("utils.github_oauth.GITHUB_CLIENT_ID", None):
-            with patch("utils.github_oauth.GITHUB_CLIENT_SECRET", None):
-                from utils.github_oauth import exchange_code_for_token
+        with (
+            patch("utils.github_oauth.GITHUB_CLIENT_ID", None),
+            patch("utils.github_oauth.GITHUB_CLIENT_SECRET", None),
+        ):
+            from utils.github_oauth import exchange_code_for_token
 
-                result = exchange_code_for_token("test_code")
+            result = exchange_code_for_token("test_code")
 
-                assert result is None
+            assert result is None
 
     def test_exchange_code_success(self):
         """Test successful code exchange."""
-        with patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"):
-            with patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"):
-                with patch("utils.github_oauth.requests.post") as mock_post:
-                    mock_response = MagicMock()
-                    mock_response.status_code = 200
-                    mock_response.json.return_value = {
-                        "access_token": "gho_test_token_123",
-                        "token_type": "bearer",
-                        "scope": "user:email",
-                    }
-                    mock_post.return_value = mock_response
+        with (
+            patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
+            patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
+            patch("utils.github_oauth.requests.post") as mock_post,
+        ):
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "access_token": "gho_test_token_123",
+                "token_type": "bearer",
+                "scope": "user:email",
+            }
+            mock_post.return_value = mock_response
 
-                    from utils.github_oauth import exchange_code_for_token
+            from utils.github_oauth import exchange_code_for_token
 
-                    result = exchange_code_for_token("valid_code")
+            result = exchange_code_for_token("valid_code")
 
-                    assert result == "gho_test_token_123"
+            assert result == "gho_test_token_123"
 
     def test_exchange_code_api_error(self):
         """Test returns None on API error response."""
-        with patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"):
-            with patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"):
-                with patch("utils.github_oauth.requests.post") as mock_post:
-                    mock_response = MagicMock()
-                    mock_response.status_code = 401
-                    mock_response.text = "Unauthorized"
-                    mock_post.return_value = mock_response
+        with (
+            patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
+            patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
+            patch("utils.github_oauth.requests.post") as mock_post,
+        ):
+            mock_response = MagicMock()
+            mock_response.status_code = 401
+            mock_response.text = "Unauthorized"
+            mock_post.return_value = mock_response
 
-                    from utils.github_oauth import exchange_code_for_token
+            from utils.github_oauth import exchange_code_for_token
 
-                    result = exchange_code_for_token("invalid_code")
+            result = exchange_code_for_token("invalid_code")
 
-                    assert result is None
+            assert result is None
 
     def test_exchange_code_oauth_error(self):
         """Test returns None when GitHub returns OAuth error."""
-        with patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"):
-            with patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"):
-                with patch("utils.github_oauth.requests.post") as mock_post:
-                    mock_response = MagicMock()
-                    mock_response.status_code = 200
-                    mock_response.json.return_value = {
-                        "error": "bad_verification_code",
-                        "error_description": "The code passed is incorrect or expired.",
-                    }
-                    mock_post.return_value = mock_response
+        with (
+            patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
+            patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
+            patch("utils.github_oauth.requests.post") as mock_post,
+        ):
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {
+                "error": "bad_verification_code",
+                "error_description": "The code passed is incorrect or expired.",
+            }
+            mock_post.return_value = mock_response
 
-                    from utils.github_oauth import exchange_code_for_token
+            from utils.github_oauth import exchange_code_for_token
 
-                    result = exchange_code_for_token("expired_code")
+            result = exchange_code_for_token("expired_code")
 
-                    assert result is None
+            assert result is None
 
     def test_exchange_code_exception(self):
         """Test returns None on exception."""
-        with patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"):
-            with patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"):
-                with patch("utils.github_oauth.requests.post") as mock_post:
-                    mock_post.side_effect = Exception("Network error")
+        with (
+            patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
+            patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
+            patch("utils.github_oauth.requests.post") as mock_post,
+        ):
+            mock_post.side_effect = Exception("Network error")
 
-                    from utils.github_oauth import exchange_code_for_token
+            from utils.github_oauth import exchange_code_for_token
 
-                    result = exchange_code_for_token("test_code")
+            result = exchange_code_for_token("test_code")
 
-                    assert result is None
+            assert result is None
 
 
 class TestGetGitHubUserInfo:
@@ -208,10 +218,12 @@ class TestAsyncExchangeCodeForToken:
     @pytest.mark.asyncio
     async def test_async_exchange_code_no_credentials(self):
         """Test async version returns None when not configured."""
-        with patch("utils.github_oauth.GITHUB_CLIENT_ID", None):
-            with patch("utils.github_oauth.GITHUB_CLIENT_SECRET", None):
-                from utils.github_oauth import async_exchange_code_for_token
+        with (
+            patch("utils.github_oauth.GITHUB_CLIENT_ID", None),
+            patch("utils.github_oauth.GITHUB_CLIENT_SECRET", None),
+        ):
+            from utils.github_oauth import async_exchange_code_for_token
 
-                result = await async_exchange_code_for_token("code")
+            result = await async_exchange_code_for_token("code")
 
-                assert result is None
+            assert result is None

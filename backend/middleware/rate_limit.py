@@ -74,6 +74,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.request_history: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
         self._last_cleanup = time.time()
+        self.background_tasks = set()
 
     def _get_rate_key(self, request: Request) -> str:
         """Get rate limiting key for the request."""
@@ -88,14 +89,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Default: use IP only for general rate limiting
         return f"{client_ip}:default"
 
-    async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for static files or health checks
-        if request.url.path.startswith("/static") or request.url.path == "/":
-            return await call_next(request)
-
-        client_ip = request.client.host if request.client else "unknown"
-
-        # A+ Security: Check if IP is blocked first
+    async def _check_ip_block(self, request: Request, client_ip: str):
+        """Check if IP is blocked and return response if so."""
         try:
             from security.ip_blocking import get_ip_blocker
 
@@ -139,6 +134,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             pass  # IP blocking not available
         except Exception as e:
             logger.debug(f"IP blocking check skipped: {e}")
+        return None
+
+    async def dispatch(self, request: Request, call_next):
+        # Skip rate limiting for static files or health checks
+        if request.url.path.startswith("/static") or request.url.path == "/":
+            return await call_next(request)
+
+        client_ip = request.client.host if request.client else "unknown"
+
+        # A+ Security: Check if IP is blocked first
+        blocked_response = await self._check_ip_block(request, client_ip)
+        if blocked_response:
+            return blocked_response
 
         # Get rate limit key and limits for this request
         rate_key = self._get_rate_key(request)
@@ -173,7 +181,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     # Use fire_and_forget to not block the response
                     import asyncio
 
-                    asyncio.create_task(blocker.record_violation(client_ip, f"rate_limit:{path}"))
+                    task = asyncio.create_task(blocker.record_violation(client_ip, f"rate_limit:{path}"))
+                    self.background_tasks.add(task)
+                    task.add_done_callback(self.background_tasks.discard)
                 except Exception:
                     pass
 

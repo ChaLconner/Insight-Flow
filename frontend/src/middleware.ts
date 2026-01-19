@@ -90,6 +90,14 @@ export function middleware(request: NextRequest) {
 
   // If authenticated and trying to access auth routes, redirect to dashboard
   if (isAuthenticated && isAuthRoute) {
+    // Break redirect loop if user is explicitly logging out or needs to re-login
+    if (request.nextUrl.searchParams.get("logout") === "true") {
+      const response = NextResponse.next();
+      response.cookies.delete("access_token");
+      response.cookies.delete("refresh_token");
+      return response;
+    }
+
     const dashboardUrl = new URL("/dashboard", request.url);
     return NextResponse.redirect(dashboardUrl);
   }

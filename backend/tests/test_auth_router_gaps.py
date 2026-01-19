@@ -69,19 +69,22 @@ class TestAuthRouterGaps:
         """Test logout logic where token is verified and blacklisted."""
         mock_request.cookies = {"access_token": "valid.token.here"}
 
-        with patch("routers.auth.clear_auth_cookies") as mock_clear:
+        with (
+            patch("routers.auth.clear_auth_cookies") as mock_clear,
             # Patch utils.auth.verify_token because it is imported inside the function
-            with patch("utils.auth.verify_token") as mock_verify:
-                mock_verify.return_value = {"jti": "unique_id", "sub": "user_123"}
+            patch("utils.auth.verify_token") as mock_verify,
+        ):
+            mock_verify.return_value = {"jti": "unique_id", "sub": "user_123"}
 
-                with patch("routers.auth.get_token_expiration") as mock_exp:
-                    # Mock expiry
-                    mock_exp.return_value = 1234567890
+            with patch("routers.auth.get_token_expiration") as mock_exp:
+                mock_exp.return_value = 1000
 
-                    with patch(
-                        "routers.auth.TokenBlacklist.async_blacklist_token"
-                    ) as mock_blacklist:
-                        await logout(mock_request, mock_response, mock_db)
+                # Also patch token blacklist
+                with patch("routers.auth.TokenBlacklist.async_blacklist_token") as mock_bl:
+                    mock_bl.return_value = None
 
-                        mock_blacklist.assert_called_once()
-                        mock_clear.assert_called_once()
+                    result = await logout(mock_request, mock_response, db=mock_db)
+
+                    assert result["message"] == "Successfully logged out"
+                    mock_clear.assert_called_once()
+                    mock_bl.assert_called_once()

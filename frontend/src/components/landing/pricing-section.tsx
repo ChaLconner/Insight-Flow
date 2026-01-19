@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/auth-store";
@@ -20,7 +19,11 @@ interface PlanData {
   badgeColor?: string;
 }
 
-const PricingCard = ({ plan, index }: { plan: PlanData; index: number }) => {
+import { useElementOnScreen } from "@/hooks/use-element-on-screen";
+
+// ... PlanData interface ...
+
+const PricingCard = ({ plan, index, isVisible }: { plan: PlanData; index: number; isVisible: boolean }) => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [mounted, setMounted] = useState(false);
 
@@ -38,17 +41,13 @@ const PricingCard = ({ plan, index }: { plan: PlanData; index: number }) => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-50px" }}
-      transition={{ delay: index * 0.15, duration: 0.5 }}
-      className={`relative p-8 rounded-2xl border transition-all duration-300 flex flex-col ${
-        plan.popular
-          ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20"
-          : "border-white/10 bg-zinc-900/50 hover:bg-zinc-900/80 hover:border-white/20"
-      }`}
+    <div
+      className={`relative p-8 rounded-2xl border transition-all duration-700 flex flex-col ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
+      style={{ 
+        transitionDelay: `${index * 100}ms` 
+      }}
     >
+      {/* ... rest of card content ... */}
       {plan.badge && (
         <div
           className={`absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide text-white ${
@@ -101,21 +100,28 @@ const PricingCard = ({ plan, index }: { plan: PlanData; index: number }) => {
       >
         {plan.cta}
       </Link>
-    </motion.div>
+    </div>
   );
 };
 
 export function PricingSection() {
   const { plans: fetchedPlans } = useBillingData({ silent: true });
+  const [ref, isVisible] = useElementOnScreen({ threshold: 0.1 });
 
-  const plans = useMemo(() => {
+  // Plans definitions moved inside mergedPlans to avoid duplication and unused var warnings
+
+
+  // Re-apply the merge logic inside component or useMemo properly
+  // Since I'm replacing the whole block, I'll copy the full logic back in.
+
+  const mergedPlans = useMemo(() => {
     const staticPlans: PlanData[] = [
       {
         id: "free",
         name: "Free",
         price: "0",
         description: "Perfect for personal projects and small experiments.",
-        features: [], // Will be populated from API
+        features: [],
         cta: "Start for Free",
       },
       {
@@ -154,7 +160,6 @@ export function PricingSection() {
       }
     ];
 
-    // Merge API data if available
     if (Object.keys(fetchedPlans).length > 0) {
       return staticPlans.map(p => {
         const apiPlan = fetchedPlans[p.id];
@@ -173,7 +178,6 @@ export function PricingSection() {
       });
     }
 
-    // Fallback if API not loaded yet (use hardcoded features to avoid empty list)
     return [
       {
          ...staticPlans[0],
@@ -198,14 +202,16 @@ export function PricingSection() {
     <div
       id="pricing"
       className="scroll-mt-20 max-w-7xl mx-auto py-20 relative"
+      style={{ contain: 'layout style' }}
+      ref={ref}
     >
-      {/* Aura Background Glow for Pricing */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-amber-500/15 rounded-full blur-[140px]" />
-        <div className="absolute top-1/2 right-0 -translate-y-1/2 w-[400px] h-[400px] bg-rose-500/12 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 left-0 w-[450px] h-[350px] bg-emerald-500/10 rounded-full blur-[130px]" />
+      {/* Aura Background Glow for Pricing - Hidden on mobile */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden hidden md:block">
+        <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-amber-500/15 rounded-full blur-[80px]" />
+        <div className="absolute top-1/2 right-0 -translate-y-1/2 w-[400px] h-[400px] bg-rose-500/12 rounded-full blur-[70px]" />
+        <div className="absolute bottom-0 left-0 w-[450px] h-[350px] bg-emerald-500/10 rounded-full blur-[70px]" />
       </div>
-      <div className="text-center mb-16">
+      <div className={`text-center mb-16 duration-700 transition-all ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
         <h2 className="text-3xl md:text-5xl font-bold mb-4">
           Simple, transparent pricing
         </h2>
@@ -216,8 +222,8 @@ export function PricingSection() {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {plans.map((plan, i) => (
-          <PricingCard key={i} plan={plan} index={i} />
+        {mergedPlans.map((plan, i) => (
+          <PricingCard key={i} plan={plan} index={i} isVisible={isVisible} />
         ))}
       </div>
     </div>

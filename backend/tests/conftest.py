@@ -205,11 +205,13 @@ def mock_app_dependencies(db_session):
 
     app.dependency_overrides[get_async_db] = override_get_async_db_global
 
-    with patch("database.init_database", new_callable=AsyncMock):
-        with patch("main.init_database", new_callable=AsyncMock):
-            with patch("services.scheduler.start_scheduler", return_value=None):
-                with patch("services.scheduler.shutdown_scheduler", return_value=None):
-                    yield
+    with (
+        patch("database.init_database", new_callable=AsyncMock),
+        patch("main.init_database", new_callable=AsyncMock),
+        patch("services.scheduler.start_scheduler", return_value=None),
+        patch("services.scheduler.shutdown_scheduler", return_value=None),
+    ):
+        yield
 
     # Cleanup if not already cleared
     app.dependency_overrides.pop(get_async_db, None)

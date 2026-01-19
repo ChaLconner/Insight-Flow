@@ -87,11 +87,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const apiBaseUrl =
+  /* const apiBaseUrl =
     process.env.NEXT_PUBLIC_API_URL &&
     process.env.NEXT_PUBLIC_API_URL.trim().length > 0
       ? process.env.NEXT_PUBLIC_API_URL
-      : "http://localhost:8000";
+      : "http://localhost:8000"; */
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -119,36 +119,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
-        {/* Preload critical resources */}
+        {/* Preload critical fonts only */}
         <link
           rel="preconnect"
           href="https://fonts.googleapis.com"
-          crossOrigin="anonymous"
         />
         <link
           rel="preconnect"
           href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="dns-prefetch"
-          href={apiBaseUrl}
-        />
-        {/* Preconnect to API for faster first request */}
-        <link
-          rel="preconnect"
-          href={apiBaseUrl}
-          crossOrigin="anonymous"
-        />
-        {/* Preconnect to common image sources */}
-        <link
-          rel="preconnect"
-          href="https://res.cloudinary.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preconnect"
-          href="https://ui-avatars.com"
           crossOrigin="anonymous"
         />
 

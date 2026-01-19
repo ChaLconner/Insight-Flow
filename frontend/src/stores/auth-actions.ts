@@ -91,7 +91,7 @@ export const authActions = {
   },
 
   // Alternative logout method for compatibility
-  logoutAndRedirect: async (redirectPath: string = "/auth/login") => {
+  logoutAndRedirect: async (redirectPath: string = "/auth/login?logout=true") => {
     await authActions.logout();
     if (typeof window !== "undefined") {
       window.location.href = redirectPath;

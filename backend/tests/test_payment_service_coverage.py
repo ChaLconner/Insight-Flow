@@ -222,21 +222,23 @@ async def test_delete_payment_method_soft_delete(payment_service, mock_db_sessio
     res.scalar_one_or_none.return_value = pm
     mock_db_session.execute.return_value = res
 
-    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe:
+    with (
+        patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as mock_stripe,
         # Mock payment lock
-        with patch("services.payment_service.payment_lock") as mock_lock:
-            mock_lock.return_value.__aenter__.return_value = None
+        patch("services.payment_service.payment_lock") as mock_lock,
+    ):
+        mock_lock.return_value.__aenter__.return_value = None
 
-            result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)
+        result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)
 
-            assert result is True
-            assert pm.is_active is False
+        assert result is True
+        assert pm.is_active is False
 
-            # Verify call arguments loosely to avoid function object mismatch
-            assert mock_stripe.called
-            args, _ = mock_stripe.call_args
-            assert args[1] == "pm_strip_1"  # Check the ID is passed correctly
-            mock_db_session.commit.assert_called()
+        # Verify call arguments loosely to avoid function object mismatch
+        assert mock_stripe.called
+        args, _ = mock_stripe.call_args
+        assert args[1] == "pm_strip_1"  # Check the ID is passed correctly
+        mock_db_session.commit.assert_called()
 
 
 @pytest.mark.asyncio
@@ -398,8 +400,10 @@ async def test_delete_default_payment_method_with_promotion(payment_service, moc
     payment_service.list_payment_methods = AsyncMock(return_value=[pm, other_pm])
     payment_service.set_default_payment_method = AsyncMock()
 
-    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock):
-        with patch("services.payment_service.payment_lock") as mock_lock:
+    with (
+        patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock),
+        patch("services.payment_service.payment_lock") as mock_lock,
+    ):
             mock_lock.return_value.__aenter__.return_value = None
 
             result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)

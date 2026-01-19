@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar
 from uuid import uuid4
 
 from sqlalchemy import Column, Integer, String
@@ -15,7 +16,7 @@ class TestModel(Base, SoftDeleteMixin, VersionedMixin, ChangeHistoryMixin):
     __tablename__ = "test_model"
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    __history_fields__ = ["name"]
+    __history_fields__: ClassVar[list[str]] = ["name"]
 
 
 def test_soft_delete_mixin():
@@ -151,7 +152,7 @@ def test_change_history_mixin_uuid():
     # Let's subclass TestModel or modify it
     class UUIDModel(TestModel):
         other_id = Column(String)  # Mocking as string col but treating as UUID in python?
-        __history_fields__ = ["other_id"]
+        __history_fields__: ClassVar[list[str]] = ["other_id"]
 
     u1 = uuid4()
     u2 = uuid4()

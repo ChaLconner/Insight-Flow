@@ -39,6 +39,56 @@ def get_token_from_cookie_or_header(
     return request.cookies.get(ACCESS_TOKEN_KEY)
 
 
+
+async def _verify_token_fingerprint(request: Request, payload: dict, user_id: str, db: AsyncSession):
+    """Verify token fingerprint if present and enabled."""
+    stored_fingerprint = payload.get("fp")
+    if not stored_fingerprint:
+        return
+
+    try:
+        from security.token_fingerprint import (
+            FINGERPRINT_ENABLED,
+            verify_fingerprint_claim,
+        )
+
+        if not FINGERPRINT_ENABLED:
+            return
+
+        is_valid, reason = verify_fingerprint_claim(request, stored_fingerprint)
+        if is_valid:
+            return
+
+        logger.warning(f"Token fingerprint mismatch for user {user_id}: {reason}")
+        # Log as security audit event
+        try:
+            from utils.request_security import get_client_ip
+            from utils.security_audit import security_audit
+
+            security_audit.log_suspicious_activity(
+                ip_address=get_client_ip(request),
+                description=f"Token used from different device/network: {reason}",
+                user_id=user_id,
+                db=db,
+            )
+            # Commit to ensure log is saved before raising 401
+            await db.commit()
+        except Exception:
+            pass
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalid - please login again",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except ImportError:
+        pass  # Fingerprint module not available
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.debug(f"Fingerprint verification skipped: {e}")
+
+
 async def get_current_user(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
@@ -63,45 +113,8 @@ async def get_current_user(
             )
 
         # A+ Security: Verify token fingerprint (device binding)
-        stored_fingerprint = payload.get("fp")
-        if stored_fingerprint:
-            try:
-                from security.token_fingerprint import (
-                    FINGERPRINT_ENABLED,
-                    verify_fingerprint_claim,
-                )
+        await _verify_token_fingerprint(request, payload, user_id, db)
 
-                if FINGERPRINT_ENABLED:
-                    is_valid, reason = verify_fingerprint_claim(request, stored_fingerprint)
-                    if not is_valid:
-                        logger.warning(f"Token fingerprint mismatch for user {user_id}: {reason}")
-                        # Log as security audit event
-                        try:
-                            from utils.request_security import get_client_ip
-                            from utils.security_audit import security_audit
-
-                            security_audit.log_suspicious_activity(
-                                ip_address=get_client_ip(request),
-                                description=f"Token used from different device/network: {reason}",
-                                user_id=user_id,
-                                db=db,
-                            )
-                            # Commit to ensure log is saved before raising 401
-                            await db.commit()
-                        except Exception:
-                            pass
-
-                        raise HTTPException(
-                            status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Session invalid - please login again",
-                            headers={"WWW-Authenticate": "Bearer"},
-                        )
-            except ImportError:
-                pass  # Fingerprint module not available
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.debug(f"Fingerprint verification skipped: {e}")
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise

@@ -218,47 +218,48 @@ def verify_fingerprint_claim(
     current_fp = extract_fingerprint(request)
     current_fp_string = current_fp.to_string(strictness)
 
-    # Simple string comparison for NORMAL mode
-    if strictness == FingerprintStrictness.NORMAL:
-        if current_fp_string == stored_fingerprint:
-            return True, "match"
+    # 1. Exact match check (fastest and most common case)
+    if current_fp_string == stored_fingerprint:
+        return True, "match"
 
-        # More detailed mismatch analysis
-        stored_parts = stored_fingerprint.split(":", 1)
-        current_parts = current_fp_string.split(":", 1)
+    result = (False, "fingerprint_mismatch")
 
-        if len(stored_parts) >= 1 and len(current_parts) >= 1:
-            if stored_parts[0] != current_parts[0]:
-                logger.warning(
-                    f"Token fingerprint mismatch: User-Agent changed. "
-                    f"Stored: {stored_parts[0][:8]}..., Current: {current_parts[0][:8]}..."
-                )
-                return False, "user_agent_mismatch"
-
-            if len(stored_parts) > 1 and len(current_parts) > 1:
-                if stored_parts[1] != current_parts[1]:
-                    logger.warning(
-                        f"Token fingerprint mismatch: IP network changed. "
-                        f"Stored: {stored_parts[1]}, Current: {current_parts[1]}"
-                    )
-                    return False, "ip_network_mismatch"
-
-        return False, "fingerprint_mismatch"
-
-    # LENIENT mode - only check UA hash
-    elif strictness == FingerprintStrictness.LENIENT:
+    # 2. LENIENT mode - only check UA hash
+    if strictness == FingerprintStrictness.LENIENT:
         stored_ua = (
             stored_fingerprint.split(":")[0] if ":" in stored_fingerprint else stored_fingerprint
         )
         if current_fp.user_agent_hash == stored_ua:
-            return True, "match"
-        return False, "user_agent_mismatch"
+            result = (True, "match")
+        else:
+            result = (False, "user_agent_mismatch")
 
-    # STRICT mode
+    # 3. STRICT mode - exact match required (already checked above)
+    elif strictness == FingerprintStrictness.STRICT:
+        result = (False, "strict_mismatch")
+
+    # 4. NORMAL mode - Detailed mismatch analysis
     else:
-        if current_fp_string == stored_fingerprint:
-            return True, "match"
-        return False, "strict_mismatch"
+        stored_parts = stored_fingerprint.split(":", 1)
+        current_parts = current_fp_string.split(":", 1)
+
+        has_ua = len(stored_parts) >= 1 and len(current_parts) >= 1
+        has_ip = len(stored_parts) > 1 and len(current_parts) > 1
+
+        if has_ua and stored_parts[0] != current_parts[0]:
+            logger.warning(
+                f"Token fingerprint mismatch: User-Agent changed. "
+                f"Stored: {stored_parts[0][:8]}..., Current: {current_parts[0][:8]}..."
+            )
+            result = (False, "user_agent_mismatch")
+        elif has_ip and stored_parts[1] != current_parts[1]:
+            logger.warning(
+                f"Token fingerprint mismatch: IP network changed. "
+                f"Stored: {stored_parts[1]}, Current: {current_parts[1]}"
+            )
+            result = (False, "ip_network_mismatch")
+
+    return result
 
 
 # Strictness configuration

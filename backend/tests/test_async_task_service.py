@@ -150,9 +150,11 @@ async def test_create_task_not_member(task_service, user_id, project_id, mock_db
     res_proj.scalars.return_value.first.return_value = Project(id=project_id)
     mock_db_session.execute.return_value = res_proj
 
-    with patch.object(task_service, "_is_project_member", return_value=False):
-        with pytest.raises(ValueError, match="Not authorized to create tasks"):
-            await task_service.create_task(task_data, created_by=user_id)
+    with (
+        patch.object(task_service, "_is_project_member", return_value=False),
+        pytest.raises(ValueError, match="Not authorized to create tasks"),
+    ):
+        await task_service.create_task(task_data, created_by=user_id)
 
 
 @pytest.mark.asyncio
@@ -313,6 +315,8 @@ async def test_check_task_permission_assignee(task_service, user_id):
 async def test_check_task_permission_unauthorized(task_service, user_id):
     task = Task(created_by=uuid.uuid4(), assignee_id=uuid.uuid4(), project_id=uuid.uuid4())
 
-    with patch.object(task_service, "_is_project_admin", return_value=False):
-        with pytest.raises(ValueError, match="Not authorized"):
-            await task_service._check_task_permission(task, user_id)
+    with (
+        patch.object(task_service, "_is_project_admin", return_value=False),
+        pytest.raises(ValueError, match="Not authorized"),
+    ):
+        await task_service._check_task_permission(task, user_id)

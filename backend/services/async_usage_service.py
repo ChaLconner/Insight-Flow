@@ -19,7 +19,7 @@ class AsyncUsageService:
     async def get_user_usage_stats(self, user: User) -> dict[str, int]:
         """
         Get usage statistics for a user.
-        
+
         Returns:
             dict containing:
             - projects_used: Number of projects owned or member of
@@ -40,7 +40,7 @@ class AsyncUsageService:
 
         # 2. Seats Used (Team Members)
         # Count distinct unique users in projects owned by current_user.
-        
+
         # Subquery: IDs of projects owned by me
         my_projects_subquery = select(Project.id).where(Project.owner_id == user.id)
 
@@ -62,7 +62,7 @@ class AsyncUsageService:
             team_members_count = 1
 
         return {
-            "projects_used": projects_count, 
+            "projects_used": projects_count,
             "seats_used": team_members_count,
             "storage_used_bytes": 0  # Placeholder for future file storage logic
         }

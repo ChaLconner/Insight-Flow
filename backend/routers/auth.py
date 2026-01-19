@@ -208,6 +208,7 @@ async def login(
             user_id=str(user.id),
             log_user_info=mask_email(login_data.email),
             request=request,
+            remember_me=login_data.remember_me,
         )
         logger.debug(
             f"Cookie settings: secure={COOKIE_SECURE}, samesite='lax', httponly=True, path='/'"

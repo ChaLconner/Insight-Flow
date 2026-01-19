@@ -35,73 +35,81 @@ class TestVerifyGoogleIdToken:
 
     def test_verify_id_token_invalid_issuer(self):
         """Test returns None for invalid token issuer."""
-        with patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"):
-            with patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify:
-                mock_verify.return_value = {
-                    "iss": "invalid.issuer.com",
-                    "aud": "test_client_id",
-                    "sub": "12345",
-                    "email": "test@gmail.com",
-                }
+        with (
+            patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"),
+            patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify,
+        ):
+            mock_verify.return_value = {
+                "iss": "invalid.issuer.com",
+                "aud": "test_client_id",
+                "sub": "12345",
+                "email": "test@gmail.com",
+            }
 
-                from utils.google_oauth import verify_google_id_token
+            from utils.google_oauth import verify_google_id_token
 
-                result = verify_google_id_token("fake_token")
+            result = verify_google_id_token("fake_token")
 
-                assert result is None
+            assert result is None
 
     def test_verify_id_token_invalid_audience(self):
         """Test returns None for invalid audience."""
-        with patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"):
-            with patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify:
-                mock_verify.return_value = {
-                    "iss": "accounts.google.com",
-                    "aud": "wrong_client_id",
-                    "sub": "12345",
-                    "email": "test@gmail.com",
-                }
+        with (
+            patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"),
+            patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify,
+        ):
+            mock_verify.return_value = {
+                "iss": "accounts.google.com",
+                "aud": "wrong_client_id",
+                "sub": "12345",
+                "email": "test@gmail.com",
+            }
 
-                from utils.google_oauth import verify_google_id_token
+            from utils.google_oauth import verify_google_id_token
 
-                result = verify_google_id_token("fake_token")
+            result = verify_google_id_token("fake_token")
 
-                assert result is None
+            assert result is None
 
     def test_verify_id_token_success(self):
         """Test successful token verification."""
-        with patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"):
-            with patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify:
-                mock_verify.return_value = {
-                    "iss": "accounts.google.com",
-                    "aud": "test_client_id",
-                    "sub": "12345",
-                    "email": "test@gmail.com",
-                    "name": "Test User",
-                    "picture": "https://example.com/photo.jpg",
-                    "email_verified": True,
-                }
+        with (
+            patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"),
+            patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify,
+        ):
+            mock_verify.return_value = {
+                "iss": "accounts.google.com",
+                "aud": "test_client_id",
+                "sub": "12345",
+                "email": "test@gmail.com",
+                "name": "Test User",
+                "picture": "https://example.com/photo.jpg",
+                "email_verified": True,
+            }
 
-                from utils.google_oauth import verify_google_id_token
+            from utils.google_oauth import verify_google_id_token
 
-                result = verify_google_id_token("valid_token")
+            result = verify_google_id_token("valid_token")
 
-                assert result is not None
-                assert result["id"] == "12345"
-                assert result["email"] == "test@gmail.com"
-                assert result["name"] == "Test User"
-                assert result["email_verified"] is True
+            assert result is not None
+            assert result["id"] == "12345"
+            assert result["email"] == "test@gmail.com"
+            assert result["name"] == "Test User"
+            assert result["email_verified"] is True
 
     def test_verify_id_token_exception(self):
         """Test returns None on exception."""
-        with patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"):
-            with patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify:
-                mock_verify.side_effect = Exception("Token verification failed")
+        with (
+            patch("utils.google_oauth.GOOGLE_CLIENT_ID", "test_client_id"),
+            patch("utils.google_oauth.id_token.verify_oauth2_token") as mock_verify,
+        ):
+            mock_verify.side_effect = Exception("Token verification failed")
 
-                from utils.google_oauth import verify_google_id_token
+            from utils.google_oauth import verify_google_id_token
 
-                result = verify_google_id_token("bad_token")
+            result = verify_google_id_token("bad_token")
 
-                assert result is None
+            assert result is None
 
 
 class TestAsyncVerifyGoogleIdToken:

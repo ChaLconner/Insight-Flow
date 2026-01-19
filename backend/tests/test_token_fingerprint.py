@@ -52,7 +52,7 @@ class TestTokenFingerprint:
         assert _get_ip_prefix("192.168.1.50") == "192.168"
         assert _get_ip_prefix("10.0.0.1") == "10.0"
         assert _get_ip_prefix("127.0.0.1") == "127.0"
-        
+
         # Explicit 3 octets (/24 network - stricter)
         assert _get_ip_prefix("192.168.1.50", octets=3) == "192.168.1"
         assert _get_ip_prefix("10.0.0.1", octets=3) == "10.0.0"
@@ -70,10 +70,10 @@ class TestTokenFingerprint:
         """Test IPv6 prefix extraction with default 2 segments."""
         # Default: 2 segments
         assert _get_ip_prefix("2001:db8:3333:4444:5555:6666:7777:8888") == "2001:db8"
-        
+
         # Explicit 3 segments
         assert _get_ip_prefix("2001:db8:3333:4444:5555:6666:7777:8888", octets=3) == "2001:db8:3333"
-        
+
         assert (
             _get_ip_prefix("::1") == "127.0"
         )  # Loopback matches 127.0 consistently
@@ -180,18 +180,18 @@ class TestTokenFingerprint:
 
     def test_mobile_friendly_ip_matching(self):
         """Test that IP changes within same /16 network are accepted.
-        
+
         This is the key improvement for mobile users whose ISP may rotate
         their IP within the same network block.
         """
         # Scenario: User's IP changes from 171.4.248.x to 171.4.217.x
         # With /24 (3 octets): This would FAIL
         # With /16 (2 octets): This should PASS ✓
-        
+
         fp_prefix_16 = _get_ip_prefix("171.4.248.50", octets=2)
         fp2_prefix_16 = _get_ip_prefix("171.4.217.38", octets=2)
         assert fp_prefix_16 == fp2_prefix_16 == "171.4"  # Same /16 network
-        
+
         # But with /24 they would differ
         fp_prefix_24 = _get_ip_prefix("171.4.248.50", octets=3)
         fp2_prefix_24 = _get_ip_prefix("171.4.217.38", octets=3)

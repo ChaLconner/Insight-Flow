@@ -84,8 +84,10 @@ class TestMiddlewareConfig:
         mock_settings.is_testing = False
         mock_settings.cache.redis_url = None
 
-        with patch("middleware.rate_limit.RateLimitMiddleware"):
-            with patch("core.middleware_config.logger") as mock_logger:
+        with (
+            patch("middleware.rate_limit.RateLimitMiddleware"),
+            patch("core.middleware_config.logger") as mock_logger,
+        ):
                 setup_rate_limit_middleware(app)
                 mock_logger.info.assert_any_call(
                     "Using in-memory rate limiting (Redis not configured)"

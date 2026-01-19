@@ -200,3 +200,12 @@ label {
 [onclick] {
   cursor: pointer;
 }
+
+/* Performance Utilities */
+.will-change-transform {
+  will-change: transform;
+}
+
+.transform-gpu {
+  transform: translate3d(0, 0, 0);
+}

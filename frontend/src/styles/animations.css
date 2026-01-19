@@ -90,19 +90,141 @@
 /* Infinite Scroll / Marquee Animation */
 @keyframes infinite-scroll {
   0% {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
 .animate-infinite-scroll {
-  animation: infinite-scroll 60s linear infinite;
+  animation: infinite-scroll 55s linear infinite;
   /* Ensure it uses GPU acceleration */
   will-change: transform;
 }
 
 .animate-infinite-scroll:hover {
   animation-play-state: paused;
+}
+
+/* Reduced motion support - stops all CSS animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-infinite-scroll {
+    animation: none;
+  }
+  
+  .shimmer::before {
+    animation: none;
+  }
+  
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-scale-in {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Content visibility optimization for off-screen sections */
+#features,
+#pricing {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
+/* Hero Section CSS Animations - GPU accelerated, no JS */
+@keyframes float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -15px, 0);
+  }
+}
+
+@keyframes float-delayed {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, 10px, 0);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes bar {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-float-delayed {
+  animation: float-delayed 5s ease-in-out infinite;
+  animation-delay: 1s;
+  will-change: transform;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+  will-change: transform;
+}
+
+.animate-progress {
+  animation: progress 1.5s ease-out forwards;
+  animation-delay: 0.5s;
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.animate-bar {
+  animation: bar 0.6s ease-out forwards;
+  transform-origin: bottom;
+  transform: scaleY(0);
+}
+
+/* Disable all hero animations on mobile and reduced motion */
+@media (prefers-reduced-motion: reduce), (max-width: 1024px) {
+  .animate-float,
+  .animate-float-delayed {
+    animation: none;
+  }
+  
+  .animate-spin-slow {
+    animation: none;
+  }
+  
+  .animate-progress {
+    animation: none;
+    transform: scaleX(1);
+  }
+  
+  .animate-bar {
+    animation: none;
+    transform: scaleY(1);
+  }
 }
