@@ -3,7 +3,6 @@ Tests for config.py validators.
 Covers configuration validation logic.
 """
 
-
 import pytest
 from pydantic import ValidationError
 

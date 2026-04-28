@@ -29,10 +29,10 @@ async function registerServiceWorker() {
       updateViaCache: "none",
     });
 
-    // Check for updates periodically (every 60 seconds)
+    // Check for updates periodically without adding constant foreground traffic.
     setInterval(() => {
       registration.update();
-    }, 60 * 1000);
+    }, 6 * 60 * 60 * 1000);
 
     // Handle updates
     registration.addEventListener("updatefound", () => {
@@ -63,6 +63,15 @@ async function registerServiceWorker() {
 export async function clearServiceWorkerCache(): Promise<void> {
   if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.controller.postMessage({ type: "CLEAR_CACHE" });
+  }
+
+  if ("caches" in window) {
+    const cacheNames = await caches.keys();
+    await Promise.all(
+      cacheNames
+        .filter((name) => name.startsWith("insight-flow-"))
+        .map((name) => caches.delete(name)),
+    );
   }
 }
 

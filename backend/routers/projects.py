@@ -77,6 +77,7 @@ async def create_project(
 async def read_projects_list(
     skip: int = 0,
     limit: int = 100,
+    search: str | None = None,
     user_projects_only: bool = Query(False),
     project_service: AsyncProjectService = Depends(get_project_service),
     current_user: User = Depends(get_current_active_user),
@@ -84,7 +85,7 @@ async def read_projects_list(
     """Retrieve projects with pagination."""
     try:
         results = await project_service.get_projects_with_stats(
-            skip=skip, limit=limit, user_id=current_user.id
+            skip=skip, limit=limit, user_id=current_user.id, search=search
         )
 
         project_responses = []

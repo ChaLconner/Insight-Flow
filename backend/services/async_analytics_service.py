@@ -4,7 +4,6 @@ Refactored for SQLAlchemy 2.0+ Async operations.
 Uses centralized CacheService for caching.
 """
 
-import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -65,27 +64,20 @@ class AsyncAnalyticsService:
             if total_projects == 0:
                 return self._get_empty_analytics_response()
 
-            # Get all metrics in parallel using gather
-            # Pass subquery directly to avoid fetching all IDs
-            overview_task = self._get_overview_metrics(
+            # Run DB work sequentially on the shared AsyncSession. AsyncSession is not
+            # concurrency-safe; cache keeps the warm path fast.
+            overview = await self._get_overview_metrics(
                 accessible_projects_subq, user_id, total_projects=total_projects
             )
-            project_stats_task = self._get_project_stats(accessible_projects_subq, limit=50)
-            team_stats_task = self._get_team_stats(accessible_projects_subq)
-
-            overview, project_data, team_data = await asyncio.gather(
-                overview_task, project_stats_task, team_stats_task
-            )
+            project_data = await self._get_project_stats(accessible_projects_subq, limit=50)
+            team_data = await self._get_team_stats(accessible_projects_subq)
 
             # Get time-based metrics
             days = self._get_days_from_period(period)
 
-            # Execute remaining queries in parallel
-            trends, distributions, daily_trends = await asyncio.gather(
-                self._get_trends(accessible_projects_subq, days),
-                self._get_distributions(accessible_projects_subq),
-                self._get_daily_trends(accessible_projects_subq, days),
-            )
+            trends = await self._get_trends(accessible_projects_subq, days)
+            distributions = await self._get_distributions(accessible_projects_subq)
+            daily_trends = await self._get_daily_trends(accessible_projects_subq, days)
 
             # Transform daily_trends for weeklyBurndown (Progress)
             weekly_burndown = [
@@ -339,13 +331,8 @@ class AsyncAnalyticsService:
             )
             return {str(row[0]): row[1] for row in result.all()}
 
-        # Run queries in parallel
-        created_counts_task = get_counts(ActivityType.TASK_CREATED)
-        completed_counts_task = get_counts(ActivityType.TASK_COMPLETED)
-
-        created_counts, completed_counts = await asyncio.gather(
-            created_counts_task, completed_counts_task
-        )
+        created_counts = await get_counts(ActivityType.TASK_CREATED)
+        completed_counts = await get_counts(ActivityType.TASK_COMPLETED)
 
         # Generate complete date range (analytics charts expect continuous dates)
         trends = []

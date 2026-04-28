@@ -31,9 +31,7 @@ class AsyncUsageService:
             await self.db.scalar(
                 select(func.count(distinct(Project.id)))
                 .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
-                .where(
-                    or_(Project.owner_id == user.id, ProjectMember.user_id == user.id)
-                )
+                .where(or_(Project.owner_id == user.id, ProjectMember.user_id == user.id))
             )
             or 0
         )
@@ -64,5 +62,5 @@ class AsyncUsageService:
         return {
             "projects_used": projects_count,
             "seats_used": team_members_count,
-            "storage_used_bytes": 0  # Placeholder for future file storage logic
+            "storage_used_bytes": 0,  # Placeholder for future file storage logic
         }

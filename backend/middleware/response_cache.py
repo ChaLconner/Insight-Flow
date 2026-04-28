@@ -26,19 +26,19 @@ class ResponseCacheMiddleware(BaseHTTPMiddleware):
         # Metrics - short cache
         (re.compile(r"^/metrics"), "public, max-age=15"),
         # Analytics overview - client-side cache for 60 seconds
-        (re.compile(r"^/analytics/overview"), "private, max-age=60"),
+        (re.compile(r"^/(?:api/v1/)?analytics/overview"), "private, max-age=60"),
         # Dashboard - client-side cache for 60 seconds
-        (re.compile(r"^/dashboard/overview"), "private, max-age=60"),
+        (re.compile(r"^/(?:api/v1/)?dashboard/overview"), "private, max-age=60"),
         # User profile (rarely changes) - client-side cache
-        (re.compile(r"^/users/me$"), "private, max-age=300"),
+        (re.compile(r"^/(?:api/v1/)?users/me$"), "private, max-age=300"),
     ]
 
     # Endpoints that should never be cached
     NO_CACHE_PATTERNS: ClassVar[list[re.Pattern[str]]] = [
-        re.compile(r"^/auth/"),
-        re.compile(r"^/tasks/"),  # Tasks change frequently
-        re.compile(r"^/projects/[^/]+/tasks"),  # Project tasks
-        re.compile(r"^/notifications/"),
+        re.compile(r"^/(?:api/v1/)?auth/"),
+        re.compile(r"^/(?:api/v1/)?tasks/"),  # Tasks change frequently
+        re.compile(r"^/(?:api/v1/)?projects/[^/]+/tasks"),  # Project tasks
+        re.compile(r"^/(?:api/v1/)?notifications/"),
     ]
 
     async def dispatch(self, request: Request, call_next):

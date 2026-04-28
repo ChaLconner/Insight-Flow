@@ -270,7 +270,9 @@ async def test_update_settings(user_service, mock_db_session):
     uid = uuid.uuid4()
     settings = UserSettings(user_id=uid, theme="light")
     # Object that would be returned by UPDATE ... RETURNING
-    updated_settings = UserSettings(user_id=uid, theme="dark", notification_preferences={"enabled": True})
+    updated_settings = UserSettings(
+        user_id=uid, theme="dark", notification_preferences={"enabled": True}
+    )
 
     # Mock UPDATE result returning the settings (success path)
     res = MagicMock()

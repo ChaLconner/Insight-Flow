@@ -9,7 +9,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,14 +21,12 @@ except ImportError:
     SecurityLog = None
 
 
-
-
 # Setup dedicated security audit logger
 AUDIT_LOG_FILE = os.getenv("SECURITY_AUDIT_LOG_FILE", "logs/security_audit.log")
 AUDIT_LOG_LEVEL = os.getenv("SECURITY_AUDIT_LOG_LEVEL", "INFO")
 
 
-class AuditEventType(str, Enum):
+class AuditEventType(StrEnum):
     """Types of security events to audit."""
 
     # Authentication events
@@ -166,7 +164,7 @@ class SecurityAuditLogger:
                     user_agent=event.user_agent[:255] if event.user_agent else None,
                     request_path=event.details.get("endpoint") if event.details else None,
                     details=event.details,
-                    timestamp=datetime.fromisoformat(event.timestamp)
+                    timestamp=datetime.fromisoformat(event.timestamp),
                 )
                 db.add(db_chat)
             except Exception as e:

@@ -308,12 +308,13 @@ export const projectsApi = {
     skip = 0,
     limit = 100,
     userProjectsOnly = false,
+    search?: string,
   ): Promise<Project[]> => {
-    const cacheKey = `projects-getProjects-${skip}-${limit}-${userProjectsOnly}`;
+    const cacheKey = `projects-getProjects-${skip}-${limit}-${userProjectsOnly}-${search}`;
 
     return createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get("/projects", {
-        params: { skip, limit, user_projects_only: userProjectsOnly },
+        params: { skip, limit, user_projects_only: userProjectsOnly, search },
       });
 
       return data;

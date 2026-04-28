@@ -103,7 +103,7 @@ def background_task[T](func: Callable[..., Coroutine[Any, Any, T]]) -> Callable[
     return wrapper
 
 
-async def run_with_timeout(
+async def run_with_timeout[T](
     coro: Coroutine[Any, Any, T], timeout_seconds: float = 30.0, default: T | None = None
 ) -> T | None:
     """

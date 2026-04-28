@@ -88,7 +88,5 @@ class TestMiddlewareConfig:
             patch("middleware.rate_limit.RateLimitMiddleware"),
             patch("core.middleware_config.logger") as mock_logger,
         ):
-                setup_rate_limit_middleware(app)
-                mock_logger.info.assert_any_call(
-                    "Using in-memory rate limiting (Redis not configured)"
-                )
+            setup_rate_limit_middleware(app)
+            mock_logger.info.assert_any_call("Using in-memory rate limiting (Redis not configured)")

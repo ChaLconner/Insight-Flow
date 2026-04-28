@@ -1,4 +1,3 @@
-
 import pytest
 
 from models.project import MemberRole, Project, ProjectMember
@@ -9,6 +8,7 @@ from utils.auth import get_password_hash
 # We use the existing fixtures from conftest.py
 # async_session, test_user are available
 
+
 @pytest.mark.asyncio
 async def test_get_user_usage_stats_empty(async_session, test_user):
     """Test usage stats for a user with no projects."""
@@ -18,6 +18,7 @@ async def test_get_user_usage_stats_empty(async_session, test_user):
     assert stats["projects_used"] == 0
     # Even with 0 projects, logic defaults seats to 1 (the user themselves) if count is 0
     assert stats["seats_used"] == 1
+
 
 @pytest.mark.asyncio
 async def test_get_user_usage_stats_owner_only(async_session, test_user):
@@ -48,6 +49,7 @@ async def test_get_user_usage_stats_owner_only(async_session, test_user):
     assert stats["projects_used"] == 2
     assert stats["seats_used"] == 1  # Only myself
 
+
 @pytest.mark.asyncio
 async def test_get_user_usage_stats_with_team(async_session, test_user):
     """Test usage stats with team members in owned projects."""
@@ -62,7 +64,7 @@ async def test_get_user_usage_stats_with_team(async_session, test_user):
         email="other@example.com",
         hashed_password=get_password_hash("pw"),
         name="Other",
-        is_active=True
+        is_active=True,
     )
     async_session.add(other_user)
     await async_session.commit()
@@ -78,7 +80,8 @@ async def test_get_user_usage_stats_with_team(async_session, test_user):
     stats = await service.get_user_usage_stats(test_user)
 
     assert stats["projects_used"] == 1
-    assert stats["seats_used"] == 2 # Me + Other
+    assert stats["seats_used"] == 2  # Me + Other
+
 
 @pytest.mark.asyncio
 async def test_get_user_usage_stats_as_member_only(async_session, test_user):
@@ -88,7 +91,7 @@ async def test_get_user_usage_stats_as_member_only(async_session, test_user):
         email="boss@example.com",
         hashed_password=get_password_hash("pw"),
         name="Boss",
-        is_active=True
+        is_active=True,
     )
     async_session.add(owner)
     await async_session.commit()

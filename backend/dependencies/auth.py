@@ -39,8 +39,9 @@ def get_token_from_cookie_or_header(
     return request.cookies.get(ACCESS_TOKEN_KEY)
 
 
-
-async def _verify_token_fingerprint(request: Request, payload: dict, user_id: str, db: AsyncSession):
+async def _verify_token_fingerprint(
+    request: Request, payload: dict, user_id: str, db: AsyncSession
+):
     """Verify token fingerprint if present and enabled."""
     stored_fingerprint = payload.get("fp")
     if not stored_fingerprint:

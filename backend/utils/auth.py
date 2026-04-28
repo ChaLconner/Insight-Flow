@@ -111,7 +111,7 @@ def verify_token(token: str) -> dict[str, Any]:
             now = datetime.now(UTC)
             MAX_SESSION_DAYS = 365
             if (now - session_start).days > MAX_SESSION_DAYS:
-                 raise HTTPException(
+                raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Session limit exceeded. Please log in again.",
                     headers={"WWW-Authenticate": "Bearer"},
@@ -196,7 +196,7 @@ async def async_verify_token_with_blacklist(
         is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
 
         if is_revoked:
-             raise HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
                 headers={"WWW-Authenticate": "Bearer"},

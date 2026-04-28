@@ -1,4 +1,3 @@
-
 import pytest
 
 from utils.file_security import (

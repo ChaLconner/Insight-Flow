@@ -3,7 +3,6 @@ Async Dashboard service for analytics and statistics.
 Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
-import asyncio
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -15,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from models.project import Project, ProjectMember
 from models.task import Task, TaskStatus
 from models.task_history import ActivityType, TaskHistory
+from models.user import User
 
 
 class AsyncDashboardService:
@@ -46,166 +46,155 @@ class AsyncDashboardService:
         seven_days_ago = now - timedelta(days=7)
         fourteen_days_ago = now - timedelta(days=14)
 
-        # Define async query tasks
-        async def get_total_projects():
-            result = await self.db.execute(
-                select(func.count(distinct(Project.id)))
-                .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
-                .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+        project_stats_result = await self.db.execute(
+            select(
+                func.count(distinct(Project.id)).label("total"),
+                func.count(
+                    distinct(case((Project.created_at >= thirty_days_ago, Project.id)))
+                ).label("created_30d"),
             )
-            return result.scalar() or 0
+            .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
+            .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+        )
+        project_stats = project_stats_result.first()
 
-        async def get_task_stats():
-            result = await self.db.execute(
-                select(
-                    func.count(Task.id).label("total"),
-                    func.sum(
-                        case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
-                    ).label("completed"),
-                    func.sum(
-                        case(
-                            (cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0
-                        )
-                    ).label("in_progress"),
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    Task.assignee_id == user_id,
-                                    cast(Task.status, String) == TaskStatus.IN_PROGRESS.value,
-                                ),
-                                1,
+        task_stats_result = await self.db.execute(
+            select(
+                func.count(Task.id).label("total"),
+                func.sum(
+                    case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
+                ).label("completed"),
+                func.sum(
+                    case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)
+                ).label("in_progress"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Task.assignee_id == user_id,
+                                cast(Task.status, String) == TaskStatus.IN_PROGRESS.value,
                             ),
-                            else_=0,
-                        )
-                    ).label("pending_review"),
-                ).filter(Task.project_id.in_(accessible_projects_subq))
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("pending_review"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Task.created_at >= thirty_days_ago,
+                                cast(Task.status, String) == TaskStatus.IN_PROGRESS.value,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("new_active"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Task.created_at >= thirty_days_ago,
+                                cast(Task.status, String) == TaskStatus.DONE.value,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("new_completed"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Task.created_at >= thirty_days_ago,
+                                Task.assignee_id == user_id,
+                                cast(Task.status, String) == TaskStatus.IN_PROGRESS.value,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("my_new_active"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                Task.created_at >= thirty_days_ago,
+                                Task.assignee_id == user_id,
+                                cast(Task.status, String) == TaskStatus.DONE.value,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("my_new_completed"),
+            ).filter(Task.project_id.in_(accessible_projects_subq))
+        )
+        task_stats = task_stats_result.first()
+
+        history_stats_result = await self.db.execute(
+            select(
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                TaskHistory.timestamp >= thirty_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("completed_30d"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                TaskHistory.user_id == user_id,
+                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                TaskHistory.timestamp >= thirty_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("my_completed_30d"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                TaskHistory.timestamp >= seven_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("velocity_7d"),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                TaskHistory.timestamp >= fourteen_days_ago,
+                                TaskHistory.timestamp < seven_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("velocity_prev_7d"),
+            ).filter(
+                TaskHistory.project_id.in_(accessible_projects_subq),
+                TaskHistory.timestamp >= thirty_days_ago,
             )
-            return result.first()
+        )
+        history_stats = history_stats_result.first()
 
-        async def get_projects_30d():
-            result = await self.db.execute(
-                select(func.count(Project.id)).filter(
-                    Project.id.in_(accessible_projects_subq), Project.created_at >= thirty_days_ago
-                )
-            )
-            return result.scalar() or 0
-
-        async def get_history_stats():
-            result = await self.db.execute(
-                select(
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
-                                    TaskHistory.timestamp >= thirty_days_ago,
-                                ),
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ).label("completed_30d"),
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    TaskHistory.user_id == user_id,
-                                    TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
-                                    TaskHistory.timestamp >= thirty_days_ago,
-                                ),
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ).label("my_completed_30d"),
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
-                                    TaskHistory.timestamp >= seven_days_ago,
-                                ),
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ).label("velocity_7d"),
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
-                                    TaskHistory.timestamp >= fourteen_days_ago,
-                                    TaskHistory.timestamp < seven_days_ago,
-                                ),
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ).label("velocity_prev_7d"),
-                ).filter(
-                    TaskHistory.project_id.in_(accessible_projects_subq),
-                    TaskHistory.timestamp >= thirty_days_ago,
-                )
-            )
-            return result.first()
-
-        async def get_task_creation_stats():
-            result = await self.db.execute(
-                select(
-                    func.sum(
-                        case(
-                            (cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0
-                        )
-                    ).label("new_active"),
-                    func.sum(
-                        case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
-                    ).label("new_completed"),
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    Task.assignee_id == user_id,
-                                    cast(Task.status, String) == TaskStatus.IN_PROGRESS.value,
-                                ),
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ).label("my_new_active"),
-                    func.sum(
-                        case(
-                            (
-                                and_(
-                                    Task.assignee_id == user_id,
-                                    cast(Task.status, String) == TaskStatus.DONE.value,
-                                ),
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ).label("my_new_completed"),
-                ).filter(
-                    Task.project_id.in_(accessible_projects_subq),
-                    Task.created_at >= thirty_days_ago,
-                )
-            )
-            return result.first()
-
-        # Execute all queries in parallel
-        (
-            total_projects,
-            task_stats,
-            projects_created_last_30_days,
-            history_stats,
-            task_creation_stats,
-        ) = await asyncio.gather(
-            get_total_projects(),
-            get_task_stats(),
-            get_projects_30d(),
-            get_history_stats(),
-            get_task_creation_stats(),
+        total_projects = project_stats.total if project_stats and project_stats.total else 0
+        projects_created_last_30_days = (
+            project_stats.created_30d if project_stats and project_stats.created_30d else 0
         )
 
         # Process Results
@@ -255,26 +244,16 @@ class AsyncDashboardService:
             else 0
         )
 
-        new_active_tasks = (
-            task_creation_stats.new_active
-            if task_creation_stats and task_creation_stats.new_active
-            else 0
-        )
+        new_active_tasks = task_stats.new_active if task_stats and task_stats.new_active else 0
         new_completed_tasks = (
-            task_creation_stats.new_completed
-            if task_creation_stats and task_creation_stats.new_completed
-            else 0
+            task_stats.new_completed if task_stats and task_stats.new_completed else 0
         )
 
         my_new_active_tasks = (
-            task_creation_stats.my_new_active
-            if task_creation_stats and task_creation_stats.my_new_active
-            else 0
+            task_stats.my_new_active if task_stats and task_stats.my_new_active else 0
         )
         my_new_completed_tasks = (
-            task_creation_stats.my_new_completed
-            if task_creation_stats and task_creation_stats.my_new_completed
-            else 0
+            task_stats.my_new_completed if task_stats and task_stats.my_new_completed else 0
         )
 
         # Calculate changes
@@ -363,19 +342,17 @@ class AsyncDashboardService:
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
 
         query = (
-            select(TaskHistory)
-            .options(
-                selectinload(TaskHistory.user),
-                selectinload(TaskHistory.project),
-                selectinload(TaskHistory.task),
-            )
+            select(TaskHistory, User, Project, Task)
+            .join(User, TaskHistory.user_id == User.id)
+            .join(Project, TaskHistory.project_id == Project.id)
+            .outerjoin(Task, TaskHistory.task_id == Task.id)
             .filter(TaskHistory.project_id.in_(accessible_projects_subq))
             .order_by(desc(TaskHistory.timestamp))
             .limit(limit)
         )
 
         result = await self.db.execute(query)
-        activities = result.scalars().all()
+        rows = result.all()
 
         action_map = {
             "TASK_CREATED": "created task",
@@ -392,7 +369,7 @@ class AsyncDashboardService:
         }
 
         activity_list = []
-        for activity in activities:
+        for activity, user, project, task in rows:
             activity_type_str = (
                 activity.activity_type.value
                 if hasattr(activity.activity_type, "value")
@@ -404,20 +381,20 @@ class AsyncDashboardService:
                 {
                     "id": str(activity.id),
                     "user": {
-                        "name": activity.user.name if activity.user else "Unknown User",
+                        "name": user.name if user else "Unknown User",
                         "id": str(activity.user_id),
-                        "avatar": activity.user.avatar_url if activity.user else None,
+                        "avatar": user.avatar_url if user else None,
                     },
                     "action": action,
-                    "target": activity.task.title
-                    if activity.task
-                    else (activity.project.name if activity.project else "Unknown Target"),
+                    "target": task.title
+                    if task
+                    else (project.name if project else "Unknown Target"),
                     "time": activity.timestamp.isoformat() if activity.timestamp else None,
                     "project": {
-                        "name": activity.project.name if activity.project else "Unknown Project",
-                        "id": str(activity.project_id) if activity.project else None,
+                        "name": project.name if project else "Unknown Project",
+                        "id": str(activity.project_id) if project else None,
                     }
-                    if activity.project
+                    if project
                     else None,
                 }
             )

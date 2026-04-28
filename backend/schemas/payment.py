@@ -3,7 +3,7 @@ Payment-related Pydantic schemas for Insight-Flow application.
 """
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
@@ -13,7 +13,7 @@ from pydantic import BaseModel, EmailStr, Field
 # ============================================================================
 
 
-class SubscriptionStatusEnum(str, Enum):
+class SubscriptionStatusEnum(StrEnum):
     """Subscription status enum."""
 
     ACTIVE = "active"
@@ -24,7 +24,7 @@ class SubscriptionStatusEnum(str, Enum):
     INCOMPLETE = "incomplete"
 
 
-class SubscriptionPlanEnum(str, Enum):
+class SubscriptionPlanEnum(StrEnum):
     """Available subscription plans."""
 
     FREE = "free"
@@ -33,7 +33,7 @@ class SubscriptionPlanEnum(str, Enum):
     ENTERPRISE = "enterprise"
 
 
-class PaymentStatusEnum(str, Enum):
+class PaymentStatusEnum(StrEnum):
     """Payment transaction status."""
 
     PENDING = "pending"

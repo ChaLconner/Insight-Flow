@@ -4,7 +4,6 @@ Tests for routers/analytics.py
 Tests for analytics router authentication.
 """
 
-
 import pytest
 from fastapi.testclient import TestClient
 

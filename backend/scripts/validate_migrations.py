@@ -93,7 +93,6 @@ def parse_migration_file(filepath: Path) -> dict | None:
         return None
 
 
-
 def _check_broken_chains(migrations: list[dict], all_revisions: set[str]) -> list[str]:
     errors = []
     for migration in migrations:
@@ -103,10 +102,15 @@ def _check_broken_chains(migrations: list[dict], all_revisions: set[str]) -> lis
         if isinstance(down_rev, tuple):
             for parent in down_rev:
                 if parent not in all_revisions:
-                    errors.append(f"Broken chain: '{migration['revision']}' references non-existent parent '{parent}'")
+                    errors.append(
+                        f"Broken chain: '{migration['revision']}' references non-existent parent '{parent}'"
+                    )
         elif down_rev not in all_revisions:
-            errors.append(f"Broken chain: '{migration['revision']}' references non-existent parent '{down_rev}'")
+            errors.append(
+                f"Broken chain: '{migration['revision']}' references non-existent parent '{down_rev}'"
+            )
     return errors
+
 
 def _check_missing_functions(migrations: list[dict]) -> tuple[list[str], list[str]]:
     errors = []
@@ -117,6 +121,7 @@ def _check_missing_functions(migrations: list[dict]) -> tuple[list[str], list[st
         if not migration["has_downgrade"]:
             warnings.append(f"Missing downgrade() function in {migration['file']}")
     return errors, warnings
+
 
 def validate_migration_chain(migrations: list[dict]) -> tuple[bool, list[str]]:
     """

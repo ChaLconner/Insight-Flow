@@ -79,6 +79,17 @@ export const authActions = {
       }
     }
 
+    if (typeof window !== "undefined") {
+      try {
+        const { clearServiceWorkerCache } = await import(
+          "@/components/providers/service-worker-registration"
+        );
+        await clearServiceWorkerCache();
+      } catch (_) {
+        // Cache clearing is best-effort; logout must continue.
+      }
+    }
+
     // Clear client state (always do this, even if server logout failed)
     logout();
 

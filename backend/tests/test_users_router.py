@@ -28,6 +28,14 @@ def mock_current_user():
     user = MagicMock(spec=User)
     user.id = uuid4()
     user.email = "test@example.com"
+    user.name = "Test User"
+    user.first_name = None
+    user.last_name = None
+    user.username = "testuser"
+    user.phone = None
+    user.bio = None
+    user.location = None
+    user.website = None
     user.role = "admin"
     user.is_active = True
     user.avatar_url = "/static/uploads/old.png"
@@ -59,12 +67,32 @@ def test_get_users(client, mock_user_service):
     mock_user_service.get_users.assert_called_with(skip=0, limit=100)
 
 
+def test_get_users_forbidden_for_non_admin(client, mock_user_service, mock_current_user):
+    """Test get_users is forbidden for non-admin users."""
+    mock_current_user.role = "user"
+
+    response = client.get("/api/v1/users/")
+
+    assert response.status_code == 403
+    mock_user_service.get_users.assert_not_called()
+
+
 def test_get_user_stats(client, mock_user_service):
     """Test get_user_stats."""
     mock_user_service.get_user_stats.return_value = {"total": 10}
     response = client.get("/api/v1/users/stats")
     assert response.status_code == 200
     assert response.json()["total"] == 10
+
+
+def test_get_user_stats_forbidden_for_non_admin(client, mock_user_service, mock_current_user):
+    """Test user stats are forbidden for non-admin users."""
+    mock_current_user.role = "user"
+
+    response = client.get("/api/v1/users/stats")
+
+    assert response.status_code == 403
+    mock_user_service.get_user_stats.assert_not_called()
 
 
 def test_invite_user_success(client, mock_user_service, mock_current_user):
@@ -166,6 +194,41 @@ def test_search_users_list(client, mock_user_service):
     mock_user_service.search_users.assert_called_with(
         "test", skip=0, limit=20, role="admin", is_active=True
     )
+
+
+def test_search_users_forbidden_filter_for_non_admin(client, mock_user_service, mock_current_user):
+    """Test non-admin users cannot use broad user filters."""
+    mock_current_user.role = "user"
+
+    response = client.get("/api/v1/users/search?q=test&status=active")
+
+    assert response.status_code == 403
+    mock_user_service.search_users.assert_not_called()
+
+
+def test_search_users_non_admin_only_returns_self(client, mock_user_service, mock_current_user):
+    """Test non-admin user search is scoped to the current user."""
+    mock_current_user.role = "user"
+
+    response = client.get("/api/v1/users/search?q=test@example.com")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["email"] == "test@example.com"
+    mock_user_service.search_users.assert_not_called()
+
+
+def test_search_users_non_admin_cannot_enumerate_others(
+    client, mock_user_service, mock_current_user
+):
+    """Test non-admin user search does not expose other users."""
+    mock_current_user.role = "user"
+
+    response = client.get("/api/v1/users/search?q=other")
+
+    assert response.status_code == 200
+    assert response.json() == []
+    mock_user_service.search_users.assert_not_called()
 
 
 def test_get_user_settings(client, mock_user_service, mock_current_user):

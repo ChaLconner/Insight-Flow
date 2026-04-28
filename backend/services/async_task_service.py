@@ -425,13 +425,15 @@ class AsyncTaskService:
         Get tasks assigned to or created by a user with optional filtering.
         Returns a tuple of (tasks, total_count).
         """
+        filters = [or_(Task.assignee_id == user_id, Task.created_by == user_id)]
+
         # Base query with eager loading
         query = (
             select(Task)
             .options(
                 selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
             )
-            .filter(or_(Task.assignee_id == user_id, Task.created_by == user_id))
+            .filter(*filters)
         )
 
         # Apply search filter
@@ -439,17 +441,22 @@ class AsyncTaskService:
             # Escape SQL LIKE wildcards to prevent pattern injection
             escaped_search = escape_like_pattern(search)
             search_term = f"%{escaped_search}%"
-            query = query.filter(
-                or_(Task.title.ilike(search_term), Task.description.ilike(search_term))
+            search_filter = or_(
+                Task.title.ilike(search_term, escape="\\"),
+                Task.description.ilike(search_term, escape="\\"),
             )
+            filters.append(search_filter)
+            query = query.filter(search_filter)
 
         # Apply status filter
         if status and status.lower() != "all":
             status_lower = status.lower()
-            query = query.filter(Task.status == status_lower)
+            status_filter = Task.status == status_lower
+            filters.append(status_filter)
+            query = query.filter(status_filter)
 
         # Count total
-        count_query = select(func.count()).select_from(query.subquery())
+        count_query = select(func.count(Task.id)).filter(*filters)
         count_result = await self.db.execute(count_query)
         total_count = count_result.scalar() or 0
 
@@ -473,12 +480,14 @@ class AsyncTaskService:
         Get tasks for a specific project with optional sorting and filtering.
         Returns (tasks, total_count).
         """
+        filters = [Task.project_id == project_id]
+
         query = (
             select(Task)
             .options(
                 selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
             )
-            .filter(Task.project_id == project_id)
+            .filter(*filters)
         )
 
         # Apply search filter
@@ -486,14 +495,19 @@ class AsyncTaskService:
             # Escape SQL LIKE wildcards to prevent pattern injection
             escaped_search = escape_like_pattern(search)
             search_term = f"%{escaped_search}%"
-            query = query.filter(
-                or_(Task.title.ilike(search_term), Task.description.ilike(search_term))
+            search_filter = or_(
+                Task.title.ilike(search_term, escape="\\"),
+                Task.description.ilike(search_term, escape="\\"),
             )
+            filters.append(search_filter)
+            query = query.filter(search_filter)
 
         # Apply status filter
         if status and status.lower() != "all":
             status_lower = status.lower()
-            query = query.filter(Task.status == status_lower)
+            status_filter = Task.status == status_lower
+            filters.append(status_filter)
+            query = query.filter(status_filter)
 
         # Apply sorting
         if sort_by:
@@ -517,7 +531,7 @@ class AsyncTaskService:
             query = query.order_by(desc(Task.updated_at))
 
         # Count total
-        count_query = select(func.count()).select_from(query.subquery())
+        count_query = select(func.count(Task.id)).filter(*filters)
         count_result = await self.db.execute(count_query)
         total_count = count_result.scalar() or 0
 

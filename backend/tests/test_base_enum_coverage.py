@@ -3,7 +3,6 @@ Tests for BaseEnum model utility.
 Covers models/base_enum.py for increased coverage.
 """
 
-
 from models.base_enum import BaseEnum
 
 

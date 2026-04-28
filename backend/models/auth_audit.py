@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class AuthStatus(str, enum.Enum):
+class AuthStatus(enum.StrEnum):
     SUCCESS = "success"
     FAILURE = "failure"
     LOCKED = "locked"

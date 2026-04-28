@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class NotificationType(str, enum.Enum):
+class NotificationType(enum.StrEnum):
     """Enum for notification types."""
 
     TASK_ASSIGNED = "task_assigned"

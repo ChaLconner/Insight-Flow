@@ -18,11 +18,9 @@ var STATIC_ASSETS = [
   "/manifest.json",
 ];
 
-// API endpoints to cache (with network-first strategy)
+// Do not cache authenticated API responses. HttpOnly-cookie auth makes cache
+// entries user-sensitive, while Cache Storage keys do not include current user.
 var CACHEABLE_API_PATTERNS = [
-  /\/api\/dashboard\/overview/,
-  /\/api\/projects$/,
-  /\/api\/users\/me/,
 ];
 
 // Install event - cache static assets

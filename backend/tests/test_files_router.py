@@ -4,7 +4,6 @@ Tests for routers/files.py
 Tests file upload/download authentication.
 """
 
-
 import pytest
 from fastapi.testclient import TestClient
 

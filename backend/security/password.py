@@ -127,7 +127,9 @@ async def check_password_breach(password: str, timeout: float = 2.0) -> tuple[bo
     """
     try:
         # Create SHA1 hash of password
-        sha1_hash = hashlib.sha1(password.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
+        sha1_hash = (
+            hashlib.sha1(password.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
+        )
         prefix, suffix = sha1_hash[:5], sha1_hash[5:]
 
         # Query HIBP API with hash prefix (k-Anonymity)

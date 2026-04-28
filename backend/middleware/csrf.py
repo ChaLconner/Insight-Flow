@@ -52,6 +52,8 @@ CSRF_EXEMPT_PATHS: set[str] = {
     "/openapi.json",
 }
 
+CSRF_EXEMPT_PREFIXES: set[str] = set()
+
 
 def generate_csrf_token() -> str:
     """Generate a cryptographically secure CSRF token."""
@@ -109,8 +111,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         if path in self.exempt_paths:
             return True
 
-        # Check if path starts with any exempt prefix
-        return any(path.startswith(exempt_path) for exempt_path in self.exempt_paths)
+        # Prefix exemptions must be explicit; auth endpoints are exact-match only.
+        return any(path.startswith(exempt_prefix) for exempt_prefix in CSRF_EXEMPT_PREFIXES)
 
     async def dispatch(self, request: Request, call_next) -> Response:
         # Skip CSRF validation if disabled

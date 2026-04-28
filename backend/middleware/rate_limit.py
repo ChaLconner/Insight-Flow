@@ -181,7 +181,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     # Use fire_and_forget to not block the response
                     import asyncio
 
-                    task = asyncio.create_task(blocker.record_violation(client_ip, f"rate_limit:{path}"))
+                    task = asyncio.create_task(
+                        blocker.record_violation(client_ip, f"rate_limit:{path}")
+                    )
                     self.background_tasks.add(task)
                     task.add_done_callback(self.background_tasks.discard)
                 except Exception:

@@ -3,7 +3,6 @@ Async Project service layer for project management.
 Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
-import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -108,7 +107,11 @@ class AsyncProjectService:
         return list(result.scalars().all())
 
     async def get_projects_with_stats(
-        self, skip: int = 0, limit: int = 100, user_id: uuid.UUID | None = None
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        user_id: uuid.UUID | None = None,
+        search: str | None = None,
     ) -> list[dict]:
         """
         Get projects with aggregated statistics using optimized parallel queries.
@@ -130,6 +133,16 @@ class AsyncProjectService:
                 .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
             )
             projects_query = projects_query.filter(Project.id.in_(accessible_projects_subq))
+
+        if search:
+            escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            search_term = f"%{escaped_search}%"
+            projects_query = projects_query.filter(
+                or_(
+                    Project.name.ilike(search_term, escape="\\"),
+                    Project.description.ilike(search_term, escape="\\"),
+                )
+            )
 
         # Should ideally sort by generic field (e.g. created_at) to ensure consistent pagination,
         # but maintaining compatibility with previous unspoken sort (likely implicit id or insertion)
@@ -174,19 +187,38 @@ class AsyncProjectService:
             res = await self.db.execute(stmt)
             return {row.project_id: row for row in res.all()}
 
-        # Members Query (Batched)
-        async def get_members():
+        async def get_member_counts():
+            stmt = (
+                select(ProjectMember.project_id, func.count(ProjectMember.id))
+                .filter(ProjectMember.project_id.in_(project_ids))
+                .group_by(ProjectMember.project_id)
+            )
+            res = await self.db.execute(stmt)
+            return {row[0]: row[1] for row in res.all()}
+
+        async def get_member_previews():
+            ranked_members = (
+                select(
+                    ProjectMember.id.label("id"),
+                    func.row_number()
+                    .over(
+                        partition_by=ProjectMember.project_id,
+                        order_by=ProjectMember.joined_at.asc(),
+                    )
+                    .label("rank"),
+                )
+                .filter(ProjectMember.project_id.in_(project_ids))
+                .subquery()
+            )
             stmt = (
                 select(ProjectMember)
                 .options(selectinload(ProjectMember.user))
-                .filter(ProjectMember.project_id.in_(project_ids))
+                .join(ranked_members, ProjectMember.id == ranked_members.c.id)
+                .filter(ranked_members.c.rank <= 5)
             )
-
             res = await self.db.execute(stmt)
-            all_members = res.scalars().all()
-
             m_map: defaultdict[uuid.UUID, list[ProjectMember]] = defaultdict(list)
-            for m in all_members:
+            for m in res.scalars().all():
                 m_map[m.project_id].append(m)
             return m_map
 
@@ -203,16 +235,17 @@ class AsyncProjectService:
             res = await self.db.execute(stmt)
             return {row[0]: row[1] for row in res.all()}
 
-        # Run in parallel
-        task_stats_map, members_map, activity_map = await asyncio.gather(
-            get_task_stats(), get_members(), get_activity()
-        )
+        task_stats_map = await get_task_stats()
+        member_count_map = await get_member_counts()
+        members_map = await get_member_previews()
+        activity_map = await get_activity()
 
         # 3. Assemble Results
         formatted_results = []
         for project in projects:
             stats = task_stats_map.get(project.id)
             members = members_map.get(project.id, [])
+            member_count = member_count_map.get(project.id, 0)
             activity = activity_map.get(project.id, 0)
 
             # Extract stats safely
@@ -227,9 +260,9 @@ class AsyncProjectService:
                     "task_count": task_count,
                     "completed_tasks": completed,
                     "overdue_tasks": overdue,
-                    "member_count": len(members),
+                    "member_count": member_count,
                     "recent_activity": activity,
-                    "members": members[:5],  # Limit member preview
+                    "members": members,
                 }
             )
 

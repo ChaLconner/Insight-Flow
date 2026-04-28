@@ -1,9 +1,9 @@
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class ActivityType(str, Enum):
+class ActivityType(StrEnum):
     TASK_CREATED = "task_created"
     TASK_UPDATED = "task_updated"
     TASK_COMPLETED = "task_completed"

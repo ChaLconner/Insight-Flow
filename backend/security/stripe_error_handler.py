@@ -4,14 +4,14 @@ Prevents internal error details from being exposed to users.
 """
 
 import logging
-from enum import Enum
+from enum import StrEnum
 
 import stripe
 
 logger = logging.getLogger("payment.errors")
 
 
-class StripeErrorCode(str, Enum):
+class StripeErrorCode(StrEnum):
     """Common Stripe error codes for mapping."""
 
     CARD_DECLINED = "card_declined"

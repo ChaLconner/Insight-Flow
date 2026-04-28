@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class AnalyticsPeriod(str, enum.Enum):
+class AnalyticsPeriod(enum.StrEnum):
     """Enum for analytics periods."""
 
     DAILY = "daily"

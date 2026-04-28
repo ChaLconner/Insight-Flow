@@ -14,6 +14,7 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from utils.logger import setup_logger
+from utils.path_normalization import normalize_request_path
 
 logger = setup_logger("performance")
 
@@ -58,18 +59,7 @@ class RequestMetrics:
 
     def _normalize_path(self, path: str) -> str:
         """Normalize path by replacing UUIDs and IDs with placeholders."""
-        import re
-
-        # Replace UUIDs
-        path = re.sub(
-            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-            "{id}",
-            path,
-            flags=re.IGNORECASE,
-        )
-        # Replace numeric IDs
-        path = re.sub(r"/\d+(?=/|$)", "/{id}", path)
-        return path
+        return normalize_request_path(path)
 
     def get_prometheus_metrics(self) -> list[str]:
         """Generate Prometheus-format metrics."""

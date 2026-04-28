@@ -225,9 +225,12 @@ class TestGoogleLoginEdgeCases:
 
         google_data = GoogleAuth(id_token="valid_id_token")
 
-        with patch("routers.auth.is_google_oauth_configured", return_value=True), patch(
-            "routers.auth.async_verify_google_id_token", new_callable=AsyncMock
-        ) as mock_verify:
+        with (
+            patch("routers.auth.is_google_oauth_configured", return_value=True),
+            patch(
+                "routers.auth.async_verify_google_id_token", new_callable=AsyncMock
+            ) as mock_verify,
+        ):
             mock_verify.return_value = {
                 "id": "google-123",
                 "email": "test@gmail.com",
@@ -290,9 +293,12 @@ class TestGithubLoginEdgeCases:
 
         github_data = GithubAuth(access_token="github_access_token")
 
-        with patch("routers.auth.is_github_oauth_configured", return_value=True), patch(
-            "routers.auth.async_get_github_user_info", new_callable=AsyncMock
-        ) as mock_user_info:
+        with (
+            patch("routers.auth.is_github_oauth_configured", return_value=True),
+            patch(
+                "routers.auth.async_get_github_user_info", new_callable=AsyncMock
+            ) as mock_user_info,
+        ):
             mock_user_info.return_value = {
                 "id": "github-123",
                 "email": "test@github.com",
@@ -327,9 +333,12 @@ class TestGithubLoginEdgeCases:
 
         github_data = GithubAuth(access_token="github_access_token")
 
-        with patch("routers.auth.is_github_oauth_configured", return_value=True), patch(
-            "routers.auth.async_get_github_user_info", new_callable=AsyncMock
-        ) as mock_user_info:
+        with (
+            patch("routers.auth.is_github_oauth_configured", return_value=True),
+            patch(
+                "routers.auth.async_get_github_user_info", new_callable=AsyncMock
+            ) as mock_user_info,
+        ):
             mock_user_info.return_value = {
                 "id": "github-123",
                 "email": "test@github.com",

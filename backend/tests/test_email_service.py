@@ -60,13 +60,16 @@ class TestEmailServiceSending:
         """Test successful email sending via Resend API."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "RESEND_API_KEY": "re_test_api_key",
-                "SENDER_EMAIL": "noreply@test.com",
-            },
-        ), patch("httpx.AsyncClient") as mock_client:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RESEND_API_KEY": "re_test_api_key",
+                    "SENDER_EMAIL": "noreply@test.com",
+                },
+            ),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
             mock_response = AsyncMock()
             mock_response.status_code = 200
             mock_response.text = '{"id": "email_123"}'
@@ -92,12 +95,15 @@ class TestEmailServiceSending:
         """Test email sending with API error."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "RESEND_API_KEY": "re_test_api_key",
-            },
-        ), patch("httpx.AsyncClient") as mock_client:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RESEND_API_KEY": "re_test_api_key",
+                },
+            ),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
             mock_response = AsyncMock()
             mock_response.status_code = 400
             mock_response.text = '{"error": "Invalid API key"}'
@@ -192,15 +198,16 @@ class TestVerificationEmail:
         """Test verification email contains correct content."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "FRONTEND_URL": "http://localhost:3000",
-                "ENVIRONMENT": "development",
-            },
-        ), patch.object(
-            EmailService, "send_email", new=AsyncMock(return_value=True)
-        ) as mock_send:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRONTEND_URL": "http://localhost:3000",
+                    "ENVIRONMENT": "development",
+                },
+            ),
+            patch.object(EmailService, "send_email", new=AsyncMock(return_value=True)) as mock_send,
+        ):
             result = await EmailService.send_verification_email(
                 "user@example.com", "verification-token-123"
             )
@@ -223,15 +230,16 @@ class TestVerificationEmail:
         """Test verification email uses custom frontend URL."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "FRONTEND_URL": "https://myapp.com",
-                "ENVIRONMENT": "development",
-            },
-        ), patch.object(
-            EmailService, "send_email", new=AsyncMock(return_value=True)
-        ) as mock_send:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRONTEND_URL": "https://myapp.com",
+                    "ENVIRONMENT": "development",
+                },
+            ),
+            patch.object(EmailService, "send_email", new=AsyncMock(return_value=True)) as mock_send,
+        ):
             await EmailService.send_verification_email("user@example.com", "token")
 
             html_content = mock_send.call_args[0][2]
@@ -246,15 +254,16 @@ class TestPasswordResetEmail:
         """Test password reset email contains correct content."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "FRONTEND_URL": "http://localhost:3000",
-                "ENVIRONMENT": "development",
-            },
-        ), patch.object(
-            EmailService, "send_email", new=AsyncMock(return_value=True)
-        ) as mock_send:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRONTEND_URL": "http://localhost:3000",
+                    "ENVIRONMENT": "development",
+                },
+            ),
+            patch.object(EmailService, "send_email", new=AsyncMock(return_value=True)) as mock_send,
+        ):
             result = await EmailService.send_password_reset_email(
                 "user@example.com", "reset-token-456"
             )
@@ -277,15 +286,16 @@ class TestPasswordResetEmail:
         """Test password reset email has appropriate messaging."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "FRONTEND_URL": "http://localhost:3000",
-                "ENVIRONMENT": "development",
-            },
-        ), patch.object(
-            EmailService, "send_email", new=AsyncMock(return_value=True)
-        ) as mock_send:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRONTEND_URL": "http://localhost:3000",
+                    "ENVIRONMENT": "development",
+                },
+            ),
+            patch.object(EmailService, "send_email", new=AsyncMock(return_value=True)) as mock_send,
+        ):
             await EmailService.send_password_reset_email("user@example.com", "token")
 
             html_content = mock_send.call_args[0][2]
@@ -303,12 +313,15 @@ class TestEmailServiceErrorHandling:
         """Test that send_email catches and handles exceptions gracefully."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "RESEND_API_KEY": "re_test_api_key",
-            },
-        ), patch("httpx.AsyncClient") as mock_client:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RESEND_API_KEY": "re_test_api_key",
+                },
+            ),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
             # Simulate connection error
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(side_effect=Exception("Connection error"))
@@ -328,12 +341,15 @@ class TestEmailServiceErrorHandling:
 
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "RESEND_API_KEY": "re_test_api_key",
-            },
-        ), patch("httpx.AsyncClient") as mock_client:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "RESEND_API_KEY": "re_test_api_key",
+                },
+            ),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(
                 side_effect=httpx.TimeoutException("Connection timed out")
@@ -383,15 +399,16 @@ class TestAccountLockoutEmail:
 
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "FRONTEND_URL": "http://localhost:3000",
-                "ENVIRONMENT": "development",
-            },
-        ), patch.object(
-            EmailService, "send_email", new=AsyncMock(return_value=True)
-        ) as mock_send:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRONTEND_URL": "http://localhost:3000",
+                    "ENVIRONMENT": "development",
+                },
+            ),
+            patch.object(EmailService, "send_email", new=AsyncMock(return_value=True)) as mock_send,
+        ):
             result = await EmailService.send_account_lockout_notification(
                 "user@example.com",
                 datetime(2026, 1, 5, 18, 0, 0),
@@ -417,15 +434,16 @@ class TestAccountLockoutEmail:
         """Test that lockout notification sanitizes user input."""
         from services.email_service import EmailService
 
-        with patch.dict(
-            os.environ,
-            {
-                "FRONTEND_URL": "http://localhost:3000",
-                "ENVIRONMENT": "development",
-            },
-        ), patch.object(
-            EmailService, "send_email", new=AsyncMock(return_value=True)
-        ) as mock_send:
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRONTEND_URL": "http://localhost:3000",
+                    "ENVIRONMENT": "development",
+                },
+            ),
+            patch.object(EmailService, "send_email", new=AsyncMock(return_value=True)) as mock_send,
+        ):
             # Attempt XSS in user agent
             await EmailService.send_account_lockout_notification(
                 "user@example.com",

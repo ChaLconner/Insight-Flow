@@ -149,3 +149,71 @@ class TestResponseCacheMiddleware:
         from middleware.response_cache import ResponseCacheMiddleware
 
         assert ResponseCacheMiddleware is not None
+
+    def test_cache_middleware_matches_versioned_dashboard_path(self):
+        """Test API v1 dashboard paths get intended private cache header."""
+        from middleware.response_cache import ResponseCacheMiddleware
+
+        app = FastAPI()
+        app.add_middleware(ResponseCacheMiddleware)
+
+        @app.get("/api/v1/dashboard/overview")
+        async def dashboard_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.get("/api/v1/dashboard/overview")
+
+        assert response.headers["Cache-Control"] == "private, max-age=60"
+
+    def test_cache_middleware_does_not_cache_versioned_notifications(self):
+        """Test API v1 notification paths remain no-store."""
+        from middleware.response_cache import ResponseCacheMiddleware
+
+        app = FastAPI()
+        app.add_middleware(ResponseCacheMiddleware)
+
+        @app.get("/api/v1/notifications/")
+        async def notifications_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.get("/api/v1/notifications/")
+
+        assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+
+
+class TestCSRFMiddleware:
+    """Tests for CSRF middleware path exemption behavior."""
+
+    def test_exact_exempt_path_allows_state_change_without_token(self):
+        """Test exact auth exempt path is allowed without CSRF token."""
+        from middleware.csrf import CSRFMiddleware
+
+        app = FastAPI()
+        app.add_middleware(CSRFMiddleware, cookie_secure=False)
+
+        @app.post("/api/v1/auth/login")
+        async def login_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.post("/api/v1/auth/login")
+
+        assert response.status_code == 200
+
+    def test_exempt_path_prefix_does_not_bypass_csrf(self):
+        """Test auth path prefix lookalikes still require CSRF."""
+        from middleware.csrf import CSRFMiddleware
+
+        app = FastAPI()
+        app.add_middleware(CSRFMiddleware, cookie_secure=False)
+
+        @app.post("/api/v1/auth/login-extra")
+        async def login_extra_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.post("/api/v1/auth/login-extra")
+
+        assert response.status_code == 403

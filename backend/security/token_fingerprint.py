@@ -15,7 +15,7 @@ import ipaddress
 import logging
 import os
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from fastapi import Request
 
@@ -34,7 +34,7 @@ logger = logging.getLogger("token_fingerprint")
 IP_PREFIX_OCTETS = int(os.getenv("TOKEN_IP_PREFIX_OCTETS", "2"))
 
 
-class FingerprintStrictness(str, Enum):
+class FingerprintStrictness(StrEnum):
     """Fingerprint verification strictness levels."""
 
     # Only validate User-Agent (most lenient, allows mobile network IP changes)

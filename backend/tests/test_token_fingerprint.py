@@ -74,9 +74,7 @@ class TestTokenFingerprint:
         # Explicit 3 segments
         assert _get_ip_prefix("2001:db8:3333:4444:5555:6666:7777:8888", octets=3) == "2001:db8:3333"
 
-        assert (
-            _get_ip_prefix("::1") == "127.0"
-        )  # Loopback matches 127.0 consistently
+        assert _get_ip_prefix("::1") == "127.0"  # Loopback matches 127.0 consistently
 
     def test_client_fingerprint_string(self):
         """Test fingerprint string representation."""

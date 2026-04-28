@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class SubscriptionStatus(str, enum.Enum):
+class SubscriptionStatus(enum.StrEnum):
     """Subscription status enum."""
 
     ACTIVE = "active"
@@ -29,7 +29,7 @@ class SubscriptionStatus(str, enum.Enum):
     INCOMPLETE = "incomplete"
 
 
-class SubscriptionPlan(str, enum.Enum):
+class SubscriptionPlan(enum.StrEnum):
     """Available subscription plans."""
 
     FREE = "free"
@@ -38,7 +38,7 @@ class SubscriptionPlan(str, enum.Enum):
     ENTERPRISE = "enterprise"
 
 
-class PaymentStatus(str, enum.Enum):
+class PaymentStatus(enum.StrEnum):
     """Payment transaction status."""
 
     PENDING = "pending"

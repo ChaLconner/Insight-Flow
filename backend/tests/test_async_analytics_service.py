@@ -67,15 +67,9 @@ async def test_get_analytics_overview_success(analytics_service, user_id, projec
         patch.object(
             analytics_service, "_get_project_stats", return_value=[{"name": "P1"}]
         ) as mock_proj_stats,
-        patch.object(
-            analytics_service, "_get_team_stats", return_value=[{"name": "U1"}]
-        ),
-        patch.object(
-            analytics_service, "_get_trends", return_value=[{"metric": "Tasks"}]
-        ),
-        patch.object(
-            analytics_service, "_get_distributions", return_value={"status": []}
-        ),
+        patch.object(analytics_service, "_get_team_stats", return_value=[{"name": "U1"}]),
+        patch.object(analytics_service, "_get_trends", return_value=[{"metric": "Tasks"}]),
+        patch.object(analytics_service, "_get_distributions", return_value={"status": []}),
         patch.object(
             analytics_service,
             "_get_daily_trends",

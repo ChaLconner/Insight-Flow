@@ -213,9 +213,12 @@ class TestAuthRouterEdgeCases:
     @pytest.mark.asyncio
     async def test_google_login_email_not_verified(self, mock_db):
         """Test Google login with unverified email."""
-        with patch("routers.auth.is_google_oauth_configured", return_value=True), patch(
-            "routers.auth.async_verify_google_id_token", new_callable=AsyncMock
-        ) as mock_verify:
+        with (
+            patch("routers.auth.is_google_oauth_configured", return_value=True),
+            patch(
+                "routers.auth.async_verify_google_id_token", new_callable=AsyncMock
+            ) as mock_verify,
+        ):
             mock_verify.return_value = {"email_verified": False, "sub": "123"}
 
             with TestClient(app) as client:

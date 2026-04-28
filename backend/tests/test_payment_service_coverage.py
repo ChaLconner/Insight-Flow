@@ -404,17 +404,17 @@ async def test_delete_default_payment_method_with_promotion(payment_service, moc
         patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock),
         patch("services.payment_service.payment_lock") as mock_lock,
     ):
-            mock_lock.return_value.__aenter__.return_value = None
+        mock_lock.return_value.__aenter__.return_value = None
 
-            result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)
+        result = await payment_service.delete_payment_method(mock_db_session, pm_id, user_id)
 
-            assert result is True
-            assert pm.is_active is False
+        assert result is True
+        assert pm.is_active is False
 
-            # Verify promotion called
-            payment_service.set_default_payment_method.assert_called_with(
-                mock_db_session, other_pm.id, user_id
-            )
+        # Verify promotion called
+        payment_service.set_default_payment_method.assert_called_with(
+            mock_db_session, other_pm.id, user_id
+        )
 
 
 @pytest.mark.asyncio

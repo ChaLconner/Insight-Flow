@@ -64,7 +64,7 @@ class Project(BaseModel):
     )
 
 
-class MemberRole(str, enum.Enum):
+class MemberRole(enum.StrEnum):
     """Enum for project member roles."""
 
     OWNER = "owner"

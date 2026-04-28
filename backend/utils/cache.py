@@ -24,7 +24,9 @@ class SimpleCache:
             "args": [str(a) for a in args],
             "kwargs": {k: str(v) for k, v in sorted(kwargs.items())},
         }
-        key_hash = hashlib.md5(json.dumps(key_data).encode(), usedforsecurity=False).hexdigest()[:12]
+        key_hash = hashlib.md5(json.dumps(key_data).encode(), usedforsecurity=False).hexdigest()[
+            :12
+        ]
         return f"{prefix}:{key_hash}"
 
     def get(self, key: str) -> Any | None:

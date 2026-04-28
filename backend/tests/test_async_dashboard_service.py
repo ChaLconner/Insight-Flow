@@ -2,7 +2,6 @@
 Async Unit tests for AsyncDashboardService.
 """
 
-
 import pytest
 
 from models.project import Project

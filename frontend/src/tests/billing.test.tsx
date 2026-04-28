@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 
@@ -20,6 +20,30 @@ vi.mock("sonner", () => ({
   },
 }));
 
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+const expectedBoundaryErrors = [
+  "Test payment error",
+  "Network error",
+  "Test error",
+  "Stripe SetupIntent failed",
+];
+
+function suppressExpectedBoundaryError(event: ErrorEvent): void {
+  if (expectedBoundaryErrors.includes(event.message)) {
+    event.preventDefault();
+  }
+}
+
+beforeAll(() => {
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  window.addEventListener("error", suppressExpectedBoundaryError);
+});
+
+afterAll(() => {
+  window.removeEventListener("error", suppressExpectedBoundaryError);
+  consoleErrorSpy.mockRestore();
+});
+
 // ============================================================================
 // StripeErrorBoundary Tests
 // ============================================================================
@@ -27,8 +51,6 @@ vi.mock("sonner", () => ({
 describe("StripeErrorBoundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Suppress console.error for expected errors in tests
-    vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   it("renders children when no error", async () => {

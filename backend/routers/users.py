@@ -13,7 +13,7 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from dependencies.services import get_user_service
 from models.user import User
@@ -40,6 +40,7 @@ router = APIRouter(prefix="/users", tags=["user management"])
 
 UPLOAD_DIR = "static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+USER_ADMIN_ROLES = {"admin", "manager"}
 
 # Initialize Cloudinary on module load
 if is_cloudinary_configured():
@@ -47,6 +48,31 @@ if is_cloudinary_configured():
     logger.info("Cloudinary initialized for avatar uploads")
 else:
     logger.warning("Cloudinary not configured, falling back to local storage")
+
+
+def _is_user_admin(user: User) -> bool:
+    return getattr(user, "role", None) in USER_ADMIN_ROLES
+
+
+def _require_user_admin(user: User) -> None:
+    if not _is_user_admin(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to manage users",
+        )
+
+
+def _query_matches_current_user(query: str, user: User) -> bool:
+    normalized_query = query.strip().lower()
+    if not normalized_query:
+        return False
+
+    candidate_values = [
+        getattr(user, "email", None),
+        getattr(user, "name", None),
+        getattr(user, "username", None),
+    ]
+    return any(normalized_query in str(value).lower() for value in candidate_values if value)
 
 
 @router.get("/", response_model=list[UserResponse])
@@ -57,6 +83,7 @@ async def get_users(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Get all users."""
+    _require_user_admin(current_user)
     return await user_service.get_users(skip=skip, limit=limit)
 
 
@@ -66,6 +93,7 @@ async def get_user_stats(
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
     """Get user statistics."""
+    _require_user_admin(current_user)
     return await user_service.get_user_stats()
 
 
@@ -154,10 +182,10 @@ async def search_users(
     skip: int = 0,
     limit: int = 20,
     role: str | None = None,
-    status: str | None = None,
+    status_filter: str | None = Query(default=None, alias="status"),
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
-) -> list[UserResponse]:
+) -> Any:
     """
     Search users by email or name with filters.
 
@@ -165,14 +193,21 @@ async def search_users(
     Regular users have limited search capabilities.
     """
     # Security: Limit what non-admin users can search
-    if current_user.role not in ["admin", "manager"]:
+    if not _is_user_admin(current_user):
         # Non-admins can only do limited searches
-        limit = min(limit, 10)
+        if role or status_filter:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to filter users",
+            )
+        if _query_matches_current_user(q, current_user):
+            return [current_user]
+        return []
 
     is_active = None
-    if status == "active":
+    if status_filter == "active":
         is_active = True
-    elif status == "inactive":
+    elif status_filter == "inactive":
         is_active = False
 
     users = await user_service.search_users(

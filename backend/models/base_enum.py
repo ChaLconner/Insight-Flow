@@ -4,7 +4,7 @@ from typing import Any, TypeVar
 T = TypeVar("T", bound="BaseEnum")
 
 
-class BaseEnum(str, enum.Enum):
+class BaseEnum(enum.StrEnum):
     """Base class for string enums with helper methods."""
 
     @classmethod

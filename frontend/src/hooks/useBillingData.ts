@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api-client";
 import type { PlanInfo } from "@/types";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
 
 interface UsageStats {
   projects: number;
@@ -18,12 +19,26 @@ interface UseBillingDataReturn {
 
 export function useBillingData(options: { silent?: boolean } = {}): UseBillingDataReturn {
   const { silent } = options;
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthInitialized = useAuthStore((state) => state.isInitialized);
   const [plans, setPlans] = useState<Record<string, PlanInfo>>({});
   const [usageStats, setUsageStats] = useState<UsageStats>({ projects: 0, seats: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!isAuthInitialized) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setPlans({});
+      setUsageStats({ projects: 0, seats: 0 });
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -51,7 +66,11 @@ export function useBillingData(options: { silent?: boolean } = {}): UseBillingDa
           seats: usageResult.value.data.seats_used ?? 0
         });
       } else if (usageResult.status === "rejected") {
-        console.warn("Failed to load usage stats:", usageResult.reason);
+        const status = (usageResult.reason as { response?: { status?: number } })?.response
+          ?.status;
+        if (status !== 401) {
+          console.warn("Failed to load usage stats:", usageResult.reason);
+        }
         // Do not throw, allow page to render with 0 usage
       }
     } catch (err) {
@@ -64,7 +83,7 @@ export function useBillingData(options: { silent?: boolean } = {}): UseBillingDa
     } finally {
       setIsLoading(false);
     }
-  }, [silent]);
+  }, [isAuthInitialized, isAuthenticated, silent]);
 
   useEffect(() => {
     fetchData();

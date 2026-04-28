@@ -50,7 +50,7 @@ export function BillingSettings() {
   // Hooks
   const { methods, isLoading: methodsLoading, fetchMethods, setDefault, deleteMethod } = usePaymentMethods();
   const { subscription, isLoading: subLoading, fetchSubscription, cancelSubscription, updateSubscription, resumeSubscription } = useSubscription();
-  const { setupIntent, isLoading: setupLoading, createSetupIntent, reset: resetSetupIntent, prefetch: prefetchSetupIntent, isPrefetched } = useSetupIntent();
+  const { setupIntent, isLoading: setupLoading, createSetupIntent, reset: resetSetupIntent, isPrefetched } = useSetupIntent();
   const { plans, usageStats, isLoading: billingDataLoading } = useBillingData();
 
   // Combined Loading State
@@ -61,11 +61,6 @@ export function BillingSettings() {
     fetchMethods();
     fetchSubscription();
   }, [fetchMethods, fetchSubscription]);
-
-  // Prefetch SetupIntent in background
-  useEffect(() => {
-    prefetchSetupIntent();
-  }, [prefetchSetupIntent]);
 
   // Update selected payment method when methods are loaded
   useEffect(() => {
@@ -98,19 +93,17 @@ export function BillingSettings() {
     resetSetupIntent();
     await new Promise(resolve => setTimeout(resolve, 1000));
     await fetchMethods();
-    setTimeout(() => prefetchSetupIntent(), 100);
     
     toast.success("Card added successfully", {
       description: "Your payment card has been linked to your account.",
     });
-  }, [resetSetupIntent, fetchMethods, prefetchSetupIntent]);
+  }, [resetSetupIntent, fetchMethods]);
 
   const handleCloseAddCardDialog = useCallback(() => {
     setIsAddCardOpen(false);
     setIsDialogReady(false);
     resetSetupIntent();
-    setTimeout(() => prefetchSetupIntent(), 100);
-  }, [resetSetupIntent, prefetchSetupIntent]);
+  }, [resetSetupIntent]);
 
   const handleConfirmPlanChange = useCallback(async (planKey: string) => {
     if (planKey === subscription?.plan) {

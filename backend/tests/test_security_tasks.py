@@ -1,5 +1,3 @@
-
-
 def test_get_tasks_unauthorized(unauthenticated_client):
     response = unauthenticated_client.get("/api/v1/tasks")
     assert response.status_code == 401
