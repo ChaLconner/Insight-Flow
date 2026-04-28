@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Trash2, Check } from "lucide-react";
 import { formatDistanceToNow, isToday, isYesterday } from "date-fns";
@@ -13,6 +13,7 @@ import {
   useNotifications,
   useNotificationPolling,
 } from "@/hooks/use-notifications";
+import { useClickOutside } from "@/hooks/use-click-outside";
 
 export function NotificationsPopover() {
   const [isOpen, setIsOpen] = useState(false);
@@ -29,20 +30,10 @@ export function NotificationsPopover() {
     removeNotification,
   } = useNotifications();
 
-  useNotificationPolling(60000);
+  useNotificationPolling(5 * 60 * 1000);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const closePopover = useCallback(() => setIsOpen(false), []);
+  useClickOutside(containerRef, closePopover);
 
   const handleMarkAsRead = async (id: string, e?: React.MouseEvent) => {
     if (e) {
@@ -167,7 +158,6 @@ export function NotificationsPopover() {
         size="icon"
         className="relative h-10 w-10 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground transition-none"
         onClick={() => setIsOpen(!isOpen)}
-        whileHover={{ scale: 1 }}
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (

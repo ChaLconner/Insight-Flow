@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Folder, CheckSquare, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { projectsApi, tasksApi } from "@/lib/api-endpoints";
 import type { Project, Task } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
+import { useClickOutside } from "@/hooks/use-click-outside";
 
 interface GlobalSearchProps {
   className?: string;
@@ -34,56 +35,64 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
+  const closeDropdown = useCallback(() => setIsOpen(false), []);
+  useClickOutside(containerRef, closeDropdown);
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // Fetch data on focus if not already cached
-  const handleFocus = async () => {
+  const handleFocus = () => {
     if (query.trim()) {
       setIsOpen(true);
     }
-    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-    if (cachedData || loading || !isAuthenticated) {
+  };
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (!isAuthenticated || trimmedQuery.length < 2) {
+      setCachedData(null);
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    try {
-      const [projectsData, tasksData] = await Promise.all([
-        projectsApi.getProjects(0, 100),
-        tasksApi.getTasks(0, 100),
-      ]);
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const [projectsData, tasksData] = await Promise.all([
+          projectsApi.getProjects(0, 5, false, trimmedQuery),
+          tasksApi.getMyTasks(0, 5, trimmedQuery),
+        ]);
 
-      // Normalize data to ensure we have arrays, handling both direct arrays and paginated responses
-      const projects = Array.isArray(projectsData)
-        ? projectsData
-        : ((projectsData as Record<string, unknown>).items as Project[]) ?? [];
-      const tasks = Array.isArray(tasksData)
-        ? tasksData
-        : ((tasksData as Record<string, unknown>).items as Task[]) ?? [];
+        if (cancelled) {
+          return;
+        }
 
-      setCachedData({
-        projects: Array.from(new Map(projects.map(p => [p.id, p])).values()),
-        tasks: Array.from(new Map(tasks.map(t => [t.id, t])).values())
-      });
-    } catch (error) {
-      console.error("Failed to load search data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const projects = Array.isArray(projectsData)
+          ? projectsData
+          : ((projectsData as Record<string, unknown>).items as Project[]) ?? [];
+        const tasks = Array.isArray(tasksData)
+          ? tasksData
+          : ((tasksData as Record<string, unknown>).items as Task[]) ?? [];
+
+        setCachedData({
+          projects: Array.from(new Map(projects.map((p) => [p.id, p])).values()),
+          tasks: Array.from(new Map(tasks.map((t) => [t.id, t])).values()),
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load search data:", error);
+          setCachedData({ projects: [], tasks: [] });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [query, isAuthenticated]);
 
   // Filter results based on query
   const results = useMemo<SearchResults>(() => {
@@ -91,23 +100,9 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
       return { projects: [], tasks: [] };
     }
 
-    const lowerQuery = query.toLowerCase();
-
     return {
-      projects: cachedData.projects
-        .filter(
-          (p) =>
-            p.name.toLowerCase().includes(lowerQuery) ||
-            p.description?.toLowerCase().includes(lowerQuery),
-        )
-        .slice(0, 5),
-      tasks: cachedData.tasks
-        .filter(
-          (t) =>
-            t.title.toLowerCase().includes(lowerQuery) ||
-            t.description?.toLowerCase().includes(lowerQuery),
-        )
-        .slice(0, 5),
+      projects: cachedData.projects.slice(0, 5),
+      tasks: cachedData.tasks.slice(0, 5),
     };
   }, [query, cachedData]);
 
@@ -147,7 +142,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
         onChange={(e) => {
           const newValue = e.target.value;
           setQuery(newValue);
-          setIsOpen(!!newValue.trim());
+          setIsOpen(newValue.trim().length >= 2);
         }}
         onFocus={() => {
           setIsReadOnly(false);
@@ -170,6 +165,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
         name="global-search"
         id="global-search-input"
         aria-autocomplete="none"
+        aria-busy={loading}
         data-1p-ignore="true"
         data-lpignore="true"
         data-protonpass-ignore="true"

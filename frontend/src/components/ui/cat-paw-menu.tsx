@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useClickOutside } from "@/hooks/use-click-outside";
 
 interface PawMenuItem {
   icon: React.ReactNode;
@@ -25,22 +26,8 @@ export function CatPawMenu({ trigger, items, className }: CatPawMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isOpen]);
+  const closeMenu = useCallback(() => setIsOpen(false), []);
+  useClickOutside(containerRef, closeMenu, isOpen);
 
   // Calculate positions for menu items (arranged in an arc above the trigger)
   const getItemPosition = (index: number, total: number) => {

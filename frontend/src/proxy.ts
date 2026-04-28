@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Middleware for authentication and route protection
- * Runs on the Edge runtime for fast response times
+ * Proxy for authentication and route protection.
+ * Runs on the Edge runtime for fast response times.
  */
 
 // Public routes that don't require authentication
@@ -66,10 +66,10 @@ function isTokenValid(token: string): boolean {
   }
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Skip middleware for static assets and API routes
+  // Skip proxy for static assets and API routes
   if (SKIP_ROUTES.some((route) => pathname.startsWith(route))) {
     return NextResponse.next();
   }
@@ -113,8 +113,6 @@ export function middleware(request: NextRequest) {
 
     return NextResponse.redirect(loginUrl);
   }
-
-
 
   return NextResponse.next();
 }

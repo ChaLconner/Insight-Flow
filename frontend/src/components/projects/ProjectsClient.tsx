@@ -25,6 +25,10 @@ import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/use-favorites";
+import {
+  blurEditableTargetOnEscape,
+  useDocumentKeyDown,
+} from "@/hooks/use-keyboard-shortcuts";
 
 // Lazy load heavy components
 const ProjectModal = dynamic(
@@ -126,32 +130,17 @@ export function ProjectsClient() {
   const actionProcessedRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
-        // Allow Escape to blur
-        if (e.key === "Escape") {
-          target.blur();
-        }
-        return;
-      }
+  const handleKeyboardShortcut = useCallback((event: KeyboardEvent) => {
+    if (blurEditableTargetOnEscape(event)) {
+      return;
+    }
 
-      if (e.key === "/") {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    if (event.key === "/") {
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    }
   }, []);
+  useDocumentKeyDown(handleKeyboardShortcut);
 
   // Handle action=create from Quick Actions
   useEffect(() => {

@@ -17,6 +17,7 @@ import { apiClient } from "@/lib/api-client";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 import { Loader2 } from "lucide-react";
+import { AuthStatusIcon } from "@/components/auth/AuthStatusIcon";
 
 function ResetPasswordForm() {
   const [token, setToken] = useState("");
@@ -125,19 +126,7 @@ function ResetPasswordForm() {
             <CardContent className="pt-6">
               <div className="text-center space-y-4">
                 <div className="text-red-600">
-                  <svg
-                    className="mx-auto h-12 w-12 text-red-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                  <AuthStatusIcon tone="error" />
                 </div>
                 <div>
                   <h3 className="text-lg font-medium text-gray-900">
@@ -171,19 +160,7 @@ function ResetPasswordForm() {
             <CardContent className="pt-6">
               <div className="text-center space-y-4">
                 <div className="text-green-600">
-                  <svg
-                    className="mx-auto h-12 w-12 text-green-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                  <AuthStatusIcon tone="success" />
                 </div>
                 <div>
                   <h3 className="text-lg font-medium text-gray-900">

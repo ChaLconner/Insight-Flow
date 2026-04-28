@@ -21,6 +21,10 @@ import {
 import { useUsers } from "./hooks/useUsers";
 import { formatLastLogin } from "./utils/formatters";
 import { KEYBOARD_SHORTCUTS } from "./types";
+import {
+  blurEditableTargetOnEscape,
+  useDocumentKeyDown,
+} from "@/hooks/use-keyboard-shortcuts";
 
 /**
  * UsersPage - Main page component for user management
@@ -86,53 +90,41 @@ export default function UsersPage() {
     announce,
   ]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
-        // Allow Escape to blur
-        if (e.key === "Escape") {
-          target.blur();
-        }
+  const handleKeyboardShortcut = useCallback(
+    (event: KeyboardEvent) => {
+      if (blurEditableTargetOnEscape(event)) {
         return;
       }
 
-      switch (e.key) {
+      switch (event.key) {
         case KEYBOARD_SHORTCUTS.FOCUS_SEARCH:
-          e.preventDefault();
+          event.preventDefault();
           searchInputRef.current?.focus();
           break;
         case KEYBOARD_SHORTCUTS.REFRESH:
-          if (!e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
+          if (!event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
             refresh();
             announce("Refreshing user list");
           }
           break;
         case KEYBOARD_SHORTCUTS.NEXT_PAGE:
           if (hasMore && !loading) {
-            e.preventDefault();
+            event.preventDefault();
             setPage(page + 1);
           }
           break;
         case KEYBOARD_SHORTCUTS.PREV_PAGE:
           if (page > 1 && !loading) {
-            e.preventDefault();
+            event.preventDefault();
             setPage(page - 1);
           }
           break;
       }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hasMore, loading, page, refresh, setPage, announce]);
+    },
+    [announce, hasMore, loading, page, refresh, setPage],
+  );
+  useDocumentKeyDown(handleKeyboardShortcut);
 
   const handleInviteClick = useCallback(() => {
     setIsInviteModalOpen(true);

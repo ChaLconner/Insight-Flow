@@ -40,6 +40,11 @@ export function AnimatedBackground({
       canvas.height = window.innerHeight;
     };
 
+    const handleResize = () => {
+      resizeCanvas();
+      createParticles();
+    };
+
     // Create particles
     const createParticles = () => {
       const particleCount = Math.floor((canvas.width * canvas.height) / 15000);
@@ -73,8 +78,16 @@ export function AnimatedBackground({
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Update and draw particles
-      particlesRef.current.forEach((particle, index) => {
+      const particles = particlesRef.current;
+      const connectionDistance = 120;
+      const cellSize = connectionDistance;
+      const grid = new Map<string, number[]>();
+
+      const getCellKey = (x: number, y: number) =>
+        `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
+
+      // Update particles first so connection checks use stable positions.
+      particles.forEach((particle, index) => {
         // Update position
         particle.x += particle.vx;
         particle.y += particle.vy;
@@ -108,6 +121,17 @@ export function AnimatedBackground({
           particle.vy *= 0.99;
         }
 
+        const cellKey = getCellKey(particle.x, particle.y);
+        const cell = grid.get(cellKey);
+        if (cell) {
+          cell.push(index);
+        } else {
+          grid.set(cellKey, [index]);
+        }
+      });
+
+      // Draw particles and nearby connections.
+      particles.forEach((particle, index) => {
         // Draw particle
         ctx.save();
         ctx.globalAlpha = particle.opacity;
@@ -123,23 +147,39 @@ export function AnimatedBackground({
         ctx.restore();
 
         // Draw connections
-        particlesRef.current.slice(index + 1).forEach((otherParticle) => {
-          const dx = particle.x - otherParticle.x;
-          const dy = particle.y - otherParticle.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
+        const cellX = Math.floor(particle.x / cellSize);
+        const cellY = Math.floor(particle.y / cellSize);
+        for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+          for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+            const nearby = grid.get(`${cellX + offsetX}:${cellY + offsetY}`);
+            if (!nearby) {
+              continue;
+            }
 
-          if (distance < 120) {
-            ctx.save();
-            ctx.globalAlpha = ((120 - distance) / 120) * 0.1;
-            ctx.strokeStyle = "#6366f1";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(particle.x, particle.y);
-            ctx.lineTo(otherParticle.x, otherParticle.y);
-            ctx.stroke();
-            ctx.restore();
+            nearby.forEach((otherIndex) => {
+              if (otherIndex <= index) {
+                return;
+              }
+
+              const otherParticle = particles[otherIndex];
+              const dx = particle.x - otherParticle.x;
+              const dy = particle.y - otherParticle.y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+
+              if (distance < connectionDistance) {
+                ctx.save();
+                ctx.globalAlpha = ((connectionDistance - distance) / connectionDistance) * 0.1;
+                ctx.strokeStyle = "#6366f1";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(particle.x, particle.y);
+                ctx.lineTo(otherParticle.x, otherParticle.y);
+                ctx.stroke();
+                ctx.restore();
+              }
+            });
           }
-        });
+        }
       });
 
       animationRef.current = requestAnimationFrame(animate);
@@ -151,10 +191,7 @@ export function AnimatedBackground({
     animate();
 
     // Event listeners
-    window.addEventListener("resize", () => {
-      resizeCanvas();
-      createParticles();
-    });
+    window.addEventListener("resize", handleResize);
     window.addEventListener("mousemove", handleMouseMove);
 
     // Visibility change handler to pause animation when not visible
@@ -177,7 +214,7 @@ export function AnimatedBackground({
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      window.removeEventListener("resize", resizeCanvas);
+      window.removeEventListener("resize", handleResize);
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

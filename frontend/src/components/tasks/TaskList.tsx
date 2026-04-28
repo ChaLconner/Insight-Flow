@@ -35,6 +35,11 @@ import { useTasks } from "@/hooks/use-tasks";
 // import { toast } from "sonner";
 // import { getErrorMessage } from "@/lib/error-utils";
 import dynamic from "next/dynamic";
+import {
+  isEditableEventTarget,
+  useDocumentKeyDown,
+} from "@/hooks/use-keyboard-shortcuts";
+import { useClickOutsideSelectors } from "@/hooks/use-click-outside";
 
 // Optimize heavy modals with dynamic import
 const NewTaskModal = dynamic(
@@ -115,23 +120,15 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
 
     const searchInputRef = useRef<HTMLInputElement>(null);
 
-    // Focus search with shortcut
-    useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (
-          e.key === "/" &&
-          document.activeElement?.tagName !== "INPUT" &&
-          document.activeElement?.tagName !== "TEXTAREA" &&
-          !(document.activeElement as HTMLElement)?.isContentEditable
-        ) {
-          e.preventDefault();
-          searchInputRef.current?.focus();
-        }
-      };
+    const handleKeyboardShortcut = useCallback((event: KeyboardEvent) => {
+      if (isEditableEventTarget(document.activeElement) || event.key !== "/") {
+        return;
+      }
 
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
+      event.preventDefault();
+      searchInputRef.current?.focus();
     }, []);
+    useDocumentKeyDown(handleKeyboardShortcut);
 
     // Reset pagination when filters change
     useEffect(() => {
@@ -254,37 +251,12 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       searchInputRef.current?.focus();
     }, []);
 
-    // Close menu when clicking outside
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (!openMenuId) {
-          return;
-        }
-
-        // Handle text nodes (e.g. clicking text inside button)
-        let target = event.target as Node;
-        if (target.nodeType === Node.TEXT_NODE) {
-          target = target.parentNode as Node;
-        }
-
-        const element = target as Element;
-
-        // Safety check for .closest method
-        if (!element || typeof element.closest !== "function") {
-          return;
-        }
-
-        if (
-          !element.closest(".task-menu-trigger") &&
-          !element.closest(".task-menu-dropdown")
-        ) {
-          setOpenMenuId(null);
-        }
-      };
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }, [openMenuId]);
+    const closeTaskMenu = useCallback(() => setOpenMenuId(null), []);
+    const taskMenuSelectors = useMemo(
+      () => [".task-menu-trigger", ".task-menu-dropdown"],
+      [],
+    );
+    useClickOutsideSelectors(taskMenuSelectors, closeTaskMenu, Boolean(openMenuId));
 
     // RENDER LOGIC
     if (isLoading) {

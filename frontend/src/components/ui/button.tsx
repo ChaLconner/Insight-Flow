@@ -37,14 +37,10 @@ const buttonVariants = cva(
   }
 );
 
-import type { HTMLMotionProps } from "framer-motion";
-import { motion } from "framer-motion";
-
 export interface ButtonProps
-  extends Omit<HTMLMotionProps<"button">, "ref" | "children">,
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
-  children?: React.ReactNode;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -60,11 +56,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     return (
-      <motion.button
+      <button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.02, transition: { duration: 0.1 } }}
         {...props}
       />
     );

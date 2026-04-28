@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import type { TooltipValueType } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,6 +46,18 @@ const TOOLTIP_CONTENT_STYLE = {
   boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
   padding: "12px 16px",
 } as const;
+
+const formatWorkloadTooltip = (
+  value: TooltipValueType | undefined,
+): [string, string] => {
+  const numericValue =
+    typeof value === "number" ? value : Number.parseFloat(String(value ?? 0));
+
+  return [
+    Number.isFinite(numericValue) ? numericValue.toLocaleString() : "0",
+    "Tasks",
+  ];
+};
 
 const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
   data = [],
@@ -230,7 +243,7 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                 cursor={{ fill: "rgba(139, 92, 246, 0.1)" }}
                 contentStyle={TOOLTIP_CONTENT_STYLE}
                 itemStyle={{ color: "#fff" }}
-                formatter={(value: number) => [value.toLocaleString(), "Tasks"]}
+                formatter={formatWorkloadTooltip}
                 labelFormatter={(label) => `👤 ${label}`}
               />
               <Bar dataKey="tasks" radius={[0, 6, 6, 0]}>

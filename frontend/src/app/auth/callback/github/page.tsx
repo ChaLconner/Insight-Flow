@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_CONFIG } from "@/lib/constants";
+import { getPostLoginRedirect } from "@/lib/auth-redirect";
 import { authActions } from "@/stores/auth-actions";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
@@ -57,27 +58,7 @@ function GitHubCallbackContent() {
         await authActions.loginWithResponse(data);
 
         const user = data.user;
-        let redirectUrl = "/dashboard";
-
-        if (user?.role) {
-          switch (user.role) {
-            case "admin":
-              redirectUrl = "/dashboard";
-              break;
-            case "manager":
-              redirectUrl = "/projects";
-              break;
-            case "member":
-            case "user":
-              redirectUrl = "/projects?tab=tasks";
-              break;
-            case "viewer":
-              redirectUrl = "/projects";
-              break;
-            default:
-              redirectUrl = "/dashboard";
-          }
-        }
+        const redirectUrl = getPostLoginRedirect(user?.role);
 
         toast.success("Login successful!", {
           description: `Welcome${user?.name ? `, ${user.name}` : ""}!`,

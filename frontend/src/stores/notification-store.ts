@@ -255,12 +255,19 @@ export const useNotificationStore = create<NotificationState>()(
 
       playNotificationSound: () => {
         if (typeof window !== "undefined") {
+          if (process.env.NODE_ENV === "test") {
+            return;
+          }
+
           try {
             const audio = new Audio("/sounds/notification.mp3");
             audio.volume = 0.5;
-            audio.play().catch((error) => {
-              console.error("Could not play notification sound:", error);
-            });
+            const playResult = audio.play();
+            if (playResult && typeof playResult.catch === "function") {
+              playResult.catch((error) => {
+                console.error("Could not play notification sound:", error);
+              });
+            }
           } catch (error) {
             console.error("Notification sound not available:", error);
           }

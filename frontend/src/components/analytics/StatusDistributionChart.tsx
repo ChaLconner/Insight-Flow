@@ -10,7 +10,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import type { PieLabelRenderProps } from "recharts";
 import { PieChart } from "lucide-react";
+import {
+  analyticsTooltipStyle,
+  analyticsTooltipTextStyle,
+  formatAnalyticsTooltip,
+} from "./chart-tooltip";
 
 interface StatusDistributionChartProps {
   data: { name: string; value: number }[];
@@ -40,6 +46,15 @@ const formatStatusName = (name: string): string => {
     nameMap[key] ||
     name.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())
   );
+};
+
+const renderStatusLabel = ({ payload, percent, name }: PieLabelRenderProps) => {
+  const displayName =
+    (payload as { displayName?: string } | undefined)?.displayName ??
+    String(name ?? "Unknown");
+  const valuePercent = typeof percent === "number" ? percent : 0;
+
+  return `${displayName} ${(valuePercent * 100).toFixed(0)}%`;
 };
 
 const StatusDistributionChartComponent: React.FC<
@@ -95,9 +110,7 @@ const StatusDistributionChartComponent: React.FC<
                 paddingAngle={2}
                 dataKey="value"
                 nameKey="displayName"
-                label={({ displayName, percent }) =>
-                  `${displayName} ${(percent * 100).toFixed(0)}%`
-                }
+                label={renderStatusLabel}
                 labelLine={false}
               >
                 {formattedData.map((entry, index) => (
@@ -113,17 +126,10 @@ const StatusDistributionChartComponent: React.FC<
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "rgba(24, 24, 27, 0.95)",
-                  borderColor: "rgba(255,255,255,0.1)",
-                  color: "#fff",
-                  borderRadius: "8px",
-                  boxShadow:
-                    "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-                }}
-                itemStyle={{ color: "#fff" }}
-                labelStyle={{ color: "#fff" }}
-                formatter={(value: number, name: string) => [value, name]}
+                contentStyle={analyticsTooltipStyle}
+                itemStyle={analyticsTooltipTextStyle}
+                labelStyle={analyticsTooltipTextStyle}
+                formatter={formatAnalyticsTooltip}
               />
               <Legend
                 wrapperStyle={{ paddingTop: "20px" }}

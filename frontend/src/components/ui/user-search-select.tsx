@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { usersApi } from "@/lib/api-endpoints";
 import type { User as UserType } from "@/types";
 import { getAvatarUrl } from "@/lib/utils";
+import { useClickOutside } from "@/hooks/use-click-outside";
 
 interface UserSearchSelectProps {
   value: string;
@@ -41,18 +42,8 @@ export function UserSearchSelect({
     setQuery(value);
   }, [value]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const closeResults = useCallback(() => setIsOpen(false), []);
+  useClickOutside(containerRef, closeResults);
 
   const handleSearch = (searchTerm: string) => {
     setQuery(searchTerm);

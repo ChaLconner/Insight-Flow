@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, useEffect, useRef, Suspense } from "react";
+import { useMemo, useCallback, useRef, Suspense } from "react";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { useAuthStore } from "@/stores/auth-store";
 import { useDashboard } from "@/hooks/use-dashboard";
@@ -38,6 +38,10 @@ const RecentActivity = dynamic(
 import type { DashboardStatsData } from "./components";
 import type { ProjectCardProject } from "./components";
 import type { ActivityItemData } from "./components";
+import {
+  isEditableEventTarget,
+  useDocumentKeyDown,
+} from "@/hooks/use-keyboard-shortcuts";
 
 const EMPTY_ARRAY: never[] = [];
 
@@ -81,32 +85,24 @@ export default function DashboardClient() {
     refetch();
   }, [queryClient, refetch]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable
-      ) {
+  const handleKeyboardShortcut = useCallback(
+    (event: KeyboardEvent) => {
+      if (isEditableEventTarget(event.target)) {
         return;
       }
 
-      switch (e.key.toLowerCase()) {
-        case KEYBOARD_SHORTCUTS.REFRESH:
-          if (!e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            handleRefresh();
-          }
-          break;
+      if (
+        event.key.toLowerCase() === KEYBOARD_SHORTCUTS.REFRESH &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        handleRefresh();
       }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleRefresh]);
+    },
+    [handleRefresh],
+  );
+  useDocumentKeyDown(handleKeyboardShortcut);
 
   // Memoize transformed data to prevent unnecessary re-renders
   const statsData = useMemo<DashboardStatsData>(() => {

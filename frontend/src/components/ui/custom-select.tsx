@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect, useId } from "react";
+import React, { useState, useRef, useCallback, useId } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClickOutside } from "@/hooks/use-click-outside";
 
 
 interface Option {
@@ -40,19 +41,8 @@ export function CustomSelect({
   // Use provided ID or fallback to stable unique ID for accessibility
   const buttonId = id ?? `select-${reactId}`;
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  const closeOptions = useCallback(() => setIsOpen(false), []);
+  useClickOutside(containerRef, closeOptions);
 
   const selectedOption = options.find((opt) => opt.value === value);
   const selectedLabel =
