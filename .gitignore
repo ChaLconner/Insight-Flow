@@ -161,7 +161,9 @@ frontend/examples/
 
 # Temporary folders
 tmp/
+.tmp/
 temp/
+backend/pytest-cache-files-*/
 
 # Optional REPL history
 .node_repl_history
