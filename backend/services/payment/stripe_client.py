@@ -12,7 +12,15 @@ import asyncio
 from typing import Any, cast
 
 import stripe
-from stripe import Customer, PaymentMethod, SetupIntent, Subscription
+from stripe import (
+    Customer,
+    Event,
+    InvalidRequestError,
+    PaymentMethod,
+    SetupIntent,
+    StripeError,
+    Subscription,
+)
 
 from config import get_settings
 from utils.logger import setup_logger
@@ -89,7 +97,7 @@ class StripeClient:
 
         try:
             return await loop.run_in_executor(None, execute)
-        except stripe.error.StripeError as e:
+        except StripeError as e:
             logger.error(f"Stripe API error: {e}")
             raise
 
@@ -135,7 +143,7 @@ class StripeClient:
             return cast(
                 "Customer | None", await self._run_stripe(stripe.Customer.retrieve, customer_id)
             )
-        except stripe.error.InvalidRequestError:
+        except InvalidRequestError:
             return None
 
     async def update_customer(self, customer_id: str, **kwargs) -> Customer:
@@ -260,7 +268,7 @@ class StripeClient:
                 "Subscription",
                 await self._run_stripe(stripe.Subscription.retrieve, subscription_id),
             )
-        except stripe.error.InvalidRequestError:
+        except InvalidRequestError:
             return None
 
     async def update_subscription(self, subscription_id: str, **kwargs) -> Subscription:
@@ -301,7 +309,7 @@ class StripeClient:
 
     def verify_webhook_signature(
         self, payload: bytes, sig_header: str, webhook_secret: str
-    ) -> stripe.Event:
+    ) -> Event:
         """
         Verify and construct a webhook event.
 
@@ -316,7 +324,7 @@ class StripeClient:
         Raises:
             stripe.error.SignatureVerificationError: If signature is invalid
         """
-        return stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        return cast("Event", stripe.Webhook.construct_event(payload, sig_header, webhook_secret))
 
 
 # Singleton instance

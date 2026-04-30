@@ -78,6 +78,8 @@ async def read_projects_list(
     skip: int = 0,
     limit: int = 100,
     search: str | None = None,
+    status_filter: str | None = Query(None, alias="status"),
+    sort_by: str = Query("newest"),
     user_projects_only: bool = Query(False),
     project_service: AsyncProjectService = Depends(get_project_service),
     current_user: User = Depends(get_current_active_user),
@@ -85,7 +87,12 @@ async def read_projects_list(
     """Retrieve projects with pagination."""
     try:
         results = await project_service.get_projects_with_stats(
-            skip=skip, limit=limit, user_id=current_user.id, search=search
+            skip=skip,
+            limit=limit,
+            user_id=current_user.id,
+            search=search,
+            status_filter=status_filter,
+            sort_by=sort_by,
         )
 
         project_responses = []
@@ -213,13 +220,31 @@ async def remove_project_member(
     member_user_id: str,
     project: Project = Depends(require_project_admin),
     project_service: AsyncProjectService = Depends(get_project_service),
+    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Remove a member."""
     try:
-        await project_service.remove_project_member(
-            project.id, uuid.UUID(member_user_id), current_user.id
+        member_uuid = uuid.UUID(member_user_id)
+        project_members = await project_service.get_project_members(project.id)
+        removed_user = next(
+            (
+                member.user
+                for member in project_members
+                if member.user_id == member_uuid and member.user
+            ),
+            None,
         )
+
+        await project_service.remove_project_member(project.id, member_uuid, current_user.id)
+
+        if removed_user:
+            await notification_service.notify_project_member_removed(
+                removed_member=removed_user,
+                project_id=project.id,
+                project_name=project.name,
+                remover=current_user,
+            )
         return {"message": "Member removed successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

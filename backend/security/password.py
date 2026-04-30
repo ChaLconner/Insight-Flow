@@ -46,13 +46,13 @@ pwd_context = CryptContext(
 
 def hash_password(password: str) -> str:
     """Hash a password using Argon2id (PHC winner)."""
-    return pwd_context.hash(password)
+    return str(pwd_context.hash(password))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        return bool(pwd_context.verify(plain_password, hashed_password))
     except Exception as e:
         logger.warning(f"Password verification failed: {e}")
         return False
@@ -92,7 +92,7 @@ def verify_and_rehash(plain_password: str, hashed_password: str) -> tuple[bool, 
 
 def needs_rehash(hashed_password: str) -> bool:
     """Check if a password hash should be upgraded."""
-    return pwd_context.needs_update(hashed_password)
+    return bool(pwd_context.needs_update(hashed_password))
 
 
 def get_hash_algorithm(hashed_password: str) -> str:

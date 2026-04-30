@@ -217,9 +217,3 @@ class UserSettingsResponse(UserSettingsBase):
     user_id: uuid.UUID
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
-
-
-class ResendVerificationRequest(BaseModel):
-    """Schema for resending verification email."""
-
-    email: EmailStr

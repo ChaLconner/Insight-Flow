@@ -2,7 +2,6 @@
 Tests for routers/favorites.py endpoints.
 """
 
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -80,44 +79,6 @@ def test_get_favorite_project_ids_error(client, mock_db):
     mock_db.execute.side_effect = Exception("Database error")
 
     response = client.get("/api/v1/favorites")
-    assert response.status_code == 500
-
-
-# ============================================================================
-# Tests for Get Favorite Projects
-# ============================================================================
-
-
-def test_get_favorite_projects_success(client, mock_db):
-    """Test getting favorite projects with details."""
-    project_id = uuid4()
-    fav_id = uuid4()
-
-    # Create mock favorite with project
-    mock_fav = MagicMock()
-    mock_fav.id = fav_id
-    mock_fav.project_id = project_id
-    mock_fav.created_at = datetime.now()
-    mock_fav.project = MagicMock()
-    mock_fav.project.name = "Test Project"
-    mock_fav.project.description = "Test Description"
-
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [mock_fav]
-    mock_db.execute.return_value = mock_result
-
-    response = client.get("/api/v1/favorites/projects")
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-    assert data[0]["projectName"] == "Test Project"
-
-
-def test_get_favorite_projects_error(client, mock_db):
-    """Test error handling for get favorite projects."""
-    mock_db.execute.side_effect = Exception("Database error")
-
-    response = client.get("/api/v1/favorites/projects")
     assert response.status_code == 500
 
 

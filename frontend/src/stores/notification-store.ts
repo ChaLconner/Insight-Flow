@@ -11,9 +11,17 @@ export { notificationSelectors } from "./notification-selectors";
 // Note: notificationActions is exported separately to avoid circular dependency
 
 // Use the type from types/index.ts directly to ensure consistency
-type CustomNotification = Notification;
+export type CustomNotification = Notification;
 
-interface NotificationState {
+export interface NotificationFilters {
+  type: string | "all";
+  priority: string | "all";
+  readStatus: "all" | "read" | "unread";
+  search: string;
+  dateRange?: { start?: Date; end?: Date };
+}
+
+export interface NotificationState {
   // State
   notifications: CustomNotification[];
   unreadCount: number;
@@ -23,13 +31,7 @@ interface NotificationState {
   vibrationEnabled: boolean;
   isLoading: boolean;
   isConnected: boolean;
-  filters: {
-    type: string | "all";
-    priority: string | "all";
-    readStatus: "all" | "read" | "unread";
-    search: string;
-    dateRange?: { start?: Date; end?: Date };
-  };
+  filters: NotificationFilters;
 
   // Core Actions
   addNotification: (notification: Omit<CustomNotification, "id" | "createdAt" | "updatedAt">) => void;

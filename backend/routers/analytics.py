@@ -1,7 +1,4 @@
-"""
-Analytics router for project metrics and productivity data.
-Refactored for Async operations with proper Dependency Injection.
-"""
+"""Analytics router for active frontend metrics."""
 
 import json
 import uuid
@@ -38,41 +35,45 @@ logger = setup_logger(__name__)
 
 
 def _format_activity(
-    activity: Any, user_map: dict, project_name: str = "", project_id: str = ""
+    activity: Any, user_map: dict[Any, User], project_name: str = "", project_id: str = ""
 ) -> dict[str, Any]:
-    """Helper to format a single activity."""
+    """Format task history activity for legacy analytics activity endpoints."""
     user = user_map.get(activity.user_id)
-    user_name = user.name if user else f"User {activity.user_id}"
-
+    activity_type = (
+        activity.activity_type.value
+        if hasattr(activity.activity_type, "value")
+        else str(activity.activity_type)
+    )
     formatted = {
         "id": str(activity.id),
-        "type": activity.activity_type.value,
-        "user_name": user_name,
-        "task_title": activity.task_title,
+        "type": activity_type,
+        "user_name": user.name if user else f"User {activity.user_id}",
+        "task_title": getattr(activity, "task_title", None),
         "timestamp": activity.timestamp.isoformat() if activity.timestamp else None,
-        "description": activity.description,
+        "description": getattr(activity, "description", None),
         "project_name": project_name,
         "project_id": project_id or str(activity.project_id),
     }
 
-    if activity.new_values:
+    new_values = getattr(activity, "new_values", None)
+    if new_values:
         try:
-            new_values = json.loads(activity.new_values)
-            if "assignee_name" in new_values:
-                formatted["assignee_name"] = new_values["assignee_name"]
+            parsed_values = json.loads(new_values)
+            if isinstance(parsed_values, dict) and "assignee_name" in parsed_values:
+                formatted["assignee_name"] = parsed_values["assignee_name"]
         except (json.JSONDecodeError, TypeError):
             pass
 
     return formatted
 
 
-async def _get_user_map(db: AsyncSession, user_ids: set) -> dict:
-    """Helper to batch fetch users."""
+async def _get_user_map(db: AsyncSession, user_ids: set[Any]) -> dict[Any, User]:
+    """Batch fetch users by ID for activity formatting."""
     if not user_ids:
         return {}
-    users_result = await db.execute(select(User).filter(User.id.in_(user_ids)))
+    users_result = await db.execute(select(User).where(User.id.in_(user_ids)))
     users = users_result.scalars().all()
-    return {u.id: u for u in users}
+    return {user.id: user for user in users}
 
 
 @router.get("/overview", response_model=AnalyticsOverviewResponse)
@@ -113,7 +114,7 @@ async def get_dashboard_metrics(
     current_user: User = Depends(get_current_active_user),
     project: Project = Depends(require_project_member),
 ) -> dict[str, Any]:
-    """Get dashboard metrics for a project."""
+    """Get dashboard metrics for a project. Kept for API compatibility."""
     return await analytics_service.get_project_analytics(project.id)
 
 
@@ -126,7 +127,7 @@ async def get_productivity_data(
     current_user: User = Depends(get_current_active_user),
     project: Project = Depends(require_project_member),
 ) -> dict[str, Any]:
-    """Get productivity data for a project."""
+    """Get productivity data for a project. Kept for API compatibility."""
     return await analytics_service.get_project_productivity(
         project.id, period=period, group_by=group_by
     )
@@ -139,68 +140,59 @@ async def get_contributions(
     current_user: User = Depends(get_current_active_user),
     project: Project = Depends(require_project_member),
 ) -> dict[str, Any]:
-    """Get team contributions for a project."""
+    """Get team contributions for a project. Kept for API compatibility."""
     return await analytics_service.get_project_contributions(project.id)
 
 
 @router.get("/projects/{project_id}/activity", response_model=dict[str, Any])
 async def get_recent_activity(
     project_id: str,
-    limit: int = Query(10, description="Number of activities to return"),
+    limit: int = Query(10, ge=1, le=100, description="Number of activities to return"),
     db: AsyncSession = Depends(get_async_db),
     task_history_service: AsyncTaskHistoryService = Depends(get_task_history_service),
     current_user: User = Depends(get_current_active_user),
     project: Project = Depends(require_project_member),
 ) -> dict[str, Any]:
-    """Get recent activity for a project."""
+    """Get recent activity for a project. Kept for API compatibility."""
     activities = await task_history_service.get_recent_activities(project.id, limit)
-
-    user_ids = {activity.user_id for activity in activities}
-    user_map = await _get_user_map(db, user_ids)
-
+    user_map = await _get_user_map(db, {activity.user_id for activity in activities})
     formatted_activities = [
         _format_activity(activity, user_map, project.name, str(project.id))
         for activity in activities
     ]
-
     return {"activities": formatted_activities, "total_count": len(formatted_activities)}
 
 
 @router.get("/activity", response_model=dict[str, Any])
 async def get_all_recent_activity(
-    limit: int = Query(20, description="Number of activities to return"),
+    limit: int = Query(20, ge=1, le=100, description="Number of activities to return"),
     db: AsyncSession = Depends(get_async_db),
     project_service: AsyncProjectService = Depends(get_project_service),
     task_history_service: AsyncTaskHistoryService = Depends(get_task_history_service),
     current_user: User = Depends(get_current_active_user),
 ) -> dict[str, Any]:
-    """Get recent activity across all projects the user has access to."""
-
+    """Get recent activity across accessible projects. Kept for API compatibility."""
     user_projects = await project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
-    project_ids = [p.id for p in user_projects]
+    project_ids = [project.id for project in user_projects]
 
     if not project_ids:
         return {"activities": [], "total_count": 0}
 
     activities = await task_history_service.get_recent_activities_for_projects(project_ids, limit)
+    user_map = await _get_user_map(db, {activity.user_id for activity in activities})
+    project_map = {project.id: project for project in user_projects}
 
-    user_ids = {activity.user_id for activity in activities}
-    user_map = await _get_user_map(db, user_ids)
-    project_map = {p.id: p for p in user_projects}
-
-    formatted_activities = []
-    for activity in activities:
-        project = project_map.get(activity.project_id)
-        project_name = project.name if project else "Unknown Project"
-        formatted_activities.append(
-            _format_activity(
-                activity,
-                user_map,
-                project_name,
-                str(activity.project_id),
-            )
+    formatted_activities = [
+        _format_activity(
+            activity,
+            user_map,
+            project.name
+            if (project := project_map.get(activity.project_id)) is not None
+            else "Unknown Project",
+            str(activity.project_id),
         )
-
+        for activity in activities
+    ]
     return {"activities": formatted_activities, "total_count": len(formatted_activities)}
 
 
@@ -211,77 +203,67 @@ async def get_batch_recent_activity(
     project_service: AsyncProjectService = Depends(get_project_service),
     task_history_service: AsyncTaskHistoryService = Depends(get_task_history_service),
     current_user: User = Depends(get_current_active_user),
-) -> list[Any]:
-    """Get recent activity for multiple projects in batch."""
+) -> list[dict[str, Any]]:
+    """Get recent activity for multiple projects in batch. Kept for API compatibility."""
     project_ids_str = request.project_ids
-    limit = request.limit
-
-    if not project_ids_str:
-        return []
-
-    # Validate UUIDs
-    valid_project_uuids: list[uuid.UUID] = []
+    limit = request.limit or 10
     results_map: dict[str, dict[str, Any]] = {}
+    valid_project_uuids: list[uuid.UUID] = []
 
-    for pid in project_ids_str:
+    for project_id_str in project_ids_str:
         try:
-            valid_project_uuids.append(uuid.UUID(pid))
+            valid_project_uuids.append(uuid.UUID(project_id_str))
         except ValueError:
-            results_map[pid] = {"projectId": pid, "error": "Invalid project ID format"}
-
-    if not valid_project_uuids:
-        return list(results_map.values())
-
-    # Check permissions
-    user_projects = await project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
-    accessible_project_ids = {p.id for p in user_projects}
-
-    accessible_requested_uuids: list[uuid.UUID] = []
-    for pid_uuid in valid_project_uuids:
-        if pid_uuid in accessible_project_ids:
-            accessible_requested_uuids.append(pid_uuid)
-        else:
-            results_map[str(pid)] = {
-                "projectId": str(pid),
-                "error": "Project not found or access denied",
+            results_map[project_id_str] = {
+                "projectId": project_id_str,
+                "error": "Invalid project ID format",
             }
 
-    if not accessible_requested_uuids:
-        return list(results_map.values())
-
-    # Batch fetch activities
-    limit_int = limit if limit is not None else 10
-    total_limit = limit_int * len(accessible_requested_uuids) * 2
-    activities = await task_history_service.get_recent_activities_for_projects(
-        accessible_requested_uuids, limit=total_limit
-    )
-
-    # Group by project
-    activities_by_project: dict[str, list[Any]] = defaultdict(list)
-    user_ids_to_fetch: set[Any] = set()
-
-    for activity in activities:
-        pid_str = str(activity.project_id)
-        if len(activities_by_project[pid_str]) < limit_int:
-            activities_by_project[pid_str].append(activity)
-            user_ids_to_fetch.add(activity.user_id)
-
-    user_map = await _get_user_map(db, user_ids_to_fetch)
-
-    # Format results
-    for pid_uuid in accessible_requested_uuids:
-        pid_str = str(pid_uuid)
-        if pid_str in results_map:
-            continue
-
-        project_activities = activities_by_project.get(pid_str, [])
-        project_name = next((p.name for p in user_projects if p.id == pid), "")
-
-        formatted_activities = [
-            _format_activity(activity, user_map, project_name, pid_str)
-            for activity in project_activities
+    if valid_project_uuids:
+        user_projects = await project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
+        project_map = {project.id: project for project in user_projects}
+        accessible_project_ids = set(project_map)
+        accessible_requested_uuids = [
+            project_id for project_id in valid_project_uuids if project_id in accessible_project_ids
         ]
 
-        results_map[pid_str] = {"projectId": pid_str, "activities": formatted_activities}
+        for project_id in valid_project_uuids:
+            if project_id not in accessible_project_ids:
+                results_map[str(project_id)] = {
+                    "projectId": str(project_id),
+                    "error": "Project not found or access denied",
+                }
 
-    return [results_map[pid_str] for pid_str in project_ids_str if pid_str in results_map]
+        if accessible_requested_uuids:
+            total_limit = limit * len(accessible_requested_uuids) * 2
+            activities = await task_history_service.get_recent_activities_for_projects(
+                accessible_requested_uuids, limit=total_limit
+            )
+            activities_by_project: dict[str, list[Any]] = defaultdict(list)
+            user_ids_to_fetch: set[Any] = set()
+
+            for activity in activities:
+                project_id_str = str(activity.project_id)
+                if len(activities_by_project[project_id_str]) < limit:
+                    activities_by_project[project_id_str].append(activity)
+                    user_ids_to_fetch.add(activity.user_id)
+
+            user_map = await _get_user_map(db, user_ids_to_fetch)
+
+            for project_id in accessible_requested_uuids:
+                project_id_str = str(project_id)
+                project = project_map[project_id]
+                formatted_activities = [
+                    _format_activity(activity, user_map, project.name, project_id_str)
+                    for activity in activities_by_project.get(project_id_str, [])
+                ]
+                results_map[project_id_str] = {
+                    "projectId": project_id_str,
+                    "activities": formatted_activities,
+                }
+
+    return [
+        results_map[project_id_str]
+        for project_id_str in project_ids_str
+        if project_id_str in results_map
+    ]

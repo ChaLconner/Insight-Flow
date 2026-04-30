@@ -15,6 +15,13 @@ from models.project import Project, ProjectMember
 from models.task import Task, TaskStatus
 from models.task_history import ActivityType, TaskHistory
 from models.user import User
+from services.cache_service import cache_service
+from utils.logger import setup_logger
+
+logger = setup_logger(__name__)
+
+# Cache TTL in seconds
+DASHBOARD_CACHE_TTL = 120  # 2 minutes
 
 
 class AsyncDashboardService:
@@ -36,8 +43,16 @@ class AsyncDashboardService:
     async def get_overview_stats(self, user_id: uuid.UUID) -> dict[str, Any]:
         """
         Get dashboard overview statistics using optimized async queries.
-        Run independent queries in parallel to reduce latency.
+        Uses caching and pre-materialized project IDs to reduce DB load.
         """
+        # B6: Check cache first
+        cache_key = f"dashboard:overview:{user_id}"
+        cached = cache_service.get(cache_key)
+        if cached:
+            logger.debug(f"Serving dashboard overview from cache for user {user_id}")
+            return cached
+
+        # B5: Use subquery directly in IN clauses to avoid pre-materializing list and hitting IN clause limits
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
 
         # Time ranges for trends
@@ -52,11 +67,12 @@ class AsyncDashboardService:
                 func.count(
                     distinct(case((Project.created_at >= thirty_days_ago, Project.id)))
                 ).label("created_30d"),
-            )
-            .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
-            .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+            ).filter(Project.id.in_(accessible_projects_subq))
         )
         project_stats = project_stats_result.first()
+
+        if not project_stats or not project_stats.total:
+            return self._get_empty_stats_response()
 
         task_stats_result = await self.db.execute(
             select(
@@ -72,7 +88,7 @@ class AsyncDashboardService:
                         (
                             and_(
                                 Task.assignee_id == user_id,
-                                cast(Task.status, String) == TaskStatus.IN_PROGRESS.value,
+                                cast(Task.status, String) == TaskStatus.IN_REVIEW.value,
                             ),
                             1,
                         ),
@@ -139,7 +155,8 @@ class AsyncDashboardService:
                     case(
                         (
                             and_(
-                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                cast(TaskHistory.activity_type, String)
+                                == ActivityType.TASK_COMPLETED.value,
                                 TaskHistory.timestamp >= thirty_days_ago,
                             ),
                             1,
@@ -152,7 +169,8 @@ class AsyncDashboardService:
                         (
                             and_(
                                 TaskHistory.user_id == user_id,
-                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                cast(TaskHistory.activity_type, String)
+                                == ActivityType.TASK_COMPLETED.value,
                                 TaskHistory.timestamp >= thirty_days_ago,
                             ),
                             1,
@@ -164,7 +182,8 @@ class AsyncDashboardService:
                     case(
                         (
                             and_(
-                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                cast(TaskHistory.activity_type, String)
+                                == ActivityType.TASK_COMPLETED.value,
                                 TaskHistory.timestamp >= seven_days_ago,
                             ),
                             1,
@@ -176,7 +195,8 @@ class AsyncDashboardService:
                     case(
                         (
                             and_(
-                                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                                cast(TaskHistory.activity_type, String)
+                                == ActivityType.TASK_COMPLETED.value,
                                 TaskHistory.timestamp >= fourteen_days_ago,
                                 TaskHistory.timestamp < seven_days_ago,
                             ),
@@ -199,22 +219,7 @@ class AsyncDashboardService:
 
         # Process Results
         if total_projects == 0:
-            return {
-                "totalProjects": 0,
-                "totalProjectsChange": "+0%",
-                "totalProjectsTrend": "up",
-                "totalTasks": 0,
-                "completedTasks": 0,
-                "inProgressTasks": 0,
-                "inProgressTasksChange": "+0%",
-                "inProgressTasksTrend": "up",
-                "pendingReviewTasks": 0,
-                "pendingReviewTasksChange": "+0%",
-                "pendingReviewTasksTrend": "up",
-                "teamVelocity": 0,
-                "teamVelocityChange": "+0%",
-                "teamVelocityTrend": "up",
-            }
+            return self._get_empty_stats_response()
 
         total_tasks = task_stats.total if task_stats else 0
         completed_tasks = task_stats.completed if task_stats and task_stats.completed else 0
@@ -278,7 +283,7 @@ class AsyncDashboardService:
 
         velocity_change = self._calculate_percentage_change(team_velocity_val, prev_velocity_val)
 
-        return {
+        result = {
             "totalProjects": total_projects,
             "totalProjectsChange": self._format_change(projects_change),
             "totalProjectsTrend": "up" if projects_change >= 0 else "down",
@@ -295,8 +300,24 @@ class AsyncDashboardService:
             "teamVelocityTrend": "up" if velocity_change >= 0 else "down",
         }
 
+        # B6: Cache result
+        cache_service.set(cache_key, result, timeout=DASHBOARD_CACHE_TTL)
+        return result
+
     async def get_recent_projects(self, user_id: uuid.UUID, limit: int = 5) -> list[dict[str, Any]]:
         """Get recent projects with progress stats using optimized async queries."""
+        # B6: Cache recent projects (wrap in dict for cache compatibility)
+        cache_key = f"dashboard:recent_projects:{user_id}:{limit}"
+        cached = cache_service.get(cache_key)
+        if isinstance(cached, dict):
+            cached_list = cached.get("_list_data")
+            if isinstance(cached_list, list):
+                cached_projects: list[dict[str, Any]] = []
+                for item in cached_list:
+                    if isinstance(item, dict):
+                        cached_projects.append({str(key): value for key, value in item.items()})
+                return cached_projects
+
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
 
         # Single query with stats
@@ -333,6 +354,9 @@ class AsyncDashboardService:
                     "updated_at": project.updated_at.isoformat() if project.updated_at else None,
                 }
             )
+
+        # B6: Cache result (wrap list in dict for cache compatibility)
+        cache_service.set(cache_key, {"_list_data": projects}, timeout=DASHBOARD_CACHE_TTL)
         return projects
 
     async def get_recent_activities(
@@ -434,6 +458,26 @@ class AsyncDashboardService:
             for task in tasks
         ]
 
+    @staticmethod
+    def _get_empty_stats_response() -> dict[str, Any]:
+        """Return empty stats response for users with no projects."""
+        return {
+            "totalProjects": 0,
+            "totalProjectsChange": "+0%",
+            "totalProjectsTrend": "up",
+            "totalTasks": 0,
+            "completedTasks": 0,
+            "inProgressTasks": 0,
+            "inProgressTasksChange": "+0%",
+            "inProgressTasksTrend": "up",
+            "pendingReviewTasks": 0,
+            "pendingReviewTasksChange": "+0%",
+            "pendingReviewTasksTrend": "up",
+            "teamVelocity": 0,
+            "teamVelocityChange": "+0%",
+            "teamVelocityTrend": "up",
+        }
+
     def _calculate_percentage_change(self, current: float, previous: float) -> float:
         if previous > 0:
             return ((current - previous) / previous) * 100
@@ -443,3 +487,13 @@ class AsyncDashboardService:
         prefix = "+" if val >= 0 else ""
         suffix = "%"
         return f"{prefix}{round(val, 1)}{suffix}"
+
+
+def invalidate_dashboard_cache(user_id: uuid.UUID | None = None) -> None:
+    """Invalidate cached dashboard data for one user, or all dashboard entries."""
+    if user_id:
+        cache_service.invalidate_pattern(f"dashboard:overview:{user_id}")
+        cache_service.invalidate_pattern(f"dashboard:recent_projects:{user_id}:")
+        return
+
+    cache_service.invalidate_pattern("dashboard:")

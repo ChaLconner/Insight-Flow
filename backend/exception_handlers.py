@@ -1,4 +1,5 @@
 import os
+from typing import Any, cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -195,9 +196,9 @@ def add_exception_handlers(app: FastAPI):
     by returning generic error messages in production while logging full
     details internally for debugging.
     """
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(AppError, app_error_handler)
-    app.add_exception_handler(ValueError, value_error_handler)
-    app.add_exception_handler(IntegrityError, integrity_error_handler)
+    app.add_exception_handler(StarletteHTTPException, cast("Any", http_exception_handler))
+    app.add_exception_handler(RequestValidationError, cast("Any", validation_exception_handler))
+    app.add_exception_handler(AppError, cast("Any", app_error_handler))
+    app.add_exception_handler(ValueError, cast("Any", value_error_handler))
+    app.add_exception_handler(IntegrityError, cast("Any", integrity_error_handler))
     app.add_exception_handler(Exception, global_exception_handler)

@@ -6,7 +6,14 @@ Prevents internal error details from being exposed to users.
 import logging
 from enum import StrEnum
 
-import stripe
+from stripe import (
+    APIConnectionError,
+    AuthenticationError,
+    CardError,
+    InvalidRequestError,
+    RateLimitError,
+    StripeError,
+)
 
 logger = logging.getLogger("payment.errors")
 
@@ -83,7 +90,7 @@ def get_safe_error_message(error: Exception, include_code: bool = False) -> str:
     error_code = None
     decline_code = None
 
-    if isinstance(error, stripe.error.CardError):
+    if isinstance(error, CardError):
         error_code = error.code
         decline_code = getattr(error, "decline_code", None)
 
@@ -95,11 +102,11 @@ def get_safe_error_message(error: Exception, include_code: bool = False) -> str:
         else:
             message = SAFE_ERROR_MESSAGES["card_declined"]
 
-    elif isinstance(error, stripe.error.RateLimitError):
+    elif isinstance(error, RateLimitError):
         message = SAFE_ERROR_MESSAGES["rate_limit"]
         error_code = "rate_limit"
 
-    elif isinstance(error, stripe.error.InvalidRequestError):
+    elif isinstance(error, InvalidRequestError):
         error_code = getattr(error, "code", "invalid_request_error")
 
         # Check for specific known patterns
@@ -115,19 +122,19 @@ def get_safe_error_message(error: Exception, include_code: bool = False) -> str:
         else:
             message = SAFE_ERROR_MESSAGES["invalid_request_error"]
 
-    elif isinstance(error, stripe.error.AuthenticationError):
+    elif isinstance(error, AuthenticationError):
         # Log internally but don't expose API key issues
         logger.critical(f"Stripe authentication error: {error}")
         message = "Payment service is temporarily unavailable. Please try again later."
         error_code = "auth_error"
 
-    elif isinstance(error, stripe.error.APIConnectionError):
+    elif isinstance(error, APIConnectionError):
         message = (
             "Unable to connect to payment service. Please check your connection and try again."
         )
         error_code = "connection_error"
 
-    elif isinstance(error, stripe.error.StripeError):
+    elif isinstance(error, StripeError):
         # Generic Stripe error
         error_code = getattr(error, "code", "stripe_error")
         message = SAFE_ERROR_MESSAGES.get(str(error_code), SAFE_ERROR_MESSAGES["default"])
@@ -158,7 +165,7 @@ def parse_stripe_error(error: Exception) -> tuple[str, str, str | None]:
     """
     safe_message = get_safe_error_message(error)
 
-    if isinstance(error, stripe.error.StripeError):
+    if isinstance(error, StripeError):
         error_code = getattr(error, "code", "unknown")
         original_message = str(error)
     else:

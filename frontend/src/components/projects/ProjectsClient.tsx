@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback, useEffect, Suspense } from "react";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { ProjectStatus } from "@/types";
@@ -23,7 +23,10 @@ import { ProjectHeader } from "@/components/projects/ProjectHeader";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Loader2 } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ProjectGridSkeleton,
+  ProjectsPageSkeletonContent,
+} from "@/components/projects/ProjectsPageSkeleton";
 import { useFavoriteIds, useToggleFavorite } from "@/hooks/use-favorites";
 import {
   blurEditableTargetOnEscape,
@@ -49,46 +52,10 @@ const ProjectGrid = dynamic(
   }
 );
 
-// Skeleton for ProjectGrid while loading
-function ProjectGridSkeleton() {
-  return (
-    <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <Skeleton key={i} className="h-[300px] w-full rounded-xl" />
-      ))}
-    </div>
-  );
-}
-
-// Loading skeleton for entire page
 function ProjectsPageSkeleton() {
   return (
     <ProtectedLayout>
-      <div className="space-y-8">
-        {/* Header Skeleton */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <Skeleton className="h-10 w-24" />
-            <Skeleton className="h-10 w-32" />
-          </div>
-        </div>
-
-        {/* Filters Skeleton */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <Skeleton className="h-10 flex-1" />
-          <div className="flex gap-2">
-            <Skeleton className="h-10 w-32" />
-            <Skeleton className="h-10 w-32" />
-          </div>
-        </div>
-
-        {/* Grid Skeleton */}
-        <ProjectGridSkeleton />
-      </div>
+      <ProjectsPageSkeletonContent />
     </ProtectedLayout>
   );
 }
@@ -97,9 +64,6 @@ export function ProjectsClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, isLoading: authLoading } = useAuthStore();
-
-  // Data fetching with React Query (like Dashboard/Analytics)
-  const { data: projects = [], isLoading, isRefetching, refetch } = useProjects();
 
   // URL State
   const activeTab: "projects" | "tasks" =
@@ -115,6 +79,24 @@ export function ProjectsClient() {
     "all"
   );
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "name">("newest");
+  const [page, setPage] = useState(1);
+  const pageSize = 12;
+
+  // Data fetching with server-side filtering/sorting. Load More increases the
+  // bounded limit instead of fetching a fixed 100 rows and filtering locally.
+  const {
+    data: projects = [],
+    isLoading,
+    isRefetching,
+    refetch,
+  } = useProjects({
+    page: 1,
+    pageSize: page * pageSize + 1,
+    search: debouncedSearchQuery,
+    status: statusFilter,
+    sortBy,
+    enabled: activeTab === "projects",
+  });
 
 
   // Modal State
@@ -240,48 +222,9 @@ export function ProjectsClient() {
     ]
   );
 
-  // Derived Data with memoization
-  const filteredProjects = useMemo(() => {
-    if (activeTab !== "projects") {
-      return [];
-    }
-
-    return projects
-      .filter((project) => {
-        const matchesSearch =
-          project.name
-            .toLowerCase()
-            .includes(debouncedSearchQuery.toLowerCase()) ||
-          project.description
-            ?.toLowerCase()
-            .includes(debouncedSearchQuery.toLowerCase());
-        const matchesStatus =
-          statusFilter === "all" || project.status === statusFilter;
-        return matchesSearch && matchesStatus;
-      })
-      .sort((a, b) => {
-        if (sortBy === "name") {
-          return a.name.localeCompare(b.name);
-        } else if (sortBy === "oldest") {
-          return (
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
-        } else {
-          return (
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-        }
-      });
-  }, [projects, debouncedSearchQuery, statusFilter, sortBy, activeTab]);
-
-  // Client-side Pagination
-  const [page, setPage] = useState(1);
-  const pageSize = 12;
-  const paginatedProjects = useMemo(() => {
-    return filteredProjects.slice(0, page * pageSize);
-  }, [filteredProjects, page]);
-
-  const hasMoreProjects = paginatedProjects.length < filteredProjects.length;
+  const visibleProjectLimit = page * pageSize;
+  const visibleProjects = projects.slice(0, visibleProjectLimit);
+  const hasMoreProjects = projects.length > visibleProjectLimit;
 
   const handleLoadMore = useCallback(() => {
     setPage((p) => p + 1);
@@ -290,7 +233,7 @@ export function ProjectsClient() {
   // Reset pagination when filters change
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, statusFilter, sortBy]);
+  }, [debouncedSearchQuery, statusFilter, sortBy]);
 
   // Loading state - show skeleton
   if (authLoading || (isLoading && projects.length === 0)) {
@@ -341,7 +284,7 @@ export function ProjectsClient() {
 
             <Suspense fallback={<ProjectGridSkeleton />}>
               <ProjectGrid
-                projects={paginatedProjects}
+                projects={visibleProjects}
                 isLoading={isLoading}
                 onEdit={handleEditProject}
                 onArchive={handleArchiveProject}

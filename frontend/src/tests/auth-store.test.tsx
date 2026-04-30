@@ -222,6 +222,39 @@ describe("auth-store", () => {
       expect(state.isAuthenticated).toBe(false);
       expect(state.isInitialized).toBe(true);
     });
+
+    it("should logout when fresh cached session is rejected by background verification", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+      const authError = Object.assign(new Error("Forbidden"), {
+        isAxiosError: true,
+        response: { status: 403 },
+      });
+
+      (apiClient.get as Mock).mockRejectedValue(authError);
+      act(() => {
+        useAuthStore.setState({
+          user: mockUser,
+          isAuthenticated: true,
+          isInitialized: false,
+          isLoading: true,
+          lastVerified: Date.now(),
+        });
+      });
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().user).toBe(null);
+    });
   });
 
   describe("checkAuthStatus", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, memo } from "react";
+import React, { memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AreaChart,
@@ -14,7 +14,8 @@ import {
 import { TrendingDown } from "lucide-react";
 import type { BurndownDataPoint } from "@/app/analytics/types";
 
-import { AnalyticsPeriod } from "@/types";
+import type { AnalyticsPeriod } from "@/types";
+import { getProgressTitle } from "@/utils/analytics-helpers";
 
 interface BurndownChartProps {
   data: BurndownDataPoint[];
@@ -27,20 +28,7 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({
   data,
   period,
 }) => {
-  const title = useMemo(() => {
-    switch (period) {
-      case AnalyticsPeriod.WEEK:
-        return "Weekly Progress";
-      case AnalyticsPeriod.MONTH:
-        return "Monthly Progress";
-      case AnalyticsPeriod.QUARTER:
-        return "Quarterly Progress";
-      case AnalyticsPeriod.YEAR:
-        return "Yearly Progress";
-      default:
-        return "Progress";
-    }
-  }, [period]);
+  const title = getProgressTitle(period);
 
   // Empty state when no data is available
   if (!data || data.length === 0) {
@@ -74,9 +62,9 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden">
-        <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
+      <CardContent className="flex-1 min-w-0 overflow-hidden">
+        <div className="h-[300px] w-full min-w-0">
+          <ResponsiveContainer width="100%" height={300}>
             <AreaChart
               data={data}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}

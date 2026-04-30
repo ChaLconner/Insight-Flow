@@ -7,6 +7,7 @@ import logging
 import threading
 import time
 from collections import defaultdict, deque
+from typing import TYPE_CHECKING
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -16,6 +17,9 @@ from database import AsyncSessionLocal
 from services.security_log_service import SecurityLogService
 
 logger = logging.getLogger("rate_limit")
+
+if TYPE_CHECKING:
+    from asyncio import Task
 
 # Per-endpoint rate limit configuration
 # Format: path_prefix -> (calls, period_seconds)
@@ -74,7 +78,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.request_history: dict[str, deque] = defaultdict(deque)
         self._lock = threading.Lock()
         self._last_cleanup = time.time()
-        self.background_tasks = set()
+        self.background_tasks: set[Task[object]] = set()
+        # B8: In-memory cache for IP block status to avoid DB hit per request
+        # Format: {ip: (is_blocked, blocked_until, cache_expire_time)}
+        self._ip_block_cache: dict[str, tuple[bool, object, float]] = {}
+        self._ip_block_cache_ttl = 30  # seconds
 
     def _get_rate_key(self, request: Request) -> str:
         """Get rate limiting key for the request."""
@@ -90,12 +98,47 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return f"{client_ip}:default"
 
     async def _check_ip_block(self, request: Request, client_ip: str):
-        """Check if IP is blocked and return response if so."""
+        """Check if IP is blocked and return response if so. Uses in-memory cache."""
         try:
             from security.ip_blocking import get_ip_blocker
 
+            # B8: Check in-memory cache first
+            now_ts = time.time()
+            cached = self._ip_block_cache.get(client_ip)
+            if cached:
+                is_blocked_cached, blocked_until_cached, expire_at = cached
+                if now_ts < expire_at:
+                    # Cache hit — use cached result
+                    if not is_blocked_cached:
+                        return None  # Not blocked, skip DB
+                    # Blocked — build response from cache
+                    remaining = 0
+                    if blocked_until_cached:
+                        now_dt = __import__("datetime").datetime.now(__import__("datetime").UTC)
+                        remaining = int((blocked_until_cached - now_dt).total_seconds())
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "success": False,
+                            "message": "Access temporarily blocked due to suspicious activity.",
+                            "code": "IP_BLOCKED",
+                            "retry_after": remaining,
+                        },
+                        headers={"Retry-After": str(remaining)},
+                    )
+                else:
+                    # Cache expired — remove stale entry
+                    del self._ip_block_cache[client_ip]
+
             blocker = get_ip_blocker()
             is_blocked, blocked_until = await blocker.is_blocked(client_ip)
+
+            # B8: Store result in cache
+            self._ip_block_cache[client_ip] = (
+                is_blocked,
+                blocked_until,
+                now_ts + self._ip_block_cache_ttl,
+            )
 
             if is_blocked:
                 remaining = 0
@@ -269,3 +312,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if ips_to_remove:
                 msg = f"Rate limiter cleanup: removed {len(ips_to_remove)} inactive IPs"
                 logger.debug(msg)
+
+            # B8: Clean up expired IP block cache entries
+            expired_ips = [
+                ip for ip, (_, _, expire_at) in self._ip_block_cache.items() if now >= expire_at
+            ]
+            for ip in expired_ips:
+                del self._ip_block_cache[ip]

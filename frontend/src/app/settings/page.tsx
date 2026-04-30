@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { Suspense, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
@@ -63,38 +63,46 @@ const PaymentHistorySettings = dynamic(
   },
 );
 
+const VALID_TABS = ["profile", "notifications", "security", "appearance", "billing", "history"] as const;
+
+type SettingsTab = (typeof VALID_TABS)[number];
+
+const SETTINGS_TABS: Array<{
+  id: SettingsTab;
+  label: string;
+  icon: typeof User;
+}> = [
+  { id: "profile", label: "Profile", icon: User },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "security", label: "Security", icon: Shield },
+  { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "billing", label: "Billing", icon: Database },
+  { id: "history", label: "Payment History", icon: Receipt },
+];
+
+function isSettingsTab(tab: string | null): tab is SettingsTab {
+  return VALID_TABS.includes(tab as SettingsTab);
+}
+
 function SettingsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Valid tab names
-  const validTabs = ["profile", "notifications", "security", "appearance", "billing", "history"];
-
-  // Get initial tab from URL or default to profile
-  const getInitialTab = () => {
+  const activeTab = useMemo<SettingsTab>(() => {
     const tabFromUrl = searchParams.get("tab");
-    if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+    if (isSettingsTab(tabFromUrl)) {
       return tabFromUrl;
     }
     return "profile";
-  };
-
-  const [activeTab, setActiveTab] = useState(getInitialTab);
+  }, [searchParams]);
 
   // Update URL when tab changes
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    router.push(`/settings?tab=${tab}`, { scroll: false });
-  };
-
-  const tabs = [
-    { id: "profile", label: "Profile", icon: User },
-    { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "security", label: "Security", icon: Shield },
-    { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "billing", label: "Billing", icon: Database },
-    { id: "history", label: "Payment History", icon: Receipt },
-  ];
+  const handleTabChange = useCallback((tab: SettingsTab) => {
+    if (tab === activeTab) {
+      return;
+    }
+    router.replace(`/settings?tab=${tab}`, { scroll: false });
+  }, [activeTab, router]);
 
   return (
     <div className="space-y-8">
@@ -114,7 +122,7 @@ function SettingsContent() {
           <Card className="bg-card border-border lg:sticky lg:top-24 overflow-hidden">
             <CardContent className="p-2">
               <nav className="flex flex-row lg:flex-col gap-2 lg:gap-0 lg:space-y-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
-                {tabs.map((tab) => (
+                {SETTINGS_TABS.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => handleTabChange(tab.id)}

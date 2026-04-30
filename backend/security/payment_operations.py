@@ -16,6 +16,14 @@ from functools import wraps
 from typing import Any
 from uuid import UUID
 
+from stripe import (
+    APIConnectionError,
+    AuthenticationError,
+    CardError,
+    InvalidRequestError,
+    RateLimitError,
+)
+
 # Re-export payment_lock and get_lock_manager from distributed_locks for backward compatibility
 from security.distributed_locks import get_lock_manager, payment_lock  # noqa: F401
 
@@ -122,7 +130,6 @@ def retry_on_stripe_error(
     - CardError (card declined, invalid, etc.)
     - AuthenticationError (API key issues)
     """
-    import stripe
 
     def decorator(func: Callable):
         @wraps(func)
@@ -133,15 +140,15 @@ def retry_on_stripe_error(
                 try:
                     return await func(*args, **kwargs)
 
-                except stripe.error.RateLimitError as e:
+                except RateLimitError as e:
                     last_error = e
                     logger.warning(f"Rate limit hit, attempt {attempt + 1}/{max_retries}")
 
-                except stripe.error.APIConnectionError as e:
+                except APIConnectionError as e:
                     last_error = e
                     logger.warning(f"Connection error, attempt {attempt + 1}/{max_retries}")
 
-                except stripe.error.InvalidRequestError as e:
+                except InvalidRequestError as e:
                     # Only retry if it's a temporary issue
                     if "temporarily" in str(e).lower() or "try again" in str(e).lower():
                         last_error = e
@@ -149,7 +156,7 @@ def retry_on_stripe_error(
                     else:
                         raise
 
-                except (stripe.error.CardError, stripe.error.AuthenticationError):
+                except (CardError, AuthenticationError):
                     # Don't retry these
                     raise
 

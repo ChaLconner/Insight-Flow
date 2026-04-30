@@ -1,5 +1,5 @@
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -124,19 +124,3 @@ def test_delete_notification_not_found(client, mock_notification_service):
     notif_id = str(uuid4())
     response = client.delete(f"/api/v1/notifications/{notif_id}")
     assert response.status_code == 404
-
-
-def test_check_deadlines(client):
-    with patch(
-        "routers.notifications.run_async_deadline_check", new_callable=AsyncMock
-    ) as mock_run:
-        mock_run.return_value = {"processed": 5}
-        response = client.post("/api/v1/notifications/check-deadlines")
-        assert response.status_code == 200
-        assert response.json()["summary"]["processed"] == 5
-
-
-def test_create_test_notifications(client, mock_notification_service):
-    response = client.post("/api/v1/notifications/create-test")
-    assert response.status_code == 200
-    assert mock_notification_service.create_notification.call_count == 3

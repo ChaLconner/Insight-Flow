@@ -58,3 +58,18 @@ export const getPeriodLabel = (period: AnalyticsPeriod) => {
       return "from last period";
   }
 };
+
+export const getProgressTitle = (period: AnalyticsPeriod) => {
+  switch (period) {
+    case AnalyticsPeriod.WEEK:
+      return "Weekly Progress";
+    case AnalyticsPeriod.MONTH:
+      return "Monthly Progress";
+    case AnalyticsPeriod.QUARTER:
+      return "Quarterly Progress";
+    case AnalyticsPeriod.YEAR:
+      return "Yearly Progress";
+    default:
+      return "Progress";
+  }
+};

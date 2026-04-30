@@ -27,7 +27,6 @@ from schemas.password_reset import (
 from schemas.user import (
     GithubAuth,
     GoogleAuth,
-    ResendVerificationRequest,
     UserCreate,
     UserLogin,
     UserResponse,
@@ -137,22 +136,6 @@ async def verify_email(
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token"
     )
-
-
-@router.post("/resend-verification", response_model=Any)
-async def resend_verification(
-    request_data: ResendVerificationRequest,
-    user_service: AsyncUserService = Depends(get_user_service),
-    _=Depends(auth_rate_limiter),
-) -> Any:
-    """
-    Resend verification email.
-    """
-    # Always return success to prevent user enumeration
-    await user_service.resend_verification_email(request_data.email)
-    return {
-        "message": "If your email is registered and not verified, a new verification link has been sent."
-    }
 
 
 @router.post("/login", response_model=Any)

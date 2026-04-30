@@ -416,8 +416,16 @@ class AsyncUserService:
                 result = await self.db.execute(select(User).filter(User.email == email))
                 user = result.scalars().first()
                 return user
+            except TimeoutError as e:
+                logger.error(f"Database timeout on attempt {attempt + 1}: {e}")
+                await self.db.rollback()
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+                    continue
+                raise e
             except OperationalError as e:
                 logger.error(f"OperationalError on attempt {attempt + 1}: {e}")
+                await self.db.rollback()
                 if (
                     "SSL connection has been closed unexpectedly" in str(e)
                     and attempt < max_retries - 1

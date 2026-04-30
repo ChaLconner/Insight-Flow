@@ -163,6 +163,7 @@ frontend/examples/
 tmp/
 .tmp/
 temp/
+pytest-cache-files-*/
 backend/pytest-cache-files-*/
 
 # Optional REPL history

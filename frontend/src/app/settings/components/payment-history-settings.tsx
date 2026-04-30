@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ export function PaymentHistorySettings() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'succeeded' | 'failed'>('all');
+  const historyRequestIdRef = useRef(0);
+  const statsRequestIdRef = useRef(0);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,19 +49,28 @@ export function PaymentHistorySettings() {
 
   // Fetch aggregated stats from dedicated API
   const fetchStats = useCallback(async () => {
+    const requestId = statsRequestIdRef.current + 1;
+    statsRequestIdRef.current = requestId;
     setStatsLoading(true);
     try {
       const { data } = await apiClient.get("/payment/history/stats");
+      if (requestId !== statsRequestIdRef.current) {
+        return;
+      }
       setStats(data);
     } catch {
       // Error state handled through UI
     } finally {
-      setStatsLoading(false);
+      if (requestId === statsRequestIdRef.current) {
+        setStatsLoading(false);
+      }
     }
   }, []);
 
   // Fetch payment history with pagination and server-side filtering
   const fetchPaymentHistory = useCallback(async (page: number, statusFilter: string) => {
+    const requestId = historyRequestIdRef.current + 1;
+    historyRequestIdRef.current = requestId;
     setHistoryLoading(true);
     try {
       const offset = (page - 1) * PAGE_SIZE;
@@ -71,6 +82,9 @@ export function PaymentHistorySettings() {
       }
       
       const { data } = await apiClient.get("/payment/history", { params });
+      if (requestId !== historyRequestIdRef.current) {
+        return;
+      }
       if (data?.payments) {
         setPaymentHistory(data.payments);
         setTotalCount(data.total ?? data.payments.length);
@@ -78,7 +92,9 @@ export function PaymentHistorySettings() {
     } catch {
       // Error state handled through UI
     } finally {
-      setHistoryLoading(false);
+      if (requestId === historyRequestIdRef.current) {
+        setHistoryLoading(false);
+      }
     }
   }, []);
 
@@ -131,7 +147,7 @@ export function PaymentHistorySettings() {
                   {statsLoading ? (
                     <Skeleton className="h-7 w-24" />
                   ) : (
-                    formatCurrency(totalSpent, 'usd')
+                    formatCurrency(totalSpent, stats?.currency ?? 'usd')
                   )}
                 </div>
               </div>

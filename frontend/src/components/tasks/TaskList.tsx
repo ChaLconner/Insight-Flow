@@ -31,6 +31,7 @@ import { CustomSelect } from "@/components/ui/custom-select";
 import { TaskItem } from "./TaskItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTasks } from "@/hooks/use-tasks";
+import { useDebounce } from "@/hooks/use-debounce";
 
 // import { toast } from "sonner";
 // import { getErrorMessage } from "@/lib/error-utils";
@@ -99,11 +100,11 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
     const router = useRouter();
     const queryClient = useQueryClient();
 
-    // Local search state (client-side filtering like ProjectsClient)
+    // Local search state, debounced before hitting server-side filtering
     const [localSearchQuery, setLocalSearchQuery] = useState(
       () => searchParams.get("search") ?? "",
     );
-    // Use local search directly for instant filtering (no debounce needed for client-side)
+    const debouncedSearchQuery = useDebounce(localSearchQuery, 300);
 
     const [statusFilter, setStatusFilter] = useState<string>(
       () => searchParams.get("status") ?? "all",
@@ -133,7 +134,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
     // Reset pagination when filters change
     useEffect(() => {
       setPage(1);
-    }, [localSearchQuery, statusFilter]);
+    }, [debouncedSearchQuery, statusFilter]);
 
     // Update local search when URL param changes (e.g. from GlobalSearch)
     useEffect(() => {
@@ -150,10 +151,11 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       };
     }, []);
 
-    // Use custom hook for data fetching and operations
-    // Fetch ALL tasks without search/status params (client-side filtering)
+    // Use custom hook for server-side filtering and pagination.
     const {
-      tasks: allTasks,
+      tasks,
+      total,
+      hasMore,
       isLoading,
       isFetching: _isFetching,
       error,
@@ -162,35 +164,12 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
       isDeleting,
     } = useTasks({
       projectId,
-      page: 1,
-      pageSize: 1000, // Fetch all tasks for client-side filtering
-      searchQuery: "", // No server-side search
-      statusFilter: "all", // No server-side filter
+      page,
+      pageSize: PAGE_SIZE,
+      searchQuery: debouncedSearchQuery,
+      statusFilter,
       enabled: isAuthenticated,
     });
-
-    // Client-side filtering (like ProjectsClient) for instant UX
-    const filteredTasks = useMemo(() => {
-      return allTasks.filter((task) => {
-        const searchLower = localSearchQuery.toLowerCase();
-        const matchesSearch =
-          !localSearchQuery ||
-          task.title.toLowerCase().includes(searchLower) ||
-          task.description?.toLowerCase().includes(searchLower);
-        const matchesStatus =
-          statusFilter === "all" || task.status === statusFilter;
-        return matchesSearch && matchesStatus;
-      });
-    }, [allTasks, localSearchQuery, statusFilter]);
-
-    // Client-side pagination
-    const paginatedTasks = useMemo(() => {
-      const start = (page - 1) * PAGE_SIZE;
-      return filteredTasks.slice(start, start + PAGE_SIZE);
-    }, [filteredTasks, page]);
-
-    const total = filteredTasks.length;
-    const hasMore = page * PAGE_SIZE < total;
 
     // Handle refresh logic exposed to parent
     useImperativeHandle(ref, () => ({
@@ -399,8 +378,8 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
 
         {/* Content */}
         <div className="space-y-4">
-          {paginatedTasks.length > 0 ? (
-            paginatedTasks.map((task) => (
+          {tasks.length > 0 ? (
+            tasks.map((task) => (
               <TaskItem
                 key={task.id}
                 task={task}
@@ -439,7 +418,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
         </div>
 
         {/* Pagination Controls */}
-        {paginatedTasks.length > 0 && (
+        {tasks.length > 0 && (
           <div className="flex justify-between items-center mt-8">
             <div className="text-sm text-muted-foreground">
               Showing {(page - 1) * PAGE_SIZE + 1} to{" "}

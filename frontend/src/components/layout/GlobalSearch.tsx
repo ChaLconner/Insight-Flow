@@ -20,6 +20,13 @@ interface SearchResults {
   tasks: Task[];
 }
 
+const SEARCH_DEBOUNCE_MS = 250;
+const SEARCH_CACHE_TTL_MS = 30_000;
+const searchCache = new Map<
+  string,
+  { expiresAt: number; data: { projects: Project[]; tasks: Task[] } }
+>();
+
 export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
@@ -34,6 +41,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
     tasks: Task[];
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
 
   const closeDropdown = useCallback(() => setIsOpen(false), []);
   useClickOutside(containerRef, closeDropdown);
@@ -47,12 +55,23 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   useEffect(() => {
     const trimmedQuery = query.trim();
     if (!isAuthenticated || trimmedQuery.length < 2) {
+      requestIdRef.current += 1;
       setCachedData(null);
       setLoading(false);
       return;
     }
 
+    const cacheKey = trimmedQuery.toLowerCase();
+    const cached = searchCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      setCachedData(cached.data);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     const timeoutId = window.setTimeout(async () => {
       setLoading(true);
       try {
@@ -61,32 +80,34 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
           tasksApi.getMyTasks(0, 5, trimmedQuery),
         ]);
 
-        if (cancelled) {
+        if (cancelled || requestId !== requestIdRef.current) {
           return;
         }
 
-        const projects = Array.isArray(projectsData)
-          ? projectsData
-          : ((projectsData as Record<string, unknown>).items as Project[]) ?? [];
-        const tasks = Array.isArray(tasksData)
-          ? tasksData
-          : ((tasksData as Record<string, unknown>).items as Task[]) ?? [];
+        const projects = projectsData;
+        const tasks = Array.isArray(tasksData) ? tasksData : tasksData.items;
 
-        setCachedData({
+        const data = {
           projects: Array.from(new Map(projects.map((p) => [p.id, p])).values()),
           tasks: Array.from(new Map(tasks.map((t) => [t.id, t])).values()),
+        };
+
+        searchCache.set(cacheKey, {
+          data,
+          expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
         });
+        setCachedData(data);
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && requestId === requestIdRef.current) {
           console.error("Failed to load search data:", error);
           setCachedData({ projects: [], tasks: [] });
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && requestId === requestIdRef.current) {
           setLoading(false);
         }
       }
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;

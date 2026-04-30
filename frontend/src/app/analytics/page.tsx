@@ -94,12 +94,16 @@ export default function AnalyticsPage() {
   // Data fetching hooks
   const { data, isLoading, error, refetch, isRefetching } =
     useAnalytics(selectedPeriod);
+  const shouldFetchPaginatedWorkload =
+    (data?.teamWorkload?.length ?? 0) >= PAGINATION_THRESHOLD;
 
   const {
     data: paginatedWorkload,
     isLoading: isWorkloadLoading,
     isFetching: isWorkloadFetching,
-  } = useTeamWorkload(workloadParams);
+  } = useTeamWorkload(workloadParams, {
+    enabled: shouldFetchPaginatedWorkload,
+  });
 
   // ============================================
   // Memoized values
@@ -107,13 +111,9 @@ export default function AnalyticsPage() {
 
   // Check if we should use paginated mode
   const usePaginatedWorkload = useMemo(() => {
-    const teamWorkloadCount = data?.teamWorkload?.length ?? 0;
     const paginatedTotal = paginatedWorkload?.total ?? 0;
-    return (
-      teamWorkloadCount >= PAGINATION_THRESHOLD ||
-      paginatedTotal > PAGINATION_THRESHOLD
-    );
-  }, [data?.teamWorkload?.length, paginatedWorkload?.total]);
+    return shouldFetchPaginatedWorkload || paginatedTotal > PAGINATION_THRESHOLD;
+  }, [paginatedWorkload?.total, shouldFetchPaginatedWorkload]);
 
   // Combined loading state for workload
   const isWorkloadBusy = isWorkloadLoading || isWorkloadFetching;

@@ -3,13 +3,11 @@ User Favorites router for managing user's favorite projects.
 """
 
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from database import get_async_db
 from models import Project, User, UserFavorite
@@ -20,18 +18,6 @@ from utils.schema_utils import to_camel
 logger = setup_logger("favorites_router")
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
-
-
-class FavoriteProjectResponse(BaseModel):
-    """Schema for favorite project response."""
-
-    id: uuid.UUID
-    project_id: uuid.UUID
-    project_name: str
-    project_description: str | None = None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
 
 
 class FavoriteIdsResponse(BaseModel):
@@ -79,41 +65,6 @@ async def get_favorite_project_ids(
         logger.error(f"Error fetching favorites: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch favorites"
-        )
-
-
-@router.get("/projects", response_model=list[FavoriteProjectResponse])
-async def get_favorite_projects(
-    current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_async_db)
-):
-    """
-    Get list of user's favorite projects with project details.
-    """
-    try:
-        result = await db.execute(
-            select(UserFavorite)
-            .options(selectinload(UserFavorite.project))
-            .where(UserFavorite.user_id == current_user.id)
-            .order_by(UserFavorite.created_at.desc())
-        )
-        favorites = result.scalars().all()
-
-        return [
-            FavoriteProjectResponse(
-                id=fav.id,
-                project_id=fav.project_id,
-                project_name=fav.project.name if fav.project else "Unknown",
-                project_description=fav.project.description if fav.project else None,
-                created_at=fav.created_at,
-            )
-            for fav in favorites
-            if fav.project  # Only include if project exists
-        ]
-    except Exception as e:
-        logger.error(f"Error fetching favorite projects: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch favorite projects",
         )
 
 

@@ -29,6 +29,15 @@ def escape_like_pattern(pattern: str) -> str:
     return re.sub(r"([%_\\])", r"\\\1", pattern)
 
 
+def _invalidate_dashboard_cache_after_mutation() -> None:
+    try:
+        from services.async_dashboard_service import invalidate_dashboard_cache
+
+        invalidate_dashboard_cache()
+    except Exception as e:
+        logger.error(f"Failed to invalidate dashboard cache: {e}")
+
+
 class AsyncTaskService:
     """Async Service class for task operations."""
 
@@ -163,6 +172,7 @@ class AsyncTaskService:
             self.db.add(db_task)
             await self.db.commit()
             await self.db.refresh(db_task)
+            _invalidate_dashboard_cache_after_mutation()
 
             # Log activity asynchronously
             try:
@@ -277,6 +287,7 @@ class AsyncTaskService:
         try:
             await self.db.commit()
             await self.db.refresh(task)
+            _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             try:
@@ -322,6 +333,7 @@ class AsyncTaskService:
             # Note: delete() is synchronous in SQLAlchemy 2.0 AsyncSession (it stages the deletion)
             await self.db.delete(task)
             await self.db.commit()
+            _invalidate_dashboard_cache_after_mutation()
             return True
         except IntegrityError:
             await self.db.rollback()
@@ -348,6 +360,7 @@ class AsyncTaskService:
 
             await self.db.commit()
             await self.db.refresh(task)
+            _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             if old_status != task.status:
@@ -398,6 +411,7 @@ class AsyncTaskService:
             task.assignee_id = assign_data.assignee_id
             await self.db.commit()
             await self.db.refresh(task)
+            _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             try:

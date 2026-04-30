@@ -79,6 +79,44 @@ class TestFilesRouter:
         )
         assert response.status_code == 401
 
+    def test_get_file_info_requires_auth(self, unauthenticated_client):
+        """Test that file info requires authentication."""
+        response = unauthenticated_client.get(
+            "/api/v1/files/info", params={"url": "/static/uploads/test.txt"}
+        )
+        assert response.status_code == 401
+
+    def test_get_file_info_success(self, client):
+        """Test getting metadata for an uploaded file."""
+        file_content = b"file info content"
+        upload_response = client.post(
+            "/api/v1/files/upload",
+            files={"file": ("info.txt", io.BytesIO(file_content), "text/plain")},
+        )
+        assert upload_response.status_code == 200
+
+        response = client.get("/api/v1/files/info", params={"url": upload_response.json()["url"]})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["url"] == upload_response.json()["url"]
+        assert data["filename"] == "info.txt"
+        assert data["size_bytes"] == len(file_content)
+        assert data["mime_type"] == "text/plain"
+        assert data["exists"] is True
+
+    def test_get_file_info_prevents_directory_traversal(self, client):
+        """Test that file info blocks directory traversal."""
+        response = client.get("/api/v1/files/info", params={"url": "../../../etc/passwd"})
+        assert response.status_code == 400
+
+    def test_get_file_info_missing_file(self, client):
+        """Test getting metadata for a missing file."""
+        response = client.get(
+            "/api/v1/files/info", params={"url": "/static/uploads/missing-info-file.txt"}
+        )
+        assert response.status_code == 404
+
     def test_delete_file_prevents_directory_traversal(self, client):
         """Test that directory traversal is blocked."""
         response = client.delete("/api/v1/files/delete", params={"url": "../../../etc/passwd"})

@@ -9,6 +9,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_async_db
@@ -105,6 +106,74 @@ async def upload_file(
         raise HTTPException(status_code=500, detail="File upload failed")
 
 
+def _resolve_upload_path(url: str, current_user: User) -> tuple[str, str]:
+    if ".." in url:
+        logger.warning(
+            f"Path traversal attempt by user {mask_user_id(str(current_user.id))}: {url[:50]}"
+        )
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    filename = os.path.basename(url)
+    if not filename or ".." in filename or "/" in filename or "\\" in filename:
+        logger.warning(
+            f"Suspicious file path by user {mask_user_id(str(current_user.id))}: {url[:50]}"
+        )
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    try:
+        validated_path = validate_file_path(UPLOAD_DIR, file_path)
+    except FileSecurityError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    return filename, validated_path
+
+
+@router.get("/info")
+async def get_file_info(
+    url: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """
+    Return metadata for an uploaded file.
+
+    Mirrors the frontend fileApi.getFileInfo contract and enforces the same
+    traversal and ownership checks as deletion.
+    """
+    try:
+        filename, validated_path = _resolve_upload_path(url, current_user)
+
+        result = await db.execute(select(FileModel).where(FileModel.unique_filename == filename))
+        db_file = result.scalar_one_or_none()
+
+        if db_file and db_file.user_id != current_user.id:
+            logger.warning(
+                f"Unauthorized file info attempt by user {mask_user_id(str(current_user.id))} "
+                f"on file owned by {mask_user_id(str(db_file.user_id))}"
+            )
+            raise HTTPException(status_code=403, detail="Not authorized to access this file")
+
+        exists = os.path.exists(validated_path)
+        if not db_file and not exists:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return {
+            "url": db_file.url if db_file else f"/static/uploads/{filename}",
+            "filename": db_file.filename if db_file else filename,
+            "unique_filename": db_file.unique_filename if db_file else filename,
+            "size_bytes": db_file.size_bytes if db_file else os.path.getsize(validated_path),
+            "mime_type": db_file.mime_type if db_file else None,
+            "exists": exists,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File info error: {e}")
+        raise HTTPException(status_code=500, detail="File info lookup failed")
+
+
 @router.delete("/delete")
 async def delete_file(
     url: str,
@@ -120,34 +189,9 @@ async def delete_file(
     - Filename sanitization
     """
     try:
-        # Security: Check for path traversal in the input URL immediately
-        if ".." in url:
-            logger.warning(
-                f"Path traversal attempt by user {mask_user_id(str(current_user.id))}: {url[:50]}"
-            )
-            raise HTTPException(status_code=400, detail="Invalid file path")
-
-        # Extract filename from URL (only basename, strips any path components)
-        filename = os.path.basename(url)
-
-        # Validate filename doesn't contain suspicious patterns
-        if not filename or ".." in filename or "/" in filename or "\\" in filename:
-            logger.warning(
-                f"Suspicious delete attempt by user {mask_user_id(str(current_user.id))}: {url[:50]}"
-            )
-            raise HTTPException(status_code=400, detail="Invalid file path")
-
-        file_path = os.path.join(UPLOAD_DIR, filename)
-
-        # Validate the final path is within upload directory
-        try:
-            validated_path = validate_file_path(UPLOAD_DIR, file_path)
-        except FileSecurityError:
-            raise HTTPException(status_code=400, detail="Invalid file path")
+        filename, validated_path = _resolve_upload_path(url, current_user)
 
         # Check ownership in database
-        from sqlalchemy import select
-
         result = await db.execute(select(FileModel).where(FileModel.unique_filename == filename))
         db_file = result.scalar_one_or_none()
 

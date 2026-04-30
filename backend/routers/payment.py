@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from stripe import SignatureVerificationError
 
 from database import get_async_db
 from dependencies.auth import get_current_user
@@ -51,19 +52,6 @@ async def get_available_plans():
     Get all available subscription plans.
     """
     return PlansListResponse(plans=list(PLAN_DETAILS.values()))
-
-
-@router.get("/status")
-async def get_payment_status(service: PaymentService = Depends(get_service)):
-    """
-    Check if Stripe is configured and working.
-    """
-    return {
-        "configured": service.is_configured,
-        "message": "Stripe is configured"
-        if service.is_configured
-        else "Stripe is NOT configured. Please set STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY in backend/.env",
-    }
 
 
 @router.get("/plans/check-downgrade/{target_plan}")
@@ -643,7 +631,7 @@ async def stripe_webhook(
         # Invalid payload
         logger.warning("Received webhook with invalid payload")
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError:
+    except SignatureVerificationError:
         # Invalid signature
         logger.warning("Received webhook with invalid signature")
         raise HTTPException(status_code=400, detail="Invalid signature")

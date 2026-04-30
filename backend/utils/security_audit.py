@@ -14,11 +14,16 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+SecurityLogModel: Any = None
+
 # Import models securely
 try:
-    from models.security_log import SecurityLog
+    from models.security_log import SecurityLog as _SecurityLogModel
 except ImportError:
-    SecurityLog = None
+    SECURITY_LOG_MODEL_AVAILABLE = False
+else:
+    SecurityLogModel = _SecurityLogModel
+    SECURITY_LOG_MODEL_AVAILABLE = True
 
 
 # Setup dedicated security audit logger
@@ -154,9 +159,9 @@ class SecurityAuditLogger:
         self.logger.log(log_level, event.to_json())
 
         # Log to Database if session is provided
-        if db and SecurityLog:
+        if db and SECURITY_LOG_MODEL_AVAILABLE and SecurityLogModel is not None:
             try:
-                db_chat = SecurityLog(
+                db_chat = SecurityLogModel(
                     event_type=event.event_type.value,
                     severity=event.severity,
                     user_id=event.user_id,

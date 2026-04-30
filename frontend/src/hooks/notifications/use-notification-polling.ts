@@ -21,6 +21,8 @@ export const useNotificationPolling = (intervalMs = 30000) => {
   const fetchNotificationsRef = useRef(fetchNotifications);
   const fetchUnreadCountRef = useRef(fetchUnreadCount);
   const hasFetchedRef = useRef(false);
+  const notificationsInFlightRef = useRef(false);
+  const unreadCountInFlightRef = useRef(false);
   
   // Update refs when functions change
   useEffect(() => {
@@ -30,11 +32,29 @@ export const useNotificationPolling = (intervalMs = 30000) => {
 
   // Stable fetch function that won't cause re-renders
   const stableFetch = useCallback(async () => {
-    await fetchNotificationsRef.current();
+    if (notificationsInFlightRef.current) {
+      return;
+    }
+
+    notificationsInFlightRef.current = true;
+    try {
+      await fetchNotificationsRef.current();
+    } finally {
+      notificationsInFlightRef.current = false;
+    }
   }, []);
 
   const stableFetchUnreadCount = useCallback(async () => {
-    return await fetchUnreadCountRef.current();
+    if (unreadCountInFlightRef.current) {
+      return false;
+    }
+
+    unreadCountInFlightRef.current = true;
+    try {
+      return await fetchUnreadCountRef.current();
+    } finally {
+      unreadCountInFlightRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -46,7 +66,7 @@ export const useNotificationPolling = (intervalMs = 30000) => {
     // Only do initial fetch once per authenticated session
     if (!hasFetchedRef.current) {
       hasFetchedRef.current = true;
-      stableFetch();
+      void stableFetch();
     }
 
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -64,7 +84,7 @@ export const useNotificationPolling = (intervalMs = 30000) => {
 
         const hasChanged = await stableFetchUnreadCount();
         if (hasChanged) {
-          stableFetch();
+          await stableFetch();
         }
       }, intervalMs);
     };
@@ -79,7 +99,7 @@ export const useNotificationPolling = (intervalMs = 30000) => {
     // Handle visibility change to suspend/resume polling
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        stableFetch(); // Fetch immediately on resume
+        void stableFetch(); // Fetch immediately on resume
         startPolling();
       } else {
         stopPolling();

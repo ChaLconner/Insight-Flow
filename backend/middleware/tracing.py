@@ -33,17 +33,12 @@ def _init_opentelemetry():
     global _tracer, _otel_available
 
     try:
-        from opentelemetry import trace  # type: ignore
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
-            OTLPSpanExporter,  # type: ignore
-        )
-        from opentelemetry.sdk.resources import Resource  # type: ignore
-        from opentelemetry.sdk.trace import TracerProvider  # type: ignore
-        from opentelemetry.sdk.trace.export import (  # type: ignore
-            BatchSpanProcessor,
-            ConsoleSpanExporter,
-        )
-        from opentelemetry.semconv.resource import ResourceAttributes  # type: ignore
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+        from opentelemetry.semconv.resource import ResourceAttributes
 
         _otel_available = True
 
@@ -171,8 +166,8 @@ class TracingMiddleware(BaseHTTPMiddleware):
             return cast("Response", await call_next(request))
 
         try:
-            from opentelemetry.semconv.trace import SpanAttributes  # type: ignore
-            from opentelemetry.trace import SpanKind, Status, StatusCode  # type: ignore
+            from opentelemetry.semconv.trace import SpanAttributes
+            from opentelemetry.trace import SpanKind, Status, StatusCode
         except ImportError:
             return cast("Response", await call_next(request))
 

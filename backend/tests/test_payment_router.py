@@ -74,24 +74,6 @@ class TestPlansEndpoints:
         data = response.json()
         assert "plans" in data
 
-    def test_get_payment_status_configured(self, client, mock_payment_service):
-        """Test payment status when configured."""
-        mock_payment_service.is_configured = True
-
-        response = client.get("/api/v1/payment/status")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["configured"] is True
-
-    def test_get_payment_status_returns_data(self, client, mock_payment_service):
-        """Test payment status returns data."""
-        response = client.get("/api/v1/payment/status")
-        assert response.status_code == 200
-        data = response.json()
-        # Just verify the response structure
-        assert "configured" in data
-        assert "message" in data
-
 
 # ============================================================================
 # Tests for Payment Methods Endpoints
@@ -188,12 +170,6 @@ class TestPaymentAuthentication:
     def test_plans_public(self, unauthenticated_client):
         """Test plans endpoint is public."""
         response = unauthenticated_client.get("/api/v1/payment/plans")
-        # Should be accessible without auth
-        assert response.status_code == 200
-
-    def test_status_public(self, unauthenticated_client):
-        """Test status endpoint is public."""
-        response = unauthenticated_client.get("/api/v1/payment/status")
         # Should be accessible without auth
         assert response.status_code == 200
 

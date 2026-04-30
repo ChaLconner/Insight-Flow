@@ -150,9 +150,7 @@ class InsightFlowUser(HttpUser):
     @task(2)
     def view_analytics(self):
         """View analytics data."""
-        if self.project_ids:
-            project_id = random.choice(self.project_ids)
-            self.client.get(f"/analytics/projects/{project_id}")
+        self.client.get("/analytics/overview")
 
     @task(1)
     def view_metrics(self):

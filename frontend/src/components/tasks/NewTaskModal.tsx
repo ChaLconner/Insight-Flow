@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useMemo, useRef, useState, useEffect, useId } from "react";
+import { motion } from "framer-motion";
 import {
   X,
   AlertCircle,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { CustomSelect } from "@/components/ui/custom-select";
+import { AnimatedModalShell } from "@/components/modals/AnimatedModalShell";
 import { tasksApi, projectsApi } from "@/lib/api-endpoints";
 import type { Project, Task, CreateTaskRequest, UpdateTaskRequest } from "@/types";
 import { TaskPriority, TaskType, TaskStatus } from "@/types";
@@ -28,6 +29,9 @@ interface NewTaskModalProps {
   defaultProjectId?: string;
   task?: Task | null;
 }
+
+const PROJECT_CACHE_TTL_MS = 60_000;
+let projectsCache: { expiresAt: number; data: Project[] } | null = null;
 
 export function NewTaskModal({
   isOpen,
@@ -47,6 +51,7 @@ export function NewTaskModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const projectsRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -81,20 +86,42 @@ export function NewTaskModal({
 
   useEffect(() => {
     if (isOpen && !defaultProjectId && !task) {
+      const cachedProjects = projectsCache;
+      if (cachedProjects && cachedProjects.expiresAt > Date.now()) {
+        setProjects(cachedProjects.data);
+        return;
+      }
+
+      let cancelled = false;
+      const requestId = projectsRequestIdRef.current + 1;
+      projectsRequestIdRef.current = requestId;
+
       // Fetch projects if not provided and not editing
       const fetchProjects = async () => {
         try {
           const response = await projectsApi.getProjects();
-          setProjects(
-            Array.isArray(response)
-              ? response
-              : ((response as Record<string, unknown>).data as Project[]) ?? [],
-          );
+          if (cancelled || requestId !== projectsRequestIdRef.current) {
+            return;
+          }
+          const data = Array.isArray(response)
+            ? response
+            : ((response as Record<string, unknown>).data as Project[]) ?? [];
+          projectsCache = {
+            data,
+            expiresAt: Date.now() + PROJECT_CACHE_TTL_MS,
+          };
+          setProjects(data);
         } catch (err) {
-          console.error("Failed to fetch projects", err);
+          if (!cancelled && requestId === projectsRequestIdRef.current) {
+            console.error("Failed to fetch projects", err);
+          }
         }
       };
       fetchProjects();
+
+      return () => {
+        cancelled = true;
+      };
     }
   }, [isOpen, defaultProjectId, task]);
 
@@ -164,7 +191,10 @@ export function NewTaskModal({
     }
   };
 
-  const projectOptions = projects.map((p) => ({ value: p.id, label: p.name }));
+  const projectOptions = useMemo(
+    () => projects.map((p) => ({ value: p.id, label: p.name })),
+    [projects],
+  );
 
   const getPriorityColor = (p: string) => {
     switch (p) {
@@ -180,11 +210,15 @@ export function NewTaskModal({
     }
   };
 
-  const priorityOptions = Object.values(TaskPriority).map((p) => ({
-    value: p,
-    label: p.charAt(0).toUpperCase() + p.slice(1).replace("_", " "),
-    color: getPriorityColor(p),
-  }));
+  const priorityOptions = useMemo(
+    () =>
+      Object.values(TaskPriority).map((p) => ({
+        value: p,
+        label: p.charAt(0).toUpperCase() + p.slice(1).replace("_", " "),
+        color: getPriorityColor(p),
+      })),
+    [],
+  );
 
   const getStatusColor = (s: string) => {
     switch (s) {
@@ -202,35 +236,33 @@ export function NewTaskModal({
     }
   };
 
-  const statusOptions = Object.values(TaskStatus).map((s) => ({
-    value: s,
-    label: s.charAt(0).toUpperCase() + s.slice(1).replace("_", " "),
-    color: getStatusColor(s),
-  }));
+  const statusOptions = useMemo(
+    () =>
+      Object.values(TaskStatus).map((s) => ({
+        value: s,
+        label: s.charAt(0).toUpperCase() + s.slice(1).replace("_", " "),
+        color: getStatusColor(s),
+      })),
+    [],
+  );
 
-  const typeOptions = Object.values(TaskType).map((t) => ({
-    value: t,
-    label: t.charAt(0).toUpperCase() + t.slice(1).replace("_", " "),
-    color: "text-muted-foreground",
-  }));
+  const typeOptions = useMemo(
+    () =>
+      Object.values(TaskType).map((t) => ({
+        value: t,
+        label: t.charAt(0).toUpperCase() + t.slice(1).replace("_", " "),
+        color: "text-muted-foreground",
+      })),
+    [],
+  );
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg rounded-2xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl max-h-[90vh] overflow-y-auto"
-          >
+    <AnimatedModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      containerClassName="sm:p-6"
+      className="relative w-full max-w-lg rounded-2xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl max-h-[90vh] overflow-y-auto"
+    >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-accent/20 sticky top-0 z-10 backdrop-blur-md">
               <div className="flex items-center gap-2">
@@ -405,9 +437,6 @@ export function NewTaskModal({
                 </div>
               </form>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </AnimatedModalShell>
   );
 }

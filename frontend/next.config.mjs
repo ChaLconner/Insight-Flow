@@ -175,10 +175,6 @@ const nextConfig = {
         source: "/api/metrics",
         destination: `${apiUrl}/metrics`,
       },
-      {
-        source: "/api/test-auth",
-        destination: `${apiUrl}/test-auth`,
-      },
       // All other API requests go to /api/v1
       {
         source: "/api/:path*",

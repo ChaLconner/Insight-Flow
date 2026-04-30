@@ -18,11 +18,15 @@ export function useAnalytics(period: AnalyticsPeriod) {
   });
 }
 
-export function useTeamWorkload(params: TeamWorkloadParams) {
+export function useTeamWorkload(
+  params: TeamWorkloadParams,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery<TeamWorkloadPaginatedResponse>({
     queryKey: ["teamWorkload", params],
     queryFn: () => analyticsApi.getTeamWorkload(params),
-    staleTime: 60000, // 1 minute
+    enabled: options.enabled ?? true,
+    staleTime: 3 * 60 * 1000, // 3 minutes — workload data doesn't change often
     placeholderData: (previousData) => previousData, // Keep previous data while loading new page
   });
 }

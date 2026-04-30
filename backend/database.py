@@ -6,6 +6,7 @@ Configured for comprehensive Async I/O using SQLAlchemy 2.0+ and asyncpg.
 import logging
 import os
 from collections.abc import AsyncGenerator, Callable
+from urllib.parse import urlparse
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -59,6 +60,9 @@ db_logger.info("=" * 50)
 # For Neon and other cloud PostgreSQL providers, we need SSL
 # Disable SSL for localhost to avoid connection issues in local development
 is_localhost = "localhost" in database_url or "127.0.0.1" in database_url
+parsed_database_url = urlparse(database_url)
+database_host = parsed_database_url.hostname or ""
+is_external_pooler = "pooler" in database_host.lower()
 if "pg8000" in database_url or "?" in database_url:
     # Clean potential leftovers if manual edits happened, though replaced above
     database_url = database_url.split("?")[0]
@@ -67,6 +71,13 @@ async_connect_args = {
     "ssl": "require" if not is_localhost else None,
     "command_timeout": 30,  # Query timeout in seconds
 }
+
+# External poolers such as Neon pooler / PgBouncer do not interact well with
+# asyncpg prepared statement caching on long-lived pooled connections.
+if is_external_pooler:
+    async_connect_args["statement_cache_size"] = 0
+    async_connect_args["max_cached_statement_lifetime"] = 0
+    db_logger.info("Detected external PostgreSQL pooler host; disabling asyncpg statement cache.")
 
 # Create Async Engine
 # Create Async Engine

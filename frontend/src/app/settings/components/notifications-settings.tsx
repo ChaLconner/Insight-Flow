@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -84,6 +84,23 @@ const emailNotificationLabels: Record<keyof EmailNotificationSettings, Notificat
   },
 };
 
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationState = {
+  email: {
+    tasks: true,
+    projects: true,
+    mentions: true,
+  },
+  inApp: {
+    tasks: true,
+    projects: true,
+    mentions: true,
+    updates: true,
+    system: true,
+  },
+};
+
+const AUTOSAVE_DELAY_MS = 600;
+
 // ===================================
 // Component
 // ===================================
@@ -92,20 +109,23 @@ export function NotificationsSettings() {
   // Settings component with preferences state
 
   const [isLoading, setIsLoading] = useState(true);
-  const [preferences, setPreferences] = useState<NotificationState>({
-    email: {
-      tasks: true,
-      projects: true,
-      mentions: true,
-    },
-    inApp: {
-      tasks: true,
-      projects: true,
-      mentions: true,
-      updates: true,
-      system: true,
-    },
-  });
+  const [preferences, setPreferences] = useState<NotificationState>(DEFAULT_NOTIFICATION_PREFERENCES);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<NotificationState | null>(null);
+  const saveVersionRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+      if (pendingSaveRef.current) {
+        void usersApi.updateSettings({
+          notificationPreferences: pendingSaveRef.current,
+        });
+      }
+    };
+  }, []);
 
   // Load settings on mount
   useEffect(() => {
@@ -135,16 +155,33 @@ export function NotificationsSettings() {
     loadSettings();
   }, []);
 
-  const persistSettings = async (newState: NotificationState) => {
-    try {
-      await usersApi.updateSettings({
-        notificationPreferences: newState,
-      });
-      // Silent success for auto-save unless we want a small toast or indicator
-    } catch (_err) {
-      toast.error("Failed to save notification preferences");
+  const persistSettings = useCallback((newState: NotificationState) => {
+    saveVersionRef.current += 1;
+    const saveVersion = saveVersionRef.current;
+    pendingSaveRef.current = newState;
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
     }
-  };
+
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      usersApi
+        .updateSettings({
+          notificationPreferences: newState,
+        })
+        .then(() => {
+          if (saveVersion === saveVersionRef.current) {
+            pendingSaveRef.current = null;
+          }
+        })
+        .catch(() => {
+          if (saveVersion === saveVersionRef.current) {
+            toast.error("Failed to save notification preferences");
+          }
+        });
+    }, AUTOSAVE_DELAY_MS);
+  }, []);
 
   const handleToggleInApp = (key: keyof InAppNotificationSettings, checked: boolean) => {
     const newState = {

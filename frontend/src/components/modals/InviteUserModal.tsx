@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,6 +13,7 @@ import { UserSearchSelect } from "@/components/ui/user-search-select";
 import { usersApi } from "@/lib/api-endpoints";
 import { UserRole } from "@/types";
 import { getErrorMessage } from "@/lib/error-utils";
+import { AnimatedModalShell } from "./AnimatedModalShell";
 
 interface InviteUserModalProps {
   isOpen: boolean;
@@ -70,22 +70,11 @@ export function InviteUserModal({
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-lg rounded-2xl border border-border bg-popover shadow-2xl overflow-hidden"
-          >
+    <AnimatedModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      className="relative w-full max-w-lg rounded-2xl border border-border bg-popover shadow-2xl overflow-hidden"
+    >
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-border">
               <div>
@@ -225,9 +214,6 @@ export function InviteUserModal({
                 </div>
               </form>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </AnimatedModalShell>
   );
 }

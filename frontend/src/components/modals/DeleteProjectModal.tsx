@@ -1,11 +1,11 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertTriangle } from "lucide-react";
 import type { Project } from "@/types";
 import { useState, useEffect } from "react";
+import { AnimatedModalShell } from "./AnimatedModalShell";
 
 interface DeleteProjectModalProps {
   isOpen: boolean;
@@ -34,22 +34,11 @@ export function DeleteProjectModal({
   const isConfirmed = confirmName === project?.name;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-md rounded-2xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl overflow-hidden"
-          >
+    <AnimatedModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      className="relative w-full max-w-md rounded-2xl border border-border bg-popover/95 backdrop-blur-xl shadow-2xl overflow-hidden"
+    >
             <div className="p-6 space-y-6">
               <div className="flex flex-col items-center text-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
@@ -108,9 +97,6 @@ export function DeleteProjectModal({
                 </Button>
               </div>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </AnimatedModalShell>
   );
 }

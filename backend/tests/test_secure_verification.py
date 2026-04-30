@@ -1,22 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.user import User
 from services.async_user_service import AsyncUserService
-
-
-# Fixtures
-@pytest.fixture
-def mock_db_session():
-    db = AsyncMock(spec=AsyncSession)
-    db.execute = AsyncMock()
-    db.commit = AsyncMock()
-    db.refresh = AsyncMock()
-    db.rollback = AsyncMock()
-    db.add = MagicMock()
-    return db
 
 
 @pytest.fixture

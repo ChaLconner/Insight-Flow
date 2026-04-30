@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,10 @@ const typeConfig = {
   [TaskType.OTHER]: { label: "Other" },
 };
 
+const RESOURCE_CACHE_TTL_MS = 60_000;
+let projectsCache: { expiresAt: number; data: Project[] } | null = null;
+const projectMembersCache = new Map<string, { expiresAt: number; data: User[] }>();
+
 export function TaskModal({
   isOpen,
   onClose,
@@ -90,33 +94,79 @@ export function TaskModal({
   const [projects, setProjects] = useState<Project[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<User[]>([]);
   const [_isLoadingResources, _setIsLoadingResources] = useState(false);
+  const projectsRequestIdRef = useRef(0);
+  const membersRequestIdRef = useRef(0);
 
-  // Fetch projects on mount
+  // Fetch projects only while modal is open.
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = projectsRequestIdRef.current + 1;
+    projectsRequestIdRef.current = requestId;
+
     const fetchProjects = async () => {
       try {
-        const { projectsApi } = await import("@/lib/api-endpoints");
-        const data = await projectsApi.getProjects(0, 100);
-        setProjects(data);
+        if (projectsCache && projectsCache.expiresAt > Date.now()) {
+          setProjects(projectsCache.data);
+        } else {
+          const { projectsApi } = await import("@/lib/api-endpoints");
+          const data = await projectsApi.getProjects(0, 100);
+          if (cancelled || requestId !== projectsRequestIdRef.current) {
+            return;
+          }
+          projectsCache = {
+            data,
+            expiresAt: Date.now() + RESOURCE_CACHE_TTL_MS,
+          };
+          setProjects(data);
+        }
 
         // If we're in edit mode and have a project ID, fetch its members
         if (task?.projectId) {
-          const members = (await projectsApi.getProjectMembers(
-            task.projectId,
-          )) as ProjectMember[];
-          if (Array.isArray(members)) {
-            setAssignableUsers(members.map((m) => m.user));
+          const cachedMembers = projectMembersCache.get(task.projectId);
+          if (cachedMembers && cachedMembers.expiresAt > Date.now()) {
+            setAssignableUsers(cachedMembers.data);
+            return;
           }
+
+          const { projectsApi } = await import("@/lib/api-endpoints");
+          const members = (await projectsApi.getProjectMembers(task.projectId)) as ProjectMember[];
+          if (cancelled || requestId !== projectsRequestIdRef.current || !Array.isArray(members)) {
+            return;
+          }
+          const users = members.map((m) => m.user);
+          projectMembersCache.set(task.projectId, {
+            data: users,
+            expiresAt: Date.now() + RESOURCE_CACHE_TTL_MS,
+          });
+          setAssignableUsers(users);
         }
       } catch (error) {
-        console.error("Failed to fetch projects:", error);
+        if (!cancelled) {
+          console.error("Failed to fetch projects:", error);
+        }
       }
     };
     fetchProjects();
-  }, [task?.projectId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, task?.projectId]);
 
   // Fetch members when project changes
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = membersRequestIdRef.current + 1;
+    membersRequestIdRef.current = requestId;
+
     const fetchMembers = async () => {
       if (!formData.projectId) {
         setAssignableUsers([]);
@@ -124,14 +174,29 @@ export function TaskModal({
       }
 
       try {
+        const cachedMembers = projectMembersCache.get(formData.projectId);
+        if (cachedMembers && cachedMembers.expiresAt > Date.now()) {
+          setAssignableUsers(cachedMembers.data);
+          return;
+        }
+
         const { projectsApi } = await import("@/lib/api-endpoints");
         const members = (await projectsApi.getProjectMembers(
           formData.projectId,
         )) as ProjectMember[];
-        if (Array.isArray(members)) {
-          setAssignableUsers(members.map((m) => m.user));
+        if (cancelled || requestId !== membersRequestIdRef.current || !Array.isArray(members)) {
+          return;
         }
+        const users = members.map((m) => m.user);
+        projectMembersCache.set(formData.projectId, {
+          data: users,
+          expiresAt: Date.now() + RESOURCE_CACHE_TTL_MS,
+        });
+        setAssignableUsers(users);
       } catch (error) {
+        if (cancelled || requestId !== membersRequestIdRef.current) {
+          return;
+        }
         console.error("Failed to fetch project members:", error);
         setAssignableUsers([]);
       }
@@ -142,7 +207,11 @@ export function TaskModal({
     if (formData.projectId && formData.projectId !== task?.projectId) {
       fetchMembers();
     }
-  }, [formData.projectId, task?.projectId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, formData.projectId, task?.projectId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

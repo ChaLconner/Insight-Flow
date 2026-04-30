@@ -10,7 +10,6 @@ import { useBillingData } from "@/hooks/useBillingData";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
 import type { PlanInfo } from "@/types";
-import { motion } from "framer-motion";
 
 // Import refactored components
 import { 
@@ -135,11 +134,7 @@ export function BillingSettings() {
 
   return (
     <div className="space-y-6">
-      <motion.div 
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
+      <div>
         {/* Current Plan */}
         <CurrentPlanCard
           subscription={subscription}
@@ -149,25 +144,17 @@ export function BillingSettings() {
           onCancelSubscription={() => cancelSubscription(false)}
           onResumeSubscription={resumeSubscription}
         />
-      </motion.div>
+      </div>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-      >
+      <div>
         {/* Usage Limits */}
         <UsageLimitsCard
           usageStats={usageStats}
           planConfig={planConfig}
         />
-      </motion.div>
+      </div>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-      >
+      <div>
         {/* Payment Methods */}
         <PaymentMethodsCard
           methods={methods}
@@ -177,7 +164,7 @@ export function BillingSettings() {
           onSetDefault={setDefault}
           onDelete={deleteMethod}
         />
-      </motion.div>
+      </div>
 
       {/* Add Card Dialog */}
       <Dialog open={isAddCardOpen} onOpenChange={handleCloseAddCardDialog}>

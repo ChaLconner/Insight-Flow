@@ -2,39 +2,12 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.project import Project, ProjectMember
 from models.task import Task, TaskPriority, TaskStatus, TaskType
 from models.user import User
 from schemas.task import TaskAssign, TaskCreate, TaskStatusUpdate, TaskUpdate
 from services.async_task_service import AsyncTaskService
-
-
-# Fixtures
-@pytest.fixture
-def mock_db_session():
-    db = AsyncMock(spec=AsyncSession)
-    db.execute = AsyncMock()
-    db.commit = AsyncMock()
-    db.refresh = AsyncMock()
-    db.rollback = AsyncMock()
-    db.add = MagicMock()
-    # Mock delete as an async method if needed, but in 2.0 it's sync usually on session, but awaitable when flushed?
-    # Actually session.delete(obj) is sync. session.execute(delete(...)) is async.
-    # The service code uses: await self.db.delete(task) which implies the session used allows await delete?
-    # SQLAlchemy AsyncSession.delete is synchronous. But if the code awaits it, it might fail in tests if mock is not async.
-    # Let's inspect the service code again: `await self.db.delete(task)` -> line 313.
-    # AsyncSession.delete IS NOT awaitable. It adds to session.
-    # However, if the user code has `await self.db.delete(task)`, it might be receiving a wrapper or we should check if they are using an extension.
-    # Standard AsyncSession.delete is sync. `await session.delete(instance)` would raise TypeError in runtime if it returns None.
-    # But wait, maybe the user code is buggy?
-    # Let's assume for now we mock it as AsyncMock to satisfy the `await` in the code, or Fix the code if it's wrong.
-    # Code: `await self.db.delete(task)`
-    # If the code runs in production, `delete` must be awaitable.
-    # Let's make it AsyncMock.
-    db.delete = AsyncMock()
-    return db
 
 
 @pytest.fixture

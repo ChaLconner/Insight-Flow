@@ -213,7 +213,7 @@ async def search_users(
     users = await user_service.search_users(
         q, skip=skip, limit=limit, role=role, is_active=is_active
     )
-    return users  # type: ignore[return-value]
+    return list(users)
 
 
 @router.get("/me/settings", response_model=UserSettingsResponse)

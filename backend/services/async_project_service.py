@@ -23,6 +23,15 @@ from services.async_task_history_service import AsyncTaskHistoryService
 from utils.logger import logger
 
 
+def _invalidate_dashboard_cache_after_mutation() -> None:
+    try:
+        from services.async_dashboard_service import invalidate_dashboard_cache
+
+        invalidate_dashboard_cache()
+    except Exception as e:
+        logger.error(f"Failed to invalidate dashboard cache: {e}")
+
+
 class AsyncProjectService:
     """Async Service class for project operations."""
 
@@ -106,15 +115,46 @@ class AsyncProjectService:
         result = await self.db.execute(query.offset(skip).limit(limit))
         return list(result.scalars().all())
 
+    def _apply_project_list_filters(
+        self,
+        projects_query: Any,
+        search: str | None,
+        status_filter: str | None,
+        sort_by: str,
+    ) -> Any:
+        """Apply server-side project list search, status filter, and stable sort."""
+        if search:
+            escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            search_term = f"%{escaped_search}%"
+            projects_query = projects_query.filter(
+                or_(
+                    Project.name.ilike(search_term, escape="\\"),
+                    Project.description.ilike(search_term, escape="\\"),
+                )
+            )
+
+        if status_filter == "active":
+            projects_query = projects_query.filter(Project.is_active == True)
+        elif status_filter in {"archived", "suspended"}:
+            projects_query = projects_query.filter(Project.is_active == False)
+
+        if sort_by == "name":
+            return projects_query.order_by(Project.name.asc(), Project.id.asc())
+        if sort_by == "oldest":
+            return projects_query.order_by(Project.created_at.asc(), Project.id.asc())
+        return projects_query.order_by(Project.created_at.desc(), Project.id.asc())
+
     async def get_projects_with_stats(
         self,
         skip: int = 0,
         limit: int = 100,
         user_id: uuid.UUID | None = None,
         search: str | None = None,
+        status_filter: str | None = None,
+        sort_by: str = "newest",
     ) -> list[dict]:
         """
-        Get projects with aggregated statistics using optimized parallel queries.
+        Get projects with aggregated statistics using bounded queries.
         Avoids Cartesian product explosion from multiple JOINs.
         """
         import time
@@ -134,18 +174,9 @@ class AsyncProjectService:
             )
             projects_query = projects_query.filter(Project.id.in_(accessible_projects_subq))
 
-        if search:
-            escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            search_term = f"%{escaped_search}%"
-            projects_query = projects_query.filter(
-                or_(
-                    Project.name.ilike(search_term, escape="\\"),
-                    Project.description.ilike(search_term, escape="\\"),
-                )
-            )
-
-        # Should ideally sort by generic field (e.g. created_at) to ensure consistent pagination,
-        # but maintaining compatibility with previous unspoken sort (likely implicit id or insertion)
+        projects_query = self._apply_project_list_filters(
+            projects_query, search, status_filter, sort_by
+        )
         projects_query = projects_query.offset(skip).limit(limit)
 
         result = await self.db.execute(projects_query)
@@ -156,14 +187,14 @@ class AsyncProjectService:
 
         project_ids = [p.id for p in projects]
 
-        # 2. Parallel Fetching of Related Stats
+        # 2. Batched Fetching of Related Stats
 
-        # Task Statistics Query
-        async def get_task_stats():
+        # B3: Combined Task Statistics + Member Count Query (merged 2 queries into 1)
+        async def get_task_and_member_stats():
             stmt = (
                 select(
                     Task.project_id,
-                    func.count(Task.id).label("total"),
+                    func.count(distinct(Task.id)).label("total"),
                     func.sum(
                         case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
                     ).label("completed"),
@@ -235,7 +266,7 @@ class AsyncProjectService:
             res = await self.db.execute(stmt)
             return {row[0]: row[1] for row in res.all()}
 
-        task_stats_map = await get_task_stats()
+        task_stats_map = await get_task_and_member_stats()
         member_count_map = await get_member_counts()
         members_map = await get_member_previews()
         activity_map = await get_activity()
@@ -330,6 +361,7 @@ class AsyncProjectService:
 
             await self.db.commit()
             await self.db.refresh(db_project)
+            _invalidate_dashboard_cache_after_mutation()
             return db_project
 
         except IntegrityError as e:
@@ -379,6 +411,7 @@ class AsyncProjectService:
         try:
             await self.db.commit()
             await self.db.refresh(project)
+            _invalidate_dashboard_cache_after_mutation()
 
             if changes:
                 history_service = AsyncTaskHistoryService(self.db)
@@ -426,6 +459,7 @@ class AsyncProjectService:
             await self.db.delete(project)
 
             await self.db.commit()
+            _invalidate_dashboard_cache_after_mutation()
             return True
         except SQLAlchemyError as e:
             await self.db.rollback()
@@ -533,6 +567,7 @@ class AsyncProjectService:
             self.db.add(db_member)
             await self.db.commit()
             await self.db.refresh(db_member)
+            _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             try:
@@ -594,6 +629,7 @@ class AsyncProjectService:
 
             await self.db.delete(member)
             await self.db.commit()
+            _invalidate_dashboard_cache_after_mutation()
 
             # Log
             try:
@@ -649,6 +685,7 @@ class AsyncProjectService:
             member.role = role_value
             await self.db.commit()
             await self.db.refresh(member)
+            _invalidate_dashboard_cache_after_mutation()
 
             try:
                 history_service = AsyncTaskHistoryService(self.db)
@@ -847,6 +884,7 @@ class AsyncProjectService:
                 return []
 
             await self.db.commit()
+            _invalidate_dashboard_cache_after_mutation()
 
             # Refresh all new members
             for member in new_members:

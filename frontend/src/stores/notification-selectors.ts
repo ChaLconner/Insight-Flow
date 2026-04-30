@@ -2,29 +2,7 @@
 // Notification Store Selectors
 // ===========================================
 
-import type { Notification } from "@/types";
-
-// Custom notification type alias
-type CustomNotification = Notification;
-
-// Store state interface for selectors
-interface NotificationState {
-  notifications: CustomNotification[];
-  unreadCount: number;
-  isPermissionGranted: boolean;
-  pushEnabled: boolean;
-  soundEnabled: boolean;
-  vibrationEnabled: boolean;
-  isLoading: boolean;
-  isConnected: boolean;
-  filters: {
-    type: string | "all";
-    priority: string | "all";
-    readStatus: "all" | "read" | "unread";
-    search: string;
-    dateRange?: { start?: Date; end?: Date };
-  };
-}
+import type { CustomNotification, NotificationState } from "./notification-store";
 
 export const notificationSelectors = {
   // Core selectors

@@ -10,17 +10,6 @@ import {
   themeActions,
 } from "@/stores/theme-store";
 
-// Add View Transitions API support
-declare global {
-  interface Document {
-    startViewTransition(callback: () => void | Promise<void>): {
-      ready: Promise<void>;
-      finished: Promise<void>;
-      updateCallbackDone: Promise<void>;
-    };
-  }
-}
-
 // Primary theme hook for managing dark/light mode
 export const useTheme = () => {
   // SSR detection
@@ -121,14 +110,7 @@ export const useTheme = () => {
       }
     };
 
-    // Use View Transitions API if available for smooth switching
-    if (document.startViewTransition) {
-      document.startViewTransition(() => {
-        updateThemeDOM();
-      });
-    } else {
-      updateThemeDOM();
-    }
+    updateThemeDOM();
 
     // Do NOT manually save to localStorage here.
     // Zustand persist middleware (in theme-store.ts) handles storage synchronization automatically.

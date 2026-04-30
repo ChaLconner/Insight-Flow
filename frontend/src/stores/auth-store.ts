@@ -2,6 +2,7 @@
 // Zustand Auth Store
 // ===========================================
 
+import axios from "axios";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { User, UpdateUserRequest } from "@/types";
@@ -35,6 +36,16 @@ interface PersistedAuthState {
   lastVerified: number;
 }
 
+let authInitializationPromise: Promise<void> | null = null;
+
+function isAuthInvalidationError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  const status = error.response?.status;
+  return status === 401 || status === 403;
+}
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -138,98 +149,134 @@ export const useAuthStore = create<AuthState>()(
       // refreshAuthToken action removed
 
       initializeAuth: async () => {
-        const { setLoading, setUser, logout, isInitialized, user, isAuthenticated, lastVerified } = get();
+        if (authInitializationPromise) {
+          return authInitializationPromise;
+        }
 
-        // 1. If already initialized, ensure loading is false and return
-        if (isInitialized) {
-          if (get().isLoading) {
-            setLoading(false);
+        authInitializationPromise = (async () => {
+          const {
+            setLoading,
+            setUser,
+            logout,
+            isInitialized,
+            user,
+            isAuthenticated,
+            lastVerified,
+          } = get();
+
+          // 1. If already initialized, ensure loading is false and return
+          if (isInitialized) {
+            if (get().isLoading) {
+              setLoading(false);
+            }
+            return;
           }
-          return;
-        }
 
-        // Check environment
-        if (typeof window === "undefined") {
-          setLoading(false);
-          set({ isInitialized: true });
-          return;
-        }
+          // Check environment
+          if (typeof window === "undefined") {
+            setLoading(false);
+            set({ isInitialized: true });
+            return;
+          }
 
-        // Skip auth check on login/register pages - user is not expected to be authenticated
-        const isOnAuthPage = window.location.pathname.startsWith("/auth/");
-        if (isOnAuthPage) {
-          setLoading(false);
-          set({ isInitialized: true });
-          return;
-        }
+          // Skip auth check on login/register pages - user is not expected to be authenticated
+          const isOnAuthPage = window.location.pathname.startsWith("/auth/");
+          if (isOnAuthPage) {
+            setLoading(false);
+            set({ isInitialized: true });
+            return;
+          }
 
-        // 2. OPTIMISTIC: If we have cached user data that was verified recently, use it immediately
-        const FRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes
-        const now = Date.now();
-        const isFreshSession = lastVerified && (now - lastVerified) < FRESH_THRESHOLD;
+          // 2. OPTIMISTIC: If we have cached user data that was verified recently, use it immediately
+          const FRESH_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+          const now = Date.now();
+          const isFreshSession =
+            lastVerified && now - lastVerified < FRESH_THRESHOLD;
 
-        if (isAuthenticated && user && isFreshSession) {
-          // User data is fresh - use cache immediately, no loading state needed
-          console.log("✅ Using cached auth (verified", Math.round((now - lastVerified) / 1000), "seconds ago)");
-          setLoading(false);
-          set({ isInitialized: true });
-          
-          // Background refresh to update user data silently (non-blocking)
-          import("@/lib/api-client").then(({ apiClient }) => {
-            apiClient.get<User>("/auth/me").then((response) => {
+          if (isAuthenticated && user && isFreshSession) {
+            // User data is fresh - use cache immediately, no loading state needed
+            console.log(
+              "✅ Using cached auth (verified",
+              Math.round((now - lastVerified) / 1000),
+              "seconds ago)",
+            );
+            setLoading(false);
+            set({ isInitialized: true });
+
+            // Background refresh to update user data silently (non-blocking)
+            import("@/lib/api-client").then(({ apiClient }) => {
+              apiClient
+                .get<User>("/auth/me")
+                .then((response) => {
+                  if (response.data) {
+                    setUser(response.data);
+                    set({ lastVerified: Date.now() });
+                  }
+                })
+                .catch((error) => {
+                  if (isAuthInvalidationError(error)) {
+                    console.warn("⚠️ Cached session invalid, logging out");
+                    logout();
+                  }
+                });
+            });
+            return;
+          }
+
+          // 3. If we have stale cached data, show optimistic UI but verify
+          if (isAuthenticated && user) {
+            // Show cached user immediately (optimistic)
+            setLoading(false);
+            set({ isInitialized: true });
+            console.log("⏳ Using stale cache, verifying with server...");
+
+            // Verify with server
+            try {
+              const { apiClient } = await import("@/lib/api-client");
+              const response = await apiClient.get<User>("/auth/me");
+
               if (response.data) {
                 setUser(response.data);
                 set({ lastVerified: Date.now() });
               }
-            }).catch(() => {
-              // Silent fail - user might have been logged out on server
-              // Will be caught on next navigation
-            });
-          });
-          return;
-        }
+            } catch (error) {
+              if (isAuthInvalidationError(error)) {
+                console.warn("⚠️ Cached session invalid, logging out");
+                logout();
+              } else {
+                console.warn(
+                  "⚠️ Auth verification unavailable, keeping cached session",
+                  error,
+                );
+              }
+            }
+            return;
+          }
 
-        // 3. If we have stale cached data, show optimistic UI but verify
-        if (isAuthenticated && user) {
-          // Show cached user immediately (optimistic)
-          setLoading(false);
-          set({ isInitialized: true });
-          console.log("⏳ Using stale cache, verifying with server...");
-          
-          // Verify with server
+          // 4. No cached data - need to fetch from server (show loading)
+          setLoading(true);
+
           try {
             const { apiClient } = await import("@/lib/api-client");
             const response = await apiClient.get<User>("/auth/me");
-            
+
             if (response.data) {
               setUser(response.data);
               set({ lastVerified: Date.now() });
             }
           } catch {
-            // Session is invalid - logout
-            console.warn("⚠️ Cached session invalid, logging out");
+            // Not authenticated - clear state silently
             logout();
+          } finally {
+            setLoading(false);
+            set({ isInitialized: true });
           }
-          return;
-        }
-
-        // 4. No cached data - need to fetch from server (show loading)
-        setLoading(true);
+        })();
 
         try {
-          const { apiClient } = await import("@/lib/api-client");
-          const response = await apiClient.get<User>("/auth/me");
-          
-          if (response.data) {
-            setUser(response.data);
-            set({ lastVerified: Date.now() });
-          }
-        } catch {
-          // Not authenticated - clear state silently
-          logout();
+          await authInitializationPromise;
         } finally {
-          setLoading(false);
-          set({ isInitialized: true });
+          authInitializationPromise = null;
         }
       },
 

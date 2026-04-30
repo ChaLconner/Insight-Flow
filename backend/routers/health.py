@@ -30,12 +30,6 @@ def minimal_test():
     return {"status": "success", "message": "Minimal test working"}
 
 
-@router.get("/test-auth")
-def test_auth():
-    """Test endpoint to check authentication."""
-    return {"message": "Auth test endpoint"}
-
-
 @router.get("/health")
 async def health_check():
     """

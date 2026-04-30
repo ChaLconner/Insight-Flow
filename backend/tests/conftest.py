@@ -6,10 +6,11 @@ Uses mock sessions and direct authentication override.
 import os
 import sys
 from collections.abc import Generator
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from starlette.testclient import TestClient
@@ -23,6 +24,24 @@ os.environ["TESTING"] = "true"
 # Import models FIRST (before Base is used elsewhere)
 from models import Base
 from models.user import User
+
+
+def create_mock_async_session(*, include_delete: bool = False) -> AsyncMock:
+    """Create the common AsyncSession mock shape used by service tests."""
+    db = AsyncMock(spec=AsyncSession)
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+    db.refresh = AsyncMock()
+    db.rollback = AsyncMock()
+    db.add = MagicMock()
+    if include_delete:
+        db.delete = AsyncMock()
+    return db
+
+
+@pytest.fixture
+def mock_db_session():
+    return create_mock_async_session(include_delete=True)
 
 
 @pytest.fixture(scope="session")

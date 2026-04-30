@@ -92,7 +92,11 @@ export const useTasks = ({
   // Helper to get items safely
   const tasks = taskResponse?.items ?? [];
   const total = taskResponse?.total ?? 0;
-  const hasMore = taskResponse?.hasMore ?? false;
+  const hasMore =
+    taskResponse?.hasMore ??
+    (taskResponse as (TaskListResponse & { has_more?: boolean }) | undefined)
+      ?.has_more ??
+    false;
 
   const updateTaskMutation = useMutation({
     mutationFn: async (task: Partial<Task> & { id: string }) => {

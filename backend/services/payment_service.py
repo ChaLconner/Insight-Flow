@@ -14,12 +14,13 @@ import contextlib
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import stripe
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from stripe import InvalidRequestError, StripeError
 
 from config import get_settings
 from models.payment import (
@@ -161,7 +162,7 @@ class PaymentService:
                     )
                     await db.commit()
                 return existing_customer_id
-            except stripe.error.InvalidRequestError as e:
+            except InvalidRequestError as e:
                 # If checking "No such customer", we must clear it from DB to avoid infinite loops
                 is_no_such_customer = "No such customer" in str(e) or "resource_missing" in str(e)
 
@@ -266,7 +267,7 @@ class PaymentService:
                 metadata={"user_id": str(user_id)},
                 idempotency_key=idem_key,
             )
-        except stripe.error.InvalidRequestError as e:
+        except InvalidRequestError as e:
             # Handle stale customer ID - clear and retry
             if "No such customer" in str(e) or "resource_missing" in str(e):
                 logger.warning(
@@ -722,7 +723,7 @@ class PaymentService:
                     await self.set_default_payment_method(db, new_default.id, user_id)
 
             # Detach from Stripe
-            with contextlib.suppress(stripe.error.InvalidRequestError):
+            with contextlib.suppress(InvalidRequestError):
                 await self._run_stripe_cmd(
                     stripe.PaymentMethod.detach, payment_method.stripe_payment_method_id
                 )
@@ -787,7 +788,7 @@ class PaymentService:
             if existing:
                 # Cancel existing Stripe subscription if any
                 if existing.stripe_subscription_id:
-                    with contextlib.suppress(stripe.error.InvalidRequestError):
+                    with contextlib.suppress(InvalidRequestError):
                         await self._run_stripe_cmd(
                             stripe.Subscription.delete, existing.stripe_subscription_id
                         )
@@ -893,7 +894,7 @@ class PaymentService:
                 stripe_price_id = price.id
                 logger.info(f"Created new Stripe price: {stripe_price_id}")
 
-        except stripe.error.StripeError as e:
+        except StripeError as e:
             logger.error(f"Stripe error during product/price setup: {e}")
             raise ValueError(f"Failed to set up subscription: {e!s}")
 
@@ -933,7 +934,7 @@ class PaymentService:
                         await self._record_invoice_payment(
                             db, user_id, existing.id, stripe_sub.latest_invoice
                         )
-                except stripe.error.InvalidRequestError as e:
+                except InvalidRequestError as e:
                     logger.error(f"Failed to update subscription in Stripe: {e}")
                     # Fallback: if subscription doesn't exist in Stripe, create new
                     if "No such subscription" in str(e):
@@ -1117,7 +1118,7 @@ class PaymentService:
                     subscription.stripe_subscription_id,
                     cancel_at_period_end=False,
                 )
-            except stripe.error.InvalidRequestError as e:
+            except InvalidRequestError as e:
                 logger.error(f"Failed to resume subscription in Stripe: {e}")
                 raise ValueError("Failed to resume subscription with payment provider")
 
@@ -1285,7 +1286,9 @@ class PaymentService:
 
         # Update fields
         new_status = stripe_sub.get("status")
-        subscription.status = SubscriptionStatus(new_status)
+        subscription.status = SubscriptionStatus(
+            cast("str", new_status or subscription.status.value)
+        )
         subscription.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
 
         # If subscription is no longer valid for access, downgrade to FREE

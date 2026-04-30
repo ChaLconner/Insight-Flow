@@ -225,12 +225,20 @@ def test_add_project_member(client, mock_project_service, mock_notification_serv
     mock_notification_service.notify_project_member_added.assert_called_once()
 
 
-def test_remove_project_member(client, mock_project_service, mock_project):
+def test_remove_project_member(
+    client, mock_project_service, mock_notification_service, mock_project
+):
     uid = uuid.uuid4()
+    member_mock = MagicMock()
+    member_mock.user_id = uid
+    member_mock.user = User(id=uid, email="removed@test.com", name="Removed User")
+    mock_project_service.get_project_members.return_value = [member_mock]
+
     response = client.delete(f"/api/v1/projects/{mock_project.id}/members/{uid}")
 
     assert response.status_code == 200
     mock_project_service.remove_project_member.assert_called_once()
+    mock_notification_service.notify_project_member_removed.assert_called_once()
 
 
 def test_update_member_role(client, mock_project_service, mock_project):

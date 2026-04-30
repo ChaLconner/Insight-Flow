@@ -405,26 +405,3 @@ class TestVerifyEmailEndpoint:
 
         assert exc_info.value.status_code == 400
         assert "Invalid or expired" in exc_info.value.detail
-
-
-class TestResendVerificationEndpoint:
-    """Tests for resend verification endpoint."""
-
-    @pytest.fixture
-    def mock_user_service(self):
-        """Create a mock user service."""
-        return AsyncMock()
-
-    @pytest.mark.asyncio
-    async def test_resend_verification_always_succeeds(self, mock_user_service):
-        """Test resend verification always returns success message."""
-        from routers.auth import resend_verification
-        from schemas.user import ResendVerificationRequest
-
-        mock_user_service.resend_verification_email = AsyncMock()
-
-        request_data = ResendVerificationRequest(email="test@example.com")
-        result = await resend_verification(request_data, mock_user_service)
-
-        # Should always return success message for security
-        assert "verification link" in result["message"]

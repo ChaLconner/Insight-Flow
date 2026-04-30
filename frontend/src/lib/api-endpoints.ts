@@ -15,6 +15,7 @@ import type {
   UpdateProjectRequest,
   CreateTaskRequest,
   UpdateTaskRequest,
+  TaskListResponse,
   Notification,
   RecentActivity,
   InviteUserRequest,
@@ -123,7 +124,7 @@ export const fileApi = {
 
   // Delete file
   deleteFile: async (url: string): Promise<void> => {
-    await apiClient.delete("/files/delete", { data: { url } });
+    await apiClient.delete("/files/delete", { params: { url } });
   },
 
   // Get file info
@@ -160,7 +161,7 @@ export const tasksApi = {
     limit = 100,
     search?: string,
     status?: string,
-  ): Promise<Task[]> => {
+  ): Promise<TaskListResponse | Task[]> => {
     const cacheKey = `tasks-getMyTasks-${skip}-${limit}-${search}-${status}`;
     return createDeduplicatedRequest(async () => {
       const params: Record<string, unknown> = { skip, limit };
@@ -193,18 +194,24 @@ export const tasksApi = {
     sortOrder?: string,
     search?: string,
     statusFilter?: string,
-  ): Promise<Task[]> => {
+  ): Promise<TaskListResponse | Task[]> => {
     const cacheKey = `tasks-getProjectTasks-${projectId}-${skip}-${limit}-${sortBy}-${sortOrder}-${search}-${statusFilter}`;
     return createDeduplicatedRequest(async () => {
+      const params: Record<string, unknown> = { skip, limit };
+      if (sortBy) {
+        params.sort_by = sortBy;
+      }
+      if (sortOrder) {
+        params.sort_order = sortOrder;
+      }
+      if (search) {
+        params.search = search;
+      }
+      if (statusFilter && statusFilter !== "all") {
+        params.status = statusFilter;
+      }
       const { data } = await apiClient.get(`/projects/${projectId}/tasks`, {
-        params: {
-          skip,
-          limit,
-          sort_by: sortBy,
-          sort_order: sortOrder,
-          search,
-          status: statusFilter,
-        },
+        params,
       });
       return data;
     }, cacheKey);
@@ -309,12 +316,28 @@ export const projectsApi = {
     limit = 100,
     userProjectsOnly = false,
     search?: string,
+    status?: string,
+    sortBy?: string,
   ): Promise<Project[]> => {
-    const cacheKey = `projects-getProjects-${skip}-${limit}-${userProjectsOnly}-${search}`;
+    const cacheKey = `projects-getProjects-${skip}-${limit}-${userProjectsOnly}-${search}-${status}-${sortBy}`;
 
     return createDeduplicatedRequest(async () => {
+      const params: Record<string, unknown> = {
+        skip,
+        limit,
+        user_projects_only: userProjectsOnly,
+      };
+      if (search) {
+        params.search = search;
+      }
+      if (status && status !== "all") {
+        params.status = status;
+      }
+      if (sortBy) {
+        params.sort_by = sortBy;
+      }
       const { data } = await apiClient.get("/projects", {
-        params: { skip, limit, user_projects_only: userProjectsOnly, search },
+        params,
       });
 
       return data;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 import type {
   PaymentMethod,
@@ -145,8 +145,8 @@ export function useSetupIntent(): UseSetupIntentReturn {
   const [error, setError] = useState<string | null>(null);
   const [isPrefetched, setIsPrefetched] = useState(false);
 
-  // Track the active fetch promise to prevent duplicate requests (race conditions)
-  const [fetchPromise, setFetchPromise] = useState<Promise<SetupIntentResponse> | null>(null);
+  // Track the active fetch promise without causing extra renders.
+  const fetchPromiseRef = useRef<Promise<SetupIntentResponse> | null>(null);
 
   const createSetupIntent = useCallback(async () => {
     // If already prefetched, return cached result immediately
@@ -155,9 +155,9 @@ export function useSetupIntent(): UseSetupIntentReturn {
     }
     
     // If a fetch is already in progress, wait for it
-    if (fetchPromise) {
+    if (fetchPromiseRef.current) {
       try {
-        return await fetchPromise;
+        return await fetchPromiseRef.current;
       } catch (_err) {
         // If the pending fetch fails, we'll try again below
       }
@@ -171,11 +171,11 @@ export function useSetupIntent(): UseSetupIntentReturn {
       .then(({ data }) => {
         setSetupIntent(data);
         setIsPrefetched(true);
-        setFetchPromise(null); // Clear promise on success
+        fetchPromiseRef.current = null; // Clear promise on success
         return data;
       });
 
-    setFetchPromise(promise);
+    fetchPromiseRef.current = promise;
 
     try {
       const data = await promise;
@@ -183,32 +183,32 @@ export function useSetupIntent(): UseSetupIntentReturn {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
-      setFetchPromise(null); // Clear promise on error
+      fetchPromiseRef.current = null; // Clear promise on error
       return null;
     } finally {
       setIsLoading(false);
     }
-  }, [isPrefetched, setupIntent, fetchPromise]);
+  }, [isPrefetched, setupIntent]);
 
   // Prefetch setup intent in background
   const prefetch = useCallback(async () => {
-    if (isPrefetched || (setupIntent != null) || (fetchPromise != null)) {return;} // Don't fetch if already have data or fetching
+    if (isPrefetched || (setupIntent != null) || (fetchPromiseRef.current != null)) {return;} // Don't fetch if already have data or fetching
     
     const promise = apiClient.post<SetupIntentResponse>("/payment/setup-intent")
       .then(({ data }) => {
         setSetupIntent(data);
         setIsPrefetched(true);
-        setFetchPromise(null);
+        fetchPromiseRef.current = null;
         return data;
       })
       .catch((err) => {
         // Prefetch failures are expected - silently ignore
-        setFetchPromise(null);
+        fetchPromiseRef.current = null;
         throw err;
       });
       
-    setFetchPromise(promise);
-  }, [isPrefetched, setupIntent, fetchPromise]);
+    fetchPromiseRef.current = promise;
+  }, [isPrefetched, setupIntent]);
 
   const reset = useCallback(() => {
     setSetupIntent(null);

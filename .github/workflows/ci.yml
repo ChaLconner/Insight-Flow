@@ -1,25 +1,30 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   PYTHON_VERSION: "3.12"
   NODE_VERSION: "20"
 
 jobs:
-  # ============================================
-  # SECURITY SCANNING (Staff/Principal Level)
-  # ============================================
   security-scan:
-    name: Security Scan
+    name: Security Scan (Advisory)
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
       contents: read
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -30,28 +35,23 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install safety for vulnerability scanning
-        run: pip install safety bandit
-
-      - name: Run safety check (Python dependencies)
+      - name: Install backend dependencies and audit tools
         working-directory: ./backend
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          safety check --full-report || echo "::warning::Some vulnerabilities detected"
-        continue-on-error: true
+          pip install pip-audit bandit
 
       - name: Run pip-audit (Python dependencies)
         working-directory: ./backend
         run: |
-          pip install pip-audit
-          pip-audit || echo "::warning::pip-audit found vulnerabilities"
+          pip-audit -r requirements.txt --format=json --output=pip-audit-report.json || true
         continue-on-error: true
 
       - name: Run bandit security linter
         working-directory: ./backend
         run: |
           bandit -r . -ll -ii -x ./tests,./scripts --format json -o bandit-report.json || true
-          cat bandit-report.json
         continue-on-error: true
 
       - name: Upload security scan results
@@ -59,17 +59,51 @@ jobs:
         if: always()
         with:
           name: security-scan-results
-          path: backend/bandit-report.json
+          path: |
+            backend/pip-audit-report.json
+            backend/bandit-report.json
 
-  # ============================================
-  # BACKEND TESTS
-  # ============================================
-  backend-test:
-    name: Backend Tests
+  backend-quality:
+    name: Backend Quality
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./backend
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies and quality tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Ruff lint
+        run: python -m ruff check .
+
+      - name: Ruff format check
+        run: python -m ruff format --check .
+
+  backend-test:
+    name: Backend Tests
+    needs: backend-quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}/backend
 
     services:
       postgres:
@@ -105,12 +139,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx coverage argon2-cffi
 
       - name: Wait for Postgres to be available
         env:
@@ -138,7 +172,7 @@ jobs:
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
         run: python scripts/init_db_for_ci.py
 
-      - name: Run Tests with Coverage
+      - name: Run tests with coverage
         env:
           SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
@@ -151,9 +185,7 @@ jobs:
           GOOGLE_REDIRECT_URI: "http://localhost:8000/auth/callback/google"
           TESTING: "true"
         run: |
-          coverage run -m pytest -v -W ignore::RuntimeWarning
-          coverage report --fail-under=85
-          coverage xml -o coverage.xml
+          python -m pytest --cov=. --cov-report=term-missing --cov-report=xml --cov-fail-under=85 -W ignore::RuntimeWarning
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -164,15 +196,13 @@ jobs:
             backend/.coverage
             backend/coverage.xml
 
-  # ============================================
-  # FRONTEND CHECKS
-  # ============================================
   frontend-check:
-    name: Frontend Lint & Build
+    name: Frontend Quality
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./frontend
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -189,22 +219,26 @@ jobs:
         run: npm ci
 
       - name: Run npm audit
-        run: npm audit --audit-level=high || echo "::warning::npm audit found high severity vulnerabilities"
+        run: npm audit --audit-level=high
         continue-on-error: true
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint:check
 
       - name: Type Check
-        run: npx tsc --noEmit
+        run: npm run type-check
 
       - name: Run Unit Tests
-        run: npm run test -- --run --coverage
+        env:
+          CI: true
+        run: npm run test:coverage
 
       - name: Build
-        run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: "https://api.example.com"
+          CI: true
+          API_URL: "http://127.0.0.1:8000"
+          NEXT_PUBLIC_API_URL: "http://127.0.0.1:8000"
+        run: npm run build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -213,14 +247,11 @@ jobs:
           path: frontend/.next
           retention-days: 1
 
-  # ============================================
-  # E2E TESTS (Playwright)
-  # ============================================
   e2e-tests:
     name: E2E Tests
     needs: [backend-test, frontend-check]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    timeout-minutes: 20
 
     steps:
       - name: Checkout code
@@ -243,9 +274,11 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: ./frontend
-        run: npx playwright test --project=chromium
+        run: npm run test:e2e -- --project=chromium
         env:
           CI: true
+          BASE_URL: "http://127.0.0.1:3000"
+          API_URL: "http://127.0.0.1:8000"
           GOOGLE_CLIENT_ID: "mock-google-client-id"
           GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
 
@@ -256,71 +289,3 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report
           retention-days: 7
-
-  # ============================================
-  # DEPLOY STAGING (on push to dev)
-  # ============================================
-  deploy-staging:
-    name: Deploy to Staging
-    needs: [backend-test, frontend-check, security-scan]
-    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: staging
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy Backend to Render (Staging)
-        run: |
-          echo "🚀 Deploying Backend to Staging..."
-          # Render auto-deploys from dev branch
-          echo "Waiting for Render deployment..."
-
-      - name: Deploy Frontend to Vercel (Preview)
-        run: |
-          echo "🚀 Deploying Frontend to Vercel Preview..."
-          # Vercel auto-deploys previews for branches
-
-      - name: Notify staging deployment
-        run: |
-          echo "✅ Staging deployment triggered"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-
-  # ============================================
-  # DEPLOY PRODUCTION (on push to main)
-  # ============================================
-  deploy-production:
-    name: Deploy to Production
-    needs: [backend-test, frontend-check, security-scan]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: production
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy Backend to Render (Production)
-        run: |
-          echo "🚀 Deploying Backend to Production..."
-          # Render auto-deploys from main branch
-          echo "Waiting for Render deployment..."
-
-      - name: Deploy Frontend to Vercel (Production)
-        run: |
-          echo "🚀 Deploying Frontend to Vercel Production..."
-          # Vercel auto-deploys production for main branch
-
-      - name: Run post-deployment health check
-        run: |
-          echo "Running health checks..."
-          # Add actual health check commands here
-          # curl -f https://api.your-domain.com/health || exit 1
-
-      - name: Notify production deployment
-        if: success()
-        run: |
-          echo "✅ Production deployment successful!"
-          echo "Deployed commit: ${{ github.sha }}"

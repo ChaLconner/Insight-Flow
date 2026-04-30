@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.notification import Notification
 from models.user import User
 from models.user_settings import UserSettings
+from services.email_service import EmailService
 from services.notification_rate_limiter import get_rate_limiter
 from utils.logger import setup_logger
 
@@ -43,12 +44,52 @@ class AsyncNotificationTriggerService:
                 "mentions": True,
                 "updates": True,
                 "system": True,
-            }
+            },
+            "email": {
+                "tasks": True,
+                "projects": True,
+                "mentions": True,
+            },
         }
 
-    def _should_notify(self, preferences: dict[str, Any], notification_type: str) -> bool:
+    def _should_notify(
+        self, preferences: dict[str, Any], channel: str, notification_type: str
+    ) -> bool:
+        channel_prefs = preferences.get(channel, {})
+        return bool(channel_prefs.get(notification_type, True))
+
+    def _should_notify_in_app(self, preferences: dict[str, Any], notification_type: str) -> bool:
         in_app_prefs = preferences.get("inApp", {})
         return bool(in_app_prefs.get(notification_type, True))
+
+    def _should_notify_email(self, preferences: dict[str, Any], notification_type: str) -> bool:
+        email_prefs = preferences.get("email", {})
+        return bool(email_prefs.get(notification_type, False))
+
+    async def _send_email_notification(
+        self,
+        user: User,
+        email_type: str,
+        subject: str,
+        message: str,
+        action_path: str | None = None,
+    ) -> None:
+        prefs = await self._get_user_preferences(user.id)
+        if not self._should_notify_email(prefs, email_type):
+            return
+
+        try:
+            import os
+
+            frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+            action_url = f"{frontend_url}{action_path}" if action_path else frontend_url
+            content = f"<p>{message}</p>"
+            html_email = EmailService._get_base_template(
+                subject, content, action_url, "Open Insight Flow"
+            )
+            await EmailService.send_email(user.email, f"Insight Flow - {subject}", html_email)
+        except Exception as e:
+            logger.warning(f"Failed to send notification email to user {user.id}: {e}")
 
     def _check_rate_limit(self, user_id: uuid.UUID, notification_type: str) -> bool:
         can_send, reason = self.rate_limiter.can_send(str(user_id), notification_type)
@@ -163,13 +204,14 @@ class AsyncNotificationTriggerService:
             return
 
         prefs = await self._get_user_preferences(new_member.id)
-        if self._should_notify(prefs, "projects"):
-            inviter_name = inviter.name or inviter.email.split("@")[0]
+        inviter_name = inviter.name or inviter.email.split("@")[0]
+        message = f"{inviter_name} added you to {project_name}"
+        if self._should_notify_in_app(prefs, "projects"):
             await self._create_notification(
                 user_id=new_member.id,
                 notification_type="project_invitation",
                 title="Added to Project",
-                message=f"{inviter_name} added you to {project_name}",
+                message=message,
                 data={
                     "project_id": str(project_id),
                     "project_name": project_name,
@@ -178,6 +220,35 @@ class AsyncNotificationTriggerService:
                 },
                 allow_grouping=False,
             )
+        await self._send_email_notification(
+            new_member, "projects", "Added to Project", message, f"/projects/{project_id}"
+        )
+
+    async def notify_project_member_removed(
+        self, removed_member: User, project_id: uuid.UUID, project_name: str, remover: User
+    ):
+        if removed_member.id == remover.id:
+            return
+
+        prefs = await self._get_user_preferences(removed_member.id)
+        remover_name = remover.name or remover.email.split("@")[0]
+        message = f"{remover_name} removed you from {project_name}"
+        if self._should_notify_in_app(prefs, "projects"):
+            await self._create_notification(
+                user_id=removed_member.id,
+                notification_type="project_member_left",
+                title="Removed from Project",
+                message=message,
+                data={
+                    "project_id": str(project_id),
+                    "project_name": project_name,
+                    "remover_id": str(remover.id),
+                },
+                allow_grouping=False,
+            )
+        await self._send_email_notification(
+            removed_member, "projects", "Removed from Project", message, None
+        )
 
     async def notify_task_assigned(
         self,
@@ -193,13 +264,14 @@ class AsyncNotificationTriggerService:
             return  # Don't notify if self-assigning
 
         prefs = await self._get_user_preferences(assignee.id)
-        if self._should_notify(prefs, "tasks"):
-            assigner_name = assigner.name or assigner.email.split("@")[0]
+        assigner_name = assigner.name or assigner.email.split("@")[0]
+        message = f"{assigner_name} assigned you a task: {task_title}"
+        if self._should_notify_in_app(prefs, "tasks"):
             await self._create_notification(
                 user_id=assignee.id,
                 notification_type="task_assigned",
                 title="New Task Assigned",
-                message=f"{assigner_name} assigned you a task: {task_title}",
+                message=message,
                 data={
                     "task_id": str(task_id),
                     "task_title": task_title,
@@ -209,6 +281,13 @@ class AsyncNotificationTriggerService:
                 },
                 allow_grouping=True,
             )
+        await self._send_email_notification(
+            assignee,
+            "tasks",
+            "New Task Assigned",
+            message,
+            f"/projects/{project_id}?task={task_id}",
+        )
 
     async def notify_task_status_changed(
         self,
@@ -227,12 +306,13 @@ class AsyncNotificationTriggerService:
         # Notify assignee if they didn't make the change
         if assignee and assignee.id != changer.id:
             prefs = await self._get_user_preferences(assignee.id)
-            if self._should_notify(prefs, "tasks"):
+            message = f"{changer_name} changed '{task_title}' status: {old_status} → {new_status}"
+            if self._should_notify_in_app(prefs, "updates"):
                 await self._create_notification(
                     user_id=assignee.id,
                     notification_type="task_updated",
                     title="Task Status Changed",
-                    message=f"{changer_name} changed '{task_title}' status: {old_status} → {new_status}",
+                    message=message,
                     data={
                         "task_id": str(task_id),
                         "task_title": task_title,
@@ -243,16 +323,24 @@ class AsyncNotificationTriggerService:
                     },
                     allow_grouping=True,
                 )
+            await self._send_email_notification(
+                assignee,
+                "tasks",
+                "Task Status Changed",
+                message,
+                f"/projects/{project_id}?task={task_id}",
+            )
 
         # Notify creator if they didn't make the change and are different from assignee
         if creator and creator.id != changer.id and (not assignee or creator.id != assignee.id):
             prefs = await self._get_user_preferences(creator.id)
-            if self._should_notify(prefs, "tasks"):
+            message = f"{changer_name} changed '{task_title}' status: {old_status} → {new_status}"
+            if self._should_notify_in_app(prefs, "updates"):
                 await self._create_notification(
                     user_id=creator.id,
                     notification_type="task_updated",
                     title="Task Status Changed",
-                    message=f"{changer_name} changed '{task_title}' status: {old_status} → {new_status}",
+                    message=message,
                     data={
                         "task_id": str(task_id),
                         "task_title": task_title,
@@ -263,6 +351,13 @@ class AsyncNotificationTriggerService:
                     },
                     allow_grouping=True,
                 )
+            await self._send_email_notification(
+                creator,
+                "tasks",
+                "Task Status Changed",
+                message,
+                f"/projects/{project_id}?task={task_id}",
+            )
 
     async def notify_task_completed(
         self,
@@ -278,13 +373,14 @@ class AsyncNotificationTriggerService:
             return  # Don't notify if the completer is the creator
 
         prefs = await self._get_user_preferences(creator.id)
-        if self._should_notify(prefs, "tasks"):
-            completer_name = completer.name or completer.email.split("@")[0]
+        completer_name = completer.name or completer.email.split("@")[0]
+        message = f"{completer_name} completed task: {task_title}"
+        if self._should_notify_in_app(prefs, "tasks"):
             await self._create_notification(
                 user_id=creator.id,
                 notification_type="task_completed",
                 title="Task Completed",
-                message=f"{completer_name} completed task: {task_title}",
+                message=message,
                 data={
                     "task_id": str(task_id),
                     "task_title": task_title,
@@ -294,6 +390,9 @@ class AsyncNotificationTriggerService:
                 },
                 allow_grouping=True,
             )
+        await self._send_email_notification(
+            creator, "tasks", "Task Completed", message, f"/projects/{project_id}?task={task_id}"
+        )
 
     async def notify_task_due_soon(
         self,
@@ -307,13 +406,14 @@ class AsyncNotificationTriggerService:
     ):
         """Notify user about an upcoming task deadline."""
         prefs = await self._get_user_preferences(assignee.id)
-        if self._should_notify(prefs, "tasks"):
-            message = "is due today" if days_left == 0 else f"is due in {days_left} days"
+        due_message = "is due today" if days_left == 0 else f"is due in {days_left} days"
+        message = f"Task '{task_title}' {due_message} ({due_date})"
+        if self._should_notify_in_app(prefs, "tasks"):
             await self._create_notification(
                 user_id=assignee.id,
                 notification_type="task_due_soon",
                 title="Task Deadline Approaching",
-                message=f"Task '{task_title}' {message} ({due_date})",
+                message=message,
                 data={
                     "task_id": str(task_id),
                     "task_title": task_title,
@@ -324,6 +424,13 @@ class AsyncNotificationTriggerService:
                 },
                 allow_grouping=True,
             )
+        await self._send_email_notification(
+            assignee,
+            "tasks",
+            "Task Deadline Approaching",
+            message,
+            f"/projects/{project_id}?task={task_id}",
+        )
 
     async def notify_task_overdue(
         self,
@@ -337,12 +444,13 @@ class AsyncNotificationTriggerService:
     ):
         """Notify user about an overdue task."""
         prefs = await self._get_user_preferences(user.id)
-        if self._should_notify(prefs, "tasks"):
+        message = f"Task '{task_title}' is {days_overdue} days overdue (due was {due_date})"
+        if self._should_notify_in_app(prefs, "tasks"):
             await self._create_notification(
                 user_id=user.id,
                 notification_type="task_overdue",
                 title="Task Overdue!",
-                message=f"Task '{task_title}' is {days_overdue} days overdue (due was {due_date})",
+                message=message,
                 data={
                     "task_id": str(task_id),
                     "task_title": task_title,
@@ -352,4 +460,65 @@ class AsyncNotificationTriggerService:
                     "days_overdue": days_overdue,
                 },
                 allow_grouping=True,
+            )
+        await self._send_email_notification(
+            user, "tasks", "Task Overdue!", message, f"/projects/{project_id}?task={task_id}"
+        )
+
+    async def notify_mention(
+        self,
+        mentioned_user: User,
+        actor: User,
+        message: str,
+        project_id: uuid.UUID | None = None,
+        task_id: uuid.UUID | None = None,
+    ):
+        """Notify user when mentioned in a comment or update."""
+        if mentioned_user.id == actor.id:
+            return
+
+        prefs = await self._get_user_preferences(mentioned_user.id)
+        actor_name = actor.name or actor.email.split("@")[0]
+        notification_message = f"{actor_name} mentioned you: {message}"
+        action_path = (
+            f"/projects/{project_id}?task={task_id}"
+            if project_id and task_id
+            else f"/projects/{project_id}"
+            if project_id
+            else None
+        )
+        if self._should_notify_in_app(prefs, "mentions"):
+            await self._create_notification(
+                user_id=mentioned_user.id,
+                notification_type="mention",
+                title="You were mentioned",
+                message=notification_message,
+                data={
+                    "project_id": str(project_id) if project_id else None,
+                    "task_id": str(task_id) if task_id else None,
+                    "actor_id": str(actor.id),
+                },
+                allow_grouping=False,
+            )
+        await self._send_email_notification(
+            mentioned_user, "mentions", "You were mentioned", notification_message, action_path
+        )
+
+    async def notify_system(
+        self,
+        user: User,
+        title: str,
+        message: str,
+        data: dict[str, Any] | None = None,
+    ):
+        """Notify user about system-level events."""
+        prefs = await self._get_user_preferences(user.id)
+        if self._should_notify_in_app(prefs, "system"):
+            await self._create_notification(
+                user_id=user.id,
+                notification_type="system",
+                title=title,
+                message=message,
+                data=data or {},
+                allow_grouping=False,
             )

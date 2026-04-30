@@ -67,9 +67,17 @@ async def test_get_analytics_overview_success(analytics_service, user_id, projec
         patch.object(
             analytics_service, "_get_project_stats", return_value=[{"name": "P1"}]
         ) as mock_proj_stats,
-        patch.object(analytics_service, "_get_team_stats", return_value=[{"name": "U1"}]),
+        patch.object(
+            analytics_service,
+            "_get_team_stats",
+            return_value=[{"name": "U1", "avatar": None, "tasks": 3}],
+        ),
         patch.object(analytics_service, "_get_trends", return_value=[{"metric": "Tasks"}]),
-        patch.object(analytics_service, "_get_distributions", return_value={"status": []}),
+        patch.object(
+            analytics_service,
+            "_get_distributions",
+            return_value={"status": [], "priority": [], "workload": []},
+        ),
         patch.object(
             analytics_service,
             "_get_daily_trends",
@@ -95,20 +103,15 @@ async def test_get_analytics_overview_success(analytics_service, user_id, projec
 
 @pytest.mark.asyncio
 async def test_get_overview_metrics(analytics_service, user_id, project_ids):
-    # Mock active projects count
-    res_active = MagicMock()
-    res_active.scalar.return_value = 1
-
     # Mock task stats (total, completed, in_progress, overdue)
     res_tasks = MagicMock()
-    # first() return tuple-like
     res_tasks.first.return_value = (10, 5, 3, 2)
 
-    # Mock member count
-    res_members = MagicMock()
-    res_members.scalar.return_value = 4
+    # Mock combined active project and member counts
+    res_counts = MagicMock()
+    res_counts.first.return_value = (1, 4)
 
-    analytics_service.db.execute.side_effect = [res_active, res_tasks, res_members]
+    analytics_service.db.execute.side_effect = [res_tasks, res_counts]
 
     metrics = await analytics_service._get_overview_metrics(project_ids, user_id, total_projects=2)
 
@@ -177,12 +180,10 @@ async def test_get_trends(analytics_service, project_ids):
 @pytest.mark.asyncio
 async def test_get_daily_trends(analytics_service, project_ids):
     # Mock daily counts
-    # Created counts
-    res_created = MagicMock()
     today_str = str(datetime.now(UTC).date())
+    res_created = MagicMock()
     res_created.all.return_value = [(today_str, 5)]
 
-    # Completed counts
     res_completed = MagicMock()
     res_completed.all.return_value = [(today_str, 3)]
 
@@ -199,15 +200,12 @@ async def test_get_daily_trends(analytics_service, project_ids):
 
 @pytest.mark.asyncio
 async def test_get_distributions(analytics_service, project_ids):
-    # 1. Status
     res_status = MagicMock()
     res_status.all.return_value = [("done", 10), ("todo", 5)]
 
-    # 2. Priority
     res_priority = MagicMock()
     res_priority.all.return_value = [("high", 8), ("low", 7)]
 
-    # 3. Workload
     u1 = User(id=uuid.uuid4(), name="U1")
     res_workload = MagicMock()
     res_workload.all.return_value = [(u1, 15)]

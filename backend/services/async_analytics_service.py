@@ -21,7 +21,7 @@ from utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 # Cache TTL in seconds
-ANALYTICS_CACHE_TTL = 300  # 5 minutes
+ANALYTICS_CACHE_TTL = 600  # 10 minutes — analytics data is not real-time critical
 
 
 class AsyncAnalyticsService:
@@ -109,17 +109,11 @@ class AsyncAnalyticsService:
     async def _get_overview_metrics(
         self, project_ids: Any, _user_id: uuid.UUID, total_projects: int = 0
     ) -> dict[str, Any]:
-        """Get overview metrics for the given projects."""
-        # Project counts provided via argument to avoid len() on subquery
-
-        active_projects_result = await self.db.execute(
-            select(func.count(Project.id)).filter(
-                Project.id.in_(project_ids), Project.is_active == True
-            )
-        )
-        active_projects = active_projects_result.scalar() or 0
-
-        # Task stats - single optimized query
+        """
+        Get overview metrics for the given projects.
+        B2: Optimized from 3 queries to 2 by merging active_projects + member_count.
+        """
+        # Query 1: Task stats in a single pass
         task_stats_result = await self.db.execute(
             select(
                 func.count(Task.id).label("total"),
@@ -150,13 +144,21 @@ class AsyncAnalyticsService:
         in_progress_tasks = task_stats[2] or 0
         overdue_tasks = task_stats[3] or 0
 
-        # Team members count
-        member_count_result = await self.db.execute(
-            select(func.count(distinct(ProjectMember.user_id))).filter(
-                ProjectMember.project_id.in_(project_ids)
+        # Query 2: Active projects + team member count combined
+        counts_result = await self.db.execute(
+            select(
+                func.count(
+                    distinct(case((Project.is_active == True, Project.id), else_=None))
+                ).label("active_projects"),
+                func.count(distinct(ProjectMember.user_id)).label("member_count"),
             )
+            .select_from(Project)
+            .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
+            .filter(Project.id.in_(project_ids))
         )
-        member_count = member_count_result.scalar() or 0
+        counts = counts_result.first()
+        active_projects = counts[0] or 0 if counts else 0
+        member_count = counts[1] or 0 if counts else 0
 
         completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
 
@@ -269,7 +271,7 @@ class AsyncAnalyticsService:
         current_result = await self.db.execute(
             select(func.count(distinct(TaskHistory.task_id))).filter(
                 TaskHistory.project_id.in_(project_ids),
-                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                cast(TaskHistory.activity_type, String) == ActivityType.TASK_COMPLETED.value,
                 TaskHistory.timestamp >= current_start,
             )
         )
@@ -279,7 +281,7 @@ class AsyncAnalyticsService:
         previous_result = await self.db.execute(
             select(func.count(distinct(TaskHistory.task_id))).filter(
                 TaskHistory.project_id.in_(project_ids),
-                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                cast(TaskHistory.activity_type, String) == ActivityType.TASK_COMPLETED.value,
                 TaskHistory.timestamp >= previous_start,
                 TaskHistory.timestamp < current_start,
             )
@@ -324,7 +326,7 @@ class AsyncAnalyticsService:
                 )
                 .filter(
                     TaskHistory.project_id.in_(project_ids),
-                    TaskHistory.activity_type == activity_type,
+                    cast(TaskHistory.activity_type, String) == activity_type.value,
                     TaskHistory.timestamp >= start_date,
                 )
                 .group_by(func.date(TaskHistory.timestamp))
@@ -604,7 +606,7 @@ class AsyncAnalyticsService:
             )
             .filter(
                 TaskHistory.project_id == project_id,
-                TaskHistory.activity_type == ActivityType.TASK_COMPLETED,
+                cast(TaskHistory.activity_type, String) == ActivityType.TASK_COMPLETED.value,
                 TaskHistory.timestamp >= start_date,
             )
             .group_by(func.date(TaskHistory.timestamp))

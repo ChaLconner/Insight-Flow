@@ -22,24 +22,47 @@ interface ApiUpdateProjectData extends UpdateProjectRequest {
   is_active?: boolean;
 }
 
-export function useProjects(options?: { enabled?: boolean }) {
+interface UseProjectsOptions {
+  enabled?: boolean;
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: ProjectStatus | "all";
+  sortBy?: "newest" | "oldest" | "name";
+}
+
+export function useProjects(options: UseProjectsOptions = {}) {
   const { user } = useAuthStore();
+  const page = options.page ?? 1;
+  const pageSize = options.pageSize ?? 100;
+  const skip = (page - 1) * pageSize;
+  const trimmedSearch = options.search?.trim();
+  const search = trimmedSearch === "" ? undefined : trimmedSearch;
+  const status = options.status && options.status !== "all" ? options.status : undefined;
+  const sortBy = options.sortBy ?? "newest";
 
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: ["projects", { skip, pageSize, search, status, sortBy }],
     queryFn: async () => {
-      // Fetch up to 100 projects default
-      const data = await projectsApi.getProjects(0, 100, false);
+      const data = await projectsApi.getProjects(
+        skip,
+        pageSize,
+        false,
+        search,
+        status,
+        sortBy,
+      );
       // Transform data
       return Array.isArray(data)
         ? data.map((p: Project, index: number) =>
-            transformProjectData(p, user ?? undefined, index),
+            transformProjectData(p, user ?? undefined, skip + index),
           )
         : [];
     },
     enabled:
       options?.enabled !== undefined ? options.enabled && !!user : !!user, // Only fetch if user is logged in
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 3 * 60 * 1000, // 3 minutes — project lists rarely change
+    placeholderData: (previousData) => previousData,
   });
 }
 
@@ -67,6 +90,7 @@ export function useCreateProject() {
       queryClient.setQueryData(["projects"], (old: Project[] | undefined) => {
         return old ? [...old, newProject] : [newProject];
       });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success("Project created", {
         description: `Project "${newProject.name}" has been created successfully.`,
       });
