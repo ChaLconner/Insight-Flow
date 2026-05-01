@@ -436,7 +436,7 @@ function RegisterPageContent() {
 
               <Button
                 type="submit"
-                className="w-full bg-white hover:bg-gray-200 text-black font-bold py-2.5"
+                className="w-full bg-white hover:bg-gray-200 text-black font-bold py-2.5 transition-all hover:scale-[1.02]"
                 disabled={isLoading || !form.formState.isValid}
               >
                 {isLoading ? (
