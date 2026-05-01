@@ -77,7 +77,7 @@ class JsonFormatter(logging.Formatter):
             log_record.update(record.extra_fields)
 
         # Add source info if in debug or error
-        if record.levelno >= logging.ERROR or os.getenv("DEBUG", "false").lower() == "true":
+        if record.levelno >= logging.ERROR or os.getenv("APP_DEBUG", "false").lower() == "true":
             log_record.update(
                 {"file": record.filename, "line": record.lineno, "function": record.funcName}
             )
@@ -106,7 +106,9 @@ def setup_logger(name: str, level: str | None = None) -> logging.Logger:
         log_level = getattr(logging, level.upper(), logging.INFO)
     else:
         # Use DEBUG in development, INFO in production
-        log_level = logging.DEBUG if os.getenv("DEBUG", "false").lower() == "true" else logging.INFO
+        log_level = (
+            logging.DEBUG if os.getenv("APP_DEBUG", "false").lower() == "true" else logging.INFO
+        )
 
     logger.setLevel(log_level)
 
@@ -123,7 +125,7 @@ def setup_logger(name: str, level: str | None = None) -> logging.Logger:
     if os.getenv("ENVIRONMENT") == "production":
         # Use JSON formatter for production
         formatter = JsonFormatter()
-    elif os.getenv("DEBUG", "false").lower() == "true":
+    elif os.getenv("APP_DEBUG", "false").lower() == "true":
         # Detailed format for development
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"

@@ -68,28 +68,49 @@ export const apiClient: AxiosInstance = axios.create({
   withCredentials: true,
 });
 
+const IDEMPOTENT_METHODS = new Set(["get", "head", "options", "put", "delete"]);
+
+function getRequestMethod(config?: AxiosRequestConfig): string {
+  return config?.method?.toLowerCase() ?? "get";
+}
+
+function isAuthRequest(config?: AxiosRequestConfig): boolean {
+  const requestUrl = config?.url ?? "";
+  return requestUrl.includes("/auth/");
+}
+
+export function shouldRetryRequest(error: AxiosError): boolean {
+  const method = getRequestMethod(error.config);
+  const isIdempotentMethod = IDEMPOTENT_METHODS.has(method);
+
+  if (!isIdempotentMethod || isAuthRequest(error.config)) {
+    return false;
+  }
+
+  if (!error.response) {
+    console.warn(
+      `🔄 Retrying network error (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
+    );
+    return error.code !== "ECONNABORTED";
+  }
+
+  if (error.response.status >= 500) {
+    console.warn(
+      `🔄 Retrying server error ${error.response.status} (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
+    );
+    return true;
+  }
+
+  return false;
+}
+
 // Add retry interceptor
 axiosRetry(apiClient, {
   retries: API_CONFIG.RETRY_ATTEMPTS,
   retryDelay: (retryCount) => {
     return API_CONFIG.RETRY_DELAY * Math.pow(2, retryCount); // Exponential backoff
   },
-  retryCondition: (error: AxiosError) => {
-    // Retry on network errors and 5xx server errors
-    if (!error.response) {
-      console.warn(
-        `🔄 Retrying network error (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
-      );
-      return true;
-    }
-    if (error.response?.status && error.response.status >= 500) {
-      console.warn(
-        `🔄 Retrying server error ${error.response.status} (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
-      );
-      return true;
-    }
-    return false;
-  },
+  retryCondition: shouldRetryRequest,
   onRetry: (retryCount, error, requestConfig) => {
     console.warn(
       `🔄 Retry attempt ${retryCount} for ${requestConfig.url}`,
@@ -303,7 +324,7 @@ async function clearAuthTokens(): Promise<void> {
 }
 
 // Helper function to get user-friendly error message
-function getErrorMessage(error: AxiosError<unknown>): string {
+export function getErrorMessage(error: AxiosError<unknown>): string {
   // Enhanced network error handling
   if (!error.response) {
     if (error.code === "ECONNABORTED") {

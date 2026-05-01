@@ -205,6 +205,10 @@ describe("auth-store", () => {
       expect(state.user).toEqual(mockUser);
       expect(state.isInitialized).toBe(true);
       expect(state.isAuthenticated).toBe(true);
+      expect(apiClient.get).toHaveBeenCalledWith("/auth/me", {
+        timeout: 8000,
+        "axios-retry": { retries: 0 },
+      });
     });
 
     it("should logout if session verification fails", async () => {

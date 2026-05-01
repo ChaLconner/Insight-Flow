@@ -227,20 +227,20 @@ class AppSettings(BaseSettings):
     """Main application settings."""
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
-    debug: bool = Field(default=False, alias="DEBUG")
+    debug: bool = Field(default=False, alias="APP_DEBUG")
     app_name: str = Field(default="Insight-Flow", alias="APP_NAME")
 
     @field_validator("debug")
     @classmethod
     def validate_debug(cls, v: bool, info: Any) -> bool:
-        """Security: Prevent DEBUG=True in production environment."""
+        """Security: Prevent APP_DEBUG=True in production environment."""
         if v:
             # Check if environment is production
             env_value = info.data.get("environment") if info.data else None
             if env_value and env_value.lower() == "production":
                 raise ValueError(
-                    "DEBUG cannot be True in production environment. "
-                    "Set ENVIRONMENT=development or remove DEBUG flag."
+                    "APP_DEBUG cannot be True in production environment. "
+                    "Set ENVIRONMENT=development or remove APP_DEBUG flag."
                 )
         return v
 

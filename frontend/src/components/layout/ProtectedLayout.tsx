@@ -55,7 +55,7 @@ export function ProtectedLayout({
   requiredRole,
 }: ProtectedLayoutProps) {
   // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL - BEFORE ANY CONDITIONAL RETURNS
-  const { isAuthenticated, isLoading, user } = useRequireAuth();
+  const { isAuthenticated, isLoading, isInitialized, user } = useRequireAuth();
   const router = useRouter();
   const hasCheckedAuth = useRef(false);
 
@@ -107,7 +107,7 @@ export function ProtectedLayout({
 
   // Fallback: If client-side auth check fails (middleware should have handled this)
   // Show loading state briefly - middleware will redirect on next navigation
-  if (!isAuthenticated && !user) {
+  if (isInitialized && !isAuthenticated && !user) {
     return <AuthLoadingLayout />;
   }
 

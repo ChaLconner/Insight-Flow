@@ -16,6 +16,7 @@ import { apiClient } from "@/lib/api-client";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getAuthRedirectUrl } from "@/lib/auth-redirect";
+import { createOAuthState, getGitHubRedirectUri } from "@/lib/social-auth";
 
 import {
   Mail,
@@ -27,6 +28,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
+
+const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -123,6 +126,21 @@ function LoginForm() {
       toast.error("Google login failed");
       setIsLoading(false);
     },
+    onNonOAuthError: (error) => {
+      console.warn("Google login popup error:", error.type);
+      setIsLoading(false);
+
+      if (error.type === "popup_closed") {
+        return;
+      }
+
+      toast.error("Google login failed", {
+        description:
+          error.type === "popup_failed_to_open"
+            ? "Google popup was blocked. Please allow popups and try again."
+            : "Google login could not be completed. Please try again.",
+      });
+    },
     flow: "implicit",
   });
 
@@ -172,10 +190,12 @@ function LoginForm() {
                   return;
                 }
                 const redirectUri = encodeURIComponent(
-                  `${window.location.origin}/auth/callback/github`,
+                  getGitHubRedirectUri(),
                 );
+                const state = createOAuthState();
+                window.sessionStorage.setItem(GITHUB_OAUTH_STATE_KEY, state);
                 const scope = "read:user user:email";
-                window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+                window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${encodeURIComponent(state)}`;
               }}
               disabled={isLoading}
               title="Sign in with GitHub"

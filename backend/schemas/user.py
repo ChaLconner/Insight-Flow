@@ -187,6 +187,7 @@ class GithubAuth(BaseModel):
 
     code: str | None = None  # Authorization code from GitHub OAuth redirect
     access_token: str | None = None  # Direct access token (if available)
+    redirect_uri: str | None = None
 
 
 class Token(BaseModel):

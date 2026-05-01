@@ -13,9 +13,10 @@ logger = setup_logger("github_oauth")
 # Load environment variables
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI", "http://localhost:3000/auth/callback/github")
 
 
-def exchange_code_for_token(code: str) -> str | None:
+def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str | None:
     """
     Exchange GitHub authorization code for access token.
 
@@ -37,6 +38,7 @@ def exchange_code_for_token(code: str) -> str | None:
                 "client_id": GITHUB_CLIENT_ID,
                 "client_secret": GITHUB_CLIENT_SECRET,
                 "code": code,
+                "redirect_uri": redirect_uri or GITHUB_REDIRECT_URI,
             },
         )
 
@@ -166,7 +168,7 @@ def is_github_oauth_configured() -> bool:
 # ==============================================================================
 
 
-async def async_exchange_code_for_token(code: str) -> str | None:
+async def async_exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str | None:
     """
     Async version: Exchange GitHub authorization code for access token.
     Uses httpx for non-blocking HTTP requests.
@@ -192,6 +194,7 @@ async def async_exchange_code_for_token(code: str) -> str | None:
                     "client_id": GITHUB_CLIENT_ID,
                     "client_secret": GITHUB_CLIENT_SECRET,
                     "code": code,
+                    "redirect_uri": redirect_uri or GITHUB_REDIRECT_URI,
                 },
             )
 
@@ -217,7 +220,9 @@ async def async_exchange_code_for_token(code: str) -> str | None:
         logger.warning("httpx not available, falling back to sync version")
         import asyncio
 
-        return await asyncio.to_thread(exchange_code_for_token, code)
+        return await asyncio.to_thread(
+            exchange_code_for_token, code, redirect_uri or GITHUB_REDIRECT_URI
+        )
     except Exception as e:
         logger.error(f"Error exchanging code for token: {e}")
         return None

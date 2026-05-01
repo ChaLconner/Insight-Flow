@@ -82,7 +82,7 @@ class TestConfigValidators:
         assert "must be 'text' or 'json'" in str(exc.value)
 
     def test_debug_in_production(self):
-        """Test preventing DEBUG=True in production."""
+        """Test preventing APP_DEBUG=True in production."""
         with pytest.raises(ValidationError) as exc:
-            AppSettings(ENVIRONMENT="production", DEBUG=True)
-        assert "DEBUG cannot be True in production" in str(exc.value)
+            AppSettings(ENVIRONMENT="production", APP_DEBUG=True)
+        assert "APP_DEBUG cannot be True in production" in str(exc.value)

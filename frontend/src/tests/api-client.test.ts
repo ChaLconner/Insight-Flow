@@ -2,7 +2,7 @@
  * Comprehensive tests for API Client
  * Tests error handling, retries, and request/response interceptors
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock axios before importing
 vi.mock('axios', () => {
@@ -66,6 +66,137 @@ describe('API Client Configuration', () => {
     timeoutError.name = 'TimeoutError';
 
     expect(timeoutError.message).toContain('timeout');
+  });
+});
+
+describe('API Client Helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('should attach CSRF token from cookies', async () => {
+    await import('@/lib/api-client');
+    const axios = (await import('axios')).default as unknown as {
+      interceptors: {
+        request: {
+          use: ReturnType<typeof vi.fn>;
+        };
+      };
+    };
+    const requestHandler = axios.interceptors.request.use.mock.calls.at(-1)?.[0] as (
+      config: { headers: Record<string, string> },
+    ) => { headers: Record<string, string> };
+
+    vi.spyOn(document, 'cookie', 'get').mockReturnValue(
+      'csrf_token=test-csrf; session=abc',
+    );
+
+    const result = requestHandler({ headers: {} });
+
+    expect(result.headers['X-CSRF-Token']).toBe('test-csrf');
+  });
+
+  it('should create form data from mixed values', async () => {
+    const { createFormData } = await import('@/lib/api-client');
+
+    const file = new File(['hello'], 'hello.txt', { type: 'text/plain' });
+    const formData = createFormData({
+      title: 'Report',
+      count: 2,
+      active: true,
+      file,
+      tags: ['alpha', 'beta'],
+      meta: { owner: 'qa' },
+      empty: null,
+    });
+
+    expect(formData.get('title')).toBe('Report');
+    expect(formData.get('count')).toBe('2');
+    expect(formData.get('active')).toBe('true');
+    expect(formData.get('file')).toBe(file);
+    expect(formData.get('tags[0]')).toBe('alpha');
+    expect(formData.get('tags[1]')).toBe('beta');
+    expect(formData.get('meta')).toBe(JSON.stringify({ owner: 'qa' }));
+    expect(formData.has('empty')).toBe(false);
+  });
+
+  it('should deduplicate concurrent requests by cache key', async () => {
+    const { createDeduplicatedRequest } = await import('@/lib/api-client');
+    const requestFn = vi.fn().mockResolvedValue('ok');
+
+    const first = createDeduplicatedRequest(requestFn, 'projects');
+    const second = createDeduplicatedRequest(requestFn, 'projects');
+
+    await expect(first).resolves.toBe('ok');
+    await expect(second).resolves.toBe('ok');
+    expect(requestFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should remove failed deduplicated requests from cache', async () => {
+    const { createDeduplicatedRequest } = await import('@/lib/api-client');
+    const requestFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('fail'))
+      .mockResolvedValueOnce('recovered');
+
+    await expect(createDeduplicatedRequest(requestFn, 'retry-key')).rejects.toThrow('fail');
+    await expect(createDeduplicatedRequest(requestFn, 'retry-key')).resolves.toBe('recovered');
+    expect(requestFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('should create custom API clients', async () => {
+    const { createCustomApiClient } = await import('@/lib/api-client');
+    const axios = (await import('axios')).default as unknown as {
+      create: ReturnType<typeof vi.fn>;
+    };
+
+    createCustomApiClient('http://api.test', 2500);
+
+    expect(axios.create).toHaveBeenCalledWith({
+      baseURL: 'http://api.test',
+      timeout: 2500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  });
+
+  it('should report backend health status', async () => {
+    const { apiClient, checkBackendHealth } = await import('@/lib/api-client');
+    const mockClient = apiClient as unknown as {
+      get: ReturnType<typeof vi.fn>;
+    };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    mockClient.get.mockResolvedValueOnce({ data: { status: 'healthy' } });
+    await expect(checkBackendHealth()).resolves.toBe(true);
+
+    mockClient.get.mockRejectedValueOnce(new Error('offline'));
+    await expect(checkBackendHealth()).resolves.toBe(false);
+    expect(consoleError).toHaveBeenCalledWith(
+      '❌ Backend health check failed:',
+      'offline',
+    );
+  });
+
+  it('should wait for backend until a health check succeeds', async () => {
+    const { apiClient, waitForBackend } = await import('@/lib/api-client');
+    const mockClient = apiClient as unknown as {
+      get: ReturnType<typeof vi.fn>;
+    };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    mockClient.get
+      .mockRejectedValueOnce(new Error('starting'))
+      .mockResolvedValueOnce({ data: { status: 'healthy' } });
+
+    await expect(waitForBackend(2, 0)).resolves.toBe(true);
+    expect(mockClient.get).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -169,6 +300,71 @@ describe('Request Configuration', () => {
 });
 
 describe('Retry Logic', () => {
+  it('should not retry auth POST timeouts', async () => {
+    const { shouldRetryRequest } = await import('@/lib/api-client');
+
+    const result = shouldRetryRequest({
+      code: 'ECONNABORTED',
+      config: {
+        method: 'post',
+        url: '/auth/login',
+      },
+    } as never);
+
+    expect(result).toBe(false);
+  });
+
+  it('should retry idempotent GET server errors', async () => {
+    const { shouldRetryRequest } = await import('@/lib/api-client');
+
+    const result = shouldRetryRequest({
+      config: {
+        method: 'get',
+        url: '/projects',
+      },
+      response: {
+        status: 503,
+      },
+    } as never);
+
+    expect(result).toBe(true);
+  });
+
+  it('should not retry non-idempotent requests or auth requests', async () => {
+    const { shouldRetryRequest } = await import('@/lib/api-client');
+
+    expect(
+      shouldRetryRequest({
+        config: {
+          method: 'post',
+          url: '/projects',
+        },
+      } as never),
+    ).toBe(false);
+    expect(
+      shouldRetryRequest({
+        config: {
+          method: 'get',
+          url: '/auth/me',
+        },
+      } as never),
+    ).toBe(false);
+  });
+
+  it('should not retry timed-out idempotent network requests', async () => {
+    const { shouldRetryRequest } = await import('@/lib/api-client');
+
+    expect(
+      shouldRetryRequest({
+        code: 'ECONNABORTED',
+        config: {
+          method: 'get',
+          url: '/projects',
+        },
+      } as never),
+    ).toBe(false);
+  });
+
   it('should retry on network error', () => {
     const shouldRetry = (error: { code?: string }) => {
       return error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT';
@@ -210,6 +406,87 @@ describe('Retry Logic', () => {
     }
 
     expect(attempts).toBe(maxRetries);
+  });
+});
+
+describe('API Error Messages', () => {
+  it('should return specific network error messages', async () => {
+    const { getErrorMessage } = await import('@/lib/api-client');
+
+    expect(getErrorMessage({ code: 'ECONNABORTED' } as never)).toBe(
+      'Request timeout. Please check your connection and try again.',
+    );
+    expect(getErrorMessage({ code: 'ECONNREFUSED' } as never)).toBe(
+      'Cannot connect to server. Please ensure backend is running.',
+    );
+    expect(getErrorMessage({ code: 'ENOTFOUND' } as never)).toBe(
+      'Server not found. Please check API URL.',
+    );
+    expect(getErrorMessage({ code: 'ETIMEDOUT' } as never)).toBe(
+      'Connection timed out. Please check your connection.',
+    );
+    expect(
+      getErrorMessage({
+        config: {
+          'axios-retry': {
+            retryCount: 2,
+          },
+        },
+      } as never),
+    ).toBe('Network error after 2 retry attempts. Please check your connection.');
+    expect(getErrorMessage({} as never)).toBe(
+      'Network error. Please check your connection.',
+    );
+  });
+
+  it('should return status-specific API error messages', async () => {
+    const { getErrorMessage } = await import('@/lib/api-client');
+
+    expect(
+      getErrorMessage({
+        response: { status: 400, data: { detail: 'Bad data' } },
+      } as never),
+    ).toBe('Bad data');
+    expect(
+      getErrorMessage({
+        response: { status: 400, data: { detail: [{ msg: 'Invalid' }] } },
+      } as never),
+    ).toBe(JSON.stringify([{ msg: 'Invalid' }]));
+    expect(
+      getErrorMessage({
+        response: { status: 401, data: {} },
+      } as never),
+    ).toBe('You are not authorized to perform this action.');
+    expect(
+      getErrorMessage({
+        response: { status: 403, data: { detail: 'No access' } },
+      } as never),
+    ).toBe('No access');
+    expect(
+      getErrorMessage({
+        response: { status: 404, data: { message: 'Missing' } },
+      } as never),
+    ).toBe('Missing');
+    expect(
+      getErrorMessage({
+        response: { status: 422, data: { message: 'Invalid form' } },
+      } as never),
+    ).toBe('Invalid form');
+    expect(
+      getErrorMessage({
+        response: { status: 429, data: {} },
+      } as never),
+    ).toBe('Too many requests. Please wait a moment.');
+    expect(
+      getErrorMessage({
+        response: { status: 500, data: { detail: 'Exploded' } },
+      } as never),
+    ).toBe('Exploded');
+    expect(
+      getErrorMessage({
+        response: { status: 418, data: {} },
+      } as never),
+    ).toBe('Server error. Please try again later.');
   });
 });
 

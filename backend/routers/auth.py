@@ -343,7 +343,9 @@ async def github_login(
 
         if github_data.code:
             # Exchange authorization code for access token (using async version for non-blocking I/O)
-            access_token = await async_exchange_code_for_token(github_data.code)
+            access_token = await async_exchange_code_for_token(
+                github_data.code, github_data.redirect_uri
+            )
         elif github_data.access_token:
             # Use provided access token directly
             access_token = github_data.access_token

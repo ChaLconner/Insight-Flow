@@ -21,6 +21,7 @@ import { getErrorMessage } from "@/lib/error-utils";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getSocialSignupRedirect } from "@/lib/auth-redirect";
+import { createOAuthState, getGitHubRedirectUri } from "@/lib/social-auth";
 
 import {
   Mail,
@@ -32,6 +33,8 @@ import {
   Layers,
 } from "lucide-react";
 import { toast } from "sonner";
+
+const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 
 // Wrapper component to handle Suspense for useSearchParams
 export default function RegisterPage() {
@@ -166,6 +169,24 @@ function RegisterPageContent() {
       setIsLoading(false);
       toast.error("Google login failed");
     },
+    onNonOAuthError: (error) => {
+      console.warn("Google login popup error:", error.type);
+      setIsLoading(false);
+
+      if (error.type === "popup_closed") {
+        return;
+      }
+
+      const description =
+        error.type === "popup_failed_to_open"
+          ? "Google popup was blocked. Please allow popups and try again."
+          : "Google login could not be completed. Please try again.";
+
+      setApiError(description);
+      toast.error("Google login failed", {
+        description,
+      });
+    },
     flow: "implicit",
   });
 
@@ -233,10 +254,12 @@ function RegisterPageContent() {
                     return;
                   }
                   const redirectUri = encodeURIComponent(
-                    `${window.location.origin}/auth/callback/github`,
+                    getGitHubRedirectUri(),
                   );
+                  const state = createOAuthState();
+                  window.sessionStorage.setItem(GITHUB_OAUTH_STATE_KEY, state);
                   const scope = "read:user user:email";
-                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${encodeURIComponent(state)}`;
                 }}
                 disabled={isLoading}
                 title={

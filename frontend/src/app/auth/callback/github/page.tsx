@@ -5,8 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { API_CONFIG } from "@/lib/constants";
 import { getPostLoginRedirect } from "@/lib/auth-redirect";
 import { authActions } from "@/stores/auth-actions";
+import { getGitHubRedirectUri } from "@/lib/social-auth";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+
+const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 
 function GitHubCallbackContent() {
   const router = useRouter();
@@ -16,6 +19,7 @@ function GitHubCallbackContent() {
   useEffect(() => {
     const handleCallback = async () => {
       const code = searchParams.get("code");
+      const state = searchParams.get("state");
       const errorParam = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");
 
@@ -35,6 +39,19 @@ function GitHubCallbackContent() {
         return;
       }
 
+      if (typeof window !== "undefined") {
+        const expectedState = window.sessionStorage.getItem(GITHUB_OAUTH_STATE_KEY);
+        if (!state || !expectedState || state !== expectedState) {
+          setError("Invalid GitHub OAuth state");
+          toast.error("GitHub login failed", {
+            description: "Invalid OAuth state. Please try again.",
+          });
+          window.sessionStorage.removeItem(GITHUB_OAUTH_STATE_KEY);
+          return;
+        }
+        window.sessionStorage.removeItem(GITHUB_OAUTH_STATE_KEY);
+      }
+
       try {
         // Send the code to our backend
         const response = await fetch(`${API_CONFIG.BASE_URL}/auth/github`, {
@@ -43,7 +60,10 @@ function GitHubCallbackContent() {
             "Content-Type": "application/json",
           },
           credentials: "include",
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({
+            code,
+            redirect_uri: getGitHubRedirectUri(),
+          }),
         });
 
         if (!response.ok) {

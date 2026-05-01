@@ -37,6 +37,11 @@ interface PersistedAuthState {
 }
 
 let authInitializationPromise: Promise<void> | null = null;
+const AUTH_VERIFICATION_TIMEOUT_MS = 8000;
+const NO_RETRY_CONFIG = {
+  timeout: AUTH_VERIFICATION_TIMEOUT_MS,
+  "axios-retry": { retries: 0 },
+} as const;
 
 function isAuthInvalidationError(error: unknown): boolean {
   if (!axios.isAxiosError(error)) {
@@ -206,7 +211,7 @@ export const useAuthStore = create<AuthState>()(
             // Background refresh to update user data silently (non-blocking)
             import("@/lib/api-client").then(({ apiClient }) => {
               apiClient
-                .get<User>("/auth/me")
+                .get<User>("/auth/me", NO_RETRY_CONFIG)
                 .then((response) => {
                   if (response.data) {
                     setUser(response.data);
@@ -233,7 +238,7 @@ export const useAuthStore = create<AuthState>()(
             // Verify with server
             try {
               const { apiClient } = await import("@/lib/api-client");
-              const response = await apiClient.get<User>("/auth/me");
+              const response = await apiClient.get<User>("/auth/me", NO_RETRY_CONFIG);
 
               if (response.data) {
                 setUser(response.data);
@@ -258,7 +263,7 @@ export const useAuthStore = create<AuthState>()(
 
           try {
             const { apiClient } = await import("@/lib/api-client");
-            const response = await apiClient.get<User>("/auth/me");
+            const response = await apiClient.get<User>("/auth/me", NO_RETRY_CONFIG);
 
             if (response.data) {
               setUser(response.data);

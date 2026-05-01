@@ -15,6 +15,7 @@ export const useAuthState = () => {
   const user = useAuthStore(authSelectors.getUser);
   const isAuthenticated = useAuthStore(authSelectors.isAuthenticated);
   const isLoading = useAuthStore(authSelectors.isLoading);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
 
   // Derived state via selectors
   const userInitials = useAuthStore(authSelectors.getUserInitials);
@@ -76,6 +77,7 @@ export const useAuthState = () => {
     user,
     isAuthenticated,
     isLoading,
+    isInitialized,
     error: null,
 
     // Computed values
@@ -105,6 +107,7 @@ export const useAuth = () => {
     user,
     isAuthenticated,
     isLoading,
+    isInitialized,
     userInitials,
     isAdmin,
     isManagerOrHigher,
@@ -114,6 +117,7 @@ export const useAuth = () => {
     user,
     isAuthenticated,
     isLoading,
+    isInitialized,
     userInitials,
     isAdmin,
     isManagerOrHigher,
@@ -125,7 +129,7 @@ export const useAuth = () => {
 // ===========================================
 
 export const useRequireAuth = () => {
-  const { user, isAuthenticated, isLoading } = useAuthState();
+  const { user, isAuthenticated, isLoading, isInitialized } = useAuthState();
 
   // Use ref for timeout to avoid sharing state between hook instances
   const redirectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -142,6 +146,7 @@ export const useRequireAuth = () => {
         // If not authenticated and not loading, redirect to login immediately
         if (
           (!isAuthenticated || !user) &&
+          isInitialized &&
           !isLoading &&
           typeof window !== "undefined"
         ) {
@@ -178,12 +183,13 @@ export const useRequireAuth = () => {
         redirectTimeoutRef.current = null;
       }
     };
-  }, [isAuthenticated, isLoading, user]); // Include user in deps with debouncing
+  }, [isAuthenticated, isInitialized, isLoading, user]); // Include user in deps with debouncing
 
   // Return auth state for use in components
   return {
     isAuthenticated,
     isLoading,
+    isInitialized,
     user,
   };
 };
