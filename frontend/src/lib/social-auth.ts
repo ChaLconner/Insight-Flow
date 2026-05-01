@@ -2,7 +2,15 @@ const DEFAULT_APP_URL = "http://localhost:3000";
 const OAUTH_STATE_BYTES = 16;
 
 function getAppBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? DEFAULT_APP_URL).replace(/\/+$/, "");
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const browserOrigin =
+    typeof window !== "undefined" ? window.location.origin : undefined;
+  const appUrl =
+    configuredAppUrl !== undefined && configuredAppUrl !== ""
+      ? configuredAppUrl
+      : (browserOrigin ?? DEFAULT_APP_URL);
+
+  return appUrl.replace(/\/+$/, "");
 }
 
 export function getGitHubRedirectUri(): string {

@@ -3,13 +3,14 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_CONFIG } from "@/lib/constants";
-import { getPostLoginRedirect } from "@/lib/auth-redirect";
+import { getAuthRedirectUrl } from "@/lib/auth-redirect";
 import { authActions } from "@/stores/auth-actions";
 import { getGitHubRedirectUri } from "@/lib/social-auth";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
+const GITHUB_OAUTH_REDIRECT_KEY = "github_oauth_redirect";
 
 function GitHubCallbackContent() {
   const router = useRouter();
@@ -47,6 +48,7 @@ function GitHubCallbackContent() {
             description: "Invalid OAuth state. Please try again.",
           });
           window.sessionStorage.removeItem(GITHUB_OAUTH_STATE_KEY);
+          window.sessionStorage.removeItem(GITHUB_OAUTH_REDIRECT_KEY);
           return;
         }
         window.sessionStorage.removeItem(GITHUB_OAUTH_STATE_KEY);
@@ -78,14 +80,23 @@ function GitHubCallbackContent() {
         await authActions.loginWithResponse(data);
 
         const user = data.user;
-        const redirectUrl = getPostLoginRedirect(user?.role);
+        const oauthRedirect =
+          typeof window !== "undefined"
+            ? window.sessionStorage.getItem(GITHUB_OAUTH_REDIRECT_KEY)
+            : null;
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(GITHUB_OAUTH_REDIRECT_KEY);
+        }
+        const redirectUrl = getAuthRedirectUrl({
+          role: user?.role,
+          callbackUrl: oauthRedirect,
+        });
 
         toast.success("Login successful!", {
           description: `Welcome${user?.name ? `, ${user.name}` : ""}!`,
         });
 
-        // Redirect to dashboard
-        window.location.href = redirectUrl;
+        router.replace(redirectUrl);
       } catch (err) {
         console.error("❌ GitHub callback error:", err);
         const errorMessage =

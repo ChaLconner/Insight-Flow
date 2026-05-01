@@ -14,6 +14,7 @@ interface AuthState {
   isLoading: boolean;
   lastActivity: number;
   isInitialized: boolean;
+  hasVerifiedSession: boolean;
   lastVerified: number; // Timestamp of last server-side verification
 
   // Actions
@@ -61,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true,
       lastActivity: Date.now(),
       isInitialized: false,
+      hasVerifiedSession: false,
       lastVerified: 0,
 
       // Actions
@@ -109,6 +111,7 @@ export const useAuthStore = create<AuthState>()(
           lastActivity: Date.now(),
           lastVerified: Date.now(),
           isInitialized: true,
+          hasVerifiedSession: true,
         });
       },
 
@@ -121,6 +124,7 @@ export const useAuthStore = create<AuthState>()(
           lastActivity: 0,
           lastVerified: 0,
           isInitialized: false,
+          hasVerifiedSession: false,
         });
       },
 
@@ -215,7 +219,7 @@ export const useAuthStore = create<AuthState>()(
                 .then((response) => {
                   if (response.data) {
                     setUser(response.data);
-                    set({ lastVerified: Date.now() });
+                    set({ hasVerifiedSession: true, lastVerified: Date.now() });
                   }
                 })
                 .catch((error) => {
@@ -242,7 +246,7 @@ export const useAuthStore = create<AuthState>()(
 
               if (response.data) {
                 setUser(response.data);
-                set({ lastVerified: Date.now() });
+                set({ hasVerifiedSession: true, lastVerified: Date.now() });
               }
             } catch (error) {
               if (isAuthInvalidationError(error)) {
@@ -267,7 +271,7 @@ export const useAuthStore = create<AuthState>()(
 
             if (response.data) {
               setUser(response.data);
-              set({ lastVerified: Date.now() });
+              set({ hasVerifiedSession: true, lastVerified: Date.now() });
             }
           } catch {
             // Not authenticated - clear state silently
@@ -367,6 +371,8 @@ export const authSelectors = {
 
   // Get loading state
   isLoading: (state: AuthState) => state.isLoading,
+
+  hasVerifiedSession: (state: AuthState) => state.hasVerifiedSession,
 
   // Check if user has specific role
   hasRole: (role: string) => (state: AuthState) => state.user?.role === role,

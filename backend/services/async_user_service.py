@@ -20,7 +20,7 @@ from models.user import User
 from models.user_settings import UserSettings
 from schemas.user import UserCreate, UserInvite, UserLogin, UserSettingsUpdate, UserUpdate
 from services.email_service import EmailService
-from utils.auth import authenticate_user, get_password_hash, verify_password
+from utils.auth import get_password_hash, verify_password
 from utils.logger import logger, mask_email, mask_token, mask_user_id
 from utils.validators import validate_password_strength
 
@@ -251,7 +251,9 @@ class AsyncUserService:
             raise ValueError(f"Account locked. Try again after {user.locked_until}")
 
         # 3. Verify Password
-        if not authenticate_user(user, login_data.password):
+        if not user.hashed_password or not await self.verify_password(
+            login_data.password, user.hashed_password
+        ):
             logger.warning(
                 f"Password authentication failed for email: {mask_email(login_data.email)}"
             )
@@ -396,16 +398,20 @@ class AsyncUserService:
         user_data = UserCreate(email=email, name=name, avatar_url=avatar_url, github_id=github_id)
         return await self.create_user(user_data)
 
-    async def update_last_login(self, user_id: uuid.UUID) -> None:
-        """Update last login timestamp."""
-        user = await self.get_user_by_id(user_id)
-        if user:
-            user.last_login_at = datetime.now(UTC)
-            try:
-                await self.db.commit()
-            except Exception as e:
-                logger.error(f"Failed to update last login time: {e}")
-                await self.db.rollback()
+    async def update_last_login(self, user_id: uuid.UUID | str) -> None:
+        """Update last login timestamp without loading the full user row."""
+        try:
+            if isinstance(user_id, str):
+                user_id = uuid.UUID(user_id)
+            await self.db.execute(
+                update(User).where(User.id == user_id).values(last_login_at=datetime.now(UTC))
+            )
+            await self.db.commit()
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid user ID for last login update: {e}")
+        except Exception as e:
+            logger.error(f"Failed to update last login time: {e}")
+            await self.db.rollback()
 
     async def get_user_by_email(self, email: str) -> User | None:
         """Get user by email with retry logic for connection errors."""

@@ -16,6 +16,7 @@ export const useNotificationPolling = (intervalMs = 30000) => {
   const { fetchNotifications, fetchUnreadCount } = useNotifications();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
+  const hasVerifiedSession = useAuthStore((state) => state.hasVerifiedSession);
   
   // Use refs to store stable function references
   const fetchNotificationsRef = useRef(fetchNotifications);
@@ -58,8 +59,8 @@ export const useNotificationPolling = (intervalMs = 30000) => {
   }, []);
 
   useEffect(() => {
-    // Don't fetch if not authenticated or auth not initialized
-    if (!isAuthenticated || !isInitialized) {
+    // Don't fetch until the cached session has been verified with the backend.
+    if (!isAuthenticated || !isInitialized || !hasVerifiedSession) {
       return;
     }
 
@@ -115,7 +116,14 @@ export const useNotificationPolling = (intervalMs = 30000) => {
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [intervalMs, stableFetch, stableFetchUnreadCount, isAuthenticated, isInitialized]);
+  }, [
+    intervalMs,
+    stableFetch,
+    stableFetchUnreadCount,
+    isAuthenticated,
+    isInitialized,
+    hasVerifiedSession,
+  ]);
 
   // Reset hasFetchedRef when user logs out
   useEffect(() => {

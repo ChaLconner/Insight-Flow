@@ -27,12 +27,10 @@ def mock_auth_utils():
     with (
         patch("services.async_user_service.get_password_hash") as mock_hash,
         patch("services.async_user_service.verify_password") as mock_verify,
-        patch("services.async_user_service.authenticate_user") as mock_auth_user,
     ):
         mock_hash.return_value = "hashed_secret"
         mock_verify.return_value = True
-        mock_auth_user.return_value = True
-        yield {"hash": mock_hash, "verify": mock_verify, "auth": mock_auth_user}
+        yield {"hash": mock_hash, "verify": mock_verify}
 
 
 @pytest.fixture
@@ -80,11 +78,12 @@ async def test_authenticate_user_success(user_service, mock_db_session, mock_aut
     res.scalars.return_value.first.return_value = user
     mock_db_session.execute.return_value = res
 
-    mock_auth_utils["auth"].return_value = True
+    user_service.verify_password = AsyncMock(return_value=True)
 
     authenticated_user = await user_service.authenticate_user(login_data)
 
     assert authenticated_user is user
+    user_service.verify_password.assert_awaited_once_with("password", "hashed_secret")
     mock_db_session.add.assert_called_once()  # Log auth attempt
 
 
@@ -108,16 +107,22 @@ async def test_authenticate_user_locked(user_service, mock_db_session):
 async def test_authenticate_user_wrong_password(user_service, mock_db_session, mock_auth_utils):
     login_data = UserLogin(email="test@example.com", password="wrong")
 
-    user = User(id=uuid.uuid4(), email="test@example.com", failed_login_attempts=0)
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        hashed_password="hashed_secret",
+        failed_login_attempts=0,
+    )
     res = MagicMock()
     res.scalars.return_value.first.return_value = user
     mock_db_session.execute.return_value = res
 
-    mock_auth_utils["auth"].return_value = False
+    user_service.verify_password = AsyncMock(return_value=False)
 
     auth_result = await user_service.authenticate_user(login_data)
 
     assert auth_result is None
+    user_service.verify_password.assert_awaited_once_with("wrong", "hashed_secret")
     assert user.failed_login_attempts == 1
     assert mock_db_session.commit.call_count >= 1  # Update attempts
 

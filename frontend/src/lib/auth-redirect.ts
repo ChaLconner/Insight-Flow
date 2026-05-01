@@ -14,6 +14,14 @@ export function getPostLoginRedirect(role: UserRole, fallback = "/dashboard") {
   }
 }
 
+function isSafeRelativeRedirect(redirectUrl: string) {
+  return (
+    redirectUrl.startsWith("/") &&
+    !redirectUrl.startsWith("//") &&
+    !redirectUrl.includes("\\")
+  );
+}
+
 export function getAuthRedirectUrl({
   role,
   callbackUrl,
@@ -23,7 +31,9 @@ export function getAuthRedirectUrl({
   callbackUrl?: string | null;
   fallback?: string;
 }) {
-  return callbackUrl ?? getPostLoginRedirect(role, fallback);
+  return callbackUrl && isSafeRelativeRedirect(callbackUrl)
+    ? callbackUrl
+    : getPostLoginRedirect(role, fallback);
 }
 
 export function getSocialSignupRedirect(role: UserRole, isPaidPlan: boolean) {

@@ -1,7 +1,7 @@
 "use client";
 import { useGoogleLogin } from "@react-oauth/google";
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,15 @@ import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 
 const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
+const GITHUB_OAUTH_REDIRECT_KEY = "github_oauth_redirect";
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const requestedRedirect =
+    searchParams.get("callbackUrl") ?? searchParams.get("redirect");
   
   const form = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
@@ -70,15 +74,10 @@ function LoginForm() {
       const user = data.user;
       const redirectUrl = getAuthRedirectUrl({
         role: user?.role,
-        callbackUrl: searchParams.get("callbackUrl"),
+        callbackUrl: requestedRedirect,
       });
 
-      // Add small delay to allow state to settle
-      setTimeout(() => {
-        if (typeof window !== "undefined") {
-          window.location.href = redirectUrl;
-        }
-      }, 100);
+      router.replace(redirectUrl);
 
     } catch (error) {
       console.error("❌ Login error:", error);
@@ -109,10 +108,10 @@ function LoginForm() {
         const user = data.user;
         const redirectUrl = getAuthRedirectUrl({
           role: user?.role,
-          callbackUrl: searchParams.get("callbackUrl"),
+          callbackUrl: requestedRedirect,
         });
 
-        window.location.href = redirectUrl;
+        router.replace(redirectUrl);
       } catch (error) {
         console.error("❌ Google login error:", error);
         toast.error("Google login failed", {
@@ -194,6 +193,14 @@ function LoginForm() {
                 );
                 const state = createOAuthState();
                 window.sessionStorage.setItem(GITHUB_OAUTH_STATE_KEY, state);
+                if (requestedRedirect) {
+                  window.sessionStorage.setItem(
+                    GITHUB_OAUTH_REDIRECT_KEY,
+                    requestedRedirect,
+                  );
+                } else {
+                  window.sessionStorage.removeItem(GITHUB_OAUTH_REDIRECT_KEY);
+                }
                 const scope = "read:user user:email";
                 window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${encodeURIComponent(state)}`;
               }}

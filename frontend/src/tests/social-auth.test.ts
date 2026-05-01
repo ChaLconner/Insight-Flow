@@ -13,6 +13,18 @@ describe("social-auth", () => {
     expect(getGitHubRedirectUri()).toBe("https://app.example.com/auth/callback/github");
   });
 
+  it("falls back to the browser origin when NEXT_PUBLIC_APP_URL is missing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.stubGlobal("window", {
+      location: { origin: "https://insight-flow-iota.vercel.app" },
+    });
+    const { getGitHubRedirectUri } = await import("@/lib/social-auth");
+
+    expect(getGitHubRedirectUri()).toBe(
+      "https://insight-flow-iota.vercel.app/auth/callback/github",
+    );
+  });
+
   it("creates a cryptographically random OAuth state", async () => {
     const getRandomValues = vi.fn((bytes: Uint8Array) => {
       bytes.set(Array.from({ length: bytes.length }, (_, index) => index));
