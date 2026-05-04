@@ -7,11 +7,19 @@ import json
 import os
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import Any
 
 from utils.logger import setup_logger
 
 logger = setup_logger("cache_service")
+
+APP_CACHE_PREFIXES = (
+    "dashboard:",
+    "analytics:",
+    "rate_limit:",
+    "GET:",
+)
 
 
 class CacheBackend(ABC):
@@ -222,22 +230,53 @@ class RedisCache(CacheBackend):
 
     def clear(self) -> None:
         try:
-            self._execute_with_retry(self.client.flushdb)
-            logger.info("Redis cache cleared")
+            deleted = 0
+            for prefix in APP_CACHE_PREFIXES:
+                deleted += self._delete_matching_keys(f"{prefix}*")
+            logger.info(f"Redis app cache cleared ({deleted} entries)")
         except Exception as e:
             logger.error(f"Redis clear error: {e}")
 
     def invalidate_pattern(self, pattern: str) -> int:
         try:
-            keys = self._execute_with_retry(self.client.keys, f"*{pattern}*")
-            if keys:
-                count = self._execute_with_retry(self.client.delete, *keys)
-                logger.debug(f"Invalidated {count} Redis keys matching '{pattern}'")
-                return count or 0
-            return 0
+            count = self._delete_matching_keys(f"*{pattern}*")
+            logger.debug(f"Invalidated {count} Redis keys matching '{pattern}'")
+            return count
         except Exception as e:
             logger.error(f"Redis invalidate_pattern error: {e}")
             return 0
+
+    def _iter_keys(self, match: str) -> Iterable[str]:
+        scan_iter = getattr(self.client, "scan_iter", None)
+        if callable(scan_iter):
+            yield from scan_iter(match=match, count=500)
+            return
+
+        cursor = 0
+        while True:
+            cursor, keys = self.client.scan(cursor=cursor, match=match, count=500)
+            yield from keys
+            if cursor == 0:
+                break
+
+    def _delete_matching_keys(self, match: str) -> int:
+        deleted = 0
+        batch: list[str] = []
+
+        for key in self._iter_keys(match):
+            batch.append(key)
+            if len(batch) >= 500:
+                deleted += self._delete_batch(batch)
+                batch.clear()
+
+        if batch:
+            deleted += self._delete_batch(batch)
+
+        return deleted
+
+    def _delete_batch(self, keys: list[str]) -> int:
+        count = self._execute_with_retry(self.client.delete, *keys)
+        return int(count or 0)
 
     def health_check(self) -> dict[str, Any]:
         """Check Redis connection health and return detailed info."""

@@ -4,6 +4,33 @@ Tests for services/cache_service.py
 Tests cache service functionality.
 """
 
+from services.cache_service import RedisCache
+
+
+class FakeRedisClient:
+    def __init__(self, keys: list[str]):
+        self.keys = keys
+        self.deleted: list[str] = []
+        self.flushdb_called = False
+        self.keys_called = False
+
+    def scan_iter(self, match: str, count: int = 500):
+        import fnmatch
+
+        assert count == 500
+        yield from [key for key in self.keys if fnmatch.fnmatch(key, match)]
+
+    def delete(self, *keys: str) -> int:
+        self.deleted.extend(keys)
+        return len(keys)
+
+    def flushdb(self):
+        self.flushdb_called = True
+
+    def keys(self, _pattern: str):
+        self.keys_called = True
+        return []
+
 
 class TestCacheServiceConfiguration:
     """Tests for cache service configuration."""
@@ -60,3 +87,56 @@ class TestCacheKeyPatterns:
 
         assert "task:" in key
         assert task_id in key
+
+
+class TestRedisCacheInvalidation:
+    def _make_cache(self, keys: list[str]) -> RedisCache:
+        cache = object.__new__(RedisCache)
+        cache.client = FakeRedisClient(keys)
+        cache.stats = {"hits": 0, "misses": 0, "sets": 0, "errors": 0}
+        return cache
+
+    def test_clear_deletes_only_application_cache_prefixes(self):
+        cache = self._make_cache(
+            [
+                "dashboard:overview:user-1",
+                "analytics:overview:user-1",
+                "rate_limit:127.0.0.1:/auth/login",
+                "GET:http://testserver/health",
+                "celery-task-meta:job-1",
+                "session:user-1",
+            ]
+        )
+
+        cache.clear()
+
+        client = cache.client
+        assert isinstance(client, FakeRedisClient)
+        assert client.flushdb_called is False
+        assert client.keys_called is False
+        assert set(client.deleted) == {
+            "dashboard:overview:user-1",
+            "analytics:overview:user-1",
+            "rate_limit:127.0.0.1:/auth/login",
+            "GET:http://testserver/health",
+        }
+
+    def test_invalidate_pattern_uses_scan_not_keys(self):
+        cache = self._make_cache(
+            [
+                "dashboard:overview:user-1",
+                "dashboard:recent_projects:user-1:5",
+                "analytics:overview:user-1",
+            ]
+        )
+
+        deleted = cache.invalidate_pattern("dashboard:")
+
+        client = cache.client
+        assert isinstance(client, FakeRedisClient)
+        assert deleted == 2
+        assert client.keys_called is False
+        assert set(client.deleted) == {
+            "dashboard:overview:user-1",
+            "dashboard:recent_projects:user-1:5",
+        }
