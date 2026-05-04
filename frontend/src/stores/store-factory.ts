@@ -14,6 +14,7 @@ import { create, StateCreator, StoreApi, UseBoundStore } from "zustand";
 import { devtools, persist, PersistOptions } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { temporal } from "zundo";
+import { browserJsonStorage } from "./browser-storage";
 
 // =============================================================================
 // Store Types
@@ -181,10 +182,11 @@ export function createStore<T extends object>({
   if (enablePersist) {
     const persistOptions: PersistOptions<T, unknown> =
       typeof enablePersist === "object"
-        ? enablePersist
+        ? { storage: browserJsonStorage, ...enablePersist }
         : {
             name: `insight-flow-${name}`,
             version: 1,
+            storage: browserJsonStorage,
           };
 
     const prevCreator = storeCreator;

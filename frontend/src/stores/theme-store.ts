@@ -4,6 +4,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { browserJsonStorage } from "./browser-storage";
 
 type Theme = "light" | "dark" | "system";
 
@@ -242,6 +243,9 @@ export const useThemeStore = create<ThemeState>()(
 
         // Add new theme class
         root.classList.add(theme);
+        root.style.colorScheme = theme;
+        root.setAttribute("data-theme", theme);
+        root.setAttribute("data-color-scheme", theme);
 
         // Update resolved theme
         get().setResolvedTheme(theme);
@@ -308,6 +312,7 @@ export const useThemeStore = create<ThemeState>()(
     }),
     {
       name: "insight-flow-theme",
+      storage: browserJsonStorage,
       partialize: (state) => ({
         theme: state.theme,
       }),

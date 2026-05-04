@@ -4,6 +4,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { browserJsonStorage } from "./browser-storage";
 import type { Notification } from "@/types";
 
 // Re-export selectors from separate file
@@ -278,6 +279,7 @@ export const useNotificationStore = create<NotificationState>()(
     }),
     {
       name: "insight-flow-notifications",
+      storage: browserJsonStorage,
       partialize: (state) => ({
         notifications: state.notifications.slice(0, 50),
         soundEnabled: state.soundEnabled,

@@ -5,6 +5,7 @@
 import axios from "axios";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { browserJsonStorage } from "./browser-storage";
 import { User, UpdateUserRequest } from "@/types";
 
 interface AuthState {
@@ -43,6 +44,21 @@ const NO_RETRY_CONFIG = {
   timeout: AUTH_VERIFICATION_TIMEOUT_MS,
   "axios-retry": { retries: 0 },
 } as const;
+
+function clearPersistedAuthStorage(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.removeItem("insight-flow-auth");
+    localStorage.removeItem("user");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+  } catch {
+    // Ignore storage errors; in-memory auth state is the source of truth.
+  }
+}
 
 function isAuthInvalidationError(error: unknown): boolean {
   if (!axios.isAxiosError(error)) {
@@ -116,7 +132,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // Clear state - Zustand persist middleware handles localStorage cleanup
+        // Clear in-memory state and remove persisted/legacy auth storage.
         set({
           user: null,
           isAuthenticated: false,
@@ -126,6 +142,12 @@ export const useAuthStore = create<AuthState>()(
           isInitialized: false,
           hasVerifiedSession: false,
         });
+
+        clearPersistedAuthStorage();
+
+        if (typeof window !== "undefined" && typeof window.queueMicrotask === "function") {
+          window.queueMicrotask(clearPersistedAuthStorage);
+        }
       },
 
       updateActivity: () => {
@@ -191,6 +213,7 @@ export const useAuthStore = create<AuthState>()(
           // Skip auth check on login/register pages - user is not expected to be authenticated
           const isOnAuthPage = window.location.pathname.startsWith("/auth/");
           if (isOnAuthPage) {
+            logout();
             setLoading(false);
             set({ isInitialized: true });
             return;
@@ -319,6 +342,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "insight-flow-auth",
+      storage: browserJsonStorage,
       partialize: (state: AuthState): PersistedAuthState => {
         // Validate user object before persisting to avoid corrupted data
         let validatedUser = state.user;

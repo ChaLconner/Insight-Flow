@@ -13,11 +13,13 @@ import { toast } from "sonner";
 // Auth actions that depend on the store but don't create circular imports
 export const authActions = {
   // Login function that stores data in localStorage and updates store
-  loginSuccess: (response: AuthResponse) => {
+  loginSuccess: async (response: AuthResponse) => {
     const { login } = useAuthStore.getState();
 
     // Backend may set HttpOnly cookies, but also returns tokens in body for fallback.
     const user = response.user ?? null;
+
+    await clearClientCaches();
 
     if (typeof window !== "undefined") {
       // Note: We rely on Zustand persist middleware to handle storage.
@@ -49,7 +51,7 @@ export const authActions = {
 
   // Alternative login method for compatibility
   loginWithResponse: async (response: AuthResponse) => {
-    authActions.loginSuccess(response);
+    await authActions.loginSuccess(response);
   },
 
   // Logout function
@@ -58,6 +60,7 @@ export const authActions = {
     
     // Set loading true to prevent premature redirects by useRequireAuth
     setLoading(true);
+    await clearClientCaches();
 
     // Attempt server-side logout to clear HttpOnly cookies
     if (typeof window !== "undefined") {
@@ -80,14 +83,7 @@ export const authActions = {
     }
 
     if (typeof window !== "undefined") {
-      try {
-        const { clearServiceWorkerCache } = await import(
-          "@/components/providers/service-worker-registration"
-        );
-        await clearServiceWorkerCache();
-      } catch (_) {
-        // Cache clearing is best-effort; logout must continue.
-      }
+      await clearServiceWorkerCaches();
     }
 
     // Clear client state (always do this, even if server logout failed)
@@ -125,4 +121,42 @@ if (typeof window !== "undefined") {
   window.addEventListener("auth:login", (_event: Event) => {});
 
   window.addEventListener("auth:logout", () => {});
+}
+
+async function clearClientCaches(): Promise<void> {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    const { clearDeduplicatedRequests } = await import("@/lib/api-client");
+    clearDeduplicatedRequests();
+  } catch (_) {
+    // Cache clearing is best-effort; logout must continue.
+  }
+
+  try {
+    const { clearQueryCache } = await import("@/providers/query-provider");
+    clearQueryCache();
+  } catch (_) {
+    // Cache clearing is best-effort; logout must continue.
+  }
+
+  try {
+    const { TokenManager } = await import("@/utils/token-manager");
+    TokenManager.clearTokens();
+  } catch (_) {
+    // Cache clearing is best-effort; logout must continue.
+  }
+}
+
+async function clearServiceWorkerCaches(): Promise<void> {
+  try {
+    const { clearServiceWorkerCache } = await import(
+      "@/components/providers/service-worker-registration"
+    );
+    await clearServiceWorkerCache();
+  } catch (_) {
+    // Cache clearing is best-effort; logout must continue.
+  }
 }

@@ -6,6 +6,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { toast } from "sonner";
+import { browserJsonStorage } from "./browser-storage";
 import { createUISlice, UIState } from "./slices/ui-slice";
 import { createFormSlice, FormState } from "./slices/form-slice";
 import { createUserSlice, UserState } from "./slices/user-slice";
@@ -53,6 +54,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "insight-flow-app",
+      storage: browserJsonStorage,
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
         currentPage: state.currentPage,
