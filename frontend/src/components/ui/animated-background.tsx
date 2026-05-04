@@ -24,25 +24,34 @@ export function AnimatedBackground({
   const particlesRef = useRef<Particle[]>([]);
   const mouseRef = useRef({ x: 0, y: 0 });
 
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return;
     }
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) {
       return;
     }
 
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
+    // Mutable ref so recoverAnimation can swap in a fresh context.
+    const activeCtx = { current: ctx };
 
-    const handleResize = () => {
-      resizeCanvas();
-      createParticles();
+    let lastFrameAt = 0;
+
+    const resizeCanvas = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const sizeChanged = canvas.width !== width || canvas.height !== height;
+
+      if (sizeChanged) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      return sizeChanged;
     };
 
     // Create particles
@@ -68,6 +77,12 @@ export function AnimatedBackground({
       }
     };
 
+    const handleResize = () => {
+      if (resizeCanvas()) {
+        createParticles();
+      }
+    };
+
     // Mouse interaction
     const handleMouseMove = (e: MouseEvent) => {
       mouseRef.current.x = e.clientX;
@@ -76,7 +91,7 @@ export function AnimatedBackground({
 
     // Animation loop
     const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      activeCtx.current.clearRect(0, 0, canvas.width, canvas.height);
 
       const particles = particlesRef.current;
       const connectionDistance = 120;
@@ -111,7 +126,7 @@ export function AnimatedBackground({
         const dy = mouseRef.current.y - particle.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        if (distance < 100) {
+        if (distance > 0 && distance < 100) {
           const force = (100 - distance) / 100;
           particle.vx -= (dx / distance) * force * 0.02;
           particle.vy -= (dy / distance) * force * 0.02;
@@ -133,18 +148,19 @@ export function AnimatedBackground({
       // Draw particles and nearby connections.
       particles.forEach((particle, index) => {
         // Draw particle
-        ctx.save();
-        ctx.globalAlpha = particle.opacity;
-        ctx.fillStyle = particle.color;
-        ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
-        ctx.fill();
+        const drawCtx = activeCtx.current;
+        drawCtx.save();
+        drawCtx.globalAlpha = particle.opacity;
+        drawCtx.fillStyle = particle.color;
+        drawCtx.beginPath();
+        drawCtx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        drawCtx.fill();
 
         // Add glow effect
-        ctx.shadowColor = particle.color;
-        ctx.shadowBlur = particle.size * 2;
-        ctx.fill();
-        ctx.restore();
+        drawCtx.shadowColor = particle.color;
+        drawCtx.shadowBlur = particle.size * 2;
+        drawCtx.fill();
+        drawCtx.restore();
 
         // Draw connections
         const cellX = Math.floor(particle.x / cellSize);
@@ -167,15 +183,15 @@ export function AnimatedBackground({
               const distance = Math.sqrt(dx * dx + dy * dy);
 
               if (distance < connectionDistance) {
-                ctx.save();
-                ctx.globalAlpha = ((connectionDistance - distance) / connectionDistance) * 0.1;
-                ctx.strokeStyle = "#6366f1";
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(particle.x, particle.y);
-                ctx.lineTo(otherParticle.x, otherParticle.y);
-                ctx.stroke();
-                ctx.restore();
+                drawCtx.save();
+                drawCtx.globalAlpha = ((connectionDistance - distance) / connectionDistance) * 0.1;
+                drawCtx.strokeStyle = "#6366f1";
+                drawCtx.lineWidth = 1;
+                drawCtx.beginPath();
+                drawCtx.moveTo(particle.x, particle.y);
+                drawCtx.lineTo(otherParticle.x, otherParticle.y);
+                drawCtx.stroke();
+                drawCtx.restore();
               }
             });
           }
@@ -183,48 +199,115 @@ export function AnimatedBackground({
       });
 
       animationRef.current = requestAnimationFrame(animate);
+      lastFrameAt = performance.now();
+    };
+
+    const stopAnimation = () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = undefined;
+      }
+    };
+
+    const startAnimation = (force = false) => {
+      const frameStale =
+        lastFrameAt > 0 && performance.now() - lastFrameAt > 1000;
+
+      if (force || frameStale) {
+        stopAnimation();
+      } else if (animationRef.current) {
+        return;
+      }
+
+      if (resizeCanvas()) {
+        createParticles();
+      } else if (particlesRef.current.length === 0) {
+        createParticles();
+      }
+
+      animate();
+    };
+
+    const recoverAnimation = () => {
+      // Re-acquire context in case the canvas bitmap was cleared by
+      // bfcache or visibility changes. The old ctx ref may be stale.
+      const freshCtx = canvas.getContext("2d", { willReadFrequently: true });
+      if (freshCtx) {
+        activeCtx.current = freshCtx;
+      }
+      if (resizeCanvas() || particlesRef.current.length === 0) {
+        createParticles();
+      }
+      startAnimation(true);
+    };
+
+    const ensureAnimationHealthy = () => {
+      if (document.hidden) {
+        return;
+      }
+
+      const frameStale =
+        lastFrameAt > 0 && performance.now() - lastFrameAt > 1000;
+      const canvasSizeMismatch =
+        canvas.width !== window.innerWidth || canvas.height !== window.innerHeight;
+
+      if (!animationRef.current || frameStale || canvasSizeMismatch) {
+        recoverAnimation();
+      }
     };
 
     // Initialize
     resizeCanvas();
     createParticles();
-    animate();
+    startAnimation();
 
     // Event listeners
     window.addEventListener("resize", handleResize);
     window.addEventListener("mousemove", handleMouseMove);
 
-    // Visibility change handler to pause animation when not visible
+    // Visibility/page lifecycle handlers keep the canvas alive across bfcache
+    // restores. Do not cancel RAF on hide; some browsers restore the page
+    // without replaying timers/listeners soon enough, leaving the canvas at
+    // its default 300x150 backing size until a full reload.
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current);
-          animationRef.current = undefined;
-        }
-      } else {
-        if (!animationRef.current) {
-          animate();
-        }
+      if (!document.hidden) {
+        recoverAnimation();
       }
     };
+
+    const handlePageShow = () => {
+      recoverAnimation();
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", recoverAnimation);
+    window.addEventListener("pointermove", ensureAnimationHealthy, { passive: true });
+    window.addEventListener("mousemove", ensureAnimationHealthy, { passive: true });
+    window.addEventListener("click", ensureAnimationHealthy);
+    const healthCheckInterval = window.setInterval(ensureAnimationHealthy, 750);
 
     // Cleanup
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      stopAnimation();
+      window.clearInterval(healthCheckInterval);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", recoverAnimation);
+      window.removeEventListener("pointermove", ensureAnimationHealthy);
+      window.removeEventListener("mousemove", ensureAnimationHealthy);
+      window.removeEventListener("click", ensureAnimationHealthy);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <canvas
       ref={canvasRef}
-      className={`fixed inset-0 pointer-events-none z-0 ${className}`}
-      style={{ background: "transparent" }}
+      className={`fixed inset-0 h-screen w-screen pointer-events-none z-0 ${className}`}
+      style={{ background: "transparent", height: "100vh", width: "100vw" }}
     />
   );
 }

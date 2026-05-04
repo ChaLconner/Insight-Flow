@@ -107,6 +107,45 @@
   animation-play-state: paused;
 }
 
+/* Auth background fallback: survives browser history restores if the canvas bitmap is reset. */
+@keyframes auth-particle-drift {
+  0% {
+    background-position:
+      0 0,
+      18px 24px,
+      0 0,
+      0 0;
+  }
+
+  100% {
+    background-position:
+      120px 80px,
+      -80px 120px,
+      140px 90px,
+      -120px -90px;
+  }
+}
+
+.auth-particle-fallback {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle, rgb(129 140 248 / 0.42) 0 1px, transparent 2px),
+    radial-gradient(circle, rgb(148 163 184 / 0.28) 0 1px, transparent 2px),
+    linear-gradient(115deg, transparent 0 46%, rgb(99 102 241 / 0.08) 47% 48%, transparent 49% 100%),
+    linear-gradient(35deg, transparent 0 44%, rgb(139 92 246 / 0.07) 45% 46%, transparent 47% 100%);
+  background-size:
+    120px 120px,
+    180px 180px,
+    260px 260px,
+    320px 320px;
+  opacity: 0.58;
+  animation: auth-particle-drift 28s linear infinite;
+  will-change: background-position;
+}
+
 /* Reduced motion support - stops all CSS animations */
 @media (prefers-reduced-motion: reduce) {
   .animate-infinite-scroll {
@@ -122,6 +161,10 @@
   .animate-scale-in {
     animation: none;
     opacity: 1;
+  }
+
+  .auth-particle-fallback {
+    animation: none;
   }
 }
 
