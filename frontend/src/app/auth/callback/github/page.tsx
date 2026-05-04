@@ -11,6 +11,23 @@ import { Loader2 } from "lucide-react";
 
 const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 const GITHUB_OAUTH_REDIRECT_KEY = "github_oauth_redirect";
+const GITHUB_OAUTH_COOKIE_PATH = "/auth/callback/github";
+
+function getCookie(name: string): string | null {
+  const cookie = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${name}=`));
+
+  if (!cookie) {
+    return null;
+  }
+
+  return decodeURIComponent(cookie.slice(name.length + 1));
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; Max-Age=0; path=${GITHUB_OAUTH_COOKIE_PATH}; SameSite=Lax`;
+}
 
 function GitHubCallbackContent() {
   const router = useRouter();
@@ -19,6 +36,11 @@ function GitHubCallbackContent() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Clear the OAuth navigation marker – we completed the flow
+      // (or at least reached the callback). This prevents a stale flag
+      // from causing an unnecessary reload on future auth page visits.
+      try { sessionStorage.removeItem("auth_oauth_started"); } catch {}
+
       const code = searchParams.get("code");
       const state = searchParams.get("state");
       const errorParam = searchParams.get("error");
@@ -41,7 +63,9 @@ function GitHubCallbackContent() {
       }
 
       if (typeof window !== "undefined") {
-        const expectedState = window.sessionStorage.getItem(GITHUB_OAUTH_STATE_KEY);
+        const expectedState =
+          window.sessionStorage.getItem(GITHUB_OAUTH_STATE_KEY) ??
+          getCookie(GITHUB_OAUTH_STATE_KEY);
         if (!state || !expectedState || state !== expectedState) {
           setError("Invalid GitHub OAuth state");
           toast.error("GitHub login failed", {
@@ -49,9 +73,12 @@ function GitHubCallbackContent() {
           });
           window.sessionStorage.removeItem(GITHUB_OAUTH_STATE_KEY);
           window.sessionStorage.removeItem(GITHUB_OAUTH_REDIRECT_KEY);
+          deleteCookie(GITHUB_OAUTH_STATE_KEY);
+          deleteCookie(GITHUB_OAUTH_REDIRECT_KEY);
           return;
         }
         window.sessionStorage.removeItem(GITHUB_OAUTH_STATE_KEY);
+        deleteCookie(GITHUB_OAUTH_STATE_KEY);
       }
 
       try {
@@ -82,10 +109,12 @@ function GitHubCallbackContent() {
         const user = data.user;
         const oauthRedirect =
           typeof window !== "undefined"
-            ? window.sessionStorage.getItem(GITHUB_OAUTH_REDIRECT_KEY)
+            ? (window.sessionStorage.getItem(GITHUB_OAUTH_REDIRECT_KEY) ??
+              getCookie(GITHUB_OAUTH_REDIRECT_KEY))
             : null;
         if (typeof window !== "undefined") {
           window.sessionStorage.removeItem(GITHUB_OAUTH_REDIRECT_KEY);
+          deleteCookie(GITHUB_OAUTH_REDIRECT_KEY);
         }
         const redirectUrl = getAuthRedirectUrl({
           role: user?.role,

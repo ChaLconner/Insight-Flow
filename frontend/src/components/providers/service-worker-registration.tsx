@@ -9,6 +9,15 @@ import { useEffect } from "react";
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      typeof window !== "undefined" &&
+      "serviceWorker" in navigator
+    ) {
+      unregisterDevelopmentServiceWorkers();
+      return;
+    }
+
     // Only register in production and if service workers are supported
     if (
       process.env.NODE_ENV === "production" &&
@@ -20,6 +29,16 @@ export function ServiceWorkerRegistration() {
   }, []);
 
   return null;
+}
+
+async function unregisterDevelopmentServiceWorkers() {
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map((registration) => registration.unregister()));
+    await clearServiceWorkerCache();
+  } catch (error) {
+    console.warn("[SW] Failed to clear development service workers:", error);
+  }
 }
 
 async function registerServiceWorker() {
@@ -62,7 +81,20 @@ async function registerServiceWorker() {
  */
 export async function clearServiceWorkerCache(): Promise<void> {
   if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({ type: "CLEAR_CACHE" });
+    await new Promise<void>((resolve) => {
+      const channel = new MessageChannel();
+      const timeout = window.setTimeout(resolve, 1000);
+
+      channel.port1.onmessage = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+
+      navigator.serviceWorker.controller?.postMessage(
+        { type: "CLEAR_CACHE" },
+        [channel.port2],
+      );
+    });
   }
 
   if ("caches" in window) {

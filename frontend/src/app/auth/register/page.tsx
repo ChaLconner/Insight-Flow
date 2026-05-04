@@ -8,10 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  AnimatedBackground,
-  FloatingShapes,
-} from "@/components/ui/animated-background";
 import { apiClient } from "@/lib/api-client";
 import { authActions } from "@/stores/auth-actions";
 import { useForm } from "react-hook-form";
@@ -21,7 +17,6 @@ import { getErrorMessage } from "@/lib/error-utils";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getSocialSignupRedirect } from "@/lib/auth-redirect";
-import { createOAuthState, getGitHubRedirectUri } from "@/lib/social-auth";
 
 import {
   Mail,
@@ -33,8 +28,6 @@ import {
   Layers,
 } from "lucide-react";
 import { toast } from "sonner";
-
-const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 
 // Wrapper component to handle Suspense for useSearchParams
 export default function RegisterPage() {
@@ -82,6 +75,12 @@ function RegisterPageContent() {
     },
     mode: "onChange", // Enable live validation
   });
+
+  const handleGitHubSignupClick = () => {
+    if (isLoading) return;
+    try { sessionStorage.setItem("auth_oauth_started", "1"); } catch {}
+    window.location.href = "/auth/github/start";
+  };
 
 
 
@@ -193,11 +192,7 @@ function RegisterPageContent() {
 
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated Background Components */}
-      <AnimatedBackground />
-      <FloatingShapes />
-
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <div className="w-full max-w-md relative z-20">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -247,26 +242,9 @@ function RegisterPageContent() {
               <Button
                 variant="outline"
                 className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
-                onClick={() => {
-                  const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
-                  if (!clientId) {
-                    toast.error("GitHub signup not configured");
-                    return;
-                  }
-                  const redirectUri = encodeURIComponent(
-                    getGitHubRedirectUri(),
-                  );
-                  const state = createOAuthState();
-                  window.sessionStorage.setItem(GITHUB_OAUTH_STATE_KEY, state);
-                  const scope = "read:user user:email";
-                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${encodeURIComponent(state)}`;
-                }}
+                onClick={handleGitHubSignupClick}
                 disabled={isLoading}
-                title={
-                  !process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
-                    ? "GitHub Client ID is missing"
-                    : "Sign up with GitHub"
-                }
+                title="Sign up with GitHub"
               >
                 <Github className="h-4 w-4 mr-3" />
                 Continue with GitHub

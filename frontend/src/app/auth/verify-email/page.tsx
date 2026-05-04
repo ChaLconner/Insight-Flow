@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api-client";
 import { CheckCircle2, XCircle, Loader2, ArrowRight } from "lucide-react";
-import { AnimatedBackground, FloatingShapes } from "@/components/ui/animated-background";
 
 export default function VerifyEmailPage() {
   return (
@@ -58,10 +57,7 @@ function VerifyEmailContent() {
   }, [token]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      <AnimatedBackground />
-      <FloatingShapes />
-      
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <div className="w-full max-w-md relative z-20">
         <Card className="bg-slate-950 shadow-2xl border-slate-800 ring-1 ring-slate-800">
             <CardHeader className="pb-6 text-center">

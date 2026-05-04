@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AnimatedBackground, FloatingShapes } from "@/components/ui/animated-background";
 import { authActions } from "@/stores/auth-actions";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,7 +15,6 @@ import { apiClient } from "@/lib/api-client";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getAuthRedirectUrl } from "@/lib/auth-redirect";
-import { createOAuthState, getGitHubRedirectUri } from "@/lib/social-auth";
 
 import {
   Mail,
@@ -29,9 +27,6 @@ import {
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 
-const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
-const GITHUB_OAUTH_REDIRECT_KEY = "github_oauth_redirect";
-
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,15 +34,31 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const requestedRedirect =
     searchParams.get("callbackUrl") ?? searchParams.get("redirect");
+  const prefilledEmail = searchParams.get("email") ?? "";
+  const prefilledPassword =
+    process.env.NODE_ENV === "production"
+      ? ""
+      : (searchParams.get("password") ?? "");
   
   const form = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "",
-      password: "",
+      email: prefilledEmail,
+      password: prefilledPassword,
       rememberMe: false,
     },
   });
+
+  useEffect(() => {
+    if (!searchParams.has("password")) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("password");
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `/auth/login?${nextQuery}` : "/auth/login");
+  }, [router, searchParams]);
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -55,6 +66,19 @@ function LoginForm() {
       toast.info(message);
     }
   }, [searchParams]);
+
+  const githubOAuthHref = requestedRedirect
+    ? `/auth/github/start?redirect=${encodeURIComponent(requestedRedirect)}`
+    : "/auth/github/start";
+
+  const handleGitHubLoginClick = () => {
+    if (isLoading) return;
+    // Mark that we are navigating away for OAuth. The inline guard script
+    // in auth/layout.tsx will detect this on back-navigation and reload
+    // the page before React hydrates a broken state.
+    try { sessionStorage.setItem("auth_oauth_started", "1"); } catch {}
+    window.location.href = githubOAuthHref;
+  };
 
   const onSubmit = async (values: LoginSchema) => {
     setIsLoading(true);
@@ -182,28 +206,7 @@ function LoginForm() {
             <Button
               variant="outline"
               className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
-              onClick={() => {
-                const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
-                if (!clientId) {
-                  toast.error("GitHub login not configured");
-                  return;
-                }
-                const redirectUri = encodeURIComponent(
-                  getGitHubRedirectUri(),
-                );
-                const state = createOAuthState();
-                window.sessionStorage.setItem(GITHUB_OAUTH_STATE_KEY, state);
-                if (requestedRedirect) {
-                  window.sessionStorage.setItem(
-                    GITHUB_OAUTH_REDIRECT_KEY,
-                    requestedRedirect,
-                  );
-                } else {
-                  window.sessionStorage.removeItem(GITHUB_OAUTH_REDIRECT_KEY);
-                }
-                const scope = "read:user user:email";
-                window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${encodeURIComponent(state)}`;
-              }}
+              onClick={handleGitHubLoginClick}
               disabled={isLoading}
               title="Sign in with GitHub"
             >
@@ -337,11 +340,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated Background Components */}
-      <AnimatedBackground />
-      <FloatingShapes />
-
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <Suspense fallback={
         <div className="z-20 p-8 rounded-xl bg-white/5 backdrop-blur-md">
            <Loader2 className="h-8 w-8 text-primary animate-spin" />

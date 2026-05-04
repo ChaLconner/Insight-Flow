@@ -167,9 +167,13 @@ export default function RootLayout({
                   if (shouldBeDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.style.colorScheme = 'dark';
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    document.documentElement.setAttribute('data-color-scheme', 'dark');
                   } else {
                     document.documentElement.classList.add('light');
                     document.documentElement.style.colorScheme = 'light';
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    document.documentElement.setAttribute('data-color-scheme', 'light');
                   }
                 } catch (e) {}
               })();
