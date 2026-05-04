@@ -483,6 +483,19 @@ class AsyncUserService:
         try:
             await self.db.commit()
             await self.db.refresh(user)
+
+            # Invalidate dashboard/analytics cache if user role or status changed
+            # (affects team statistics displayed on dashboard)
+            if "role" in update_data or "is_active" in update_data:
+                try:
+                    from services.async_analytics_service import invalidate_analytics_cache
+                    from services.async_dashboard_service import invalidate_dashboard_cache
+
+                    invalidate_dashboard_cache()
+                    invalidate_analytics_cache()
+                except Exception as e:
+                    logger.error(f"Failed to invalidate cache after user update: {e}")
+
             return user
         except IntegrityError as e:
             await self.db.rollback()

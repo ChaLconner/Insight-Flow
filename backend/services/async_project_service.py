@@ -25,11 +25,13 @@ from utils.logger import logger
 
 def _invalidate_dashboard_cache_after_mutation() -> None:
     try:
+        from services.async_analytics_service import invalidate_analytics_cache
         from services.async_dashboard_service import invalidate_dashboard_cache
 
         invalidate_dashboard_cache()
+        invalidate_analytics_cache()
     except Exception as e:
-        logger.error(f"Failed to invalidate dashboard cache: {e}")
+        logger.error(f"Failed to invalidate dashboard/analytics cache: {e}")
 
 
 class AsyncProjectService:
