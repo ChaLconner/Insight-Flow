@@ -89,6 +89,19 @@ const nextConfig = {
   async headers() {
     const headers = [
       {
+        source: "/auth/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, max-age=0, must-revalidate",
+          },
+          {
+            key: "Pragma",
+            value: "no-cache",
+          },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           {
@@ -156,7 +169,7 @@ const nextConfig = {
 
   // API Proxy Rewrites
   async rewrites() {
-    const apiUrl = process.env.API_URL || "http://localhost:8000";
+    const apiUrl = process.env.API_URL || "http://127.0.0.1:8000";
     return [
       // Root level endpoints that should NOT go to /api/v1
       {

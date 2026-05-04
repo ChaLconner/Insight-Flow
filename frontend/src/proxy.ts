@@ -16,6 +16,7 @@ const PUBLIC_ROUTES = [
   "/auth/forgot-password",
   "/auth/reset-password",
   "/auth/callback",
+  "/auth/github",
 ];
 
 // Routes that should redirect to dashboard if already authenticated

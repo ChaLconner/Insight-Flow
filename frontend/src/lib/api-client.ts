@@ -289,17 +289,24 @@ async function clearAuthTokens(): Promise<void> {
     return;
   }
 
-  // Skip if already on auth pages or landing page to prevent loops/unwanted redirects
+  setLoggingOut(true);
+  clearDeduplicatedRequests();
+  await clearClientSideCaches();
+
+  // Always clear the local auth store, even on public/auth pages. This prevents
+  // stale persisted users from reviving after cookies were revoked elsewhere.
+  if (logoutCallback) {
+    logoutCallback();
+  }
+
+  // Skip redirect/toast if already on auth pages or landing page to prevent loops.
   const path = window.location.pathname;
   const isOnPublicPage = path.startsWith("/auth/") || path === "/";
   
   if (isOnPublicPage) {
-    // Just clear the logging out flag and return - don't show toast or redirect
     setLoggingOut(false);
     return;
   }
-
-  setLoggingOut(true);
 
   // Attempt server-side logout to clear HttpOnly cookies
   try {
@@ -311,11 +318,6 @@ async function clearAuthTokens(): Promise<void> {
     );
   } catch {
     // ignore
-  }
-
-  // Execute registered logout handler (clears store)
-  if (logoutCallback) {
-    logoutCallback();
   }
 
   // Navigate to login page
@@ -491,6 +493,28 @@ export function createDeduplicatedRequest<T = unknown>(
 
   inFlightRequests.set(cacheKey, promise);
   return promise;
+}
+
+export function clearDeduplicatedRequests(): void {
+  inFlightRequests.clear();
+}
+
+async function clearClientSideCaches(): Promise<void> {
+  try {
+    const { clearQueryCache } = await import("@/providers/query-provider");
+    clearQueryCache();
+  } catch {
+    // Cache clearing is best-effort; session cleanup must continue.
+  }
+
+  try {
+    const { clearServiceWorkerCache } = await import(
+      "@/components/providers/service-worker-registration"
+    );
+    await clearServiceWorkerCache();
+  } catch {
+    // Cache clearing is best-effort; session cleanup must continue.
+  }
 }
 
 // ===========================================

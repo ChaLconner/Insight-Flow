@@ -9,12 +9,12 @@
 var CACHE_NAME = "insight-flow-v1";
 var STATIC_CACHE_NAME = "insight-flow-static-v1";
 var API_CACHE_NAME = "insight-flow-api-v1";
+var LOCAL_DEV_HOSTS = ["localhost", "127.0.0.1", "::1"];
 
 // Static assets to cache on install
 var STATIC_ASSETS = [
   "/",
   "/dashboard",
-  "/auth/login",
   "/manifest.json",
 ];
 
@@ -40,22 +40,32 @@ self.addEventListener("install", function(event) {
 // Activate event - clean up old caches
 self.addEventListener("activate", function(event) {
   event.waitUntil(
-    caches.keys().then(function(cacheNames) {
-      return Promise.all(
-        cacheNames
-          .filter(function(name) {
-            return (
-              name.startsWith("insight-flow-") &&
-              name !== CACHE_NAME &&
-              name !== STATIC_CACHE_NAME &&
-              name !== API_CACHE_NAME
-            );
-          })
-          .map(function(name) {
-            console.log("[SW] Deleting old cache:", name);
-            return caches.delete(name);
-          })
-      );
+    (LOCAL_DEV_HOSTS.includes(self.location.hostname)
+      ? self.registration.unregister()
+      : Promise.resolve()
+    ).then(function() {
+      return caches.keys().then(function(cacheNames) {
+        return Promise.all(
+          cacheNames
+            .filter(function(name) {
+              return (
+                name.startsWith("insight-flow-") &&
+                (
+                  LOCAL_DEV_HOSTS.includes(self.location.hostname) ||
+                  (
+                    name !== CACHE_NAME &&
+                    name !== STATIC_CACHE_NAME &&
+                    name !== API_CACHE_NAME
+                  )
+                )
+              );
+            })
+            .map(function(name) {
+              console.log("[SW] Deleting old cache:", name);
+              return caches.delete(name);
+            })
+        );
+      });
     })
   );
   // Claim all clients immediately
@@ -143,6 +153,14 @@ self.addEventListener("fetch", function(event) {
   var request = event.request;
   var url = new URL(request.url);
 
+  if (LOCAL_DEV_HOSTS.includes(url.hostname)) {
+    return;
+  }
+
+  if (url.pathname.startsWith("/auth/")) {
+    return;
+  }
+
   // Skip non-GET requests
   if (request.method !== "GET") {
     return;
@@ -183,9 +201,19 @@ self.addEventListener("message", function(event) {
   if (event.data && event.data.type === "CLEAR_CACHE") {
     event.waitUntil(
       caches.keys().then(function(names) {
-        return Promise.all(names.map(function(name) {
-          return caches.delete(name);
-        }));
+        return Promise.all(
+          names
+            .filter(function(name) {
+              return name.startsWith("insight-flow-");
+            })
+            .map(function(name) {
+              return caches.delete(name);
+            })
+        );
+      }).then(function() {
+        if (event.ports && event.ports[0]) {
+          event.ports[0].postMessage({ type: "CACHE_CLEARED" });
+        }
       })
     );
   }
