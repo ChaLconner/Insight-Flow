@@ -51,6 +51,7 @@ describe("auth-store", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-01"));
     vi.resetModules();
+    window.history.pushState({}, "", "/dashboard");
     
     // Ensure store is clean even if resetModules fails to create a fresh one (e.g. if cached somewhere)
     // Note: This relies on the fact that if we get a recycled store, we clean it. 
@@ -143,6 +144,16 @@ describe("auth-store", () => {
       expect(state.isLoading).toBe(false);
       expect(state.isInitialized).toBe(false);
       expect(state.lastActivity).toBe(0);
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("user");
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("access_token");
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("refresh_token");
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(localStorageMock.getItem("insight-flow-auth")).toBe(null);
     });
 
     it("setLoading should update loading state", async () => {
@@ -225,6 +236,50 @@ describe("auth-store", () => {
       expect(state.user).toBe(null);
       expect(state.isAuthenticated).toBe(false);
       expect(state.isInitialized).toBe(true);
+    });
+
+    it("should clear persisted auth state on auth routes", async () => {
+      window.history.pushState({}, "", "/auth/login");
+      localStorageMock.setItem(
+        "insight-flow-auth",
+        JSON.stringify({
+          state: {
+            user: { email: "stale@example.com" },
+            isAuthenticated: true,
+            lastActivity: Date.now(),
+            lastVerified: Date.now(),
+          },
+        }),
+      );
+
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+
+      act(() => {
+        useAuthStore.setState({
+          user: { email: "stale@example.com" } as User,
+          isAuthenticated: true,
+          isInitialized: false,
+          isLoading: true,
+          lastVerified: Date.now(),
+        });
+      });
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+      });
+
+      expect(apiClient.get).not.toHaveBeenCalled();
+      expect(useAuthStore.getState().isAuthenticated).toBe(false);
+      expect(useAuthStore.getState().user).toBe(null);
+      expect(useAuthStore.getState().isInitialized).toBe(true);
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(localStorageMock.getItem("insight-flow-auth")).toBe(null);
     });
 
     it("should logout when fresh cached session is rejected by background verification", async () => {

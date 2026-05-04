@@ -166,6 +166,48 @@ describe('API Client Helpers', () => {
     });
   });
 
+  it('should clear local auth state on refresh failure even when already on an auth route', async () => {
+    vi.resetModules();
+    const axios = (await import('axios')).default as unknown as {
+      get: ReturnType<typeof vi.fn>;
+      post: ReturnType<typeof vi.fn>;
+      interceptors: {
+        response: {
+          use: ReturnType<typeof vi.fn>;
+        };
+      };
+    };
+    axios.get.mockReset();
+    axios.post.mockReset();
+    axios.interceptors.response.use.mockClear();
+
+    const {
+      registerLogoutHandler,
+      setLoggingOut,
+    } = await import('@/lib/api-client');
+    const logoutHandler = vi.fn();
+    const refreshFailure = new Error('refresh failed');
+    const finalAuthFailure = new Error('still unauthorized');
+    const responseHandler = [...axios.interceptors.response.use.mock.calls].reverse().find(
+      (call) => typeof call[1] === 'function',
+    )?.[1] as (error: unknown) => Promise<unknown>;
+
+    window.history.pushState({}, '', '/auth/login');
+    setLoggingOut(false);
+    registerLogoutHandler(logoutHandler);
+    axios.post.mockRejectedValueOnce(refreshFailure);
+    axios.get.mockRejectedValueOnce(finalAuthFailure);
+
+    await expect(
+      responseHandler({
+        response: { status: 401 },
+        config: { method: 'get', url: '/projects' },
+      }),
+    ).rejects.toBe(refreshFailure);
+
+    expect(logoutHandler).toHaveBeenCalledTimes(1);
+  });
+
   it('should report backend health status', async () => {
     const { apiClient, checkBackendHealth } = await import('@/lib/api-client');
     const mockClient = apiClient as unknown as {
