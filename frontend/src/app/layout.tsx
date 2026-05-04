@@ -136,6 +136,25 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
 
+        {/* BfCache Guard: Reloads if returning from OAuth flow to prevent stale UI */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('pageshow', function(event) {
+                try {
+                  if (sessionStorage.getItem("auth_oauth_started") === "1") {
+                    sessionStorage.removeItem("auth_oauth_started");
+                    window.location.reload();
+                  }
+                  if (document.body) {
+                    document.body.style.overflow = "";
+                  }
+                } catch(e) {}
+              });
+            `,
+          }}
+        />
+
         {/* Theme initialization script - prevents flash */}
         <script
           dangerouslySetInnerHTML={{

@@ -8,6 +8,13 @@ vi.mock("@/providers/google-auth-provider", () => ({
   ),
 }));
 
+vi.mock("next/script", () => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  default: ({ dangerouslySetInnerHTML, ...props }: any) => {
+    return <script dangerouslySetInnerHTML={dangerouslySetInnerHTML} {...props} />;
+  },
+}));
+
 vi.mock("@/components/ui/animated-background", () => ({
   AnimatedBackground: () => <div data-testid="animated-background" />,
   FloatingShapes: () => <div data-testid="floating-shapes" />,
@@ -89,20 +96,4 @@ describe("AuthLayout theme isolation", () => {
     vi.useRealTimers();
   });
 
-  it("renders an inline guard script for sessionStorage-based OAuth back-nav detection", () => {
-    const { container, unmount } = render(
-      <AuthLayout>
-        <div>Auth page</div>
-      </AuthLayout>,
-    );
-
-    const scripts = container.parentElement?.querySelectorAll("script") ?? [];
-    const guardScript = Array.from(scripts).find((s) =>
-      s.innerHTML.includes("auth_oauth_started"),
-    );
-
-    expect(guardScript).toBeTruthy();
-
-    unmount();
-  });
 });
