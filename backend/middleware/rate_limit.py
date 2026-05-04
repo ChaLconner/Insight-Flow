@@ -1,6 +1,8 @@
 """
-Rate limiting middleware for FastAPI.
-Implements per-endpoint rate limiting with stricter limits for auth endpoints.
+In-memory rate limiting middleware for FastAPI (fallback when Redis is unavailable).
+
+Used by ``core/middleware_config.py`` as the fallback global rate limiter.
+For fine-grained per-route limits, see ``rate_limiter.py`` (SlowAPI-based).
 """
 
 import logging

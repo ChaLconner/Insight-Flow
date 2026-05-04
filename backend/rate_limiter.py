@@ -1,6 +1,14 @@
 """
-Rate limiting configuration for the application.
-Uses slowapi for simple and effective rate limiting.
+Route-level rate limiting configuration (SlowAPI decorator-based).
+
+This module provides per-endpoint rate limits applied via decorators on individual
+router handlers (e.g., auth, payment). It is **complementary** to the global
+middleware rate limiters in ``middleware/rate_limit.py`` (in-memory fallback) and
+``middleware/redis_rate_limit.py`` (Redis, production).
+
+Architecture:
+    - Global middleware (``middleware_config.setup_rate_limit_middleware``) → broad DDoS protection
+    - This module (``@limiter.limit()``, ``AuthRateLimiter``) → fine-grained per-route limits
 
 Production: Uses Redis for distributed rate limiting across multiple workers.
 Development: Falls back to in-memory storage for simplicity.

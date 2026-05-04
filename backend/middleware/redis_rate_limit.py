@@ -1,6 +1,9 @@
 """
-Redis-based rate limiting middleware for distributed rate limiting.
-Uses sliding window algorithm with Redis for distributed environments.
+Redis-based rate limiting middleware for distributed environments (production).
+
+Used by ``core/middleware_config.py`` as the primary global rate limiter when Redis
+is available. Falls back to ``middleware/rate_limit.py`` (in-memory) otherwise.
+For fine-grained per-route limits, see ``rate_limiter.py`` (SlowAPI-based).
 """
 
 import time
