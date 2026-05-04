@@ -72,11 +72,11 @@ function LoginForm() {
     : "/auth/github/start";
 
   const handleGitHubLoginClick = () => {
-    if (isLoading) return;
+    if (isLoading) {return;}
     // Mark that we are navigating away for OAuth. The inline guard script
     // in auth/layout.tsx will detect this on back-navigation and reload
     // the page before React hydrates a broken state.
-    try { sessionStorage.setItem("auth_oauth_started", "1"); } catch {}
+    try { sessionStorage.setItem("auth_oauth_started", "1"); } catch { /* ignore */ }
     window.location.href = githubOAuthHref;
   };
 

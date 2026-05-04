@@ -98,8 +98,8 @@ export function useDashboard() {
         recentActivities: data.recentActivities || [],
       };
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
+    staleTime: 2 * 60 * 1000, // 2 minutes (aligned with backend cache TTL)
+    gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
     refetchOnWindowFocus: false,
     refetchOnMount: false, // Don't refetch if data is fresh
   });

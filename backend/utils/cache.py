@@ -1,6 +1,13 @@
 """
 Simple in-memory cache utility for dashboard data.
-For production, consider using Redis or similar caching solution.
+
+.. deprecated::
+    This module is deprecated. Use ``services.cache_service.CacheService`` instead,
+    which provides Redis support with an in-memory fallback, singleton management,
+    and production-grade cache invalidation.
+
+    This module is only retained for backward compatibility with existing tests
+    (``tests/test_cache_utils.py``). No new code should import from here.
 """
 
 import hashlib

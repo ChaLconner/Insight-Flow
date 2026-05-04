@@ -7,56 +7,54 @@ import { useAppStore, appSelectors } from "@/stores/app-store";
 import { toast } from "sonner";
 
 // Hook for app global state management
-// Hook for app global state management
 const EMPTY_OBJECT: Record<string, unknown> = {};
 
 export const useAppState = () => {
-  // Zustand store state
-  const store = useAppStore();
+  // Use granular selectors to avoid unnecessary re-renders
+  // Each selector subscribes only to the specific state it needs
+  const isLoading = useAppStore((state) => appSelectors.isLoading(state));
+  const isSideNavOpen = useAppStore((state) => appSelectors.isSideNavOpen(state));
+  const isFullscreen = useAppStore((state) => appSelectors.isFullscreen(state));
+  const isDarkMode = useAppStore((state) => appSelectors.isDarkMode(state));
+  const breadcrumbs = useAppStore((state) => appSelectors.getBreadcrumbs(state));
+  const alerts = useAppStore((state) => appSelectors.getAlerts(state));
+  const modals = useAppStore((state) => appSelectors.getModals(state));
+  const search = useAppStore((state) => appSelectors.getSearch(state));
+  const forms = useAppStore((state) => appSelectors.getForms(state));
+  const currentProjectId = useAppStore((state) => appSelectors.getCurrentProjectId(state));
+  const userPreferences = useAppStore((state) => appSelectors.getUserPreferences(state));
 
-  // Selectors
-  const isLoading = appSelectors.isLoading(store);
-  const isSideNavOpen = appSelectors.isSideNavOpen(store);
-  const isFullscreen = appSelectors.isFullscreen(store);
-  const isDarkMode = appSelectors.isDarkMode(store);
-  const breadcrumbs = appSelectors.getBreadcrumbs(store);
-  const alerts = appSelectors.getAlerts(store);
-  const modals = appSelectors.getModals(store);
-  const search = appSelectors.getSearch(store);
-  const forms = appSelectors.getForms(store);
-  const currentProjectId = appSelectors.getCurrentProjectId(store);
-  const userPreferences = appSelectors.getUserPreferences(store);
-
-  // Actions
-  const setLoading = store.setLoading;
-  const toggleSideNav = store.toggleSideNav;
-  const setFullscreen = store.setFullscreen;
-  const toggleDarkMode = store.toggleDarkMode;
-  const addAlert = store.addAlert;
-  const removeAlert = store.removeAlert;
-  const clearAlerts = store.clearAlerts;
-  const showModal = store.showModal;
-  const hideModal = store.hideModal;
-  const closeAllModals = store.closeAllModals;
-  const setSearch = store.setSearch;
-  const clearSearch = store.clearSearch;
-  const updateForm = store.updateForm;
-  const clearForm = store.clearForm;
-  const setCurrentProjectId = store.setCurrentProjectId;
-  const updateUserPreferences = store.updateUserPreferences;
-  const setBreadcrumbs = store.setBreadcrumbs;
+  // Actions — stable references (functions don't change between renders)
+  const setLoading = useAppStore((state) => state.setLoading);
+  const toggleSideNav = useAppStore((state) => state.toggleSideNav);
+  const setFullscreen = useAppStore((state) => state.setFullscreen);
+  const toggleDarkMode = useAppStore((state) => state.toggleDarkMode);
+  const addAlert = useAppStore((state) => state.addAlert);
+  const removeAlert = useAppStore((state) => state.removeAlert);
+  const clearAlerts = useAppStore((state) => state.clearAlerts);
+  const showModal = useAppStore((state) => state.showModal);
+  const hideModal = useAppStore((state) => state.hideModal);
+  const closeAllModals = useAppStore((state) => state.closeAllModals);
+  const setSearch = useAppStore((state) => state.setSearch);
+  const clearSearch = useAppStore((state) => state.clearSearch);
+  const updateForm = useAppStore((state) => state.updateForm);
+  const clearForm = useAppStore((state) => state.clearForm);
+  const setCurrentProjectId = useAppStore((state) => state.setCurrentProjectId);
+  const updateUserPreferences = useAppStore((state) => state.updateUserPreferences);
+  const setBreadcrumbs = useAppStore((state) => state.setBreadcrumbs);
 
   // Custom app actions
-  const setPageTitle = store.setPageTitle;
-  const showToast = store.showToast;
-  const hideToast = store.hideToast;
-  const addNotification = store.addNotification;
-  const removeNotification = store.removeNotification;
-  const clearNotifications = store.clearNotifications;
+  const setPageTitle = useAppStore((state) => state.setPageTitle);
+  const showToast = useAppStore((state) => state.showToast);
+  const hideToast = useAppStore((state) => state.hideToast);
+  const addNotification = useAppStore((state) => state.addNotification);
+  const removeNotification = useAppStore((state) => state.removeNotification);
+  const clearNotifications = useAppStore((state) => state.clearNotifications);
 
   // Advanced actions
-  const navigateWithBreadcrumb = store.navigateWithBreadcrumb;
-  const resetAppState = store.resetAppState;
+  const navigateWithBreadcrumb = useAppStore((state) => state.navigateWithBreadcrumb);
+  const resetAppState = useAppStore((state) => state.resetAppState);
+  const setUserPreferences = useAppStore((state) => state.setUserPreferences);
 
   // Convenience functions for toast notifications
   // These use sonner toast directly without adding to alerts to avoid duplicate notifications
@@ -219,7 +217,7 @@ export const useAppState = () => {
     clearNotifications,
 
     // Store methods for advanced usage
-    setUserPreferences: store.setUserPreferences,
+    setUserPreferences,
   };
 };
 

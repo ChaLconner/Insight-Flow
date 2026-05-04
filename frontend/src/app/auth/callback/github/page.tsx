@@ -39,7 +39,7 @@ function GitHubCallbackContent() {
       // Clear the OAuth navigation marker – we completed the flow
       // (or at least reached the callback). This prevents a stale flag
       // from causing an unnecessary reload on future auth page visits.
-      try { sessionStorage.removeItem("auth_oauth_started"); } catch {}
+      try { sessionStorage.removeItem("auth_oauth_started"); } catch { /* ignore */ }
 
       const code = searchParams.get("code");
       const state = searchParams.get("state");

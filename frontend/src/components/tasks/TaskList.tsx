@@ -25,16 +25,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Task } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
 
-// import { tasksApi } from "@/lib/api-endpoints";
-// import { apiClient } from "@/lib/api-client";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { TaskItem } from "./TaskItem";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTasks } from "@/hooks/use-tasks";
 import { useDebounce } from "@/hooks/use-debounce";
 
-// import { toast } from "sonner";
-// import { getErrorMessage } from "@/lib/error-utils";
 import dynamic from "next/dynamic";
 import {
   isEditableEventTarget,

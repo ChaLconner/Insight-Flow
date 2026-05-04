@@ -50,7 +50,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("focus", handleFocus);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   // Use useLayoutEffect for immediate execution before paint
@@ -70,7 +70,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     // Reset body overflow – a Dialog or modal from a previous page may
     // have left `overflow: hidden` on the body, blocking all interaction.
     document.body.style.overflow = "";
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   // Set up MutationObserver to prevent any theme changes while on auth pages
@@ -129,7 +129,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         root.setAttribute("data-color-scheme", original.dataColorScheme);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   return (

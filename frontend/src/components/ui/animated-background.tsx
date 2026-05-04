@@ -300,7 +300,7 @@ export function AnimatedBackground({
       window.removeEventListener("mousemove", ensureAnimationHealthy);
       window.removeEventListener("click", ensureAnimationHealthy);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
   return (

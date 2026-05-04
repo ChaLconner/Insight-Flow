@@ -77,8 +77,8 @@ function RegisterPageContent() {
   });
 
   const handleGitHubSignupClick = () => {
-    if (isLoading) return;
-    try { sessionStorage.setItem("auth_oauth_started", "1"); } catch {}
+    if (isLoading) {return;}
+    try { sessionStorage.setItem("auth_oauth_started", "1"); } catch { /* ignore */ }
     window.location.href = "/auth/github/start";
   };
 
