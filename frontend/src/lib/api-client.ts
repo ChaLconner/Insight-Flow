@@ -40,12 +40,7 @@ export interface AuthTokens {
   token_type?: string;
 }
 
-export interface RefreshTokenResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in?: number;
-  token_type?: string;
-}
+export type RefreshTokenResponse = AuthTokens;
 
 // Backend health check response
 export interface HealthCheckResponse {
@@ -256,7 +251,7 @@ apiClient.interceptors.response.use(
     }
 
     // Handle other errors
-    const errorMessage = getErrorMessage(error);
+    const errorMessage = getAxiosErrorMessage(error);
 
     return Promise.reject({
       ...error,
@@ -325,8 +320,8 @@ async function clearAuthTokens(): Promise<void> {
   // Keep isLoggingOut true until the page unloads
 }
 
-// Helper function to get user-friendly error message
-export function getErrorMessage(error: AxiosError<unknown>): string {
+// Helper function to get user-friendly error message from Axios errors
+export function getAxiosErrorMessage(error: AxiosError<unknown>): string {
   // Enhanced network error handling
   if (!error.response) {
     if (error.code === "ECONNABORTED") {

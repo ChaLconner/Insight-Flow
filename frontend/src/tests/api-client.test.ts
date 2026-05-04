@@ -453,22 +453,22 @@ describe('Retry Logic', () => {
 
 describe('API Error Messages', () => {
   it('should return specific network error messages', async () => {
-    const { getErrorMessage } = await import('@/lib/api-client');
+    const { getAxiosErrorMessage } = await import('@/lib/api-client');
 
-    expect(getErrorMessage({ code: 'ECONNABORTED' } as never)).toBe(
+    expect(getAxiosErrorMessage({ code: 'ECONNABORTED' } as never)).toBe(
       'Request timeout. Please check your connection and try again.',
     );
-    expect(getErrorMessage({ code: 'ECONNREFUSED' } as never)).toBe(
+    expect(getAxiosErrorMessage({ code: 'ECONNREFUSED' } as never)).toBe(
       'Cannot connect to server. Please ensure backend is running.',
     );
-    expect(getErrorMessage({ code: 'ENOTFOUND' } as never)).toBe(
+    expect(getAxiosErrorMessage({ code: 'ENOTFOUND' } as never)).toBe(
       'Server not found. Please check API URL.',
     );
-    expect(getErrorMessage({ code: 'ETIMEDOUT' } as never)).toBe(
+    expect(getAxiosErrorMessage({ code: 'ETIMEDOUT' } as never)).toBe(
       'Connection timed out. Please check your connection.',
     );
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         config: {
           'axios-retry': {
             retryCount: 2,
@@ -476,56 +476,56 @@ describe('API Error Messages', () => {
         },
       } as never),
     ).toBe('Network error after 2 retry attempts. Please check your connection.');
-    expect(getErrorMessage({} as never)).toBe(
+    expect(getAxiosErrorMessage({} as never)).toBe(
       'Network error. Please check your connection.',
     );
   });
 
   it('should return status-specific API error messages', async () => {
-    const { getErrorMessage } = await import('@/lib/api-client');
+    const { getAxiosErrorMessage } = await import('@/lib/api-client');
 
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 400, data: { detail: 'Bad data' } },
       } as never),
     ).toBe('Bad data');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 400, data: { detail: [{ msg: 'Invalid' }] } },
       } as never),
     ).toBe(JSON.stringify([{ msg: 'Invalid' }]));
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 401, data: {} },
       } as never),
     ).toBe('You are not authorized to perform this action.');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 403, data: { detail: 'No access' } },
       } as never),
     ).toBe('No access');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 404, data: { message: 'Missing' } },
       } as never),
     ).toBe('Missing');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 422, data: { message: 'Invalid form' } },
       } as never),
     ).toBe('Invalid form');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 429, data: {} },
       } as never),
     ).toBe('Too many requests. Please wait a moment.');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 500, data: { detail: 'Exploded' } },
       } as never),
     ).toBe('Exploded');
     expect(
-      getErrorMessage({
+      getAxiosErrorMessage({
         response: { status: 418, data: {} },
       } as never),
     ).toBe('Server error. Please try again later.');
