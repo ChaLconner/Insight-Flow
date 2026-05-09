@@ -219,16 +219,49 @@ class AsyncTaskService:
             logger.warning(f"User {user_id} unauthorized for task {task.id}")
             raise ValueError("Not authorized to perform this action on this task")
 
-    async def update_task(  # noqa: PLR0912, PLR0915
-        self, task_id: uuid.UUID, task_data: TaskUpdate, user_id: uuid.UUID
+    async def _get_authorized_task(
+        self, task_id: uuid.UUID, user_id: uuid.UUID, allow_assignee: bool = False
     ) -> Task:
-        """Update task information."""
         task = await self.get_task_by_id(task_id)
         if not task:
             raise ValueError("Task not found")
 
-        # Check permissions (Assignee allowed)
-        await self._check_task_permission(task, user_id, allow_assignee=True)
+        await self._check_task_permission(task, user_id, allow_assignee=allow_assignee)
+        return task
+
+    def _build_task_list_query(
+        self, filters: list[Any], search: str | None = None, status: str | None = None
+    ) -> tuple[Any, list[Any]]:
+        query = (
+            select(Task)
+            .options(
+                selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
+            )
+            .filter(*filters)
+        )
+
+        if search:
+            escaped_search = escape_like_pattern(search)
+            search_term = f"%{escaped_search}%"
+            search_filter = or_(
+                Task.title.ilike(search_term, escape="\\"),
+                Task.description.ilike(search_term, escape="\\"),
+            )
+            filters.append(search_filter)
+            query = query.filter(search_filter)
+
+        if status and status.lower() != "all":
+            status_filter = Task.status == status.lower()
+            filters.append(status_filter)
+            query = query.filter(status_filter)
+
+        return query, filters
+
+    async def update_task(  # noqa: PLR0912, PLR0915
+        self, task_id: uuid.UUID, task_data: TaskUpdate, user_id: uuid.UUID
+    ) -> Task:
+        """Update task information."""
+        task = await self._get_authorized_task(task_id, user_id, allow_assignee=True)
 
         # Check if assignee exists (if provided)
         if task_data.assignee_id:
@@ -315,12 +348,7 @@ class AsyncTaskService:
 
     async def delete_task(self, task_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Delete a task."""
-        task = await self.get_task_by_id(task_id)
-        if not task:
-            raise ValueError("Task not found")
-
-        # Check permissions (Assignee NOT allowed)
-        await self._check_task_permission(task, user_id, allow_assignee=False)
+        task = await self._get_authorized_task(task_id, user_id)
 
         # Log before delete
         try:
@@ -345,12 +373,7 @@ class AsyncTaskService:
         self, task_id: uuid.UUID, status_update: TaskStatusUpdate, user_id: uuid.UUID
     ) -> Task:
         """Update task status."""
-        task = await self.get_task_by_id(task_id)
-        if not task:
-            raise ValueError("Task not found")
-
-        # Check permissions (Assignee allowed)
-        await self._check_task_permission(task, user_id, allow_assignee=True)
+        task = await self._get_authorized_task(task_id, user_id, allow_assignee=True)
 
         old_status = task.status
 
@@ -394,12 +417,7 @@ class AsyncTaskService:
         self, task_id: uuid.UUID, assign_data: TaskAssign, user_id: uuid.UUID
     ) -> Task:
         """Assign task to a user."""
-        task = await self.get_task_by_id(task_id)
-        if not task:
-            raise ValueError("Task not found")
-
-        # Check permissions
-        await self._check_task_permission(task, user_id, allow_assignee=False)
+        task = await self._get_authorized_task(task_id, user_id)
 
         # Check assignee exists
         assignee_result = await self.db.execute(
@@ -442,34 +460,7 @@ class AsyncTaskService:
         Returns a tuple of (tasks, total_count).
         """
         filters = [or_(Task.assignee_id == user_id, Task.created_by == user_id)]
-
-        # Base query with eager loading
-        query = (
-            select(Task)
-            .options(
-                selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
-            )
-            .filter(*filters)
-        )
-
-        # Apply search filter
-        if search:
-            # Escape SQL LIKE wildcards to prevent pattern injection
-            escaped_search = escape_like_pattern(search)
-            search_term = f"%{escaped_search}%"
-            search_filter = or_(
-                Task.title.ilike(search_term, escape="\\"),
-                Task.description.ilike(search_term, escape="\\"),
-            )
-            filters.append(search_filter)
-            query = query.filter(search_filter)
-
-        # Apply status filter
-        if status and status.lower() != "all":
-            status_lower = status.lower()
-            status_filter = Task.status == status_lower
-            filters.append(status_filter)
-            query = query.filter(status_filter)
+        query, filters = self._build_task_list_query(filters, search, status)
 
         # Count total
         count_query = select(func.count(Task.id)).filter(*filters)
@@ -497,33 +488,7 @@ class AsyncTaskService:
         Returns (tasks, total_count).
         """
         filters = [Task.project_id == project_id]
-
-        query = (
-            select(Task)
-            .options(
-                selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
-            )
-            .filter(*filters)
-        )
-
-        # Apply search filter
-        if search:
-            # Escape SQL LIKE wildcards to prevent pattern injection
-            escaped_search = escape_like_pattern(search)
-            search_term = f"%{escaped_search}%"
-            search_filter = or_(
-                Task.title.ilike(search_term, escape="\\"),
-                Task.description.ilike(search_term, escape="\\"),
-            )
-            filters.append(search_filter)
-            query = query.filter(search_filter)
-
-        # Apply status filter
-        if status and status.lower() != "all":
-            status_lower = status.lower()
-            status_filter = Task.status == status_lower
-            filters.append(status_filter)
-            query = query.filter(status_filter)
+        query, filters = self._build_task_list_query(filters, search, status)
 
         # Apply sorting
         if sort_by:

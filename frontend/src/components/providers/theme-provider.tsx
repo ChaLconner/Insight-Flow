@@ -4,7 +4,7 @@
 
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/hooks/use-theme";
 import { useIsHydrated } from "@/hooks/use-hydration";
@@ -26,7 +26,8 @@ export function ThemeProvider({
 }: ThemeProviderProps) {
   const { initializeTheme, currentTheme } = useTheme();
   const isHydrated = useIsHydrated();
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const lastSyncedThemeRef = useRef<string | null>(null);
 
   // Check if on auth pages - skip theme operations
   const pathname = usePathname();
@@ -48,10 +49,22 @@ export function ThemeProvider({
       return;
     }
 
+    if (lastSyncedThemeRef.current === null) {
+      lastSyncedThemeRef.current = currentTheme;
+      return;
+    }
+
+    if (lastSyncedThemeRef.current === currentTheme) {
+      return;
+    }
+
     // Debounce save to prevent excessive API calls
     const timer = setTimeout(() => {
       usersApi
         .updateSettings({ theme: currentTheme })
+        .then(() => {
+          lastSyncedThemeRef.current = currentTheme;
+        })
         .catch((err) => console.warn("Failed to sync theme:", err));
     }, 2000);
 

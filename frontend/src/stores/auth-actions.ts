@@ -7,13 +7,15 @@ import { AuthResponse } from "@/types";
 import { toast } from "sonner";
 
 // Track initialization state to prevent duplicate calls
-// Track initialization state to prevent duplicate calls
 // (Moved to auth-store.ts)
 
 // Auth actions that depend on the store but don't create circular imports
 export const authActions = {
   // Login function that stores data in localStorage and updates store
-  loginSuccess: async (response: AuthResponse) => {
+  loginSuccess: async (
+    response: AuthResponse,
+    options: { rememberMe?: boolean } = {},
+  ) => {
     const { login } = useAuthStore.getState();
 
     // Backend may set HttpOnly cookies, but also returns tokens in body for fallback.
@@ -36,7 +38,7 @@ export const authActions = {
     }
 
     // Update store (store tokens as well for compatibility)
-    login(user);
+    login(user, { rememberMe: options.rememberMe === true });
 
     // Get display name with fallbacks
     const displayName = user?.name || user?.firstName || user?.username || user?.email || "User";
@@ -50,8 +52,11 @@ export const authActions = {
   },
 
   // Alternative login method for compatibility
-  loginWithResponse: async (response: AuthResponse) => {
-    await authActions.loginSuccess(response);
+  loginWithResponse: async (
+    response: AuthResponse,
+    options: { rememberMe?: boolean } = {},
+  ) => {
+    await authActions.loginSuccess(response, options);
   },
 
   // Logout function
@@ -115,13 +120,6 @@ export const authActions = {
     }
   },
 };
-
-// Listen for auth events (only in browser environment)
-if (typeof window !== "undefined") {
-  window.addEventListener("auth:login", (_event: Event) => {});
-
-  window.addEventListener("auth:logout", () => {});
-}
 
 async function clearClientCaches(): Promise<void> {
   if (typeof window === "undefined") {

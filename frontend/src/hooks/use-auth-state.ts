@@ -322,10 +322,10 @@ export const useSessionTimeout = (timeoutMinutes: number = 30) => {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // Activity listeners
+    // Activity listeners — mousemove intentionally excluded as it fires
+    // thousands of times per second; mousedown is sufficient for detecting activity
     const activityEvents = [
       "mousedown",
-      "mousemove",
       "keypress",
       "scroll",
       "touchstart",

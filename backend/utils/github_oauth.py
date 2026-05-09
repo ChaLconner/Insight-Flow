@@ -16,6 +16,55 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI", "http://localhost:3000/auth/callback/github")
 
 
+def _extract_access_token(data: dict) -> str | None:
+    if "error" in data:
+        logger.error(f"GitHub OAuth error: {data.get('error_description', data.get('error'))}")
+        return None
+
+    access_token = data.get("access_token")
+    if not access_token:
+        logger.error("No access token in GitHub response")
+        return None
+
+    logger.info("Successfully exchanged code for GitHub access token")
+    return str(access_token)
+
+
+def _select_verified_email(emails: list[dict]) -> str | None:
+    primary_email = next(
+        (
+            email_obj.get("email")
+            for email_obj in emails
+            if email_obj.get("primary") and email_obj.get("verified")
+        ),
+        None,
+    )
+    if primary_email:
+        return str(primary_email)
+
+    verified_email = next(
+        (email_obj.get("email") for email_obj in emails if email_obj.get("verified")),
+        None,
+    )
+    return str(verified_email) if verified_email else None
+
+
+def _build_github_user_info(user_data: dict, email: str | None) -> dict | None:
+    if not email:
+        logger.error("Could not retrieve email from GitHub")
+        return None
+
+    logger.info(f"Successfully retrieved GitHub user info for: {mask_email(email)}")
+    return {
+        "id": str(user_data.get("id")),
+        "email": email,
+        "name": user_data.get("name") or user_data.get("login"),
+        "picture": user_data.get("avatar_url"),
+        "login": user_data.get("login"),
+        "email_verified": True,  # GitHub only returns verified emails
+    }
+
+
 def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str | None:
     """
     Exchange GitHub authorization code for access token.
@@ -48,17 +97,7 @@ def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str |
 
         data = response.json()
 
-        if "error" in data:
-            logger.error(f"GitHub OAuth error: {data.get('error_description', data.get('error'))}")
-            return None
-
-        access_token = data.get("access_token")
-        if not access_token:
-            logger.error("No access token in GitHub response")
-            return None
-
-        logger.info("Successfully exchanged code for GitHub access token")
-        return str(access_token)
+        return _extract_access_token(data)
 
     except Exception as e:
         logger.error(f"Error exchanging code for token: {e}")
@@ -106,33 +145,9 @@ def get_github_user_info(access_token: str) -> dict | None:
 
             if emails_response.status_code == 200:
                 emails = emails_response.json()
-                # Find primary, verified email
-                for email_obj in emails:
-                    if email_obj.get("primary") and email_obj.get("verified"):
-                        email = email_obj.get("email")
-                        break
+                email = _select_verified_email(emails)
 
-                # Fallback to first verified email
-                if not email:
-                    for email_obj in emails:
-                        if email_obj.get("verified"):
-                            email = email_obj.get("email")
-                            break
-
-        if not email:
-            logger.error("Could not retrieve email from GitHub")
-            return None
-
-        logger.info(f"Successfully retrieved GitHub user info for: {mask_email(email)}")
-
-        return {
-            "id": str(user_data.get("id")),
-            "email": email,
-            "name": user_data.get("name") or user_data.get("login"),
-            "picture": user_data.get("avatar_url"),
-            "login": user_data.get("login"),
-            "email_verified": True,  # GitHub only returns verified emails
-        }
+        return _build_github_user_info(user_data, email)
 
     except Exception as e:
         logger.error(f"Error getting GitHub user info: {e}")
@@ -204,17 +219,7 @@ async def async_exchange_code_for_token(code: str, redirect_uri: str | None = No
 
         data = response.json()
 
-        # Check for errors or missing token
-        if "error" in data:
-            logger.error(f"GitHub OAuth error: {data.get('error_description', data.get('error'))}")
-            return None
-
-        access_token = data.get("access_token")
-        if access_token:
-            logger.info("Successfully exchanged code for GitHub access token")
-        else:
-            logger.error("No access token in GitHub response")
-        return str(access_token) if access_token else None
+        return _extract_access_token(data)
 
     except ImportError:
         logger.warning("httpx not available, falling back to sync version")
@@ -273,33 +278,9 @@ async def async_get_github_user_info(access_token: str) -> dict | None:
 
                 if emails_response.status_code == 200:
                     emails = emails_response.json()
-                    # Find primary, verified email
-                    for email_obj in emails:
-                        if email_obj.get("primary") and email_obj.get("verified"):
-                            email = email_obj.get("email")
-                            break
+                    email = _select_verified_email(emails)
 
-                    # Fallback to first verified email
-                    if not email:
-                        for email_obj in emails:
-                            if email_obj.get("verified"):
-                                email = email_obj.get("email")
-                                break
-
-        if not email:
-            logger.error("Could not retrieve email from GitHub")
-            return None
-
-        logger.info(f"Successfully retrieved GitHub user info for: {mask_email(email)}")
-
-        return {
-            "id": str(user_data.get("id")),
-            "email": email,
-            "name": user_data.get("name") or user_data.get("login"),
-            "picture": user_data.get("avatar_url"),
-            "login": user_data.get("login"),
-            "email_verified": True,  # GitHub only returns verified emails
-        }
+        return _build_github_user_info(user_data, email)
 
     except ImportError:
         logger.warning("httpx not available, falling back to sync version")

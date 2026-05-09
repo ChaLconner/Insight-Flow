@@ -3,6 +3,12 @@ from uuid import uuid4
 
 import pytest
 import stripe
+from payment_service_test_helpers import (
+    configured_stripe_settings,
+    make_mock_db_session,
+    make_payment_service,
+    make_test_user,
+)
 
 from models.payment import (
     PaymentHistory,
@@ -11,47 +17,29 @@ from models.payment import (
     SubscriptionPlan,
     SubscriptionStatus,
 )
-from models.user import User
 from models.webhook_log import WebhookEventLog
 from schemas.payment import SubscriptionCreate, SubscriptionPlanEnum
-from services.payment_service import PaymentService
-
-# ============================================================================
-# Fixtures (Copied from test_payment_service_supplement.py)
-# ============================================================================
 
 
 @pytest.fixture
 def mock_settings():
-    with patch("services.payment_service.get_settings") as mock:
-        mock.return_value.stripe.is_configured = True
-        mock.return_value.stripe.secret_key = "sk_test_123"
+    with configured_stripe_settings() as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_db_session():
-    mock = AsyncMock()
-    mock.execute = AsyncMock(return_value=MagicMock())
-    mock.commit = AsyncMock()
-    mock.refresh = AsyncMock()
-    mock.add = MagicMock()
-    mock.add_all = MagicMock()
-    mock.rollback = AsyncMock()
-    return mock
+    return make_mock_db_session()
 
 
 @pytest.fixture
 def payment_service(mock_settings):
-    return PaymentService()
+    return make_payment_service()
 
 
 @pytest.fixture
 def test_user():
-    user = MagicMock(spec=User)
-    user.id = uuid4()
-    user.email = "test@example.com"
-    return user
+    return make_test_user()
 
 
 # ============================================================================

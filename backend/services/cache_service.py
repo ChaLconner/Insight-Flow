@@ -249,13 +249,15 @@ class RedisCache(CacheBackend):
     def _iter_keys(self, match: str) -> Iterable[str]:
         scan_iter = getattr(self.client, "scan_iter", None)
         if callable(scan_iter):
-            yield from scan_iter(match=match, count=500)
+            for key in scan_iter(match=match, count=500):
+                yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
             return
 
         cursor = 0
         while True:
             cursor, keys = self.client.scan(cursor=cursor, match=match, count=500)
-            yield from keys
+            for key in keys:
+                yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
             if cursor == 0:
                 break
 

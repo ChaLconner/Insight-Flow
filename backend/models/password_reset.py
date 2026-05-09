@@ -20,7 +20,7 @@ class PasswordReset(BaseModel):
 
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
 
     @staticmethod
@@ -47,7 +47,10 @@ class PasswordReset(BaseModel):
 
     def is_expired(self):
         """Check if the token has expired."""
-        return datetime.now(UTC) > self.expires_at
+        expires_at = self.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        return datetime.now(UTC) > expires_at
 
     def is_valid(self):
         """Check if the token is valid (not expired and not used)."""

@@ -63,7 +63,9 @@ function ProjectsPageSkeleton() {
 export function ProjectsClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const authLoading = useAuthStore((state) => state.isLoading);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
 
   // URL State
   const activeTab: "projects" | "tasks" =
@@ -95,7 +97,7 @@ export function ProjectsClient() {
     search: debouncedSearchQuery,
     status: statusFilter,
     sortBy,
-    enabled: activeTab === "projects",
+    enabled: activeTab === "projects" && isInitialized && isAuthenticated,
   });
 
 

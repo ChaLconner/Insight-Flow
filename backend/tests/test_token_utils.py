@@ -6,6 +6,8 @@ Tests token utility functions.
 
 from unittest.mock import MagicMock
 
+from fastapi import Response
+
 
 class TestTokenConstants:
     """Tests for token constants."""
@@ -56,6 +58,44 @@ class TestCookieFunctions:
 
         # Should have called delete_cookie for both tokens
         assert mock_response.delete_cookie.call_count >= 2
+
+    def test_remember_me_false_sets_session_refresh_cookie(self):
+        """Test default login refresh cookie is not persisted across browser restarts."""
+        from utils.token_utils import create_and_set_auth_cookies
+
+        response = Response()
+
+        create_and_set_auth_cookies(
+            response,
+            user_id="00000000-0000-0000-0000-000000000001",
+            remember_me=False,
+        )
+
+        refresh_cookie = next(
+            cookie
+            for cookie in response.headers.getlist("set-cookie")
+            if cookie.startswith("refresh_token=")
+        )
+        assert "Max-Age=" not in refresh_cookie
+
+    def test_remember_me_true_sets_persistent_refresh_cookie(self):
+        """Test remember me persists refresh cookie for the configured extended lifetime."""
+        from utils.token_utils import create_and_set_auth_cookies
+
+        response = Response()
+
+        create_and_set_auth_cookies(
+            response,
+            user_id="00000000-0000-0000-0000-000000000001",
+            remember_me=True,
+        )
+
+        refresh_cookie = next(
+            cookie
+            for cookie in response.headers.getlist("set-cookie")
+            if cookie.startswith("refresh_token=")
+        )
+        assert "Max-Age=2592000" in refresh_cookie
 
 
 class TestTokenExpiration:

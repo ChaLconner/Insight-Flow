@@ -80,7 +80,8 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
   const isLoadingRef = useRef(false);
   const lastLoadTime = useRef<number>(0);
 
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
 
   // Fetch stats
   const fetchStats = useCallback(async () => {

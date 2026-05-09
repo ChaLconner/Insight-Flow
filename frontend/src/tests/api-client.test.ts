@@ -358,6 +358,7 @@ describe('Retry Logic', () => {
 
   it('should retry idempotent GET server errors', async () => {
     const { shouldRetryRequest } = await import('@/lib/api-client');
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = shouldRetryRequest({
       config: {
@@ -370,6 +371,8 @@ describe('Retry Logic', () => {
     } as never);
 
     expect(result).toBe(true);
+    expect(consoleWarn).toHaveBeenCalledWith('🔄 Retrying server error 503 (attempt 1)');
+    consoleWarn.mockRestore();
   });
 
   it('should not retry non-idempotent requests or auth requests', async () => {
@@ -395,6 +398,7 @@ describe('Retry Logic', () => {
 
   it('should not retry timed-out idempotent network requests', async () => {
     const { shouldRetryRequest } = await import('@/lib/api-client');
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     expect(
       shouldRetryRequest({
@@ -405,6 +409,8 @@ describe('Retry Logic', () => {
         },
       } as never),
     ).toBe(false);
+    expect(consoleWarn).not.toHaveBeenCalled();
+    consoleWarn.mockRestore();
   });
 
   it('should retry on network error', () => {

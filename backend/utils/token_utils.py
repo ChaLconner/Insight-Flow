@@ -76,7 +76,7 @@ def set_auth_cookies(
     access_token: str,
     refresh_token: str,
     log_user_info: str | None = None,
-    refresh_expire_days: int = REFRESH_TOKEN_EXPIRE_DAYS,
+    refresh_expire_days: int | None = None,
 ) -> None:
     """
     Set HttpOnly authentication cookies on the response.
@@ -86,7 +86,8 @@ def set_auth_cookies(
         access_token: The access token to set
         refresh_token: The refresh token to set
         log_user_info: Optional masked user info for logging
-        refresh_expire_days: Expiration days for refresh token
+        refresh_expire_days: Expiration days for persistent refresh token.
+            None creates a session cookie that expires when the browser closes.
     """
     # For cross-site requests (Vercel <-> Render), SameSite must be 'none'
     # and Secure must be True. If not in production (local dev), we can use
@@ -112,15 +113,25 @@ def set_auth_cookies(
         path="/",
     )
 
-    response.set_cookie(
-        key=REFRESH_TOKEN_KEY,
-        value=refresh_token,
-        httponly=True,
-        secure=secure_flag,
-        samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
-        max_age=refresh_expire_days * 24 * 60 * 60,
-        path="/",
-    )
+    if refresh_expire_days is None:
+        response.set_cookie(
+            key=REFRESH_TOKEN_KEY,
+            value=refresh_token,
+            httponly=True,
+            secure=secure_flag,
+            samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
+            path="/",
+        )
+    else:
+        response.set_cookie(
+            key=REFRESH_TOKEN_KEY,
+            value=refresh_token,
+            httponly=True,
+            secure=secure_flag,
+            samesite=cast("Literal['lax', 'strict', 'none']", samesite_flag),
+            max_age=refresh_expire_days * 24 * 60 * 60,
+            path="/",
+        )
 
     if log_user_info:
         logger.info(f"Auth cookies set for user {log_user_info}")
@@ -196,5 +207,8 @@ def create_and_set_auth_cookies(
     access_token, refresh_token, refresh_expire_days = create_auth_tokens(
         user_id, fingerprint, remember_me
     )
-    set_auth_cookies(response, access_token, refresh_token, log_user_info, refresh_expire_days)
+    refresh_cookie_expire_days = refresh_expire_days if remember_me else None
+    set_auth_cookies(
+        response, access_token, refresh_token, log_user_info, refresh_cookie_expire_days
+    )
     return access_token, refresh_token

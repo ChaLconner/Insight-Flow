@@ -6,6 +6,7 @@ import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { AnalyticsPeriod } from "@/types";
 import { useAnalytics, useTeamWorkload } from "@/hooks/use-analytics";
 import type { TeamWorkloadParams } from "@/app/analytics/types";
+import { useAuthStore } from "@/stores/auth-store";
 
 // Components
 import { AnalyticsHeader } from "@/components/analytics/AnalyticsHeader";
@@ -83,6 +84,11 @@ const EMPTY_ARRAY: never[] = [];
 // Main Component
 // ============================================
 export default function AnalyticsPage() {
+  const authLoading = useAuthStore((state) => state.isLoading);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
+  const canFetchAnalytics = isInitialized && isAuthenticated;
+
   // State
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(
     AnalyticsPeriod.MONTH,
@@ -93,7 +99,7 @@ export default function AnalyticsPage() {
 
   // Data fetching hooks
   const { data, isLoading, error, refetch, isRefetching } =
-    useAnalytics(selectedPeriod);
+    useAnalytics(selectedPeriod, { enabled: canFetchAnalytics });
   const shouldFetchPaginatedWorkload =
     (data?.teamWorkload?.length ?? 0) >= PAGINATION_THRESHOLD;
 
@@ -102,7 +108,7 @@ export default function AnalyticsPage() {
     isLoading: isWorkloadLoading,
     isFetching: isWorkloadFetching,
   } = useTeamWorkload(workloadParams, {
-    enabled: shouldFetchPaginatedWorkload,
+    enabled: canFetchAnalytics && shouldFetchPaginatedWorkload,
   });
 
   // ============================================
@@ -139,8 +145,12 @@ export default function AnalyticsPage() {
   // ============================================
 
   // Loading state
-  if (isLoading) {
-    return <AnalyticsPageSkeleton />;
+  if (authLoading || !canFetchAnalytics || isLoading) {
+    return (
+      <ProtectedLayout>
+        <AnalyticsPageSkeleton />
+      </ProtectedLayout>
+    );
   }
 
   // Error state

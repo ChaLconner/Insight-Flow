@@ -76,6 +76,17 @@ describe("useDashboard Hook", () => {
     expect(typeof result.current.isLoading).toBe("boolean");
   });
 
+  it("should not fetch dashboard data when disabled", async () => {
+    const { dashboardApi } = await import("@/lib/api-endpoints");
+    const { useDashboard } = await import("@/hooks/use-dashboard");
+
+    renderHook(() => useDashboard({ enabled: false }), {
+      wrapper: createWrapper(),
+    });
+
+    expect(dashboardApi.getOverview).not.toHaveBeenCalled();
+  });
+
   it("should transform API response with select function", async () => {
     const { dashboardApi } = await import("@/lib/api-endpoints");
 

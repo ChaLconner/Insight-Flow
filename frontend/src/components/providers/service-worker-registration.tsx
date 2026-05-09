@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { isE2ERuntime } from "@/lib/runtime-flags";
 
 /**
  * Service Worker Registration Component
@@ -9,6 +10,10 @@ import { useEffect } from "react";
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
+    if (isE2ERuntime()) {
+      return;
+    }
+
     if (
       process.env.NODE_ENV !== "production" &&
       typeof window !== "undefined" &&
@@ -29,6 +34,10 @@ export function ServiceWorkerRegistration() {
   }, []);
 
   return null;
+}
+
+export function shouldRunDevelopmentServiceWorkerCleanup(): boolean {
+  return process.env.NODE_ENV !== "production" && !isE2ERuntime();
 }
 
 async function unregisterDevelopmentServiceWorkers() {

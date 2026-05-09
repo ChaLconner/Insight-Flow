@@ -51,7 +51,11 @@ export const dashboardKeys = {
   overview: () => [...dashboardKeys.all, "overview"] as const,
 };
 
-export function useDashboard() {
+interface UseDashboardOptions {
+  enabled?: boolean;
+}
+
+export function useDashboard(options: UseDashboardOptions = {}) {
   return useQuery({
     queryKey: dashboardKeys.overview(),
     queryFn: async () => {
@@ -102,5 +106,6 @@ export function useDashboard() {
     gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
     refetchOnWindowFocus: false,
     refetchOnMount: false, // Don't refetch if data is fresh
+    enabled: options.enabled ?? true,
   });
 }

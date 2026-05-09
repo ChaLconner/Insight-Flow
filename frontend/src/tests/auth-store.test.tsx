@@ -22,7 +22,24 @@ const localStorageMock = (() => {
   };
 })();
 
+const sessionStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: vi.fn(() => {
+      store = {};
+    }),
+  };
+})();
+
 Object.defineProperty(window, "localStorage", { value: localStorageMock });
+Object.defineProperty(window, "sessionStorage", { value: sessionStorageMock });
 
 // Mock API endpoints
 vi.mock("@/lib/api-endpoints", () => ({
@@ -48,6 +65,7 @@ describe("auth-store", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     localStorageMock.clear();
+    sessionStorageMock.clear();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-01"));
     vi.resetModules();
@@ -63,7 +81,8 @@ describe("auth-store", () => {
             isAuthenticated: false,
             isLoading: true,
             isInitialized: false,
-            lastActivity: 0
+            lastActivity: 0,
+            rememberMe: false
         }); // merge
     });
   });
@@ -126,6 +145,40 @@ describe("auth-store", () => {
       expect(state.isInitialized).toBe(true);
     });
 
+    it("login should persist auth state to sessionStorage unless remember me is selected", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+
+      act(() => {
+        useAuthStore.getState().login(mockUser);
+      });
+
+      expect(sessionStorageMock.setItem).toHaveBeenCalledWith(
+        "insight-flow-auth",
+        expect.any(String),
+      );
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
+      expect(localStorageMock.setItem).not.toHaveBeenCalledWith(
+        "insight-flow-auth",
+        expect.any(String),
+      );
+    });
+
+    it("login should persist auth state to localStorage when remember me is selected", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const mockUser = { id: "1", email: "test@example.com" } as User;
+
+      act(() => {
+        useAuthStore.getState().login(mockUser, { rememberMe: true });
+      });
+
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(
+        "insight-flow-auth",
+        expect.any(String),
+      );
+      expect(sessionStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
+    });
+
     it("logout should clear state", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
       const mockUser = { id: "1", email: "test@example.com" } as User;
@@ -145,6 +198,7 @@ describe("auth-store", () => {
       expect(state.isInitialized).toBe(false);
       expect(state.lastActivity).toBe(0);
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
+      expect(sessionStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("user");
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("access_token");
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("refresh_token");
@@ -285,6 +339,8 @@ describe("auth-store", () => {
     it("should logout when fresh cached session is rejected by background verification", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
       const { apiClient } = await import("@/lib/api-client");
+      const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const mockUser = { id: "1", email: "test@example.com" } as User;
       const authError = Object.assign(new Error("Forbidden"), {
         isAxiosError: true,
@@ -313,6 +369,14 @@ describe("auth-store", () => {
 
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
       expect(useAuthStore.getState().user).toBe(null);
+      expect(consoleLog).toHaveBeenCalledWith(
+        "✅ Using cached auth (verified",
+        0,
+        "seconds ago)",
+      );
+      expect(consoleWarn).toHaveBeenCalledWith("⚠️ Cached session invalid, logging out");
+      consoleLog.mockRestore();
+      consoleWarn.mockRestore();
     });
   });
 

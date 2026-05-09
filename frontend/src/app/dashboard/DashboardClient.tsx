@@ -52,13 +52,16 @@ const KEYBOARD_SHORTCUTS = {
 } as const;
 
 export default function DashboardClient() {
-  const { isLoading: authLoading } = useAuthStore();
+  const authLoading = useAuthStore((state) => state.isLoading);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
   const queryClient = useQueryClient();
   const { data, isLoading, error, refetch, isFetching } =
-    useDashboard();
+    useDashboard({ enabled: isInitialized && isAuthenticated });
   const announcerRef = useRef<HTMLDivElement>(null);
 
-  const loading = authLoading || (isLoading && !data);
+  const canFetchDashboard = isInitialized && isAuthenticated;
+  const loading = authLoading || !canFetchDashboard || (isLoading && !data);
 
   // Announce function for screen readers
   const announce = useCallback((message: string) => {

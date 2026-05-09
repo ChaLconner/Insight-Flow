@@ -54,9 +54,11 @@ export const useNotifications = () => {
   const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await notificationsApi.getNotifications();
+      const [data, count] = await Promise.all([
+        notificationsApi.getNotifications(),
+        notificationsApi.getUnreadCount(),
+      ]);
       setNotifications(data);
-      const count = await notificationsApi.getUnreadCount();
       setUnreadCount(count);
     } catch (error: unknown) {
       // Silently ignore 401 errors - they're expected when user isn't authenticated

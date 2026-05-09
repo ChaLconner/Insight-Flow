@@ -23,7 +23,7 @@ export const useTasks = ({
   enabled = true,
 }: UseTasksOptions = {}) => {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const queryKey = [
     "tasks",

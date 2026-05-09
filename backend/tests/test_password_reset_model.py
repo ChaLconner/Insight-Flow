@@ -141,6 +141,18 @@ class TestPasswordResetModel:
 
         assert reset_token.is_expired() is True
 
+    def test_is_expired_handles_naive_database_datetime_as_utc(self):
+        """Test that database-loaded naive datetimes are treated as UTC."""
+        from models.password_reset import PasswordReset
+
+        reset_token = PasswordReset(
+            email="test@example.com",
+            token="hashed_token",
+            expires_at=datetime.now().replace(tzinfo=None) + timedelta(hours=1),
+        )
+
+        assert reset_token.is_expired() is False
+
     def test_is_valid_returns_true_for_fresh_unused_token(self):
         """Test that is_valid returns True for fresh, unused token."""
         from models.password_reset import PasswordReset

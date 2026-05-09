@@ -20,6 +20,7 @@ import {
   Mail,
   Lock,
   Github,
+  ArrowLeft,
   ArrowRight,
   Loader2,
   Layers,
@@ -93,7 +94,9 @@ function LoginForm() {
       const data = response.data;
       
       // Use authActions to properly handle login (this will show the toast)
-      await authActions.loginWithResponse(data);
+      await authActions.loginWithResponse(data, {
+        rememberMe: values.rememberMe === true,
+      });
 
       const user = data.user;
       const redirectUrl = getAuthRedirectUrl({
@@ -171,6 +174,17 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-md relative z-20">
+      <Button
+        asChild
+        variant="outline"
+        className="mb-6 bg-slate-900/80 hover:bg-slate-800 border-slate-700 text-white"
+      >
+        <Link href="/" aria-label="Back to landing page">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to home
+        </Link>
+      </Button>
+
       {/* Logo */}
       <div className="text-center mb-8">
         <div className="mx-auto h-12 w-12 rounded-xl bg-primary flex items-center justify-center mb-4 shadow-lg shadow-primary/25">

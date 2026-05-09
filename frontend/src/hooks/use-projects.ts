@@ -32,7 +32,7 @@ interface UseProjectsOptions {
 }
 
 export function useProjects(options: UseProjectsOptions = {}) {
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const page = options.page ?? 1;
   const pageSize = options.pageSize ?? 100;
   const skip = (page - 1) * pageSize;
@@ -68,7 +68,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
 
 export function useCreateProject() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
 
   return useMutation({
     mutationFn: async (data: CreateProjectRequest) => {
@@ -105,7 +105,7 @@ export function useCreateProject() {
 
 export function useUpdateProject() {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
 
   return useMutation({
     mutationFn: async ({

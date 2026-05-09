@@ -282,7 +282,7 @@ test.describe('Performance Tests', () => {
   });
 
   test.describe('Memory Usage', () => {
-    test('should not have memory leaks on navigation', async ({ page }) => {
+    test('should not have memory leaks on navigation', async ({ page, browserName }) => {
       // Get initial memory baseline (if available)
       const getMemoryUsage = async () => {
         try {
@@ -298,7 +298,24 @@ test.describe('Performance Tests', () => {
           return 0;
         }
       };
+
+      const collectGarbage = async () => {
+        if (browserName !== 'chromium') {
+          return;
+        }
+
+        try {
+          const cdpSession = await page.context().newCDPSession(page);
+          await cdpSession.send('HeapProfiler.collectGarbage');
+          await cdpSession.detach();
+        } catch {
+          // CDP is best-effort; memory API fallback still verifies navigation.
+        }
+      };
       
+      await page.goto('/auth/login');
+      await page.waitForLoadState('networkidle');
+      await collectGarbage();
       const initialMemory = await getMemoryUsage();
       
       // Navigate multiple times
@@ -307,12 +324,17 @@ test.describe('Performance Tests', () => {
         await page.waitForLoadState('networkidle');
       }
       
+      await collectGarbage();
       const finalMemory = await getMemoryUsage();
       
       // If memory API is available, check for reasonable memory growth
       if (initialMemory > 0 && finalMemory > 0) {
-        // Memory shouldn't grow more than 3x during navigation
-        expect(finalMemory).toBeLessThan(initialMemory * 3);
+        // Compare against a loaded-page baseline rather than a blank tab.
+        const allowedGrowth = Math.max(
+          initialMemory * 1.5,
+          initialMemory + 20 * 1024 * 1024,
+        );
+        expect(finalMemory).toBeLessThan(allowedGrowth);
       } else {
         // If memory API not available, just verify navigation succeeded
         expect(true).toBe(true);

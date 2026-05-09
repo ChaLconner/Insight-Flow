@@ -363,6 +363,17 @@ class AsyncDashboardService:
         self, user_id: uuid.UUID, limit: int = 10
     ) -> list[dict[str, Any]]:
         """Get recent team activities using optimized async queries."""
+        cache_key = f"dashboard:recent_activities:{user_id}:{limit}"
+        cached = cache_service.get(cache_key)
+        if isinstance(cached, dict):
+            cached_list = cached.get("_list_data")
+            if isinstance(cached_list, list):
+                cached_activities: list[dict[str, Any]] = []
+                for item in cached_list:
+                    if isinstance(item, dict):
+                        cached_activities.append({str(key): value for key, value in item.items()})
+                return cached_activities
+
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
 
         query = (
@@ -423,10 +434,23 @@ class AsyncDashboardService:
                 }
             )
 
+        cache_service.set(cache_key, {"_list_data": activity_list}, timeout=DASHBOARD_CACHE_TTL)
         return activity_list
 
     async def get_today_tasks(self, user_id: uuid.UUID, limit: int = 10) -> list[dict[str, Any]]:
         """Get tasks assigned to user for today or overdue."""
+        # B6: Check cache first (shorter TTL since tasks change more frequently)
+        cache_key = f"dashboard:today_tasks:{user_id}:{limit}"
+        cached = cache_service.get(cache_key)
+        if isinstance(cached, dict):
+            cached_list = cached.get("_list_data")
+            if isinstance(cached_list, list):
+                cached_tasks: list[dict[str, Any]] = []
+                for item in cached_list:
+                    if isinstance(item, dict):
+                        cached_tasks.append({str(key): value for key, value in item.items()})
+                return cached_tasks
+
         today = date.today()
 
         query = (
@@ -442,7 +466,7 @@ class AsyncDashboardService:
         result = await self.db.execute(query)
         tasks = result.scalars().all()
 
-        return [
+        task_list = [
             {
                 "id": str(task.id),
                 "title": task.title,
@@ -457,6 +481,10 @@ class AsyncDashboardService:
             }
             for task in tasks
         ]
+
+        # B6: Cache result (shorter TTL for tasks)
+        cache_service.set(cache_key, {"_list_data": task_list}, timeout=60)
+        return task_list
 
     @staticmethod
     def _get_empty_stats_response() -> dict[str, Any]:
@@ -494,6 +522,8 @@ def invalidate_dashboard_cache(user_id: uuid.UUID | None = None) -> None:
     if user_id:
         cache_service.invalidate_pattern(f"dashboard:overview:{user_id}")
         cache_service.invalidate_pattern(f"dashboard:recent_projects:{user_id}:")
+        cache_service.invalidate_pattern(f"dashboard:recent_activities:{user_id}:")
+        cache_service.invalidate_pattern(f"dashboard:today_tasks:{user_id}:")
         return
 
     cache_service.invalidate_pattern("dashboard:")

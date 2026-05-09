@@ -5,6 +5,7 @@ import pytest
 from models.password_reset import PasswordReset
 from models.user import User
 from services.async_password_reset_service import AsyncPasswordResetService
+from utils.auth import verify_password
 
 
 @pytest.fixture
@@ -132,6 +133,21 @@ async def test_reset_password_user_not_found(password_reset_service, mock_db_ses
 
     result = await password_reset_service.reset_password("valid", "pass")
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_reset_password_accepts_persisted_token_from_database(async_session, test_user):
+    service = AsyncPasswordResetService(async_session)
+
+    reset_token = await service.create_password_reset_token(test_user.email)
+
+    assert reset_token is not None
+    assert await service.validate_reset_token(reset_token.raw_token) is not None
+
+    result = await service.reset_password(reset_token.raw_token, "NewPass123!")
+
+    assert result is True
+    assert verify_password("NewPass123!", test_user.hashed_password)
 
 
 @pytest.mark.asyncio

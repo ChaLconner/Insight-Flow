@@ -108,12 +108,6 @@ export function PricingSection() {
   const { plans: fetchedPlans } = useBillingData({ silent: true });
   const [ref, isVisible] = useElementOnScreen({ threshold: 0.1 });
 
-  // Plans definitions moved inside mergedPlans to avoid duplication and unused var warnings
-
-
-  // Re-apply the merge logic inside component or useMemo properly
-  // Since I'm replacing the whole block, I'll copy the full logic back in.
-
   const mergedPlans = useMemo(() => {
     const staticPlans: PlanData[] = [
       {

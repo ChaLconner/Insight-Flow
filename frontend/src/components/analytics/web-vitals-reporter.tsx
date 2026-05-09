@@ -13,6 +13,7 @@
  */
 
 import { useEffect } from "react";
+import { shouldEnableDevelopmentDiagnostics } from "@/lib/runtime-flags";
 
 interface WebVitalMetric {
   id: string;
@@ -124,6 +125,10 @@ function onPerfEntry(metric: {
  */
 export function useWebVitals() {
   useEffect(() => {
+    if (!shouldEnableWebVitals()) {
+      return;
+    }
+
     // Dynamically import web-vitals to avoid SSR issues
     import("web-vitals").then(({ onCLS, onFCP, onLCP, onTTFB, onINP }) => {
       onCLS(onPerfEntry);
@@ -136,6 +141,13 @@ export function useWebVitals() {
       console.debug("web-vitals library not available");
     });
   }, []);
+}
+
+export function shouldEnableWebVitals(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    shouldEnableDevelopmentDiagnostics()
+  );
 }
 
 /**

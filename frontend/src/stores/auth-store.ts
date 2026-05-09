@@ -5,7 +5,7 @@
 import axios from "axios";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { browserJsonStorage } from "./browser-storage";
+import { authJsonStorage } from "./browser-storage";
 import { User, UpdateUserRequest } from "@/types";
 
 interface AuthState {
@@ -14,6 +14,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   lastActivity: number;
+  rememberMe: boolean;
   isInitialized: boolean;
   hasVerifiedSession: boolean;
   lastVerified: number; // Timestamp of last server-side verification
@@ -22,7 +23,7 @@ interface AuthState {
   setUser: (user: User | null) => void;
   updateUserAvatar: (avatar: string) => void;
   setLoading: (loading: boolean) => void;
-  login: (user: User) => void;
+  login: (user: User, options?: { rememberMe?: boolean }) => void;
   logout: () => void;
   updateActivity: () => void;
   checkAuthStatus: () => boolean;
@@ -35,6 +36,7 @@ interface PersistedAuthState {
   user: User | null;
   isAuthenticated: boolean;
   lastActivity: number;
+  rememberMe: boolean;
   lastVerified: number;
 }
 
@@ -52,6 +54,7 @@ function clearPersistedAuthStorage(): void {
 
   try {
     localStorage.removeItem("insight-flow-auth");
+    sessionStorage.removeItem("insight-flow-auth");
     localStorage.removeItem("user");
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
@@ -77,6 +80,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: true,
       lastActivity: Date.now(),
+      rememberMe: false,
       isInitialized: false,
       hasVerifiedSession: false,
       lastVerified: 0,
@@ -119,12 +123,13 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: loading });
       },
 
-      login: (user) => {
+      login: (user, options = {}) => {
         set({
           user,
           isAuthenticated: true,
           isLoading: false,
           lastActivity: Date.now(),
+          rememberMe: options.rememberMe === true,
           lastVerified: Date.now(),
           isInitialized: true,
           hasVerifiedSession: true,
@@ -138,6 +143,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           isLoading: false,
           lastActivity: 0,
+          rememberMe: false,
           lastVerified: 0,
           isInitialized: false,
           hasVerifiedSession: false,
@@ -342,7 +348,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "insight-flow-auth",
-      storage: browserJsonStorage,
+      storage: authJsonStorage,
       partialize: (state: AuthState): PersistedAuthState => {
         // Validate user object before persisting to avoid corrupted data
         let validatedUser = state.user;
@@ -375,6 +381,7 @@ export const useAuthStore = create<AuthState>()(
           user: validatedUser,
           isAuthenticated: state.isAuthenticated,
           lastActivity: state.lastActivity,
+          rememberMe: state.rememberMe,
           lastVerified: state.lastVerified,
         };
       },

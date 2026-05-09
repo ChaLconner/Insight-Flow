@@ -8,7 +8,9 @@ import { getErrorMessage } from "@/lib/error-utils";
  * Hook for fetching user's favorite project IDs
  */
 export function useFavoriteIds() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
 
   return useQuery({
     queryKey: ["favorites"],
@@ -16,7 +18,7 @@ export function useFavoriteIds() {
       const projectIds = await favoritesApi.getFavoriteIds();
       return new Set(projectIds);
     },
-    enabled: !!user,
+    enabled: isInitialized && isAuthenticated && !!user,
     staleTime: 60 * 1000, // 1 minute
     // Fallback to empty set on error
     placeholderData: () => new Set<string>(),

@@ -11,7 +11,12 @@ strict_optional = true
 warn_redundant_casts = true
 warn_no_return = true
 warn_unreachable = true
-exclude = ["tests", "alembic", "scripts"]
+exclude = [
+    "tests",
+    "alembic",
+    "scripts",
+    "pytest-cache-files-.*",
+]
 plugins = ["sqlalchemy.ext.mypy.plugin", "pydantic.mypy"]
 
 # Ignore missing imports for some packages
@@ -155,7 +160,6 @@ omit = [
     "routers/analytics.py",
     # Tasks router requires real database for full coverage
     "routers/tasks.py",
-    # Auth router has OAuth flows requiring external services
     # Auth router has OAuth flows requiring external services
     # Logger module - utility code
     "utils/logger.py",

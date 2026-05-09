@@ -25,12 +25,17 @@ class ResponseCacheMiddleware(BaseHTTPMiddleware):
         (re.compile(r"^/health"), "public, max-age=30"),
         # Metrics - short cache
         (re.compile(r"^/metrics"), "public, max-age=15"),
-        # Analytics overview - client-side cache for 60 seconds
-        (re.compile(r"^/(?:api/v1/)?analytics/overview"), "private, max-age=60"),
-        # Dashboard - client-side cache for 60 seconds
-        (re.compile(r"^/(?:api/v1/)?dashboard/overview"), "private, max-age=60"),
+        # Analytics overview - client-side cache with stale-while-revalidate for instant loads
+        (re.compile(r"^/(?:api/v1/)?analytics/overview"), "private, max-age=60, stale-while-revalidate=120"),
+        # Dashboard endpoints - client-side cache with stale-while-revalidate
+        (re.compile(r"^/(?:api/v1/)?dashboard/overview"), "private, max-age=60, stale-while-revalidate=120"),
+        (re.compile(r"^/(?:api/v1/)?dashboard/today-tasks"), "private, max-age=30, stale-while-revalidate=60"),
+        (re.compile(r"^/(?:api/v1/)?dashboard/recent-projects"), "private, max-age=60, stale-while-revalidate=120"),
+        (re.compile(r"^/(?:api/v1/)?dashboard/team-activity"), "private, max-age=30, stale-while-revalidate=60"),
+        # Projects list - short cache for navigation
+        (re.compile(r"^/(?:api/v1/)?projects/?$"), "private, max-age=15, stale-while-revalidate=30"),
         # User profile (rarely changes) - client-side cache
-        (re.compile(r"^/(?:api/v1/)?users/me$"), "private, max-age=300"),
+        (re.compile(r"^/(?:api/v1/)?users/me$"), "private, max-age=300, stale-while-revalidate=600"),
     ]
 
     # Endpoints that should never be cached

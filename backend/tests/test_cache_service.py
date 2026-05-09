@@ -8,9 +8,9 @@ from services.cache_service import RedisCache
 
 
 class FakeRedisClient:
-    def __init__(self, keys: list[str]):
+    def __init__(self, keys: list[str | bytes]):
         self.keys = keys
-        self.deleted: list[str] = []
+        self.deleted: list[str | bytes] = []
         self.flushdb_called = False
         self.keys_called = False
 
@@ -18,9 +18,16 @@ class FakeRedisClient:
         import fnmatch
 
         assert count == 500
-        yield from [key for key in self.keys if fnmatch.fnmatch(key, match)]
+        yield from [
+            key
+            for key in self.keys
+            if fnmatch.fnmatch(
+                key.decode("utf-8") if isinstance(key, bytes) else key,
+                match,
+            )
+        ]
 
-    def delete(self, *keys: str) -> int:
+    def delete(self, *keys: str | bytes) -> int:
         self.deleted.extend(keys)
         return len(keys)
 
@@ -90,7 +97,7 @@ class TestCacheKeyPatterns:
 
 
 class TestRedisCacheInvalidation:
-    def _make_cache(self, keys: list[str]) -> RedisCache:
+    def _make_cache(self, keys: list[str | bytes]) -> RedisCache:
         cache = object.__new__(RedisCache)
         cache.client = FakeRedisClient(keys)
         cache.stats = {"hits": 0, "misses": 0, "sets": 0, "errors": 0}
@@ -140,3 +147,22 @@ class TestRedisCacheInvalidation:
             "dashboard:overview:user-1",
             "dashboard:recent_projects:user-1:5",
         }
+
+    def test_invalidate_pattern_decodes_redis_byte_keys(self):
+        cache = self._make_cache(
+            [
+                b"dashboard:overview:user-1",
+                b"dashboard:recent_projects:user-1:5",
+                b"analytics:overview:user-1",
+            ]
+        )
+
+        deleted = cache.invalidate_pattern("dashboard:")
+
+        client = cache.client
+        assert isinstance(client, FakeRedisClient)
+        assert deleted == 2
+        assert client.deleted == [
+            "dashboard:overview:user-1",
+            "dashboard:recent_projects:user-1:5",
+        ]

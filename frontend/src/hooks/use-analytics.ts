@@ -8,10 +8,14 @@ import type {
   TeamWorkloadParams,
 } from "@/app/analytics/types";
 
-export function useAnalytics(period: AnalyticsPeriod) {
+export function useAnalytics(
+  period: AnalyticsPeriod,
+  options: { enabled?: boolean } = {},
+) {
   return useQuery<AnalyticsResponse>({
     queryKey: ["analytics", period],
     queryFn: () => analyticsApi.getAnalytics(period),
+    enabled: options.enabled ?? true,
     refetchInterval: 300000, // 5 minutes
     staleTime: 300000, // 5 minutes (analytics data doesn't change that often)
     placeholderData: (previousData) => previousData, // Keep previous data while loading new period

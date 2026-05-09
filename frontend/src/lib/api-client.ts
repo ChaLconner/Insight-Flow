@@ -83,10 +83,14 @@ export function shouldRetryRequest(error: AxiosError): boolean {
   }
 
   if (!error.response) {
+    if (error.code === "ECONNABORTED") {
+      return false;
+    }
+
     console.warn(
       `🔄 Retrying network error (attempt ${(error.config?.["axios-retry"]?.retryCount ?? 0) + 1})`,
     );
-    return error.code !== "ECONNABORTED";
+    return true;
   }
 
   if (error.response.status >= 500) {

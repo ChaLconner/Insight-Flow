@@ -22,10 +22,31 @@ interface SearchResults {
 
 const SEARCH_DEBOUNCE_MS = 250;
 const SEARCH_CACHE_TTL_MS = 30_000;
+const SEARCH_CACHE_MAX_SIZE = 50;
 const searchCache = new Map<
   string,
   { expiresAt: number; data: { projects: Project[]; tasks: Task[] } }
 >();
+
+// Evict expired entries to prevent unbounded memory growth
+function evictExpiredSearchCache() {
+  const now = Date.now();
+  for (const [key, entry] of searchCache) {
+    if (entry.expiresAt <= now) {
+      searchCache.delete(key);
+    }
+  }
+  // If still over limit after TTL eviction, remove oldest entries
+  if (searchCache.size > SEARCH_CACHE_MAX_SIZE) {
+    const keysToDelete = [...searchCache.keys()].slice(
+      0,
+      searchCache.size - SEARCH_CACHE_MAX_SIZE,
+    );
+    for (const key of keysToDelete) {
+      searchCache.delete(key);
+    }
+  }
+}
 
 export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const router = useRouter();
@@ -92,6 +113,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
           tasks: Array.from(new Map(tasks.map((t) => [t.id, t])).values()),
         };
 
+        evictExpiredSearchCache();
         searchCache.set(cacheKey, {
           data,
           expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,

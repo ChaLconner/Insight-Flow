@@ -19,6 +19,7 @@ const nextConfig = {
   compress: true, // Enable gzip compression
   poweredByHeader: false, // Security improvement (removes X-Powered-By)
   productionBrowserSourceMaps: false, // Disable source maps in production for performance
+  devIndicators: process.env.NEXT_PUBLIC_E2E === "1" ? false : undefined,
 
   // Image optimization - updated for Next.js 16
   images: {

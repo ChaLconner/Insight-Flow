@@ -67,6 +67,21 @@ else:
     logger.info("🔒 COOKIE_SECURE is TRUE (Production Mode). HTTPS required for cookies.")
 
 
+def _login_success_response(user: User, *, role: str | None = None) -> dict[str, Any]:
+    return {
+        "message": "Login successful",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "username": user.username,
+            "name": user.name,
+            "avatar": user.avatar_url,
+            "role": role or user.role,
+            "is_active": user.is_active,
+        },
+    }
+
+
 @router.post("/register", response_model=UserResponse)
 async def register(
     user_data: UserCreate, user_service: AsyncUserService = Depends(get_user_service)
@@ -202,19 +217,7 @@ async def login(
         if not user_role:
             user_role = "user"
 
-        # Return user info without tokens in body
-        return {
-            "message": "Login successful",
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "username": user.username,
-                "name": user.name,
-                "avatar": user.avatar_url,
-                "role": user_role,
-                "is_active": user.is_active,
-            },
-        }
+        return _login_success_response(user, role=user_role)
 
     except HTTPException as http_err:
         logger.error(f"HTTP error during login: {http_err.detail}")
@@ -298,18 +301,7 @@ async def google_login(
             request=request,
         )
 
-        return {
-            "message": "Login successful",
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "username": user.username,
-                "name": user.name,
-                "avatar": user.avatar_url,
-                "role": user.role,
-                "is_active": user.is_active,
-            },
-        }
+        return _login_success_response(user)
 
     except HTTPException as http_err:
         logger.error(f"HTTP error during Google login: {http_err.detail}")
@@ -390,18 +382,7 @@ async def github_login(
             request=request,
         )
 
-        return {
-            "message": "Login successful",
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "username": user.username,
-                "name": user.name,
-                "avatar": user.avatar_url,
-                "role": user.role,
-                "is_active": user.is_active,
-            },
-        }
+        return _login_success_response(user)
 
     except HTTPException as http_err:
         logger.error(f"HTTP error during GitHub login: {http_err.detail}")

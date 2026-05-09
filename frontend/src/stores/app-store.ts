@@ -184,12 +184,45 @@ export const appSelectors = {
   isDarkMode: (state: AppState) => state.isDarkMode,
 } as const;
 
-// Auto-cleanup alerts on unmount
-if (typeof window !== "undefined") {
-  document.addEventListener("visibilitychange", () => {
+declare global {
+  interface Window {
+    __insightFlowAppVisibilityCleanup?: {
+      unregister: () => void;
+    };
+  }
+}
+
+export function registerAppVisibilityCleanup(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (window.__insightFlowAppVisibilityCleanup) {
+    return;
+  }
+
+  const handleVisibilityChange = () => {
     if (document.hidden) {
       const { clearAlerts } = useAppStore.getState();
       clearAlerts();
     }
-  });
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.__insightFlowAppVisibilityCleanup = {
+    unregister: () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      delete window.__insightFlowAppVisibilityCleanup;
+    },
+  };
 }
+
+export function unregisterAppVisibilityCleanup(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.__insightFlowAppVisibilityCleanup?.unregister();
+}
+
+registerAppVisibilityCleanup();

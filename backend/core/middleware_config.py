@@ -108,11 +108,13 @@ def setup_performance_middleware(app: FastAPI) -> None:
 
 def setup_cache_middleware(app: FastAPI) -> None:
     """Configure caching middleware."""
-    from middleware.cache import CacheMiddleware
     from middleware.response_cache import ResponseCacheMiddleware
 
     app.add_middleware(ResponseCacheMiddleware)  # API Cache-Control headers
-    app.add_middleware(CacheMiddleware, cache_timeout=60)
+    # Note: Server-side response caching is handled at the service layer
+    # (e.g., cache_service in dashboard/analytics services) for proper
+    # cache invalidation. The removed CacheMiddleware was a no-op since
+    # it excluded all major routes (/tasks, /projects, /users, etc.).
 
 
 def setup_request_id_middleware(app: FastAPI) -> None:
