@@ -4,7 +4,7 @@ User Favorites router for managing user's favorite projects.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,9 @@ from utils.schema_utils import to_camel
 logger = setup_logger("favorites_router")
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
+
+# Route-level rate limiting for favorites operations
+from rate_limiter import RateLimits, limiter
 
 
 class FavoriteIdsResponse(BaseModel):
@@ -47,7 +50,9 @@ class ToggleFavoriteResponse(BaseModel):
 
 
 @router.get("", response_model=FavoriteIdsResponse)
+@limiter.limit(RateLimits.API_READ)
 async def get_favorite_project_ids(
+    request: Request,
     current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_async_db)
 ):
     """
@@ -69,8 +74,10 @@ async def get_favorite_project_ids(
 
 
 @router.post("/toggle", response_model=ToggleFavoriteResponse)
+@limiter.limit(RateLimits.FAVORITES_WRITE)
 async def toggle_favorite(
-    request: ToggleFavoriteRequest,
+    request: Request,
+    toggle_request: ToggleFavoriteRequest,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db),
 ):
@@ -79,7 +86,7 @@ async def toggle_favorite(
     If project is already favorited, removes it. Otherwise, adds it.
     """
     try:
-        project_uuid = uuid.UUID(request.project_id)
+        project_uuid = uuid.UUID(toggle_request.project_id)
 
         # Verify project exists
         project_result = await db.execute(select(Project).where(Project.id == project_uuid))
@@ -105,7 +112,7 @@ async def toggle_favorite(
 
             return ToggleFavoriteResponse(
                 is_favorite=False,
-                project_id=request.project_id,
+                project_id=toggle_request.project_id,
                 message=f'"{project.name}" has been removed from your favorites.',
             )
         else:
@@ -118,7 +125,7 @@ async def toggle_favorite(
 
             return ToggleFavoriteResponse(
                 is_favorite=True,
-                project_id=request.project_id,
+                project_id=toggle_request.project_id,
                 message=f'"{project.name}" has been added to your favorites.',
             )
 
@@ -137,7 +144,9 @@ async def toggle_favorite(
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(RateLimits.FAVORITES_WRITE)
 async def remove_favorite(
+    request: Request,
     project_id: str,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db),
@@ -177,7 +186,9 @@ async def remove_favorite(
 @router.post(
     "/{project_id}", status_code=status.HTTP_201_CREATED, response_model=ToggleFavoriteResponse
 )
+@limiter.limit(RateLimits.FAVORITES_WRITE)
 async def add_favorite(
+    request: Request,
     project_id: str,
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db),

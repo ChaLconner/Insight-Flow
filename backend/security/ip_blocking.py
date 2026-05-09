@@ -13,6 +13,7 @@ Features:
 
 import logging
 import os
+import time
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
@@ -44,6 +45,11 @@ class IPBlockingService:
     _violation_counts: ClassVar[dict[str, int]] = {}
     _blocked_ips: ClassVar[dict[str, datetime]] = {}
     _block_counts: ClassVar[dict[str, int]] = {}  # For escalation
+    _last_cleanup: ClassVar[float] = 0
+
+    # Memory safety limits
+    MAX_TRACKED_IPS = 10_000
+    CLEANUP_INTERVAL = 300  # 5 minutes
 
     # Whitelisted IPs (never block these)
     WHITELISTED_IPS: ClassVar[set[str]] = {
@@ -70,6 +76,16 @@ class IPBlockingService:
                 logger.info("IP blocking service using in-memory backend")
         except Exception as e:
             logger.warning(f"Redis not available for IP blocking, using in-memory: {e}")
+
+        # VULN-02: Warn loudly in production when Redis is not available
+        if not self._use_redis:
+            environment = os.getenv("ENVIRONMENT", "development")
+            if environment == "production":
+                logger.critical(
+                    "⚠️ SECURITY WARNING: IP Blocking is using in-memory storage in production. "
+                    "Violations will NOT be shared across workers! "
+                    "Configure REDIS_URL for effective IP blocking."
+                )
 
     def _is_whitelisted(self, ip: str) -> bool:
         """Check if IP is whitelisted."""
@@ -217,6 +233,9 @@ class IPBlockingService:
 
     def _record_violation_memory(self, ip: str, reason: str) -> bool:
         """Record violation in memory."""
+        # VULN-03: Periodic cleanup to prevent memory exhaustion
+        self._cleanup_memory()
+
         # Increment count
         self._violation_counts[ip] = self._violation_counts.get(ip, 0) + 1
         count = self._violation_counts[ip]
@@ -246,6 +265,45 @@ class IPBlockingService:
             return True
 
         return False
+
+    def _cleanup_memory(self) -> None:
+        """
+        Periodically prune stale entries to prevent memory exhaustion (VULN-03).
+        Removes expired blocks and caps the number of tracked IPs.
+        """
+        now = time.time()
+        if now - self._last_cleanup < self.CLEANUP_INTERVAL:
+            return
+        self.__class__._last_cleanup = now
+
+        # Remove expired blocks
+        expired_blocks = [
+            ip for ip, until in self._blocked_ips.items()
+            if until <= datetime.now(UTC)
+        ]
+        for ip in expired_blocks:
+            del self._blocked_ips[ip]
+
+        # Enforce max tracked IPs to prevent memory exhaustion
+        if len(self._violation_counts) > self.MAX_TRACKED_IPS:
+            # Evict oldest entries (those with lowest violation counts first)
+            sorted_ips = sorted(
+                self._violation_counts.items(), key=lambda x: x[1]
+            )
+            excess = len(sorted_ips) - self.MAX_TRACKED_IPS
+            for ip, _ in sorted_ips[:excess]:
+                del self._violation_counts[ip]
+                self._block_counts.pop(ip, None)
+
+            logger.warning(
+                f"IP blocking cleanup: evicted {excess} entries, "
+                f"tracking {len(self._violation_counts)} IPs"
+            )
+
+        if expired_blocks:
+            logger.debug(
+                f"IP blocking cleanup: removed {len(expired_blocks)} expired blocks"
+            )
 
     async def unblock(self, ip: str) -> bool:
         """

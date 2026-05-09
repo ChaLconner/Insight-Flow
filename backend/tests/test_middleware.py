@@ -164,7 +164,7 @@ class TestResponseCacheMiddleware:
         with TestClient(app) as client:
             response = client.get("/api/v1/dashboard/overview")
 
-        assert response.headers["Cache-Control"] == "private, max-age=60"
+        assert response.headers["Cache-Control"] == "private, max-age=60, stale-while-revalidate=120"
 
     def test_cache_middleware_does_not_cache_versioned_notifications(self):
         """Test API v1 notification paths remain no-store."""

@@ -68,7 +68,11 @@ def create_limiter() -> Limiter:
                 strategy="fixed-window",
             )
         except Exception as e:
-            logger.warning(f"Redis connection failed, using in-memory rate limiting: {e}")
+            logger.critical(
+                f"Redis connection FAILED for SlowAPI rate limiting: {e}. "
+                "Falling back to in-memory storage — NOT suitable for production "
+                "multi-worker deployments! Rate limits will NOT be shared across workers."
+            )
 
     # Fallback to in-memory storage
     if settings.is_production:
@@ -149,6 +153,34 @@ class RateLimits:
     # Stricter limits for known abuse vectors
     SENSITIVE_READ = "30/minute"  # Sensitive data access
     BULK_OPERATIONS = "20/minute"  # Bulk create/update/delete
+
+    # Analytics & Dashboard (expensive DB aggregation queries)
+    ANALYTICS_READ = "30/minute"  # Analytics overview, contributions
+    ANALYTICS_BATCH = "10/minute"  # Batch activity queries (amplification risk)
+    DASHBOARD_READ = "30/minute"  # Dashboard overview (parallel queries)
+
+    # Task management
+    TASK_CREATE = "30/minute"  # Task creation (triggers notifications)
+    TASK_UPDATE = "60/minute"  # Task updates
+    TASK_DELETE = "20/minute"  # Task deletion
+
+    # Notifications (prevent rapid polling abuse)
+    NOTIFICATION_POLL = "60/minute"  # List/count notifications
+    NOTIFICATION_BULK = "10/minute"  # Bulk read operations
+
+    # Favorites (write operations)
+    FAVORITES_WRITE = "30/minute"  # Toggle/add/remove favorites
+
+    # Project management
+    PROJECT_CREATE = "10/minute"  # Project creation
+    PROJECT_UPDATE = "30/minute"  # Project updates
+    PROJECT_DELETE = "10/minute"  # Project deletion
+    PROJECT_MEMBERS = "20/minute"  # Member management (add/remove)
+
+    # User management
+    USER_SEARCH = "30/minute"  # User search
+    USER_PROFILE_UPDATE = "20/minute"  # Profile updates
+    USER_AVATAR = "5/minute"  # Avatar upload (file processing)
 
 
 # =============================================================================

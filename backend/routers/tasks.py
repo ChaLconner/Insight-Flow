@@ -6,7 +6,7 @@ Refactored for Async operations with proper Dependency Injection.
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,9 +57,14 @@ def map_task_to_response(task: Task) -> dict[str, Any]:
 logger = setup_logger("tasks_router")
 router = APIRouter()
 
+# Route-level rate limiting for task operations
+from rate_limiter import RateLimits, limiter
+
 
 @router.get("/my/tasks", response_model=TaskListResponse)
+@limiter.limit(RateLimits.API_READ)
 async def get_my_tasks(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     search: str | None = None,
@@ -80,7 +85,9 @@ async def get_my_tasks(
 
 
 @router.post("/", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_CREATE)
 async def create_task(
+    request: Request,
     task_data: TaskCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
@@ -118,7 +125,9 @@ async def create_task(
 
 
 @router.get("/", response_model=TaskListResponse)
+@limiter.limit(RateLimits.API_READ)
 async def get_all_tasks(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     search: str | None = None,
@@ -153,7 +162,9 @@ async def read_task(
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_UPDATE)
 async def update_task(
+    request: Request,
     task_data: TaskUpdate,
     task: Task = Depends(get_async_authorized_task),
     task_service: AsyncTaskService = Depends(get_task_service),
@@ -168,7 +179,9 @@ async def update_task(
 
 
 @router.delete("/{task_id}")
+@limiter.limit(RateLimits.TASK_DELETE)
 async def delete_task(
+    request: Request,
     task: Task = Depends(get_async_authorized_task),
     task_service: AsyncTaskService = Depends(get_task_service),
     current_user: User = Depends(get_current_active_user),
@@ -183,7 +196,9 @@ async def delete_task(
 
 
 @router.put("/{task_id}/status", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_UPDATE)
 async def update_task_status(
+    request: Request,
     status_data: dict,
     background_tasks: BackgroundTasks,
     task: Task = Depends(get_async_authorized_task),
@@ -237,7 +252,9 @@ async def update_task_status(
 
 
 @router.put("/{task_id}/assign", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_UPDATE)
 async def assign_task(
+    request: Request,
     assign_data: dict,
     background_tasks: BackgroundTasks,
     task: Task = Depends(get_async_authorized_task),

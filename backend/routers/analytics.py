@@ -5,7 +5,7 @@ import uuid
 from collections import defaultdict
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +32,9 @@ from utils.logger import setup_logger
 
 router = APIRouter()
 logger = setup_logger(__name__)
+
+# Route-level rate limiting for expensive analytics queries
+from rate_limiter import RateLimits, limiter
 
 
 def _format_activity(
@@ -77,7 +80,9 @@ async def _get_user_map(db: AsyncSession, user_ids: set[Any]) -> dict[Any, User]
 
 
 @router.get("/overview", response_model=AnalyticsOverviewResponse)
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_analytics_overview(
+    request: Request,
     period: str = Query("30d", description="Time period: 7d, 30d, 90d, 1y"),
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
@@ -87,7 +92,9 @@ async def get_analytics_overview(
 
 
 @router.get("/team-workload", response_model=TeamWorkloadPaginatedResponse)
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_team_workload(
+    request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
     search: str = Query(None, description="Search term for user names"),
@@ -108,7 +115,9 @@ async def get_team_workload(
 
 
 @router.get("/projects/{project_id}/dashboard")
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_dashboard_metrics(
+    request: Request,
     project_id: str,
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
@@ -119,7 +128,9 @@ async def get_dashboard_metrics(
 
 
 @router.get("/projects/{project_id}/productivity")
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_productivity_data(
+    request: Request,
     project_id: str,
     period: str = Query("30d", description="Time period: 7d, 30d, 90d"),
     group_by: str = Query("week", description="Group by: day, week, month"),
@@ -134,7 +145,9 @@ async def get_productivity_data(
 
 
 @router.get("/projects/{project_id}/contributions")
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_contributions(
+    request: Request,
     project_id: str,
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
@@ -145,7 +158,9 @@ async def get_contributions(
 
 
 @router.get("/projects/{project_id}/activity", response_model=dict[str, Any])
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_recent_activity(
+    request: Request,
     project_id: str,
     limit: int = Query(10, ge=1, le=100, description="Number of activities to return"),
     db: AsyncSession = Depends(get_async_db),
@@ -164,7 +179,9 @@ async def get_recent_activity(
 
 
 @router.get("/activity", response_model=dict[str, Any])
+@limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_all_recent_activity(
+    request: Request,
     limit: int = Query(20, ge=1, le=100, description="Number of activities to return"),
     db: AsyncSession = Depends(get_async_db),
     project_service: AsyncProjectService = Depends(get_project_service),
@@ -197,16 +214,18 @@ async def get_all_recent_activity(
 
 
 @router.post("/activity/batch", response_model=list[BatchActivityResponse])
+@limiter.limit(RateLimits.ANALYTICS_BATCH)
 async def get_batch_recent_activity(
-    request: BatchActivityRequest,
+    request: Request,
+    batch_request: BatchActivityRequest,
     db: AsyncSession = Depends(get_async_db),
     project_service: AsyncProjectService = Depends(get_project_service),
     task_history_service: AsyncTaskHistoryService = Depends(get_task_history_service),
     current_user: User = Depends(get_current_active_user),
 ) -> list[dict[str, Any]]:
     """Get recent activity for multiple projects in batch. Kept for API compatibility."""
-    project_ids_str = request.project_ids
-    limit = request.limit or 10
+    project_ids_str = batch_request.project_ids
+    limit = batch_request.limit or 10
     results_map: dict[str, dict[str, Any]] = {}
     valid_project_uuids: list[uuid.UUID] = []
 

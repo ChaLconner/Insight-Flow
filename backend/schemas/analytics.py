@@ -25,8 +25,8 @@ class ActivityResponse(BaseModel):
 
 
 class BatchActivityRequest(BaseModel):
-    project_ids: list[str]
-    limit: int | None = 10
+    project_ids: list[str] = Field(..., max_length=20, description="Max 20 projects per batch")
+    limit: int = Field(default=10, ge=1, le=50, description="Activities per project (max 50)")
 
 
 class BatchActivityResponse(BaseModel):

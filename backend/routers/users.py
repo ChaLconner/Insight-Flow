@@ -13,7 +13,7 @@ import os
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 
 from dependencies.services import get_user_service
 from models.user import User
@@ -37,6 +37,9 @@ from utils.file_security import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["user management"])
+
+# Route-level rate limiting for user operations
+from rate_limiter import RateLimits, limiter
 
 UPLOAD_DIR = "static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -98,7 +101,9 @@ async def get_user_stats(
 
 
 @router.post("/invite", response_model=UserResponse)
+@limiter.limit(RateLimits.API_WRITE)
 async def invite_user(
+    request: Request,
     user_invite: UserInvite,
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
@@ -128,7 +133,9 @@ async def get_current_user_profile(
 
 
 @router.put("/me", response_model=UserResponse)
+@limiter.limit(RateLimits.USER_PROFILE_UPDATE)
 async def update_current_user_profile(
+    request: Request,
     user_data: UserUpdate,
     current_user: User = Depends(get_current_active_user),
     user_service: AsyncUserService = Depends(get_user_service),
@@ -148,7 +155,9 @@ async def update_current_user_profile(
 
 
 @router.get("/search/{email}", response_model=UserResponse)
+@limiter.limit(RateLimits.USER_SEARCH)
 async def search_user_by_email(
+    request: Request,
     email: str,
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
@@ -177,7 +186,9 @@ async def search_user_by_email(
 
 
 @router.get("/search", response_model=list[UserResponse])
+@limiter.limit(RateLimits.USER_SEARCH)
 async def search_users(
+    request: Request,
     q: str = "",
     skip: int = 0,
     limit: int = 20,
@@ -226,7 +237,9 @@ async def get_current_user_settings(
 
 
 @router.patch("/me/settings", response_model=UserSettingsResponse)
+@limiter.limit(RateLimits.USER_PROFILE_UPDATE)
 async def update_current_user_settings(
+    request: Request,
     settings_data: UserSettingsUpdate,
     current_user: User = Depends(get_current_active_user),
     user_service: AsyncUserService = Depends(get_user_service),
@@ -239,7 +252,9 @@ async def update_current_user_settings(
 
 
 @router.post("/me/avatar", response_model=UserResponse)
+@limiter.limit(RateLimits.USER_AVATAR)
 async def upload_user_avatar(  # noqa: PLR0912, PLR0915
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
     user_service: AsyncUserService = Depends(get_user_service),

@@ -6,7 +6,7 @@ Refactored for Async operations with proper Dependency Injection.
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from async_dependencies import require_project_admin, require_project_member, require_project_owner
@@ -35,6 +35,9 @@ logger = setup_logger("projects_router")
 
 router = APIRouter(prefix="", tags=["project management"])
 
+# Route-level rate limiting for project operations
+from rate_limiter import RateLimits, limiter
+
 
 class RoleUpdate(BaseModel):
     """Schema for role update requests."""
@@ -43,7 +46,9 @@ class RoleUpdate(BaseModel):
 
 
 @router.post("/projects", response_model=ProjectResponse)
+@limiter.limit(RateLimits.PROJECT_CREATE)
 async def create_project(
+    request: Request,
     project_data: ProjectCreate,
     project_service: AsyncProjectService = Depends(get_project_service),
     current_user: User = Depends(get_current_active_user),
@@ -74,7 +79,9 @@ async def create_project(
 
 
 @router.get("/projects", response_model=list[ProjectResponse])
+@limiter.limit(RateLimits.API_READ)
 async def read_projects_list(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     search: str | None = None,
@@ -128,7 +135,9 @@ async def read_project(
 
 
 @router.put("/projects/{project_id}", response_model=ProjectWithMembers)
+@limiter.limit(RateLimits.PROJECT_UPDATE)
 async def update_project(
+    request: Request,
     project_data: ProjectUpdate,
     project: Project = Depends(require_project_admin),
     project_service: AsyncProjectService = Depends(get_project_service),
@@ -157,7 +166,9 @@ async def update_project(
 
 
 @router.delete("/projects/{project_id}")
+@limiter.limit(RateLimits.PROJECT_DELETE)
 async def delete_project(
+    request: Request,
     project: Project = Depends(require_project_owner),
     project_service: AsyncProjectService = Depends(get_project_service),
     current_user: User = Depends(get_current_active_user),
@@ -184,7 +195,9 @@ async def read_project_members(
 
 
 @router.post("/projects/{project_id}/members", response_model=ProjectMemberResponse)
+@limiter.limit(RateLimits.PROJECT_MEMBERS)
 async def add_project_member(
+    request: Request,
     project_id: str,
     member_data: ProjectMemberCreate,
     project_service: AsyncProjectService = Depends(get_project_service),
@@ -216,7 +229,9 @@ async def add_project_member(
 
 
 @router.delete("/projects/{project_id}/members/{member_user_id}")
+@limiter.limit(RateLimits.PROJECT_MEMBERS)
 async def remove_project_member(
+    request: Request,
     member_user_id: str,
     project: Project = Depends(require_project_admin),
     project_service: AsyncProjectService = Depends(get_project_service),

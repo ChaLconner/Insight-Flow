@@ -5,7 +5,7 @@ Refactored to use AsyncNotificationService and Dependency Injection.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from dependencies.services import get_async_notification_service
 from models.user import User
@@ -23,9 +23,14 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+# Route-level rate limiting for notification operations
+from rate_limiter import RateLimits, limiter
+
 
 @router.get("/", response_model=list[NotificationResponse])
+@limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def get_notifications(
+    request: Request,
     skip: int = 0,
     limit: int = 50,
     unread_only: bool = False,
@@ -42,7 +47,9 @@ async def get_notifications(
 
 
 @router.get("/unread-count", response_model=int)
+@limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def get_unread_count(
+    request: Request,
     notification_service: AsyncNotificationService = Depends(get_async_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> int:
@@ -51,7 +58,9 @@ async def get_unread_count(
 
 
 @router.put("/{notification_id}/read", response_model=NotificationResponse)
+@limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def mark_notification_read(
+    request: Request,
     notification_id: str,
     notification_service: AsyncNotificationService = Depends(get_async_notification_service),
     current_user: User = Depends(get_current_active_user),
@@ -77,7 +86,9 @@ async def mark_notification_read(
 
 
 @router.put("/read-all", response_model=dict)
+@limiter.limit(RateLimits.NOTIFICATION_BULK)
 async def mark_all_read(
+    request: Request,
     notification_service: AsyncNotificationService = Depends(get_async_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> dict:
@@ -90,7 +101,9 @@ async def mark_all_read(
 
 
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def delete_notification(
+    request: Request,
     notification_id: str,
     notification_service: AsyncNotificationService = Depends(get_async_notification_service),
     current_user: User = Depends(get_current_active_user),

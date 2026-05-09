@@ -6,7 +6,7 @@ Refactored for Async operations with proper Dependency Injection.
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from dependencies.services import get_dashboard_service
 from models.user import User
@@ -25,6 +25,9 @@ from utils.logger import setup_logger
 logger = setup_logger("dashboard_router")
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+# Route-level rate limiting for expensive dashboard queries
+from rate_limiter import RateLimits, limiter
 
 
 def _build_activity_response(activity: dict) -> DashboardActivityResponse:
@@ -57,7 +60,9 @@ def _build_activity_response(activity: dict) -> DashboardActivityResponse:
 
 
 @router.get("/overview", response_model=DashboardOverviewResponse)
+@limiter.limit(RateLimits.DASHBOARD_READ)
 async def get_dashboard_overview(
+    request: Request,
     dashboard_service: AsyncDashboardService = Depends(get_dashboard_service),
     current_user: User = Depends(get_current_active_user),
 ) -> DashboardOverviewResponse:
@@ -90,7 +95,9 @@ async def get_dashboard_overview(
 
 
 @router.get("/today-tasks")
+@limiter.limit(RateLimits.DASHBOARD_READ)
 async def get_today_tasks(
+    request: Request,
     dashboard_service: AsyncDashboardService = Depends(get_dashboard_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -106,7 +113,9 @@ async def get_today_tasks(
 
 
 @router.get("/recent-projects")
+@limiter.limit(RateLimits.DASHBOARD_READ)
 async def get_recent_projects(
+    request: Request,
     dashboard_service: AsyncDashboardService = Depends(get_dashboard_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -122,7 +131,9 @@ async def get_recent_projects(
 
 
 @router.get("/team-activity")
+@limiter.limit(RateLimits.DASHBOARD_READ)
 async def get_team_activity(
+    request: Request,
     dashboard_service: AsyncDashboardService = Depends(get_dashboard_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:

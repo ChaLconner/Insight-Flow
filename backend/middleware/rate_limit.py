@@ -182,8 +182,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return None
 
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for static files or health checks
-        if request.url.path.startswith("/static") or request.url.path == "/":
+        path = request.url.path
+
+        # Skip rate limiting for static files or root
+        if path.startswith("/static") or path == "/":
+            return await call_next(request)
+
+        # VULN-10: In production, only exempt health checks (for load balancers).
+        # In development, also exempt docs/openapi for developer convenience.
+        exempt_paths = ["/health"]
+        try:
+            from config import get_settings
+            if not get_settings().is_production:
+                exempt_paths.extend(["/docs", "/openapi.json", "/redoc"])
+        except Exception:
+            pass
+
+        if any(path.startswith(p) for p in exempt_paths):
             return await call_next(request)
 
         client_ip = request.client.host if request.client else "unknown"

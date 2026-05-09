@@ -36,6 +36,10 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
     """
     Configure rate limiting middleware.
     Uses Redis if available, falls back to in-memory.
+
+    SECURITY NOTE (VULN-01): In-memory rate limiting is NOT safe for
+    production multi-worker deployments. Each worker maintains its own
+    counter, effectively multiplying the allowed rate by N workers.
     """
     from middleware.rate_limit import RateLimitMiddleware
     from middleware.redis_rate_limit import RedisRateLimitMiddleware
@@ -60,6 +64,15 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
                 return
         except Exception as e:
             logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
+
+    # VULN-01: Warn critically in production when Redis is not available
+    if settings.is_production:
+        logger.critical(
+            "⚠️ SECURITY WARNING: Using in-memory rate limiting in production! "
+            "Rate limits will NOT be shared across workers. "
+            "An attacker gets N × the configured limit (where N = worker count). "
+            "Configure REDIS_URL for distributed rate limiting."
+        )
 
     # Fallback to in-memory rate limiting
     app.add_middleware(RateLimitMiddleware, calls=200, period=60)

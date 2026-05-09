@@ -5,7 +5,7 @@ Refactored to use async operations and Dependency Injection.
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from async_dependencies import require_project_member
 from dependencies.services import get_project_service, get_task_service
@@ -30,6 +30,9 @@ from utils.validators import validate_uuid
 logger = setup_logger("project_tasks_router")
 
 router = APIRouter(prefix="/projects", tags=["project tasks"])
+
+# Route-level rate limiting for project task operations
+from rate_limiter import RateLimits, limiter
 
 
 def _get_status_value(status) -> str:
@@ -74,7 +77,9 @@ def _build_task_with_details_response(task: Any) -> dict:
 
 
 @router.get("/{project_id}/tasks", response_model=TaskListResponse)
+@limiter.limit(RateLimits.API_READ)
 async def get_project_tasks(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     sort_by: str | None = Query(None, description="Field to sort by"),
@@ -116,7 +121,9 @@ async def get_project_tasks(
 
 
 @router.post("/{project_id}/tasks", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_CREATE)
 async def create_task_for_project(
+    request: Request,
     task_data: TaskCreate,
     project: Project = Depends(require_project_member),
     task_service: AsyncTaskService = Depends(get_task_service),
@@ -138,7 +145,9 @@ async def create_task_for_project(
 
 
 @router.get("/{project_id}/tasks/{task_id}", response_model=TaskWithDetails)
+@limiter.limit(RateLimits.API_READ)
 async def read_project_task(
+    request: Request,
     project_id: str,
     task_id: str,
     task_service: AsyncTaskService = Depends(get_task_service),
@@ -173,7 +182,9 @@ async def read_project_task(
 
 
 @router.put("/{project_id}/tasks/{task_id}", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_UPDATE)
 async def update_project_task(
+    request: Request,
     task_id: str,
     task_data: TaskUpdate,
     project: Project = Depends(require_project_member),
@@ -206,7 +217,9 @@ async def update_project_task(
 
 
 @router.delete("/{project_id}/tasks/{task_id}")
+@limiter.limit(RateLimits.TASK_DELETE)
 async def delete_project_task(
+    request: Request,
     task_id: str,
     project: Project = Depends(require_project_member),
     task_service: AsyncTaskService = Depends(get_task_service),
@@ -238,7 +251,9 @@ async def delete_project_task(
 
 
 @router.put("/{project_id}/tasks/{task_id}/status", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_UPDATE)
 async def update_project_task_status(
+    request: Request,
     task_id: str,
     status_data: dict[str, str],
     project: Project = Depends(require_project_member),
@@ -279,7 +294,9 @@ async def update_project_task_status(
 
 
 @router.put("/{project_id}/tasks/{task_id}/assign", response_model=TaskResponse)
+@limiter.limit(RateLimits.TASK_UPDATE)
 async def assign_project_task(
+    request: Request,
     project_id: str,
     task_id: str,
     assign_data: dict,
