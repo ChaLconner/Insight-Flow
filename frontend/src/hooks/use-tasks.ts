@@ -82,7 +82,7 @@ export const useTasks = ({
         hasMore: items.length >= pageSize,
       };
     },
-    enabled: enabled && isAuthenticated,
+    enabled: Boolean(enabled && isAuthenticated),
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
     retry: 2,

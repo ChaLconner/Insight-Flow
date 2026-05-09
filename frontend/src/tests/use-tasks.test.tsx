@@ -9,9 +9,10 @@ import { useTasks } from "@/hooks/use-tasks";
 
 // Mock the auth store
 vi.mock("@/stores/auth-store", () => ({
-  useAuthStore: vi.fn(() => ({
-    isAuthenticated: true,
-  })),
+  useAuthStore: vi.fn((selector) => {
+    const state = { isAuthenticated: true };
+    return selector ? selector(state) : state.isAuthenticated;
+  }),
 }));
 
 // Mock the tasksApi
@@ -193,8 +194,10 @@ describe("useTasks hook", () => {
     });
     it("should not fetch when not authenticated", async () => {
        const { useAuthStore } = await import("@/stores/auth-store");
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-       vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: false } as any);
+       vi.mocked(useAuthStore).mockImplementation((selector: any) => {
+         const state = { isAuthenticated: false };
+         return selector ? selector(state) : state.isAuthenticated;
+       });
 
        const { result } = renderHook(() => useTasks(), {
          wrapper: createWrapper(),
@@ -207,9 +210,10 @@ describe("useTasks hook", () => {
        expect(tasksApi.getMyTasks).not.toHaveBeenCalled();
        expect(result.current.tasks).toEqual([]);
        
-       // Reset mock
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-       vi.mocked(useAuthStore).mockReturnValue({ isAuthenticated: true } as any);
+       vi.mocked(useAuthStore).mockImplementation((selector: any) => {
+         const state = { isAuthenticated: true };
+         return selector ? selector(state) : state.isAuthenticated;
+       });
     });
   });
 
