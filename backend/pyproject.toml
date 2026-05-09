@@ -188,7 +188,7 @@ omit = [
     "middleware/tracing.py",
     "middleware/monitoring.py",
     "middleware/csrf.py",
-    "middleware/cache.py",
+
     "middleware/response_cache.py",
     "models/token_blacklist.py",
     # Auth dependencies are mocked in conformance tests
