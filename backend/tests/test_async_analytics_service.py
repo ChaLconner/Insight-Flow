@@ -76,7 +76,12 @@ async def test_get_analytics_overview_success(analytics_service, user_id, projec
         patch.object(
             analytics_service,
             "_get_distributions",
-            return_value={"status": [], "priority": [], "workload": []},
+            return_value={
+                "status": [],
+                "priority": [],
+                "workload": [],
+                "workloadTotal": 0,
+            },
         ),
         patch.object(
             analytics_service,
@@ -95,6 +100,7 @@ async def test_get_analytics_overview_success(analytics_service, user_id, projec
         assert len(result["projects"]) == 1
         assert len(result["team"]) == 1
         assert len(result["trends"]) == 1
+        assert result["teamWorkloadTotal"] == 0
 
         # Verify calls
         mock_overview.assert_called_once()
@@ -200,6 +206,9 @@ async def test_get_daily_trends(analytics_service, project_ids):
 
 @pytest.mark.asyncio
 async def test_get_distributions(analytics_service, project_ids):
+    res_workload_total = MagicMock()
+    res_workload_total.scalar.return_value = 1
+
     res_status = MagicMock()
     res_status.all.return_value = [("done", 10), ("todo", 5)]
 
@@ -210,14 +219,20 @@ async def test_get_distributions(analytics_service, project_ids):
     res_workload = MagicMock()
     res_workload.all.return_value = [(u1, 15)]
 
-    analytics_service.db.execute.side_effect = [res_status, res_priority, res_workload]
+    analytics_service.db.execute.side_effect = [
+        res_status,
+        res_priority,
+        res_workload_total,
+        res_workload,
+    ]
 
-    dists = await analytics_service._get_distributions(project_ids)
+    dists = await analytics_service._get_distributions(project_ids, workload_limit=10)
 
     assert len(dists["status"]) == 2
     assert len(dists["priority"]) == 2
     assert len(dists["workload"]) == 1
     assert dists["workload"][0]["tasks"] == 15
+    assert dists["workloadTotal"] == 1
 
 
 @pytest.mark.asyncio
@@ -250,14 +265,9 @@ async def test_get_team_workload_paginated(analytics_service, user_id):
     # Stats rows
     res_stats = MagicMock()
     uid = uuid.uuid4()
-    res_stats.all.return_value = [(uid, 10, 5)]
+    res_stats.all.return_value = [(uid, "U1", None, 10, 5)]
 
-    # Users
-    u1 = User(id=uid, name="U1", email="u1@test.com")
-    res_users = MagicMock()
-    res_users.scalars.return_value.all.return_value = [u1]
-
-    analytics_service.db.execute.side_effect = [res_count, res_stats, res_users]
+    analytics_service.db.execute.side_effect = [res_count, res_stats]
 
     result = await analytics_service.get_team_workload_paginated(user_id)
 
@@ -265,6 +275,10 @@ async def test_get_team_workload_paginated(analytics_service, user_id):
     assert len(result["items"]) == 1
     assert result["items"][0]["name"] == "U1"
     assert result["items"][0]["progress"] == 50
+    assert result["page_size"] == 10
+    assert result["total_pages"] == 1
+    assert result["has_next"] is False
+    assert result["has_prev"] is False
 
 
 @pytest.mark.asyncio
