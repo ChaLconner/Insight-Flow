@@ -109,4 +109,3 @@ const DashboardHeader = memo(function DashboardHeader(
 DashboardHeader.displayName = "DashboardHeader";
 
 export { DashboardHeader };
-export type { DashboardHeaderProps };

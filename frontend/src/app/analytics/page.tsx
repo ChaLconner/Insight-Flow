@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { AnalyticsPeriod } from "@/types";
 import { useAnalytics, useTeamWorkload } from "@/hooks/use-analytics";
 import type { TeamWorkloadParams } from "@/app/analytics/types";
+import type { AnalyticsChartKey } from "@/components/analytics/ChartCarousel";
 import { useAuthStore } from "@/stores/auth-store";
 
 // Components
@@ -79,6 +80,7 @@ const INITIAL_WORKLOAD_PARAMS: TeamWorkloadParams = {
 
 const PAGINATION_THRESHOLD = 10;
 const EMPTY_ARRAY: never[] = [];
+const INITIAL_ACTIVE_CHART: AnalyticsChartKey = "burndown";
 
 // ============================================
 // Main Component
@@ -93,6 +95,8 @@ export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(
     AnalyticsPeriod.MONTH,
   );
+  const [activeChart, setActiveChart] =
+    useState<AnalyticsChartKey>(INITIAL_ACTIVE_CHART);
   const [workloadParams, setWorkloadParams] = useState<TeamWorkloadParams>(
     INITIAL_WORKLOAD_PARAMS,
   );
@@ -100,8 +104,11 @@ export default function AnalyticsPage() {
   // Data fetching hooks
   const { data, isLoading, error, refetch, isRefetching } =
     useAnalytics(selectedPeriod, { enabled: canFetchAnalytics });
+  const teamWorkloadTotal =
+    data?.teamWorkloadTotal ?? (data?.teamWorkload?.length ?? 0);
+  const usePaginatedWorkload = teamWorkloadTotal > PAGINATION_THRESHOLD;
   const shouldFetchPaginatedWorkload =
-    (data?.teamWorkload?.length ?? 0) >= PAGINATION_THRESHOLD;
+    canFetchAnalytics && usePaginatedWorkload && activeChart === "workload";
 
   const {
     data: paginatedWorkload,
@@ -110,16 +117,6 @@ export default function AnalyticsPage() {
   } = useTeamWorkload(workloadParams, {
     enabled: canFetchAnalytics && shouldFetchPaginatedWorkload,
   });
-
-  // ============================================
-  // Memoized values
-  // ============================================
-
-  // Check if we should use paginated mode
-  const usePaginatedWorkload = useMemo(() => {
-    const paginatedTotal = paginatedWorkload?.total ?? 0;
-    return shouldFetchPaginatedWorkload || paginatedTotal > PAGINATION_THRESHOLD;
-  }, [paginatedWorkload?.total, shouldFetchPaginatedWorkload]);
 
   // Combined loading state for workload
   const isWorkloadBusy = isWorkloadLoading || isWorkloadFetching;
@@ -140,12 +137,16 @@ export default function AnalyticsPage() {
     refetch();
   }, [refetch]);
 
+  const handleActiveChartChange = useCallback((chart: AnalyticsChartKey) => {
+    setActiveChart(chart);
+  }, []);
+
   // ============================================
   // Render logic
   // ============================================
 
   // Loading state
-  if (authLoading || !canFetchAnalytics || isLoading) {
+  if (authLoading || !canFetchAnalytics || (isLoading && !data)) {
     return (
       <ProtectedLayout>
         <AnalyticsPageSkeleton />
@@ -190,6 +191,7 @@ export default function AnalyticsPage() {
             paginatedWorkloadData={paginatedWorkload}
             onWorkloadPageChange={handleWorkloadPageChange}
             isWorkloadLoading={isWorkloadBusy}
+            onActiveChartChange={handleActiveChartChange}
           />
         </div>
 

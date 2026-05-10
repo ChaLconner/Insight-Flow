@@ -50,7 +50,7 @@ export function BillingSettings() {
   const { methods, isLoading: methodsLoading, fetchMethods, setDefault, deleteMethod } = usePaymentMethods();
   const { subscription, isLoading: subLoading, fetchSubscription, cancelSubscription, updateSubscription, resumeSubscription } = useSubscription();
   const { setupIntent, isLoading: setupLoading, createSetupIntent, reset: resetSetupIntent, isPrefetched } = useSetupIntent();
-  const { plans, usageStats, isLoading: billingDataLoading } = useBillingData();
+  const { plans, usageStats, isLoading: billingDataLoading, refresh: refreshBillingData } = useBillingData();
 
   // Combined Loading State
   const isLoading = methodsLoading || subLoading || billingDataLoading;
@@ -91,7 +91,7 @@ export function BillingSettings() {
     setIsAddCardOpen(false);
     resetSetupIntent();
     await new Promise(resolve => setTimeout(resolve, 1000));
-    await fetchMethods();
+    await fetchMethods({ force: true });
     
     toast.success("Card added successfully", {
       description: "Your payment card has been linked to your account.",
@@ -121,12 +121,15 @@ export function BillingSettings() {
       toast.success("Plan updated successfully");
       setIsChangePlanOpen(false);
       // Wait a bit before refreshing to allow backend to process
-      setTimeout(() => fetchSubscription(), 1000);
+      setTimeout(() => {
+        void fetchSubscription({ force: true });
+        void refreshBillingData({ force: true });
+      }, 1000);
     } catch {
        // Error usually handled by hook
        toast.error("Failed to update plan");
     }
-  }, [subscription?.plan, selectedPaymentMethodId, updateSubscription, fetchSubscription]);
+  }, [subscription?.plan, selectedPaymentMethodId, updateSubscription, fetchSubscription, refreshBillingData]);
 
   // Resolve Current Plan Config
   const currentPlan = subscription?.plan ?? "free";

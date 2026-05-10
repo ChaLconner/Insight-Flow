@@ -11,7 +11,7 @@ const CARD_CLASSES =
 const TITLE_CLASSES = "text-sm font-medium text-muted-foreground";
 const VALUE_CLASSES = "text-2xl font-bold text-foreground";
 
-export interface StatsCardProps {
+interface StatsCardProps {
   title: string;
   value: string | number;
   change?: string;

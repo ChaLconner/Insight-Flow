@@ -1,7 +1,6 @@
 import React, { memo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 
 export const MetricCardSkeleton = memo(function MetricCardSkeleton() {
   return (
@@ -137,30 +136,28 @@ export const HeaderSkeleton = memo(function HeaderSkeleton() {
 
 export const AnalyticsPageSkeleton = memo(function AnalyticsPageSkeleton() {
   return (
-    <ProtectedLayout>
-      <div className="space-y-8">
-        <HeaderSkeleton />
+    <div className="space-y-8">
+      <HeaderSkeleton />
 
-        {/* Key Metrics Skeleton */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }, (_, i) => (
-            <MetricCardSkeleton key={i} />
-          ))}
-        </div>
-
-        {/* Chart Carousel Skeleton */}
-        <ChartCarouselSkeleton />
-
-        {/* Trends Skeleton */}
-        <PerformanceTrendsSkeleton />
-
-        {/* Performance Charts Skeleton */}
-        <div className="grid gap-8 lg:grid-cols-2">
-          {Array.from({ length: 2 }, (_, i) => (
-            <PerformanceCardSkeleton key={i} />
-          ))}
-        </div>
+      {/* Key Metrics Skeleton */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <MetricCardSkeleton key={i} />
+        ))}
       </div>
-    </ProtectedLayout>
+
+      {/* Chart Carousel Skeleton */}
+      <ChartCarouselSkeleton />
+
+      {/* Trends Skeleton */}
+      <PerformanceTrendsSkeleton />
+
+      {/* Performance Charts Skeleton */}
+      <div className="grid gap-8 lg:grid-cols-2">
+        {Array.from({ length: 2 }, (_, i) => (
+          <PerformanceCardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
   );
 });

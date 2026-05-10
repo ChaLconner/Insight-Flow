@@ -49,7 +49,7 @@ export function ThemeProvider({
       return;
     }
 
-    if (lastSyncedThemeRef.current === null) {
+    if (lastSyncedThemeRef.current == null) {
       lastSyncedThemeRef.current = currentTheme;
       return;
     }
@@ -89,9 +89,9 @@ export function ThemeProvider({
         root.style.colorScheme = "dark";
       } else {
         // System or other
-         const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-         root.classList.add(isDark ? "dark" : "light");
-         root.style.colorScheme = isDark ? "dark" : "light";
+        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        root.classList.add(isDark ? "dark" : "light");
+        root.style.colorScheme = isDark ? "dark" : "light";
       }
     }
   }, [isHydrated, isAuthPage]);

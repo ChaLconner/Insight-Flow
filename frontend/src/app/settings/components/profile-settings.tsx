@@ -14,6 +14,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { usersApi } from "@/lib/api-endpoints";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
+import { canSubmitProfileForm } from "./profile-settings.utils";
 
 // Define proper types for profile data
 export interface ProfileData {
@@ -39,7 +40,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/;
 
 // Bio max length
-const BIO_MAX_LENGTH = 300;
+const BIO_MAX_LENGTH = 100;
 
 export function ProfileSettings({
   isLoading: initialLoading = false,
@@ -160,6 +161,10 @@ export function ProfileSettings({
       toast.error("Bio is too long");
       return;
     }
+    if (!isPhoneValid) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
 
     try {
       setIsSaving(true);
@@ -194,6 +199,14 @@ export function ProfileSettings({
     profileData.phone !== ((user as unknown as Record<string, string | undefined>).phone ?? "") ||
     profileData.bio !== ((user as unknown as Record<string, string | undefined>).bio ?? "")
   );
+  const canSaveProfile = canSubmitProfileForm({
+    hasUser: Boolean(user),
+    isSaving,
+    isFormDirty: Boolean(isFormDirty),
+    isEmailValid,
+    isPhoneValid,
+    isBioOverLimit,
+  });
 
   return (
     <div className="space-y-6">
@@ -450,7 +463,7 @@ export function ProfileSettings({
           <CardFooter className="border-t border-border pt-6 flex justify-end bg-accent/5">
             <Button
               onClick={handleSave}
-              disabled={isSaving || !user || !isFormDirty || !isEmailValid || isBioOverLimit}
+              disabled={!canSaveProfile}
               className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 px-8 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? (

@@ -78,6 +78,8 @@ const initialResolvedTheme = isSystem
   ? (systemPrefersDark ? "dark" : "light")
   : (initialTheme === "light" ? "light" : "dark");
 
+let systemThemeListenerCleanup: (() => void) | null = null;
+
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
@@ -279,11 +281,15 @@ export const useThemeStore = create<ThemeState>()(
           return;
         }
 
+        if (systemThemeListenerCleanup) {
+          return systemThemeListenerCleanup;
+        }
+
         const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
         const handleChange = () => {
           if (get().theme === "system") {
-            get().applySystemTheme();
+            get().updateSystemPreference(mediaQuery.matches);
           }
         };
 
@@ -291,9 +297,19 @@ export const useThemeStore = create<ThemeState>()(
         mediaQuery.addEventListener("change", handleChange);
 
         // Return cleanup function
-        return () => {
+        let isListening = true;
+
+        systemThemeListenerCleanup = () => {
+          if (!isListening) {
+            return;
+          }
+
+          isListening = false;
           mediaQuery.removeEventListener("change", handleChange);
+          systemThemeListenerCleanup = null;
         };
+
+        return systemThemeListenerCleanup;
       },
 
       updateMetaThemeColor: (theme) => {

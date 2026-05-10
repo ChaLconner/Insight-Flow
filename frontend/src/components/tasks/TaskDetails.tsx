@@ -21,6 +21,8 @@ import {
   Tag,
   History,
   Flag,
+  MessageSquare,
+  Send,
   // CheckCircle2,
   // Timer,
   Save,
@@ -28,7 +30,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { format, differenceInDays, isPast, isToday, isTomorrow } from "date-fns";
-import type { Task, UpdateTaskRequest } from "@/types";
+import type { Task, TaskComment, UpdateTaskRequest } from "@/types";
 import { TaskStatus, TaskPriority, TaskType } from "@/types";
 import { tasksApi } from "@/lib/api-endpoints";
 import {
@@ -131,6 +133,10 @@ export function TaskDetails({
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [comments, setComments] = useState<TaskComment[]>(initialTask.comments ?? []);
+  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   // Edit State
   const [title, setTitle] = useState(task.title);
@@ -151,7 +157,34 @@ export function TaskDetails({
 
   useEffect(() => {
     setTask(initialTask);
+    setComments(initialTask.comments ?? []);
   }, [initialTask]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadComments = async () => {
+      try {
+        setIsCommentsLoading(true);
+        const fetchedComments = await tasksApi.getTaskComments(initialTask.id);
+        if (isMounted) {
+          setComments(fetchedComments);
+        }
+      } catch (error) {
+        console.error("Failed to load task comments:", error);
+      } finally {
+        if (isMounted) {
+          setIsCommentsLoading(false);
+        }
+      }
+    };
+
+    void loadComments();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialTask.id]);
 
   // Sync edit state when task changes or mode toggles
   useEffect(() => {
@@ -226,6 +259,26 @@ export function TaskDetails({
       console.error("Failed to delete task:", error);
       setIsDeleting(false);
       toast.error("Failed to delete task");
+    }
+  };
+
+  const handleCommentSubmit = async () => {
+    const content = commentDraft.trim();
+    if (!content) {
+      return;
+    }
+
+    try {
+      setIsSubmittingComment(true);
+      const createdComment = await tasksApi.createTaskComment(task.id, { content });
+      setComments((current) => [...current, createdComment]);
+      setCommentDraft("");
+      toast.success("Comment posted");
+    } catch (error) {
+      console.error("Failed to post comment:", error);
+      toast.error("Failed to post comment");
+    } finally {
+      setIsSubmittingComment(false);
     }
   };
 
@@ -508,6 +561,89 @@ export function TaskDetails({
               ) : (
                 renderDescription(task.description ?? "")
               )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-primary" />
+                    Comments
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Use <span className="font-mono">@username</span> to mention teammates.
+                  </p>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {comments.length} comment{comments.length === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border bg-background/60 p-4 space-y-3">
+                  <Textarea
+                    value={commentDraft}
+                    onChange={(event) => setCommentDraft(event.target.value)}
+                    placeholder="Add a comment or mention someone with @username"
+                    className="min-h-[110px] bg-transparent border-border"
+                    disabled={isSubmittingComment}
+                  />
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      Mention notifications are sent when the username matches an active account.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={handleCommentSubmit}
+                      disabled={!commentDraft.trim() || isSubmittingComment}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      {isSubmittingComment ? "Posting..." : "Post Comment"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {isCommentsLoading ? (
+                    <div className="rounded-xl border border-border bg-background/40 px-4 py-6 text-sm text-muted-foreground">
+                      Loading comments...
+                    </div>
+                  ) : comments.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-background/30 px-4 py-6 text-sm text-muted-foreground">
+                      No comments yet. Start the discussion here.
+                    </div>
+                  ) : (
+                    comments.map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="rounded-xl border border-border bg-background/40 p-4 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              {comment.user.firstName
+                                ? `${comment.user.firstName} ${comment.user.lastName ?? ""}`.trim()
+                                : (comment.user.username ?? comment.user.email)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(comment.createdAt), "MMM d, yyyy h:mm a")}
+                            </p>
+                          </div>
+                          {comment.mentions.length > 0 && (
+                            <div className="text-[11px] uppercase tracking-wide text-amber-400">
+                              {comment.mentions.length} mention{comment.mentions.length === 1 ? "" : "s"}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                          {comment.content}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

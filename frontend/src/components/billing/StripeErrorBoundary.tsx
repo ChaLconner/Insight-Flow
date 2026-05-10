@@ -164,20 +164,4 @@ export class StripeErrorBoundary extends Component<Props, State> {
   }
 }
 
-/**
- * HOC to wrap any component with Stripe error boundary
- */
-export function withStripeErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  fallbackMessage?: string
-) {
-  return function WithStripeErrorBoundary(props: P) {
-    return (
-      <StripeErrorBoundary fallbackMessage={fallbackMessage}>
-        <WrappedComponent {...props} />
-      </StripeErrorBoundary>
-    );
-  };
-}
-
 export default StripeErrorBoundary;

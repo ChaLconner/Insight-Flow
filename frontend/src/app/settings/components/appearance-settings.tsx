@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
 import { useTheme } from "@/hooks/use-theme";
 import {
   Card,
@@ -10,9 +11,14 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Palette, Sun, Moon, Monitor, Check } from "lucide-react";
+import { usersApi } from "@/lib/api-endpoints";
+import { toast } from "sonner";
+
+const SUPPORTED_THEMES = new Set(["light", "dark", "system"]);
 
 export function AppearanceSettings() {
   const { currentTheme, setTheme } = useTheme();
+  const hydratedThemeRef = useRef(false);
 
   const themes = [
     {
@@ -34,6 +40,56 @@ export function AppearanceSettings() {
       description: "Syncs with device",
     },
   ] as const;
+
+  useEffect(() => {
+    if (hydratedThemeRef.current) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadPersistedTheme = async () => {
+      try {
+        const settings = (await usersApi.getSettings()) as { theme?: string } | null;
+        const persistedTheme = settings?.theme;
+
+        if (
+          isMounted &&
+          persistedTheme &&
+          SUPPORTED_THEMES.has(persistedTheme) &&
+          persistedTheme !== currentTheme
+        ) {
+          setTheme(persistedTheme as "light" | "dark" | "system");
+        }
+      } catch {
+        // Keep local theme when settings lookup fails.
+      } finally {
+        hydratedThemeRef.current = true;
+      }
+    };
+
+    void loadPersistedTheme();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentTheme, setTheme]);
+
+  const handleThemeChange = useCallback(async (themeId: "light" | "dark" | "system") => {
+    if (themeId === currentTheme) {
+      return;
+    }
+
+    const previousTheme = currentTheme;
+    setTheme(themeId);
+
+    try {
+      await usersApi.updateSettings({ theme: themeId });
+    } catch {
+      setTheme(previousTheme);
+      toast.error("Failed to save theme preference");
+    }
+  }, [currentTheme, setTheme]);
 
   return (
     <div className="space-y-6">
@@ -60,7 +116,7 @@ export function AppearanceSettings() {
                 return (
                   <button
                     key={theme.id}
-                    onClick={() => setTheme(theme.id)}
+                    onClick={() => void handleThemeChange(theme.id)}
                     className={`
                       relative flex flex-col items-center justify-between p-4 rounded-xl border-2 transition-all duration-200 outline-none
                       ${

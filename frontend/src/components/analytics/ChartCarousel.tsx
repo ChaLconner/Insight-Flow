@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, lazy, useState, useCallback, useMemo, memo } from "react";
+import { Suspense, lazy, useState, useCallback, useMemo, memo, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { AnalyticsPeriod } from "@/types";
 import type {
@@ -34,6 +34,16 @@ const PriorityChart = lazy(() =>
 
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
 
+const CHART_KEYS = [
+  "burndown",
+  "workload",
+  "creation-completion",
+  "status-distribution",
+  "priority-distribution",
+] as const;
+
+export type AnalyticsChartKey = (typeof CHART_KEYS)[number];
+
 interface ChartCarouselProps {
   burndownData: BurndownDataPoint[];
   workloadData: { name: string; avatar?: string; tasks: number }[];
@@ -49,6 +59,7 @@ interface ChartCarouselProps {
   paginatedWorkloadData?: TeamWorkloadPaginatedResponse | null;
   onWorkloadPageChange?: (params: TeamWorkloadParams) => void;
   isWorkloadLoading?: boolean;
+  onActiveChartChange?: (key: AnalyticsChartKey) => void;
 }
 
 // Period options moved outside component to prevent recreation
@@ -100,9 +111,14 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
   paginatedWorkloadData,
   onWorkloadPageChange,
   isWorkloadLoading = false,
+  onActiveChartChange,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(0);
+
+  useEffect(() => {
+    onActiveChartChange?.(CHART_KEYS[currentIndex]);
+  }, [currentIndex, onActiveChartChange]);
 
   // Memoize charts array to prevent recreation on each render
   const charts = useMemo(

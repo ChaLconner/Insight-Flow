@@ -52,11 +52,12 @@ export interface AnalyticsResponse {
   statusDistribution: { name: string; value: number }[];
   priorityDistribution: { name: string; value: number }[];
   teamWorkload: { name: string; avatar?: string; tasks: number }[];
+  teamWorkloadTotal?: number;
   dailyTrends: { date: string; created: number; completed: number }[];
 }
 
 // Types for paginated team workload (scalable for 1K-100K users)
-export interface TeamWorkloadItem {
+interface TeamWorkloadItem {
   name: string;
   avatar?: string;
   tasks: number;

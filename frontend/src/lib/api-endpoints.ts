@@ -14,13 +14,43 @@ import type {
   CreateProjectRequest,
   UpdateProjectRequest,
   CreateTaskRequest,
+  CreateTaskCommentRequest,
   UpdateTaskRequest,
   TaskListResponse,
+  TaskComment,
   Notification,
   RecentActivity,
   InviteUserRequest,
   UserStats,
+  SystemNotificationRequest,
+  SystemNotificationResponse,
 } from "@/types";
+
+const USER_SETTINGS_CACHE_TTL_MS = 30_000;
+
+type UserSettingsCache = {
+  value: unknown | null;
+  timestamp: number;
+};
+
+const userSettingsCache: UserSettingsCache = {
+  value: null,
+  timestamp: 0,
+};
+
+function hasFreshUserSettingsCache(): boolean {
+  return userSettingsCache.value != null && Date.now() - userSettingsCache.timestamp < USER_SETTINGS_CACHE_TTL_MS;
+}
+
+function updateUserSettingsCache(value: unknown): void {
+  userSettingsCache.value = value;
+  userSettingsCache.timestamp = Date.now();
+}
+
+export function __clearUsersSettingsCacheForTests(): void {
+  userSettingsCache.value = null;
+  userSettingsCache.timestamp = 0;
+}
 import type {
   AnalyticsResponse,
   TeamWorkloadPaginatedResponse,
@@ -303,6 +333,24 @@ export const tasksApi = {
     );
     return data;
   },
+
+  // Get task comments
+  getTaskComments: async (taskId: string): Promise<TaskComment[]> => {
+    const cacheKey = `tasks-getTaskComments-${taskId}`;
+    return createDeduplicatedRequest(async () => {
+      const { data } = await apiClient.get(`/tasks/${taskId}/comments`);
+      return data;
+    }, cacheKey);
+  },
+
+  // Create task comment
+  createTaskComment: async (
+    taskId: string,
+    commentData: CreateTaskCommentRequest,
+  ): Promise<TaskComment> => {
+    const { data } = await apiClient.post(`/tasks/${taskId}/comments`, commentData);
+    return data;
+  },
 };
 
 // ===========================================
@@ -480,16 +528,23 @@ export const usersApi = {
 
   // Get user settings
   getSettings: async (): Promise<unknown> => {
+    if (hasFreshUserSettingsCache()) {
+      return userSettingsCache.value;
+    }
+
     const cacheKey = "users-getSettings";
-    return createDeduplicatedRequest(async () => {
+    const settings = await createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get("/users/me/settings");
       return data;
     }, cacheKey);
+    updateUserSettingsCache(settings);
+    return settings;
   },
 
   // Update user settings
   updateSettings: async (settingsData: unknown): Promise<unknown> => {
     const { data } = await apiClient.patch("/users/me/settings", settingsData);
+    updateUserSettingsCache(data);
     return data;
   },
 
@@ -506,6 +561,14 @@ export const usersApi = {
       const { data } = await apiClient.get("/users/stats");
       return data;
     }, cacheKey);
+  },
+
+  // Send system notification
+  sendSystemNotification: async (
+    notificationData: SystemNotificationRequest,
+  ): Promise<SystemNotificationResponse> => {
+    const { data } = await apiClient.post("/users/system-notifications", notificationData);
+    return data;
   },
 };
 

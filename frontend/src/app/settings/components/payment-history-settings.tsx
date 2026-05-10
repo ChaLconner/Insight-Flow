@@ -31,6 +31,58 @@ interface PaymentStats {
 }
 
 const PAGE_SIZE = 10;
+const PAYMENT_HISTORY_CACHE_TTL_MS = 30_000;
+const PAYMENT_HISTORY_CACHE_MAX_ENTRIES = 12;
+
+type PaymentHistoryCacheEntry = {
+  payments: PaymentHistoryItem[];
+  total: number;
+  timestamp: number;
+};
+
+const paymentStatsCache: {
+  value: PaymentStats | null;
+  timestamp: number;
+} = {
+  value: null,
+  timestamp: 0,
+};
+
+const paymentHistoryCache = new Map<string, PaymentHistoryCacheEntry>();
+let paymentStatsPromise: Promise<PaymentStats> | null = null;
+const paymentHistoryPromises = new Map<string, Promise<{ payments: PaymentHistoryItem[]; total: number }>>();
+
+function hasFreshCache(timestamp: number): boolean {
+  return timestamp > 0 && Date.now() - timestamp < PAYMENT_HISTORY_CACHE_TTL_MS;
+}
+
+function pruneHistoryCache(): void {
+  for (const [key, value] of paymentHistoryCache.entries()) {
+    if (!hasFreshCache(value.timestamp)) {
+      paymentHistoryCache.delete(key);
+    }
+  }
+
+  while (paymentHistoryCache.size > PAYMENT_HISTORY_CACHE_MAX_ENTRIES) {
+    const oldestKey = paymentHistoryCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    paymentHistoryCache.delete(oldestKey);
+  }
+}
+
+function getHistoryCacheKey(page: number, statusFilter: string): string {
+  return `${page}:${statusFilter}`;
+}
+
+export function __clearPaymentHistoryCacheForTests(): void {
+  paymentStatsCache.value = null;
+  paymentStatsCache.timestamp = 0;
+  paymentHistoryCache.clear();
+  paymentStatsPromise = null;
+  paymentHistoryPromises.clear();
+}
 
 export function PaymentHistorySettings() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
@@ -47,13 +99,72 @@ export function PaymentHistorySettings() {
   const [stats, setStats] = useState<PaymentStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
+  const requestStats = useCallback(async () => {
+    if (paymentStatsPromise) {
+      return paymentStatsPromise;
+    }
+
+    paymentStatsPromise = apiClient.get("/payment/history/stats")
+      .then(({ data }) => {
+        paymentStatsCache.value = data;
+        paymentStatsCache.timestamp = Date.now();
+        return data;
+      })
+      .finally(() => {
+        paymentStatsPromise = null;
+      });
+
+    return paymentStatsPromise;
+  }, []);
+
+  const requestPaymentHistory = useCallback(async (page: number, statusFilter: string) => {
+    const cacheKey = getHistoryCacheKey(page, statusFilter);
+    const existingPromise = paymentHistoryPromises.get(cacheKey);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    const offset = (page - 1) * PAGE_SIZE;
+    const params: Record<string, unknown> = { limit: PAGE_SIZE, offset };
+    if (statusFilter !== "all") {
+      params.status = statusFilter;
+    }
+
+    const requestPromise = apiClient
+      .get("/payment/history", { params })
+      .then(({ data }) => {
+        const result = {
+          payments: data?.payments ?? [],
+          total: data?.total ?? data?.payments?.length ?? 0,
+        };
+        paymentHistoryCache.set(cacheKey, {
+          ...result,
+          timestamp: Date.now(),
+        });
+        pruneHistoryCache();
+        return result;
+      })
+      .finally(() => {
+        paymentHistoryPromises.delete(cacheKey);
+      });
+
+    paymentHistoryPromises.set(cacheKey, requestPromise);
+    return requestPromise;
+  }, []);
+
   // Fetch aggregated stats from dedicated API
   const fetchStats = useCallback(async () => {
+    if (paymentStatsCache.value && hasFreshCache(paymentStatsCache.timestamp)) {
+      setStats(paymentStatsCache.value);
+      setStatsLoading(false);
+      return;
+    }
+
     const requestId = statsRequestIdRef.current + 1;
     statsRequestIdRef.current = requestId;
     setStatsLoading(true);
     try {
-      const { data } = await apiClient.get("/payment/history/stats");
+      const data = await requestStats();
       if (requestId !== statsRequestIdRef.current) {
         return;
       }
@@ -65,30 +176,31 @@ export function PaymentHistorySettings() {
         setStatsLoading(false);
       }
     }
-  }, []);
+  }, [requestStats]);
 
   // Fetch payment history with pagination and server-side filtering
   const fetchPaymentHistory = useCallback(async (page: number, statusFilter: string) => {
+    pruneHistoryCache();
+    const cacheKey = getHistoryCacheKey(page, statusFilter);
+    const cachedHistory = paymentHistoryCache.get(cacheKey);
+
+    if (cachedHistory && hasFreshCache(cachedHistory.timestamp)) {
+      setPaymentHistory(cachedHistory.payments);
+      setTotalCount(cachedHistory.total);
+      setHistoryLoading(false);
+      return;
+    }
+
     const requestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = requestId;
     setHistoryLoading(true);
     try {
-      const offset = (page - 1) * PAGE_SIZE;
-      const params: Record<string, unknown> = { limit: PAGE_SIZE, offset };
-      
-      // Only add status param if not 'all'
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
-      }
-      
-      const { data } = await apiClient.get("/payment/history", { params });
+      const data = await requestPaymentHistory(page, statusFilter);
       if (requestId !== historyRequestIdRef.current) {
         return;
       }
-      if (data?.payments) {
-        setPaymentHistory(data.payments);
-        setTotalCount(data.total ?? data.payments.length);
-      }
+      setPaymentHistory(data.payments);
+      setTotalCount(data.total);
     } catch {
       // Error state handled through UI
     } finally {
@@ -96,7 +208,7 @@ export function PaymentHistorySettings() {
         setHistoryLoading(false);
       }
     }
-  }, []);
+  }, [requestPaymentHistory]);
 
   // Initial load - fetch both stats and history
   useEffect(() => {

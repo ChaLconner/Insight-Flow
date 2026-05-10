@@ -21,6 +21,45 @@ interface DowngradeWarning {
   action_required: string;
 }
 
+const DOWNGRADE_ELIGIBILITY_CACHE_TTL_MS = 30_000;
+const DOWNGRADE_ELIGIBILITY_CACHE_MAX_ENTRIES = 8;
+
+type DowngradeEligibilityCacheEntry = {
+  canDowngrade: boolean;
+  warnings: DowngradeWarning[];
+  timestamp: number;
+};
+
+const downgradeEligibilityCache = new Map<string, DowngradeEligibilityCacheEntry>();
+
+function pruneDowngradeEligibilityCache(): void {
+  for (const [key, value] of downgradeEligibilityCache.entries()) {
+    if (!hasFreshDowngradeEligibilityCache(value)) {
+      downgradeEligibilityCache.delete(key);
+    }
+  }
+
+  while (downgradeEligibilityCache.size > DOWNGRADE_ELIGIBILITY_CACHE_MAX_ENTRIES) {
+    const oldestKey = downgradeEligibilityCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    downgradeEligibilityCache.delete(oldestKey);
+  }
+}
+
+function getDowngradeEligibilityCacheKey(currentPlan: string, targetPlan: string): string {
+  return `${currentPlan}:${targetPlan}`;
+}
+
+function hasFreshDowngradeEligibilityCache(entry: DowngradeEligibilityCacheEntry): boolean {
+  return Date.now() - entry.timestamp < DOWNGRADE_ELIGIBILITY_CACHE_TTL_MS;
+}
+
+export function __clearDowngradeEligibilityCacheForTests(): void {
+  downgradeEligibilityCache.clear();
+}
+
 interface ChangePlanDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,9 +107,24 @@ export function ChangePlanDialog({
     
     // If downgrading, check eligibility first
     if (targetIndex < currentIndex) {
+      const cacheKey = getDowngradeEligibilityCacheKey(currentPlan, planKey);
+      const cachedEligibility = downgradeEligibilityCache.get(cacheKey);
+
+      if (cachedEligibility && hasFreshDowngradeEligibilityCache(cachedEligibility)) {
+        setDowngradeWarnings(cachedEligibility.canDowngrade ? [] : cachedEligibility.warnings);
+        setSelectedPlan(planKey);
+        return;
+      }
+
       setIsCheckingDowngrade(true);
       try {
         const { data } = await apiClient.get(`/payment/plans/check-downgrade/${planKey}`);
+        downgradeEligibilityCache.set(cacheKey, {
+          canDowngrade: Boolean(data.can_downgrade),
+          warnings: data.warnings ?? [],
+          timestamp: Date.now(),
+        });
+        pruneDowngradeEligibilityCache();
         if (!data.can_downgrade) {
           setDowngradeWarnings(data.warnings ?? []);
         } else {

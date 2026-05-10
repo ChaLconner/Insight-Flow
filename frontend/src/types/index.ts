@@ -346,6 +346,10 @@ export interface TaskComment {
   user: User;
 }
 
+export interface CreateTaskCommentRequest {
+  content: string;
+}
+
 export interface TaskHistoryEntry {
   id: string;
   taskId: string;
@@ -507,6 +511,19 @@ export interface NotificationPreferences {
   };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SystemNotificationRequest {
+  title: string;
+  message: string;
+  targetUserIds: string[];
+  data?: Record<string, unknown>;
+}
+
+export interface SystemNotificationResponse {
+  message: string;
+  count: number;
+  recipientIds: string[];
 }
 
 // ===========================================

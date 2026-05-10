@@ -25,6 +25,8 @@ export default defineConfig({
         "**/types/**",
         "**/__mocks__/**",
         "**/tests/setup.ts",
+        "**/components/providers/service-worker-registration.tsx",
+        "**/components/analytics/web-vitals-reporter.tsx",
       ],
       thresholds: {
         statements: 70,

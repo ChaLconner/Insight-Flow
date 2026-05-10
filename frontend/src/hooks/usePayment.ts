@@ -12,6 +12,57 @@ import type {
 
 import { apiClient } from "@/lib/api-client";
 
+const BILLING_CACHE_TTL_MS = 30_000;
+
+type CachedValue<T> = {
+  value: T | null;
+  timestamp: number;
+};
+
+const paymentMethodsCache: CachedValue<PaymentMethod[]> = {
+  value: null,
+  timestamp: 0,
+};
+
+const subscriptionCache: CachedValue<Subscription | null> = {
+  value: null,
+  timestamp: 0,
+};
+
+let paymentMethodsPromise: Promise<{
+  methods: PaymentMethod[];
+  requestId: number;
+}> | null = null;
+let subscriptionPromise: Promise<{
+  subscription: Subscription | null;
+  requestId: number;
+}> | null = null;
+let paymentMethodsRequestId = 0;
+let subscriptionRequestId = 0;
+
+function hasFreshCache(timestamp: number): boolean {
+  return timestamp > 0 && Date.now() - timestamp < BILLING_CACHE_TTL_MS;
+}
+
+function updateCachedValue<T>(cache: CachedValue<T>, value: T): void {
+  cache.value = value;
+  cache.timestamp = Date.now();
+}
+
+function clearCachedValue<T>(cache: CachedValue<T>): void {
+  cache.value = null;
+  cache.timestamp = 0;
+}
+
+export function __clearPaymentCachesForTests(): void {
+  clearCachedValue(paymentMethodsCache);
+  clearCachedValue(subscriptionCache);
+  paymentMethodsPromise = null;
+  subscriptionPromise = null;
+  paymentMethodsRequestId = 0;
+  subscriptionRequestId = 0;
+}
+
 // ============================================================================
 // usePaymentMethods Hook
 // ============================================================================
@@ -20,7 +71,7 @@ interface UsePaymentMethodsReturn {
   methods: PaymentMethod[];
   isLoading: boolean;
   error: string | null;
-  fetchMethods: () => Promise<void>;
+  fetchMethods: (options?: { force?: boolean }) => Promise<void>;
   setDefault: (id: string) => Promise<void>;
   deleteMethod: (id: string) => Promise<void>;
 }
@@ -53,19 +104,53 @@ export function usePaymentMethods(): UsePaymentMethodsReturn {
     createdAt: (pm.created_at as string) ?? new Date().toISOString(),
   });
 
-  const fetchMethods = useCallback(async () => {
+  const requestPaymentMethods = useCallback(async (options?: { force?: boolean }) => {
+    if (!options?.force && paymentMethodsPromise) {
+      return paymentMethodsPromise;
+    }
+
+    const requestId = paymentMethodsRequestId + 1;
+    paymentMethodsRequestId = requestId;
+    const requestPromise = apiClient
+      .get<{ payment_methods: Record<string, unknown>[]; total: number }>("/payment/methods")
+      .then(({ data }) => {
+        const transformed = data.payment_methods.map(transformPaymentMethod);
+        if (requestId === paymentMethodsRequestId) {
+          updateCachedValue(paymentMethodsCache, transformed);
+        }
+        return {
+          methods: transformed,
+          requestId,
+        };
+      })
+      .finally(() => {
+        if (paymentMethodsPromise === requestPromise) {
+          paymentMethodsPromise = null;
+        }
+      });
+
+    paymentMethodsPromise = requestPromise;
+    return requestPromise;
+  }, []);
+
+  const fetchMethods = useCallback(async (options?: { force?: boolean }) => {
+    if (!options?.force && paymentMethodsCache.value && hasFreshCache(paymentMethodsCache.timestamp)) {
+      setMethods(paymentMethodsCache.value);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.get<{ payment_methods: Record<string, unknown>[]; total: number }>(
-        "/payment/methods"
-      );
-      
-      // Transform each payment method from snake_case to camelCase
-      const transformed = data.payment_methods.map(transformPaymentMethod);
-      setMethods(transformed);
+      const result = await requestPaymentMethods(options);
+      if (result.requestId === paymentMethodsRequestId) {
+        setMethods(result.methods);
+      }
     } catch (err: unknown) {
       if (err instanceof Error && (err as { response?: { status: number } }).response?.status === 503) {
+        updateCachedValue(paymentMethodsCache, []);
         setMethods([]);
         return;
       }
@@ -74,14 +159,15 @@ export function usePaymentMethods(): UsePaymentMethodsReturn {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [requestPaymentMethods]);
 
   const setDefault = useCallback(
     async (id: string) => {
       setIsLoading(true);
       try {
         await apiClient.put(`/payment/methods/${id}/default`);
-        await fetchMethods();
+        clearCachedValue(paymentMethodsCache);
+        await fetchMethods({ force: true });
         toast.success("Default card updated", {
           description: "Your default payment card has been changed.",
         });
@@ -103,7 +189,8 @@ export function usePaymentMethods(): UsePaymentMethodsReturn {
       setIsLoading(true);
       try {
         await apiClient.delete(`/payment/methods/${id}`);
-        await fetchMethods();
+        clearCachedValue(paymentMethodsCache);
+        await fetchMethods({ force: true });
         toast.success("Card removed", {
           description: "Your payment card has been deleted.",
         });
@@ -227,7 +314,7 @@ interface UseSubscriptionReturn {
   subscription: Subscription | null;
   isLoading: boolean;
   error: string | null;
-  fetchSubscription: () => Promise<void>;
+  fetchSubscription: (options?: { force?: boolean }) => Promise<void>;
   cancelSubscription: (immediately?: boolean) => Promise<void>;
   updateSubscription: (plan: string, paymentMethodId?: string) => Promise<void>;
   resumeSubscription: () => Promise<void>;
@@ -252,30 +339,71 @@ export function useSubscription(): UseSubscriptionReturn {
     updatedAt: (sub.updated_at as string) ?? new Date().toISOString(),
   });
 
-  const fetchSubscription = useCallback(async () => {
+  const requestSubscription = useCallback(async (options?: { force?: boolean }) => {
+    if (!options?.force && subscriptionPromise) {
+      return subscriptionPromise;
+    }
+
+    const requestId = subscriptionRequestId + 1;
+    subscriptionRequestId = requestId;
+    const requestPromise = apiClient
+      .get<Record<string, unknown>>("/payment/subscription")
+      .then(({ data }) => {
+        const transformed = transformSubscription(data);
+        if (requestId === subscriptionRequestId) {
+          updateCachedValue(subscriptionCache, transformed);
+        }
+        return {
+          subscription: transformed,
+          requestId,
+        };
+      })
+      .catch((err: unknown) => {
+        const errRes = err as { response?: { status: number }; status?: number };
+        const status = errRes.response?.status ?? errRes.status;
+        if (status === 404) {
+          if (requestId === subscriptionRequestId) {
+            updateCachedValue(subscriptionCache, null);
+          }
+          return {
+            subscription: null,
+            requestId,
+          };
+        }
+        throw err;
+      })
+      .finally(() => {
+        if (subscriptionPromise === requestPromise) {
+          subscriptionPromise = null;
+        }
+      });
+
+    subscriptionPromise = requestPromise;
+    return requestPromise;
+  }, []);
+
+  const fetchSubscription = useCallback(async (options?: { force?: boolean }) => {
+    if (!options?.force && hasFreshCache(subscriptionCache.timestamp)) {
+      setSubscription(subscriptionCache.value);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.get<Record<string, unknown>>(
-        "/payment/subscription"
-      );
-      setSubscription(transformSubscription(data));
-    } catch (err: unknown) {
-      // 404 means no subscription found, which corresponds to free plan (normal behavior)
-      const errRes = err as { response?: { status: number }; status?: number };
-      const status = errRes.response?.status ?? errRes.status;
-      if (status === 404) {
-        setSubscription(null);
-        // Don't set error - 404 is expected for users without subscriptions
-        return;
+      const result = await requestSubscription(options);
+      if (result.requestId === subscriptionRequestId) {
+        setSubscription(result.subscription);
       }
-      // Only set error for real failures, not 404s
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [requestSubscription]);
 
   const updateSubscription = useCallback(
     async (plan: string, paymentMethodId?: string) => {
@@ -286,7 +414,9 @@ export function useSubscription(): UseSubscriptionReturn {
           "/payment/subscription",
           { plan, payment_method_id: paymentMethodId }
         );
-        setSubscription(transformSubscription(data));
+        const transformed = transformSubscription(data);
+        updateCachedValue(subscriptionCache, transformed);
+        setSubscription(transformed);
         toast.success("Plan updated", {
           description: `You are now on the ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan.`,
         });
@@ -311,7 +441,8 @@ export function useSubscription(): UseSubscriptionReturn {
         await apiClient.delete(`/payment/subscription`, {
           params: { cancel_immediately: immediately },
         });
-        await fetchSubscription();
+        clearCachedValue(subscriptionCache);
+        await fetchSubscription({ force: true });
         toast.success("Subscription cancelled", {
           description: immediately 
             ? "Your subscription has been cancelled immediately."
@@ -334,7 +465,8 @@ export function useSubscription(): UseSubscriptionReturn {
     setIsLoading(true);
     try {
       await apiClient.post(`/payment/subscription/resume`);
-      await fetchSubscription();
+      clearCachedValue(subscriptionCache);
+      await fetchSubscription({ force: true });
       toast.success("Subscription Resumed", {
         description: "Auto-renew has been turned back on. You will be billed at the end of the current period.",
       });

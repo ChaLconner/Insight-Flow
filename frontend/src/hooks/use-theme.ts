@@ -47,6 +47,7 @@ export const useTheme = () => {
   const setPrimaryColor = store.setPrimaryColor;
   const resetTheme = store.resetTheme;
   const updateSystemPreference = store.updateSystemPreference;
+  const listenToSystemTheme = store.listenToSystemTheme;
   const _setSystemPrefersDark = store.setSystemPrefersDark;
 
   // Listen to system theme changes when using system preference
@@ -55,18 +56,8 @@ export const useTheme = () => {
       return;
     }
 
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const handleChange = (e: MediaQueryListEvent) => {
-      updateSystemPreference(e.matches);
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener("change", handleChange);
-    };
-  }, [isSystemMode, updateSystemPreference]);
+    return listenToSystemTheme();
+  }, [isSystemMode, listenToSystemTheme, updateSystemPreference]);
 
   // Apply theme to document (client-side only)
   useEffect(() => {
