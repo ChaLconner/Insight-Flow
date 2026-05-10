@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NotificationPriority, TaskPriority, TaskType, UserRole } from "@/types";
 
 const apiClientMock = {
   get: vi.fn(),
@@ -39,8 +40,9 @@ describe("api endpoints coverage", () => {
     });
     await authApi.register({
       email: "user@example.com",
+      username: "jane1234",
       password: "secret123",
-      confirmPassword: "secret123",
+      name: "Jane Doe",
       firstName: "Jane",
       lastName: "Doe",
     });
@@ -87,7 +89,13 @@ describe("api endpoints coverage", () => {
       "launch",
       "todo",
     );
-    await tasksApi.createTask("project-1", { title: "Ship", description: "Now" });
+    await tasksApi.createTask("project-1", {
+      title: "Ship",
+      description: "Now",
+      projectId: "project-1",
+      priority: TaskPriority.MEDIUM,
+      type: TaskType.FEATURE,
+    });
     await tasksApi.updateTask("task-1", { title: "Updated" });
     await tasksApi.updateProjectTask("project-1", "task-1", { title: "Project Updated" });
     await tasksApi.deleteTask("task-1");
@@ -101,7 +109,7 @@ describe("api endpoints coverage", () => {
 
     await projectsApi.getProjects(0, 50, true, "roadmap", "active", "name");
     await projectsApi.getProject("project-1");
-    await projectsApi.createProject({ name: "Roadmap" });
+    await projectsApi.createProject({ name: "Roadmap", color: "#6366f1" });
     await projectsApi.updateProject("project-1", { name: "Roadmap v2" });
     await projectsApi.deleteProject("project-1");
     await projectsApi.getProjectMembers("project-1");
@@ -155,12 +163,13 @@ describe("api endpoints coverage", () => {
     await expect(usersApi.getSettings()).resolves.toEqual({ theme: "dark" });
     await expect(usersApi.getSettings()).resolves.toEqual({ theme: "dark" });
     await usersApi.updateSettings({ theme: "light" });
-    await usersApi.inviteUser({ email: "invitee@example.com", role: "member" });
+    await usersApi.inviteUser({ email: "invitee@example.com", role: UserRole.MEMBER });
     await usersApi.getStats();
     await usersApi.sendSystemNotification({
       title: "Notice",
       message: "Hello team",
-      type: "info",
+      targetUserIds: ["user-1", "user-2"],
+      data: { priority: NotificationPriority.MEDIUM },
     });
 
     await dashboardApi.getOverview();

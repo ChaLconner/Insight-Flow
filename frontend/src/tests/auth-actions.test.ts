@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { UserRole } from "@/types";
 
 const loginMock = vi.fn();
 const logoutMock = vi.fn();
@@ -65,15 +66,20 @@ describe("auth actions", () => {
 
     await authActions.loginSuccess(
       {
-        access_token: "token",
-        refresh_token: "refresh",
-        token_type: "bearer",
+        accessToken: "token",
+        refreshToken: "refresh",
+        expiresAt: "2026-01-01T00:00:00Z",
         user: {
           id: "user-1",
           email: "jane@example.com",
           username: "janedoe",
           firstName: "Jane",
           name: "Jane Doe",
+          role: UserRole.MEMBER,
+          isActive: true,
+          emailVerified: true,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
         },
       },
       { rememberMe: true },
