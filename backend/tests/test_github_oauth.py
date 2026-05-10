@@ -42,9 +42,7 @@ class TestGitHubOAuthConfiguration:
         ):
             from utils.github_oauth import resolve_github_redirect_uri
 
-            result = resolve_github_redirect_uri(
-                "https://custom.example.com/auth/callback/github"
-            )
+            result = resolve_github_redirect_uri("https://custom.example.com/auth/callback/github")
 
             assert result == "https://custom.example.com/auth/callback/github"
 
