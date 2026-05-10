@@ -8,12 +8,15 @@ import { Toaster } from "sonner";
 import WebVitalsReporter from "@/components/analytics/web-vitals-reporter";
 import ServiceWorkerRegistration from "@/components/providers/service-worker-registration";
 import { AuthInitializer } from "@/components/providers/auth-initializer";
+import { resolveAppUrl } from "@/lib/app-url";
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
+
+const appUrl = resolveAppUrl();
 
 export const metadata: Metadata = {
   title: {
@@ -35,13 +38,11 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
-  ),
+  metadataBase: new URL(appUrl),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    url: appUrl,
     title: "Insight Flow",
     description: "Modern project management platform with glassmorphism design",
     siteName: "Insight Flow",
@@ -68,7 +69,7 @@ export const metadata: Metadata = {
     yandex: "yandex-verification=YOUR_VERIFICATION_CODE",
   },
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    canonical: appUrl,
   },
 };
 
@@ -92,8 +93,6 @@ export default function RootLayout({
     process.env.NEXT_PUBLIC_API_URL.trim().length > 0
       ? process.env.NEXT_PUBLIC_API_URL
       : "http://localhost:8000"; */
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   // JSON-LD for Organization
   const jsonLd = {

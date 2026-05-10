@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveAppUrl } from "@/lib/app-url";
 
 const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 const GITHUB_OAUTH_REDIRECT_KEY = "github_oauth_redirect";
@@ -11,13 +12,7 @@ function createOAuthState(): string {
 }
 
 function getAppBaseUrl(request: NextRequest): string {
-  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  const appUrl =
-    configuredAppUrl !== undefined && configuredAppUrl !== ""
-      ? configuredAppUrl
-      : request.nextUrl.origin;
-
-  return appUrl.replace(/\/+$/, "");
+  return resolveAppUrl({ requestOrigin: request.nextUrl.origin });
 }
 
 function getSafeRedirect(value: string | null): string | null {

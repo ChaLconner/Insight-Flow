@@ -25,6 +25,17 @@ describe("social-auth", () => {
     );
   });
 
+  it("falls back to Vercel production URL before localhost when app URL is missing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.stubEnv("VERCEL_PROJECT_PRODUCTION_URL", "insight-flow-iota.vercel.app");
+    vi.stubGlobal("window", undefined);
+    const { getGitHubRedirectUri } = await import("@/lib/social-auth");
+
+    expect(getGitHubRedirectUri()).toBe(
+      "https://insight-flow-iota.vercel.app/auth/callback/github",
+    );
+  });
+
   it("creates a cryptographically random OAuth state", async () => {
     const getRandomValues = vi.fn((bytes: Uint8Array) => {
       bytes.set(Array.from({ length: bytes.length }, (_, index) => index));
