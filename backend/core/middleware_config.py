@@ -70,7 +70,7 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
         logger.critical(
             "⚠️ SECURITY WARNING: Using in-memory rate limiting in production! "
             "Rate limits will NOT be shared across workers. "
-            "An attacker gets N × the configured limit (where N = worker count). "
+            "An attacker gets N x the configured limit (where N = worker count). "
             "Configure REDIS_URL for distributed rate limiting."
         )
 

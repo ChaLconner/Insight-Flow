@@ -193,6 +193,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         exempt_paths = ["/health"]
         try:
             from config import get_settings
+
             if not get_settings().is_production:
                 exempt_paths.extend(["/docs", "/openapi.json", "/redoc"])
         except Exception:

@@ -278,8 +278,7 @@ class IPBlockingService:
 
         # Remove expired blocks
         expired_blocks = [
-            ip for ip, until in self._blocked_ips.items()
-            if until <= datetime.now(UTC)
+            ip for ip, until in self._blocked_ips.items() if until <= datetime.now(UTC)
         ]
         for ip in expired_blocks:
             del self._blocked_ips[ip]
@@ -287,9 +286,7 @@ class IPBlockingService:
         # Enforce max tracked IPs to prevent memory exhaustion
         if len(self._violation_counts) > self.MAX_TRACKED_IPS:
             # Evict oldest entries (those with lowest violation counts first)
-            sorted_ips = sorted(
-                self._violation_counts.items(), key=lambda x: x[1]
-            )
+            sorted_ips = sorted(self._violation_counts.items(), key=lambda x: x[1])
             excess = len(sorted_ips) - self.MAX_TRACKED_IPS
             for ip, _ in sorted_ips[:excess]:
                 del self._violation_counts[ip]
@@ -301,9 +298,7 @@ class IPBlockingService:
             )
 
         if expired_blocks:
-            logger.debug(
-                f"IP blocking cleanup: removed {len(expired_blocks)} expired blocks"
-            )
+            logger.debug(f"IP blocking cleanup: removed {len(expired_blocks)} expired blocks")
 
     async def unblock(self, ip: str) -> bool:
         """
