@@ -13,7 +13,22 @@ logger = setup_logger("github_oauth")
 # Load environment variables
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
-GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI", "http://localhost:3000/auth/callback/github")
+
+
+def resolve_github_redirect_uri(redirect_uri: str | None = None) -> str:
+    explicit_redirect = (redirect_uri or "").strip()
+    if explicit_redirect:
+        return explicit_redirect
+
+    configured_redirect = os.getenv("GITHUB_REDIRECT_URI", "").strip()
+    if configured_redirect:
+        return configured_redirect
+
+    frontend_url = os.getenv("FRONTEND_URL", "").strip()
+    if frontend_url:
+        return f"{frontend_url.rstrip('/')}/auth/callback/github"
+
+    return "http://localhost:3000/auth/callback/github"
 
 
 def _extract_access_token(data: dict) -> str | None:
@@ -87,7 +102,7 @@ def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str |
                 "client_id": GITHUB_CLIENT_ID,
                 "client_secret": GITHUB_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": redirect_uri or GITHUB_REDIRECT_URI,
+                "redirect_uri": resolve_github_redirect_uri(redirect_uri),
             },
         )
 
@@ -209,7 +224,7 @@ async def async_exchange_code_for_token(code: str, redirect_uri: str | None = No
                     "client_id": GITHUB_CLIENT_ID,
                     "client_secret": GITHUB_CLIENT_SECRET,
                     "code": code,
-                    "redirect_uri": redirect_uri or GITHUB_REDIRECT_URI,
+                    "redirect_uri": resolve_github_redirect_uri(redirect_uri),
                 },
             )
 
@@ -226,7 +241,7 @@ async def async_exchange_code_for_token(code: str, redirect_uri: str | None = No
         import asyncio
 
         return await asyncio.to_thread(
-            exchange_code_for_token, code, redirect_uri or GITHUB_REDIRECT_URI
+            exchange_code_for_token, code, resolve_github_redirect_uri(redirect_uri)
         )
     except Exception as e:
         logger.error(f"Error exchanging code for token: {e}")

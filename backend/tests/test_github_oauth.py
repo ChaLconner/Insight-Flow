@@ -20,6 +20,34 @@ class TestGitHubOAuthConfiguration:
 
         assert isinstance(result, bool)
 
+    def test_resolve_github_redirect_uri_uses_frontend_url_when_specific_env_missing(self):
+        """Test redirect falls back to FRONTEND_URL before localhost."""
+        with patch.dict(
+            "os.environ",
+            {"FRONTEND_URL": "https://insight-flow-iota.vercel.app", "GITHUB_REDIRECT_URI": ""},
+            clear=True,
+        ):
+            from utils.github_oauth import resolve_github_redirect_uri
+
+            result = resolve_github_redirect_uri()
+
+            assert result == "https://insight-flow-iota.vercel.app/auth/callback/github"
+
+    def test_resolve_github_redirect_uri_prefers_explicit_value(self):
+        """Test explicit redirect URI wins over environment fallback."""
+        with patch.dict(
+            "os.environ",
+            {"FRONTEND_URL": "https://insight-flow-iota.vercel.app"},
+            clear=True,
+        ):
+            from utils.github_oauth import resolve_github_redirect_uri
+
+            result = resolve_github_redirect_uri(
+                "https://custom.example.com/auth/callback/github"
+            )
+
+            assert result == "https://custom.example.com/auth/callback/github"
+
 
 class TestExchangeCodeForToken:
     """Tests for exchange_code_for_token function."""
