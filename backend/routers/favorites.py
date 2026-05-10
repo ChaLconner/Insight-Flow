@@ -53,7 +53,8 @@ class ToggleFavoriteResponse(BaseModel):
 @limiter.limit(RateLimits.API_READ)
 async def get_favorite_project_ids(
     request: Request,
-    current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_async_db)
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Get list of user's favorite project IDs.

@@ -22,6 +22,7 @@ logger = setup_logger(__name__)
 
 # Cache TTL in seconds
 ANALYTICS_CACHE_TTL = 600  # 10 minutes — analytics data is not real-time critical
+ANALYTICS_WORKLOAD_PREVIEW_LIMIT = 10
 
 
 class AsyncAnalyticsService:
@@ -76,7 +77,10 @@ class AsyncAnalyticsService:
             days = self._get_days_from_period(period)
 
             trends = await self._get_trends(accessible_projects_subq, days)
-            distributions = await self._get_distributions(accessible_projects_subq)
+            distributions = await self._get_distributions(
+                accessible_projects_subq,
+                workload_limit=ANALYTICS_WORKLOAD_PREVIEW_LIMIT,
+            )
             daily_trends = await self._get_daily_trends(accessible_projects_subq, days)
 
             # Transform daily_trends for weeklyBurndown (Progress)
@@ -92,7 +96,8 @@ class AsyncAnalyticsService:
                 "team": team_data[:5],  # Top 5
                 "statusDistribution": distributions.get("status", []),
                 "priorityDistribution": distributions.get("priority", []),
-                "teamWorkload": distributions.get("workload", [])[:10],
+                "teamWorkload": distributions.get("workload", []),
+                "teamWorkloadTotal": distributions.get("workloadTotal", 0),
                 "weeklyBurndown": weekly_burndown,
                 "dailyTrends": daily_trends,
             }
@@ -363,7 +368,9 @@ class AsyncAnalyticsService:
 
         return trends
 
-    async def _get_distributions(self, project_ids: Any) -> dict[str, list[dict[str, Any]]]:
+    async def _get_distributions(
+        self, project_ids: Any, workload_limit: int | None = None
+    ) -> dict[str, Any]:
         """Get status, priority, and workload distributions."""
         # Status distribution
         status_result = await self.db.execute(
@@ -386,12 +393,24 @@ class AsyncAnalyticsService:
         priority_dist = [{"name": p[0], "value": p[1]} for p in priority_counts]
 
         # Workload distribution
+        workload_total_result = await self.db.execute(
+            select(func.count(distinct(Task.assignee_id))).filter(
+                Task.project_id.in_(project_ids), Task.assignee_id.isnot(None)
+            )
+        )
+        workload_total = workload_total_result.scalar() or 0
+
         workload_query = (
             select(User, func.count(Task.id).label("count"))
             .join(Task, Task.assignee_id == User.id)
             .filter(Task.project_id.in_(project_ids))
             .group_by(User.id)
+            .order_by(
+                func.count(Task.id).desc(), func.coalesce(User.name, User.username, User.email)
+            )
         )
+        if workload_limit is not None:
+            workload_query = workload_query.limit(workload_limit)
         workload_result = await self.db.execute(workload_query)
         workload_rows = workload_result.all()
 
@@ -405,9 +424,12 @@ class AsyncAnalyticsService:
                 }
             )
 
-        workload_dist.sort(key=lambda x: x["tasks"], reverse=True)
-
-        return {"status": status_dist, "priority": priority_dist, "workload": workload_dist}
+        return {
+            "status": status_dist,
+            "priority": priority_dist,
+            "workload": workload_dist,
+            "workloadTotal": workload_total,
+        }
 
     async def get_project_analytics(self, project_id: uuid.UUID) -> dict[str, Any]:
         """Get analytics for a specific project."""
@@ -495,6 +517,7 @@ class AsyncAnalyticsService:
             "statusDistribution": [],
             "priorityDistribution": [],
             "teamWorkload": [],
+            "teamWorkloadTotal": 0,
             "dailyTrends": [],
         }
 
@@ -512,81 +535,93 @@ class AsyncAnalyticsService:
         Get paginated team workload data for scalability.
         """
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
+        completed_count = func.sum(
+            case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
+        ).label("completed_count")
+        task_count = func.count(Task.id).label("task_count")
+        user_name = func.coalesce(User.name, User.username, User.email)
 
-        # Build workload query
         query = (
             select(
-                Task.assignee_id,
-                func.count(Task.id).label("task_count"),
-                func.sum(
-                    case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
-                ).label("completed_count"),
+                User.id.label("user_id"),
+                user_name.label("user_name"),
+                User.avatar_url.label("avatar_url"),
+                task_count,
+                completed_count,
             )
+            .join(User, User.id == Task.assignee_id)
             .filter(Task.project_id.in_(accessible_projects_subq), Task.assignee_id.isnot(None))
-            .group_by(Task.assignee_id)
+            .group_by(User.id)
         )
 
-        # Get total count first
-        count_result = await self.db.execute(
-            select(func.count(distinct(Task.assignee_id))).filter(
-                Task.project_id.in_(accessible_projects_subq), Task.assignee_id.isnot(None)
+        if search:
+            query = query.filter(
+                func.lower(func.coalesce(User.name, User.username, User.email)).contains(
+                    search.lower()
+                )
             )
-        )
+
+        sort_by_name = func.coalesce(User.name, User.username, User.email)
+        if sort_by == "name":
+            if sort_order == "asc":
+                query = query.order_by(sort_by_name.asc(), task_count.desc())
+            else:
+                query = query.order_by(sort_by_name.desc(), task_count.desc())
+        elif sort_order == "asc":
+            query = query.order_by(task_count.asc(), sort_by_name.asc())
+        else:
+            query = query.order_by(task_count.desc(), sort_by_name.asc())
+
+        count_result = await self.db.execute(select(func.count()).select_from(query.subquery()))
         total_count = count_result.scalar() or 0
 
-        # Calculate pagination
         offset = (page - 1) * page_size
-
-        # Execute main query with pagination
         result = await self.db.execute(query.offset(offset).limit(page_size))
         stats = result.all()
+        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+        has_next = page < total_pages
+        has_prev = page > 1 and total_count > 0
 
         if not stats:
-            return {"items": [], "total": 0, "page": page, "pageSize": page_size, "hasMore": False}
+            return {
+                "items": [],
+                "total": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "has_next": False,
+                "has_prev": has_prev,
+            }
 
-        # Get user info
-        user_ids = [s[0] for s in stats]
-        users_result = await self.db.execute(select(User).filter(User.id.in_(user_ids)))
-        users = {u.id: u for u in users_result.scalars().all()}
-
-        # Format items
         items = []
-        for assignee_id, task_count, completed_count in stats:
-            user = users.get(assignee_id)
-            if not user:
-                continue
-
-            # Apply search filter if specified
-            if search and search.lower() not in (user.name or "").lower():
-                continue
-
+        for (
+            assignee_id,
+            assignee_name,
+            avatar_url,
+            member_task_count,
+            member_completed_count,
+        ) in stats:
             items.append(
                 {
-                    "id": str(user.id),
-                    "name": user.name,
-                    "avatar": user.avatar_url,
-                    "email": user.email,
-                    "tasks": task_count or 0,
-                    "completed": completed_count or 0,
-                    "progress": round((completed_count or 0) / (task_count or 1) * 100),
+                    "id": str(assignee_id),
+                    "name": assignee_name,
+                    "avatar": avatar_url,
+                    "tasks": member_task_count or 0,
+                    "completed": member_completed_count or 0,
+                    "progress": round(
+                        (member_completed_count or 0) / (member_task_count or 1) * 100
+                    ),
                 }
             )
-
-        # Sort items
-        reverse = sort_order == "desc"
-        if sort_by == "tasks":
-            # Fix sort key for mypy: ensure int
-            items.sort(key=lambda x: int(x.get("tasks", 0) or 0), reverse=reverse)
-        elif sort_by == "name":
-            # Fix sort key for mypy: ensure str
-            items.sort(key=lambda x: str(x.get("name") or "").lower(), reverse=reverse)
 
         return {
             "items": items,
             "total": total_count,
             "page": page,
-            "pageSize": page_size,
-            "hasMore": offset + len(items) < total_count,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_prev": has_prev,
         }
 
     async def get_project_productivity(
