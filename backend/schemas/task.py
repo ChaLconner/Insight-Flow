@@ -110,6 +110,38 @@ class TaskAssign(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+class TaskCommentCreate(BaseModel):
+    """Schema for creating a task comment."""
+
+    content: str = Field(..., min_length=1, max_length=4000)
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        content = v.strip()
+        if not content:
+            raise ValueError("Comment content is required")
+        return content
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class TaskCommentResponse(BaseModel):
+    """Schema for task comment response data."""
+
+    id: uuid.UUID
+    task_id: uuid.UUID
+    user_id: uuid.UUID
+    content: str
+    is_edited: bool
+    mentions: list[str]
+    created_at: datetime
+    updated_at: datetime
+    user: UserResponse
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
 class TaskResponse(TaskBase):
     """Schema for task response data."""
 

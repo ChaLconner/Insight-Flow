@@ -3,21 +3,26 @@ Task management router for CRUD operations.
 Refactored for Async operations with proper Dependency Injection.
 """
 
+import re
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from async_dependencies import get_async_authorized_task
 from database import get_async_db
 from dependencies.services import get_notification_service, get_task_service
+from models.analytics import TaskComment
 from models.task import Task
 from models.user import User
 from routers.auth import get_current_active_user
 from schemas.task import (
     TaskAssign,
+    TaskCommentCreate,
+    TaskCommentResponse,
     TaskCreate,
     TaskListResponse,
     TaskResponse,
@@ -28,6 +33,8 @@ from schemas.task import (
 from services.async_notification_trigger_service import AsyncNotificationTriggerService
 from services.async_task_service import AsyncTaskService
 from utils.logger import mask_user_id, setup_logger
+
+MENTION_PATTERN = re.compile(r"(?<![\w])@([A-Za-z0-9_]{1,255})")
 
 
 def map_task_to_response(task: Task) -> dict[str, Any]:
@@ -51,6 +58,33 @@ def map_task_to_response(task: Task) -> dict[str, Any]:
         "project": task.project,
         "priority": task.priority.value if hasattr(task.priority, "value") else task.priority,
         "type": task.type.value if hasattr(task.type, "value") else task.type,
+    }
+
+
+def parse_comment_mentions(content: str) -> list[str]:
+    """Extract unique mentioned usernames from comment content."""
+    mentions: list[str] = []
+    seen: set[str] = set()
+    for match in MENTION_PATTERN.findall(content):
+        normalized = match.strip().lower()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            mentions.append(normalized)
+    return mentions
+
+
+def build_task_comment_response(comment: TaskComment) -> dict[str, Any]:
+    """Serialize a task comment for API responses."""
+    return {
+        "id": comment.id,
+        "task_id": comment.task_id,
+        "user_id": comment.user_id,
+        "content": comment.content,
+        "is_edited": str(comment.is_edited).lower() == "true",
+        "mentions": parse_comment_mentions(comment.content),
+        "created_at": comment.created_at,
+        "updated_at": comment.updated_at,
+        "user": comment.user,
     }
 
 
@@ -159,6 +193,64 @@ async def read_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     return TaskWithDetails.model_validate(detailed_task)
+
+
+@router.get("/{task_id}/comments", response_model=list[TaskCommentResponse])
+@limiter.limit(RateLimits.API_READ)
+async def get_task_comments(
+    request: Request,
+    task: Task = Depends(get_async_authorized_task),
+    db: AsyncSession = Depends(get_async_db),
+) -> Any:
+    """Get comments for a task."""
+    result = await db.execute(
+        select(TaskComment)
+        .options(selectinload(TaskComment.user))
+        .filter(TaskComment.task_id == task.id)
+        .order_by(TaskComment.created_at.asc())
+    )
+    comments = result.scalars().all()
+    return [
+        TaskCommentResponse.model_validate(build_task_comment_response(comment))
+        for comment in comments
+    ]
+
+
+@router.post("/{task_id}/comments", response_model=TaskCommentResponse)
+@limiter.limit(RateLimits.API_WRITE)
+async def create_task_comment(
+    request: Request,
+    comment_data: TaskCommentCreate,
+    task: Task = Depends(get_async_authorized_task),
+    db: AsyncSession = Depends(get_async_db),
+    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Create a comment on a task and notify mentioned users."""
+    comment = TaskComment(task_id=task.id, user_id=current_user.id, content=comment_data.content)
+    db.add(comment)
+    await db.commit()
+    await db.refresh(comment)
+    comment.user = current_user
+
+    mentioned_usernames = parse_comment_mentions(comment.content)
+    if mentioned_usernames:
+        mentioned_result = await db.execute(
+            select(User).filter(func.lower(User.username).in_(mentioned_usernames))
+        )
+        mentioned_users = mentioned_result.scalars().all()
+        for mentioned_user in mentioned_users:
+            if mentioned_user.id == current_user.id:
+                continue
+            await notification_service.notify_mention(
+                mentioned_user=mentioned_user,
+                actor=current_user,
+                message=comment.content,
+                project_id=task.project_id,
+                task_id=task.id,
+            )
+
+    return TaskCommentResponse.model_validate(build_task_comment_response(comment))
 
 
 @router.put("/{task_id}", response_model=TaskResponse)

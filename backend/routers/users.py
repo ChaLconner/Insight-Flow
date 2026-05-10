@@ -14,17 +14,23 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies.services import get_user_service
+from database import get_async_db
+from dependencies.services import get_notification_service, get_user_service
 from models.user import User
 from routers.auth import get_current_active_user
 from schemas.user import (
+    SystemNotificationRequest,
+    SystemNotificationResponse,
     UserInvite,
     UserResponse,
     UserSettingsResponse,
     UserSettingsUpdate,
     UserUpdate,
 )
+from services.async_notification_trigger_service import AsyncNotificationTriggerService
 from services.async_user_service import AsyncUserService
 from utils.cloudinary_upload import init_cloudinary, is_cloudinary_configured
 from utils.cloudinary_upload import upload_avatar as cloudinary_upload_avatar
@@ -249,6 +255,40 @@ async def update_current_user_settings(
         return await user_service.update_settings(current_user.id, settings_data)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/system-notifications", response_model=SystemNotificationResponse)
+@limiter.limit(RateLimits.API_WRITE)
+async def send_system_notification(
+    request: Request,
+    notification_data: SystemNotificationRequest,
+    db: AsyncSession = Depends(get_async_db),
+    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """Send a system notification to one or more users."""
+    _require_user_admin(current_user)
+
+    target_ids = list(dict.fromkeys(notification_data.target_user_ids))
+    result = await db.execute(select(User).filter(User.id.in_(target_ids)))
+    recipients = list(result.scalars().all())
+
+    if not recipients:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No target users found")
+
+    for recipient in recipients:
+        await notification_service.notify_system(
+            user=recipient,
+            title=notification_data.title,
+            message=notification_data.message,
+            data=notification_data.data,
+        )
+
+    return SystemNotificationResponse(
+        message="System notifications sent",
+        count=len(recipients),
+        recipient_ids=[recipient.id for recipient in recipients],
+    )
 
 
 @router.post("/me/avatar", response_model=UserResponse)

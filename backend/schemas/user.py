@@ -218,3 +218,24 @@ class UserSettingsResponse(UserSettingsBase):
     user_id: uuid.UUID
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)
+
+
+class SystemNotificationRequest(BaseModel):
+    """Schema for sending system notifications to specific users."""
+
+    title: str = Field(..., min_length=1, max_length=200)
+    message: str = Field(..., min_length=1, max_length=2000)
+    target_user_ids: list[uuid.UUID] = Field(..., min_length=1)
+    data: dict[str, Any] | None = None
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+class SystemNotificationResponse(BaseModel):
+    """Summary response for sent system notifications."""
+
+    message: str
+    count: int
+    recipient_ids: list[uuid.UUID]
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
