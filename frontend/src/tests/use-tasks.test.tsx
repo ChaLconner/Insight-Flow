@@ -194,10 +194,10 @@ describe("useTasks hook", () => {
     });
     it("should not fetch when not authenticated", async () => {
        const { useAuthStore } = await import("@/stores/auth-store");
-       vi.mocked(useAuthStore).mockImplementation((selector: any) => {
-         const state = { isAuthenticated: false };
-         return selector ? selector(state) : state.isAuthenticated;
-       });
+      vi.mocked(useAuthStore).mockImplementation((selector) => {
+        const state = { isAuthenticated: false } as Parameters<typeof selector>[0];
+        return selector(state);
+      });
 
        const { result } = renderHook(() => useTasks(), {
          wrapper: createWrapper(),
@@ -209,11 +209,10 @@ describe("useTasks hook", () => {
 
        expect(tasksApi.getMyTasks).not.toHaveBeenCalled();
        expect(result.current.tasks).toEqual([]);
-       
-       vi.mocked(useAuthStore).mockImplementation((selector: any) => {
-         const state = { isAuthenticated: true };
-         return selector ? selector(state) : state.isAuthenticated;
-       });
+      vi.mocked(useAuthStore).mockImplementation((selector) => {
+        const state = { isAuthenticated: true } as Parameters<typeof selector>[0];
+        return selector(state);
+      });
     });
   });
 
