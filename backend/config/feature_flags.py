@@ -164,7 +164,7 @@ class FeatureFlagRegistry:
             if flag.rollout_percentage < 100:
                 # Use consistent hashing so same user always gets same result
                 hash_input = f"{name}:{user_id}"
-                hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+                hash_value = int(hashlib.sha256(hash_input.encode()).hexdigest(), 16)
                 bucket = hash_value % 100
                 if bucket >= flag.rollout_percentage:
                     return False

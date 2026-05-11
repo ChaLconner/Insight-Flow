@@ -247,7 +247,7 @@ class AppSettings(BaseSettings):
     api_version: str = Field(default="1.0.0", alias="API_VERSION")
 
     # Server settings
-    host: str = Field(default="0.0.0.0", alias="HOST")
+    host: str = Field(default="0.0.0.0", alias="HOST")  # nosec B104
     port: int = Field(default=8000, alias="PORT")
 
     # Trusted hosts
