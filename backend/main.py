@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
-from config import get_settings
+from config import AppSettings, get_settings
 from core.middleware_config import setup_all_middleware
 from database import init_database
 from exception_handlers import add_exception_handlers
@@ -34,47 +34,49 @@ from routers import (
 from services.scheduler import shutdown_scheduler, start_scheduler
 from utils.logger import app_logger
 
-settings = get_settings()
+
+def _build_lifespan(settings: AppSettings):
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Application lifespan manager for startup and shutdown."""
+        app_logger.info("=" * 50)
+        app_logger.info("FASTAPI SERVER STARTING UP (LIFESPAN)")
+        app_logger.info(f"Environment: {settings.environment}")
+
+        try:
+            await init_database()
+            app_logger.info("Database initialized successfully")
+        except Exception as e:
+            if settings.is_production:
+                app_logger.critical(f"Database initialization failed in production: {e}")
+                raise RuntimeError("Database initialization failed in production") from e
+            app_logger.warning(f"Database initialization failed: {e}")
+            app_logger.info("Continuing without database-backed functionality in non-production.")
+
+        try:
+            start_scheduler()
+            app_logger.info("Background scheduler started")
+        except Exception as e:
+            app_logger.error(f"Failed to start scheduler: {e}")
+
+        app_logger.info("=" * 50)
+        app_logger.info(f"Server accessible at: http://{settings.host}:{settings.port}")
+        app_logger.info("=" * 50)
+
+        yield
+
+        shutdown_scheduler()
+        app_logger.info("FASTAPI SERVER SHUTTING DOWN")
+
+    return lifespan
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager for startup and shutdown."""
-    # Startup logic
-    app_logger.info("=" * 50)
-    app_logger.info("FASTAPI SERVER STARTING UP (LIFESPAN)")
-    app_logger.info(f"Environment: {settings.environment}")
+def create_app(settings: AppSettings | None = None) -> FastAPI:
+    settings = settings or get_settings()
 
-    # Initialize database connection
-    try:
-        await init_database()
-        app_logger.info("Database initialized successfully")
-    except Exception as e:
-        app_logger.warning(f"Database initialization failed: {e}")
-        app_logger.info("Continuing with mock authentication...")
-
-    # Start background scheduler
-    try:
-        start_scheduler()
-        app_logger.info("Background scheduler started")
-    except Exception as e:
-        app_logger.error(f"Failed to start scheduler: {e}")
-
-    app_logger.info("=" * 50)
-    app_logger.info(f"Server accessible at: http://{settings.host}:{settings.port}")
-    app_logger.info("=" * 50)
-
-    yield
-
-    # Shutdown logic
-    shutdown_scheduler()
-    app_logger.info("FASTAPI SERVER SHUTTING DOWN")
-
-
-# Create FastAPI application
-app = FastAPI(
-    title=settings.app_name,
-    description="""
+    app = FastAPI(
+        title=settings.app_name,
+        description="""
 ## Insight-Flow Project Management API
 
 A comprehensive project management and team collaboration platform.
@@ -93,94 +95,93 @@ Use `/auth/login` to authenticate and `/auth/logout` to terminate sessions.
 ### Rate Limiting
 API requests are rate-limited. Please contact support for higher limits.
     """,
-    version=settings.api_version,
-    terms_of_service="https://example.com/terms/",
-    contact={
-        "name": "Insight-Flow Support",
-        "email": "support@insight-flow.com",
-    },
-    license_info={
-        "name": "MIT License",
-        "url": "https://opensource.org/licenses/MIT",
-    },
-    openapi_tags=[
-        {
-            "name": "auth",
-            "description": "Authentication operations - login, logout, token refresh, OAuth",
+        version=settings.api_version,
+        terms_of_service="https://example.com/terms/",
+        contact={
+            "name": "Insight-Flow Support",
+            "email": "support@insight-flow.com",
         },
-        {
-            "name": "users",
-            "description": "User management - profiles, settings, search",
+        license_info={
+            "name": "MIT License",
+            "url": "https://opensource.org/licenses/MIT",
         },
-        {
-            "name": "projects",
-            "description": "Project CRUD operations and member management",
-        },
-        {
-            "name": "tasks",
-            "description": "Task management - create, update, assign, track status",
-        },
-        {
-            "name": "dashboard",
-            "description": "Dashboard statistics and analytics overview",
-        },
-        {
-            "name": "analytics",
-            "description": "Detailed project analytics and metrics",
-        },
-        {
-            "name": "notifications",
-            "description": "User notifications and alerts",
-        },
-        {
-            "name": "files",
-            "description": "File upload and management",
-        },
-        {
-            "name": "health",
-            "description": "Health checks and metrics for monitoring",
-        },
-        {
-            "name": "favorites",
-            "description": "User favorite projects management",
-        },
-    ],
-    redirect_slashes=True,
-    lifespan=lifespan,
-)
+        openapi_tags=[
+            {
+                "name": "auth",
+                "description": "Authentication operations - login, logout, token refresh, OAuth",
+            },
+            {
+                "name": "users",
+                "description": "User management - profiles, settings, search",
+            },
+            {
+                "name": "projects",
+                "description": "Project CRUD operations and member management",
+            },
+            {
+                "name": "tasks",
+                "description": "Task management - create, update, assign, track status",
+            },
+            {
+                "name": "dashboard",
+                "description": "Dashboard statistics and analytics overview",
+            },
+            {
+                "name": "analytics",
+                "description": "Detailed project analytics and metrics",
+            },
+            {
+                "name": "notifications",
+                "description": "User notifications and alerts",
+            },
+            {
+                "name": "files",
+                "description": "File upload and management",
+            },
+            {
+                "name": "health",
+                "description": "Health checks and metrics for monitoring",
+            },
+            {
+                "name": "favorites",
+                "description": "User favorite projects management",
+            },
+        ],
+        redirect_slashes=True,
+        lifespan=_build_lifespan(settings),
+        docs_url="/docs" if settings.enable_docs else None,
+        redoc_url="/redoc" if settings.enable_docs else None,
+        openapi_url="/openapi.json" if settings.enable_docs else None,
+    )
 
-# Mount static files
-if not os.path.exists("static"):
-    os.makedirs("static")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+    if not os.path.exists("static"):
+        os.makedirs("static")
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Setup all middleware (CORS, security, rate limiting, etc.)
-setup_all_middleware(app)
+    setup_all_middleware(app)
 
-# Setup rate limiter
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore
 
-# Register exception handlers
-add_exception_handlers(app)
+    add_exception_handlers(app)
 
-# API Version prefix
-API_V1_PREFIX = "/api/v1"
+    api_v1_prefix = "/api/v1"
+    app.include_router(projects.router, prefix=api_v1_prefix, tags=["projects"])
+    app.include_router(tasks.router, prefix=f"{api_v1_prefix}/tasks", tags=["tasks"])
+    app.include_router(analytics.router, prefix=f"{api_v1_prefix}/analytics", tags=["analytics"])
+    app.include_router(users.router, prefix=api_v1_prefix, tags=["users"])
+    app.include_router(auth.router, prefix=api_v1_prefix, tags=["auth"])
+    app.include_router(dashboard.router, prefix=api_v1_prefix, tags=["dashboard"])
+    app.include_router(notifications.router, prefix=api_v1_prefix)
+    app.include_router(files.router, prefix=api_v1_prefix)
+    app.include_router(project_tasks.router, prefix=api_v1_prefix, tags=["project tasks"])
+    app.include_router(payment.router, prefix=api_v1_prefix, tags=["payment"])
+    app.include_router(usage.router, prefix=api_v1_prefix, tags=["usage"])
+    app.include_router(favorites.router, prefix=api_v1_prefix, tags=["favorites"])
+    app.include_router(security_logs.router, prefix=api_v1_prefix, tags=["security"])
+    app.include_router(health.router)
 
-# Include routers with API versioning
-app.include_router(projects.router, prefix=API_V1_PREFIX, tags=["projects"])
-app.include_router(tasks.router, prefix=f"{API_V1_PREFIX}/tasks", tags=["tasks"])
-app.include_router(analytics.router, prefix=f"{API_V1_PREFIX}/analytics", tags=["analytics"])
-app.include_router(users.router, prefix=API_V1_PREFIX, tags=["users"])
-app.include_router(auth.router, prefix=API_V1_PREFIX, tags=["auth"])
-app.include_router(dashboard.router, prefix=API_V1_PREFIX, tags=["dashboard"])
-app.include_router(notifications.router, prefix=API_V1_PREFIX)
-app.include_router(files.router, prefix=API_V1_PREFIX)
-app.include_router(project_tasks.router, prefix=API_V1_PREFIX, tags=["project tasks"])
-app.include_router(payment.router, prefix=API_V1_PREFIX, tags=["payment"])
-app.include_router(usage.router, prefix=API_V1_PREFIX, tags=["usage"])
-app.include_router(favorites.router, prefix=API_V1_PREFIX, tags=["favorites"])
-app.include_router(security_logs.router, prefix=API_V1_PREFIX, tags=["security"])
+    return app
 
-# Include health router (no prefix - these are root-level endpoints)
-app.include_router(health.router)
+
+app = create_app()

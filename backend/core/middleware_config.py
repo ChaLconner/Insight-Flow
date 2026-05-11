@@ -49,6 +49,9 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
         logger.info("Skipping rate limit middleware in testing environment")
         return
 
+    if settings.is_production and not settings.cache.redis_url:
+        raise RuntimeError("REDIS_URL is required in production for distributed rate limiting.")
+
     if settings.cache.redis_url:
         try:
             from services.cache_service import cache_service
@@ -63,6 +66,8 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
                 logger.info("Using Redis-based rate limiting")
                 return
         except Exception as e:
+            if settings.is_production:
+                raise RuntimeError("Redis-backed rate limiting is required in production.") from e
             logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
 
     # VULN-01: Warn critically in production when Redis is not available

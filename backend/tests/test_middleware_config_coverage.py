@@ -82,6 +82,7 @@ class TestMiddlewareConfig:
         from core.middleware_config import setup_rate_limit_middleware
 
         mock_settings.is_testing = False
+        mock_settings.is_production = False
         mock_settings.cache.redis_url = None
 
         with (
@@ -90,3 +91,15 @@ class TestMiddlewareConfig:
         ):
             setup_rate_limit_middleware(app)
             mock_logger.info.assert_any_call("Using in-memory rate limiting (Redis not configured)")
+
+    @patch("core.middleware_config.settings")
+    def test_setup_rate_limit_middleware_requires_redis_in_production(self, mock_settings, app):
+        """Test production requires Redis-backed rate limiting."""
+        from core.middleware_config import setup_rate_limit_middleware
+
+        mock_settings.is_testing = False
+        mock_settings.is_production = True
+        mock_settings.cache.redis_url = None
+
+        with pytest.raises(RuntimeError, match="REDIS_URL is required in production"):
+            setup_rate_limit_middleware(app)

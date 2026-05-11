@@ -6,21 +6,45 @@ Provides endpoints for Kubernetes liveness/readiness probes and general health m
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import PlainTextResponse
 
 from config import get_settings
 from utils.logger import setup_logger
 
 logger = setup_logger("health_router")
-settings = get_settings()
 
 router = APIRouter(tags=["health"])
+
+
+def _settings():
+    return get_settings()
+
+
+def _require_metrics_enabled() -> Any:
+    settings = _settings()
+    if not settings.enable_metrics:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Metrics endpoint is disabled",
+        )
+    return settings
+
+
+def _require_detailed_health_enabled() -> Any:
+    settings = _settings()
+    if settings.enable_detailed_health or settings.is_development or settings.is_testing:
+        return settings
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Detailed health endpoint is disabled",
+    )
 
 
 @router.get("/")
 def read_root():
     """Root endpoint - basic API info."""
+    settings = _settings()
     return {"message": "Hello from FastAPI", "version": settings.api_version}
 
 
@@ -36,6 +60,7 @@ async def health_check():
     Basic health check endpoint.
     Returns overall application health status.
     """
+    settings = _settings()
     return {
         "status": "healthy",
         "environment": settings.environment,
@@ -49,6 +74,7 @@ async def db_health_check():
     Database health check with connection pool statistics.
     Useful for monitoring and debugging connection issues.
     """
+    settings = _require_detailed_health_enabled()
     from sqlalchemy import text
 
     from database import AsyncSessionLocal, async_engine
@@ -85,6 +111,7 @@ async def cache_health_check():
     """
     Cache health check with statistics.
     """
+    _require_detailed_health_enabled()
     from services.cache_service import cache_service
 
     try:
@@ -100,6 +127,7 @@ async def full_health_check():
     Comprehensive health check for all system components.
     Useful for Kubernetes liveness/readiness probes.
     """
+    settings = _require_detailed_health_enabled()
     import psutil
     from sqlalchemy import text
 
@@ -158,6 +186,7 @@ async def prometheus_metrics():
     Prometheus-compatible metrics endpoint.
     Returns metrics in Prometheus text format.
     """
+    _require_metrics_enabled()
     from database import async_engine
     from middleware.monitoring import get_request_metrics
     from services.cache_service import cache_service

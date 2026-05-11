@@ -258,6 +258,7 @@ class AppSettings(BaseSettings):
     # Feature flags
     enable_docs: bool = Field(default=True, alias="ENABLE_DOCS")
     enable_metrics: bool = Field(default=True, alias="ENABLE_METRICS")
+    enable_detailed_health: bool = Field(default=False, alias="ENABLE_DETAILED_HEALTH")
 
     # Nested settings
     database: DatabaseSettings = Field(default_factory=lambda: DatabaseSettings())
