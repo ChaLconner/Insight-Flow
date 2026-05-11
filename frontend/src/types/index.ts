@@ -714,7 +714,7 @@ export interface SetupIntentResponse {
 
 export interface CreatePaymentMethodRequest {
   payment_method_id: string;
-  customer_id: string;
+  customer_id?: string;
   set_as_default?: boolean;
   billing_name?: string;
   billing_email?: string;

@@ -14,14 +14,12 @@ import { apiClient } from "@/lib/api-client";
 
 interface PaymentMethodFormProps {
   clientSecret: string;
-  customerId: string;
   onSuccess: () => void;
   onCancel: () => void;
   defaultName?: string;
 }
 
 export function PaymentMethodForm({
-  customerId,
   onSuccess,
   onCancel,
 }: PaymentMethodFormProps) {
@@ -73,7 +71,6 @@ export function PaymentMethodForm({
         const response = await apiClient.post("/payment/methods", {
           payment_method_id: setupIntent.payment_method,
           set_as_default: true,
-          customer_id: customerId,
           billing_name: cardName,
         });
 

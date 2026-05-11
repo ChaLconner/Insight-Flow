@@ -181,7 +181,6 @@ export function BillingSettings() {
             <StripeProvider options={{ clientSecret: setupIntent.client_secret }}>
               <PaymentMethodForm
                 clientSecret={setupIntent.client_secret}
-                customerId={setupIntent.customer_id}
                 onSuccess={handleCardAdded}
                 onCancel={handleCloseAddCardDialog}
                 defaultName={user?.name ?? ""}
