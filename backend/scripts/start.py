@@ -5,6 +5,14 @@ This ensures the server is accessible from the frontend.
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Running this file as `python scripts/start.py` puts `backend/scripts` on
+# sys.path. Add the backend root so top-level app modules resolve in CI.
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 import uvicorn
 from dotenv import load_dotenv
