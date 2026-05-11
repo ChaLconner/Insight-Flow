@@ -503,22 +503,3 @@ class AsyncNotificationTriggerService:
         await self._send_email_notification(
             mentioned_user, "mentions", "You were mentioned", notification_message, action_path
         )
-
-    async def notify_system(
-        self,
-        user: User,
-        title: str,
-        message: str,
-        data: dict[str, Any] | None = None,
-    ):
-        """Notify user about system-level events."""
-        prefs = await self._get_user_preferences(user.id)
-        if self._should_notify_in_app(prefs, "system"):
-            await self._create_notification(
-                user_id=user.id,
-                notification_type="system",
-                title=title,
-                message=message,
-                data=data or {},
-                allow_grouping=False,
-            )

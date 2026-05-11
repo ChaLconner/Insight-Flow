@@ -22,8 +22,6 @@ import type {
   RecentActivity,
   InviteUserRequest,
   UserStats,
-  SystemNotificationRequest,
-  SystemNotificationResponse,
 } from "@/types";
 
 const USER_SETTINGS_CACHE_TTL_MS = 30_000;
@@ -563,13 +561,6 @@ export const usersApi = {
     }, cacheKey);
   },
 
-  // Send system notification
-  sendSystemNotification: async (
-    notificationData: SystemNotificationRequest,
-  ): Promise<SystemNotificationResponse> => {
-    const { data } = await apiClient.post("/users/system-notifications", notificationData);
-    return data;
-  },
 };
 
 // ===========================================

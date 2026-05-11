@@ -1,14 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { BellRing, Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 
 interface UsersPageHeaderProps {
   onRefresh: () => void;
   onInvite: () => void;
-  onNotify: () => void;
   isRefreshing: boolean;
-  canSendNotifications: boolean;
 }
 
 /**
@@ -17,9 +15,7 @@ interface UsersPageHeaderProps {
 export function UsersPageHeader({
   onRefresh,
   onInvite,
-  onNotify,
   isRefreshing,
-  canSendNotifications,
 }: UsersPageHeaderProps) {
   return (
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -45,18 +41,6 @@ export function UsersPageHeader({
           <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} aria-hidden="true" />
           Refresh
         </Button>
-        {canSendNotifications && (
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1 sm:flex-none border-amber-500/30 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
-            onClick={onNotify}
-            aria-label="Send a system notification"
-          >
-            <BellRing className="h-4 w-4 mr-2" aria-hidden="true" />
-            Send Alert
-          </Button>
-        )}
         <Button
           className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-500 text-white"
           onClick={onInvite}

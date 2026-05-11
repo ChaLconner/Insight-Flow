@@ -5,7 +5,6 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { InviteUserModal } from "@/components/modals/InviteUserModal";
-import { useAuthStore } from "@/stores/auth-store";
 
 // Local imports
 import {
@@ -14,7 +13,6 @@ import {
   UserFilters,
   UserPagination,
   RoleDistribution,
-  SystemNotificationModal,
   UsersPageSkeleton,
   EmptyState,
   UsersPageHeader,
@@ -39,7 +37,6 @@ import {
  */
 export default function UsersPage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [isSystemNotificationOpen, setIsSystemNotificationOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const announcerRef = useRef<HTMLDivElement>(null);
 
@@ -65,10 +62,6 @@ export default function UsersPage() {
     refresh,
     loadUsers,
   } = useUsers({ pageSize: 10, debounceMs: 300 });
-  const currentUser = useAuthStore((state) => state.user);
-  const canSendNotifications =
-    currentUser?.role === "admin" || currentUser?.role === "manager";
-
   // Announce dynamic content changes to screen readers
   const announce = useCallback((message: string) => {
     if (announcerRef.current) {
@@ -139,22 +132,10 @@ export default function UsersPage() {
     setIsInviteModalOpen(false);
   }, []);
 
-  const handleSystemNotificationOpen = useCallback(() => {
-    setIsSystemNotificationOpen(true);
-  }, []);
-
-  const handleSystemNotificationClose = useCallback(() => {
-    setIsSystemNotificationOpen(false);
-  }, []);
-
   const handleInviteSuccess = useCallback(() => {
     loadUsers(true);
     announce("User invited successfully. Refreshing list.");
   }, [loadUsers, announce]);
-
-  const handleSystemNotificationSuccess = useCallback(() => {
-    announce("System notification sent successfully.");
-  }, [announce]);
 
   // Loading state
   if (loading && !dataFetched) {
@@ -219,9 +200,7 @@ export default function UsersPage() {
         <UsersPageHeader
           onRefresh={refresh}
           onInvite={handleInviteClick}
-          onNotify={handleSystemNotificationOpen}
           isRefreshing={refreshing}
-          canSendNotifications={canSendNotifications}
         />
 
         {/* Stats Grid */}
@@ -294,12 +273,6 @@ export default function UsersPage() {
         isOpen={isInviteModalOpen}
         onClose={handleInviteClose}
         onSuccess={handleInviteSuccess}
-      />
-      <SystemNotificationModal
-        isOpen={isSystemNotificationOpen}
-        onClose={handleSystemNotificationClose}
-        onSuccess={handleSystemNotificationSuccess}
-        users={users}
       />
     </DashboardLayout>
   );

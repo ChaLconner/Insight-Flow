@@ -6,4 +6,3 @@ export { RoleDistribution } from "./RoleDistribution";
 export { UsersPageSkeleton } from "./UsersPageSkeleton";
 export { EmptyState } from "./EmptyState";
 export { UsersPageHeader } from "./UsersPageHeader";
-export { SystemNotificationModal } from "./SystemNotificationModal";

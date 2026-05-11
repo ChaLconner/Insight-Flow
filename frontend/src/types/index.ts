@@ -513,19 +513,6 @@ export interface NotificationPreferences {
   updatedAt: string;
 }
 
-export interface SystemNotificationRequest {
-  title: string;
-  message: string;
-  targetUserIds: string[];
-  data?: Record<string, unknown>;
-}
-
-export interface SystemNotificationResponse {
-  message: string;
-  count: number;
-  recipientIds: string[];
-}
-
 // ===========================================
 // Form Types
 // ===========================================

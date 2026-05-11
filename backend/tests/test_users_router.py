@@ -274,55 +274,6 @@ def test_update_user_settings(client, mock_user_service, mock_current_user):
     assert response.json()["theme"] == "light"
 
 
-def test_send_system_notification_success(
-    client, mock_notification_service, mock_db_session, mock_current_user
-):
-    target_user = User(
-        id=uuid4(),
-        email="target@example.com",
-        username="target",
-        role="member",
-        is_active=True,
-        created_at=datetime.now(),
-        updated_at=datetime.now(),
-    )
-    result = MagicMock()
-    result.scalars.return_value.all.return_value = [target_user]
-    mock_db_session.execute.return_value = result
-
-    response = client.post(
-        "/api/v1/users/system-notifications",
-        json={
-            "title": "Maintenance",
-            "message": "Planned maintenance tonight",
-            "targetUserIds": [str(target_user.id)],
-            "data": {"type": "maintenance"},
-        },
-    )
-
-    assert response.status_code == 200
-    assert response.json()["count"] == 1
-    mock_notification_service.notify_system.assert_awaited_once()
-
-
-def test_send_system_notification_forbidden_for_non_admin(
-    client, mock_notification_service, mock_current_user
-):
-    mock_current_user.role = "user"
-
-    response = client.post(
-        "/api/v1/users/system-notifications",
-        json={
-            "title": "Maintenance",
-            "message": "Planned maintenance tonight",
-            "targetUserIds": [str(uuid4())],
-        },
-    )
-
-    assert response.status_code == 403
-    mock_notification_service.notify_system.assert_not_called()
-
-
 # ============================================================================
 # Avatar Upload Tests (Mocking Cloudinary & Local)
 # ============================================================================

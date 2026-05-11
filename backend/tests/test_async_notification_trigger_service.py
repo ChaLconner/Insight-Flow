@@ -270,20 +270,6 @@ async def test_notify_mention_respects_mentions_pref(trigger_service, mock_db_se
 
 
 @pytest.mark.asyncio
-async def test_notify_system_respects_system_pref(trigger_service, mock_db_session, users):
-    user, _ = users
-
-    with patch.object(
-        trigger_service,
-        "_get_user_preferences",
-        return_value={"inApp": {"system": False}},
-    ):
-        await trigger_service.notify_system(user=user, title="Maintenance", message="Soon")
-
-        mock_db_session.add.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_grouping_existing_notification(trigger_service, mock_db_session, users):
     assigner, assignee = users
 
