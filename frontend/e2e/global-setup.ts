@@ -5,8 +5,13 @@
 import { chromium, FullConfig } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getPostLoginRedirect } from '../src/lib/auth-redirect';
 
 const AUTH_FILE = path.join(__dirname, '.auth/user.json');
+const E2E_EMAIL = process.env.E2E_USER_EMAIL;
+const E2E_PASSWORD = process.env.E2E_USER_PASSWORD;
+const E2E_USER_ROLE = process.env.E2E_USER_ROLE ?? 'manager';
+const expectedRedirectPath = getPostLoginRedirect(E2E_USER_ROLE);
 
 async function globalSetup(config: FullConfig) {
   // Ensure auth directory exists
@@ -38,19 +43,25 @@ async function globalSetup(config: FullConfig) {
     // Wait for login form to be ready
     await page.waitForLoadState('networkidle');
     
-    // Check if we're already logged in (redirected to dashboard)
-    if (page.url().includes('/dashboard')) {
+    // Check if we're already logged in (redirected to the role-based landing page)
+    if (page.url().includes(expectedRedirectPath)) {
       console.log('Already authenticated');
       await context.storageState({ path: AUTH_FILE });
       await browser.close();
       return;
     }
 
-    // Note: For real authentication, you would fill in actual test credentials
-    // This is a placeholder that creates an empty auth state for unauthenticated tests
-    console.log('Creating unauthenticated state for public page tests');
-    
-    // Save the storage state (even without auth for now)
+    if (E2E_EMAIL && E2E_PASSWORD) {
+      await page.getByRole('textbox', { name: /email/i }).fill(E2E_EMAIL);
+      await page.locator('input[type="password"]').fill(E2E_PASSWORD);
+      await page.getByRole('button', { name: /sign in|login/i }).click();
+      await page.waitForLoadState('networkidle');
+      await page.waitForURL(new RegExp(`${expectedRedirectPath}`));
+      console.log(`Created authenticated state for ${E2E_EMAIL}`);
+    } else {
+      console.log('Creating unauthenticated state for public page tests');
+    }
+
     await context.storageState({ path: AUTH_FILE });
     
   } catch (error) {

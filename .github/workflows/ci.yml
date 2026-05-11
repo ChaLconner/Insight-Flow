@@ -20,7 +20,7 @@ env:
 
 jobs:
   security-scan:
-    name: Security Scan (Advisory)
+    name: Security Scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,14 +45,14 @@ jobs:
       - name: Run pip-audit (Python dependencies)
         working-directory: ./backend
         run: |
-          pip-audit -r requirements.txt --format=json --output=pip-audit-report.json || true
-        continue-on-error: true
+          pip-audit -r requirements.txt --format=json --output=pip-audit-report.json
 
       - name: Run bandit security linter
         working-directory: ./backend
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
-          bandit -r . -ll -ii -x ./tests,./scripts --format json -o bandit-report.json || true
-        continue-on-error: true
+          bandit -r . -ll -ii -x ./tests,./scripts,./.venv --format json -o bandit-report.json
 
       - name: Upload security scan results
         uses: actions/upload-artifact@v4
@@ -220,7 +220,6 @@ jobs:
 
       - name: Run npm audit
         run: npm audit --audit-level=high
-        continue-on-error: true
 
       - name: Lint
         run: npm run lint:check
@@ -252,10 +251,41 @@ jobs:
     needs: [backend-test, frontend-check]
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: insightflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -268,6 +298,29 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Initialize E2E database
+        working-directory: ./backend
+        env:
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+        run: python scripts/init_db_for_ci.py
+
+      - name: Seed E2E user
+        working-directory: ./backend
+        env:
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+          REDIS_URL: "redis://localhost:6379/0"
+          GOOGLE_CLIENT_ID: "mock-google-client-id"
+          GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
+        run: python scripts/seed_demo_user.py
+
       - name: Install Playwright browsers
         working-directory: ./frontend
         run: npx playwright install --with-deps chromium
@@ -277,8 +330,16 @@ jobs:
         run: npm run test:e2e -- --project=chromium
         env:
           CI: true
-          BASE_URL: "http://127.0.0.1:3000"
+          BASE_URL: "http://localhost:3000"
           API_URL: "http://127.0.0.1:8000"
+          PLAYWRIGHT_START_BACKEND: "1"
+          E2E_USER_EMAIL: "demo@insightflow.com"
+          E2E_USER_PASSWORD: "demo1234"
+          E2E_USER_ROLE: "manager"
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+          REDIS_URL: "redis://localhost:6379/0"
+          GOOGLE_REDIRECT_URI: "http://localhost:8000/auth/callback/google"
           GOOGLE_CLIENT_ID: "mock-google-client-id"
           GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
 

@@ -76,6 +76,17 @@ describe("LoginPage query prefills", () => {
     expect(githubButton).toBeEnabled();
   });
 
+  it("submits through a POST form and becomes interactive after hydration", async () => {
+    render(<LoginPage />);
+
+    const submitButton = screen.getByRole("button", { name: /sign in/i });
+    expect(submitButton.closest("form")).toHaveAttribute("method", "post");
+
+    await waitFor(() => {
+      expect(submitButton).toBeEnabled();
+    });
+  });
+
   it("renders a link back to the landing page", () => {
     render(<LoginPage />);
 
@@ -106,7 +117,11 @@ describe("LoginPage query prefills", () => {
       target: { value: "password123" },
     });
     fireEvent.click(screen.getByLabelText(/remember me/i));
-    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    const submitButton = screen.getByRole("button", { name: /sign in/i });
+    await waitFor(() => {
+      expect(submitButton).toBeEnabled();
+    });
+    fireEvent.click(submitButton);
 
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith("/auth/login", {

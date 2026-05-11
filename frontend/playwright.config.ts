@@ -1,5 +1,27 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === '1';
+const startBackend = process.env.PLAYWRIGHT_START_BACKEND === '1';
+const frontendServer = {
+  command: 'cross-env NEXT_PUBLIC_E2E=1 npm run dev',
+  url: 'http://localhost:3000',
+  reuseExistingServer,
+  timeout: 120000,
+};
+
+const backendCommand =
+  process.platform === 'win32'
+    ? 'powershell -NoProfile -Command "Set-Location ..\\backend; $env:HOST=\'127.0.0.1\'; $env:PORT=\'8000\'; $env:RELOAD=\'false\'; python scripts/start.py"'
+    : "cd ../backend && HOST=127.0.0.1 PORT=8000 RELOAD=false python scripts/start.py";
+
+const backendServer = {
+  command: backendCommand,
+  url: 'http://127.0.0.1:8000/health',
+  name: 'Backend',
+  reuseExistingServer,
+  timeout: 120000,
+};
+
 /**
  * Playwright E2E Test Configuration for Insight-Flow
  * @see https://playwright.dev/docs/test-configuration
@@ -82,12 +104,7 @@ export default defineConfig({
   ],
   
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'cross-env NEXT_PUBLIC_E2E=1 npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === '1',
-    timeout: 120000,
-  },
+  webServer: startBackend ? [backendServer, frontendServer] : frontendServer,
   
   /* Folder for test artifacts such as screenshots, videos, traces, etc. */
   outputDir: 'e2e-results/',

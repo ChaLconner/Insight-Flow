@@ -32,6 +32,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const requestedRedirect =
     searchParams.get("callbackUrl") ?? searchParams.get("redirect");
@@ -49,6 +50,10 @@ function LoginForm() {
       rememberMe: false,
     },
   });
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (!searchParams.has("password")) {
@@ -242,7 +247,11 @@ function LoginForm() {
           </div>
 
           {/* Login Form */}
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form
+            method="post"
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4"
+          >
             <div className="space-y-2">
               <Label htmlFor="email" className="text-white">
                 Email
@@ -323,7 +332,7 @@ function LoginForm() {
             <Button
               type="submit"
               className="w-full bg-white hover:bg-gray-200 text-black font-bold py-2.5 transition-all hover:scale-[1.02]"
-              disabled={isLoading}
+              disabled={isLoading || !isHydrated}
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

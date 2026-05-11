@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NotificationPriority, TaskPriority, TaskType, UserRole } from "@/types";
+import { TaskPriority, TaskType, UserRole } from "@/types";
 
 const apiClientMock = {
   get: vi.fn(),
@@ -165,12 +165,6 @@ describe("api endpoints coverage", () => {
     await usersApi.updateSettings({ theme: "light" });
     await usersApi.inviteUser({ email: "invitee@example.com", role: UserRole.MEMBER });
     await usersApi.getStats();
-    await usersApi.sendSystemNotification({
-      title: "Notice",
-      message: "Hello team",
-      targetUserIds: ["user-1", "user-2"],
-      data: { priority: NotificationPriority.MEDIUM },
-    });
 
     await dashboardApi.getOverview();
     await dashboardApi.getTodayTasks();

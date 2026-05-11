@@ -3,6 +3,12 @@
  * Tests login, logout, and protected route access
  */
 import { test, expect } from '@playwright/test';
+import { getPostLoginRedirect } from '../src/lib/auth-redirect';
+
+const E2E_EMAIL = process.env.E2E_USER_EMAIL;
+const E2E_PASSWORD = process.env.E2E_USER_PASSWORD;
+const E2E_USER_ROLE = process.env.E2E_USER_ROLE ?? 'manager';
+const expectedRedirectPath = getPostLoginRedirect(E2E_USER_ROLE);
 
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -89,24 +95,19 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should successfully login with valid credentials', async ({ page }) => {
+    test.skip(!E2E_EMAIL || !E2E_PASSWORD, 'E2E credentials are not configured');
+
     await page.goto('/auth/login');
     
     // Fill in credentials
-    await page.getByRole('textbox', { name: /email/i }).fill('test@example.com');
-    await page.locator('input[type="password"]').fill('password123');
+    await page.getByRole('textbox', { name: /email/i }).fill(E2E_EMAIL ?? '');
+    await page.locator('input[type="password"]').fill(E2E_PASSWORD ?? '');
     
     // Submit form
     await page.getByRole('button', { name: /sign in|login/i }).click();
     
-    // Wait for navigation - should either redirect to dashboard or show error
-    await page.waitForLoadState('networkidle');
-    
-    // Check if login succeeded (dashboard) or failed (still on login with error)
-    const currentUrl = page.url();
-    const hasError = await page.locator('[role="alert"], [class*="error"]').count() > 0;
-    
-    // Either we're on dashboard (success) or we got an error message (expected for invalid test creds)
-    expect(currentUrl.includes('dashboard') || currentUrl.includes('login')).toBe(true);
+    // In CI/local E2E with seeded user this must reach the role-based landing page.
+    await page.waitForURL(new RegExp(`${expectedRedirectPath}`), { timeout: 15000 });
   });
 
   test('should logout successfully when authenticated', async ({ page }) => {

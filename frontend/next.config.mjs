@@ -20,6 +20,7 @@ const nextConfig = {
   poweredByHeader: false, // Security improvement (removes X-Powered-By)
   productionBrowserSourceMaps: false, // Disable source maps in production for performance
   devIndicators: process.env.NEXT_PUBLIC_E2E === "1" ? false : undefined,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
 
   // Image optimization - updated for Next.js 16
   images: {
@@ -39,6 +40,11 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "*.googleusercontent.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com",
         pathname: "/**",
       },
       { protocol: "https", hostname: "ui-avatars.com", pathname: "/**" },
