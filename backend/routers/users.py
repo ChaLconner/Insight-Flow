@@ -44,6 +44,7 @@ from rate_limiter import RateLimits, limiter
 UPLOAD_DIR = "static/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 USER_ADMIN_ROLES = {"admin", "manager"}
+PRIVILEGED_INVITE_ROLES = {"admin", "manager"}
 
 # Initialize Cloudinary on module load
 if is_cloudinary_configured():
@@ -116,9 +117,14 @@ async def invite_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to invite users"
         )
+    if current_user.role != "admin" and user_invite.role in PRIVILEGED_INVITE_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Managers cannot assign privileged roles",
+        )
 
     try:
-        user = await user_service.invite_user(user_invite)
+        user = await user_service.invite_user(user_invite, actor_role=current_user.role)
         return user
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

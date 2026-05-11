@@ -612,7 +612,7 @@ async def reset_password(
                 success=True,
             )
         else:
-            logger.warning(f"Password reset failed for token: {request_data.token}")
+            logger.warning(f"Password reset failed for token: {mask_token(request_data.token)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token"
             )
@@ -620,7 +620,7 @@ async def reset_password(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in reset password for token {request_data.token}: {e}")
+        logger.error(f"Error in reset password for token {mask_token(request_data.token)}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
         )
@@ -654,11 +654,13 @@ async def validate_reset_token(
 
         if reset_token:
             logger.info(
-                f"Reset token validation successful for token: {request_data.token[:10]}..."
+                f"Reset token validation successful for token: {mask_token(request_data.token)}"
             )
             return ValidateResetTokenResponse(valid=True, message="Token is valid")
         else:
-            logger.warning(f"Reset token validation failed for token: {request_data.token[:10]}...")
+            logger.warning(
+                f"Reset token validation failed for token: {mask_token(request_data.token)}"
+            )
             return ValidateResetTokenResponse(valid=False, message="Invalid or expired reset token")
 
     except Exception as e:

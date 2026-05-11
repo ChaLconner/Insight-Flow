@@ -129,6 +129,42 @@ def test_invite_user_success(client, mock_user_service, mock_current_user):
 
     assert response.status_code == 200
     assert response.json()["email"] == "invite@test.com"
+    mock_user_service.invite_user.assert_awaited_once()
+    assert mock_user_service.invite_user.await_args.kwargs["actor_role"] == "admin"
+
+
+def test_manager_cannot_invite_privileged_user(client, mock_user_service, mock_current_user):
+    """Managers can invite lower roles but cannot create admins or managers."""
+    mock_current_user.role = "manager"
+
+    response = client.post(
+        "/api/v1/users/invite", json={"email": "invite@test.com", "role": "admin"}
+    )
+
+    assert response.status_code == 403
+    mock_user_service.invite_user.assert_not_called()
+
+
+def test_manager_can_invite_viewer(client, mock_user_service, mock_current_user):
+    """Managers can still invite non-privileged users."""
+    mock_current_user.role = "manager"
+    new_id = uuid4()
+    mock_user_service.invite_user.return_value = {
+        "id": new_id,
+        "email": "viewer@test.com",
+        "role": "viewer",
+        "is_active": True,
+        "created_at": datetime.now(),
+        "updated_at": datetime.now(),
+    }
+
+    response = client.post(
+        "/api/v1/users/invite", json={"email": "viewer@test.com", "role": "viewer"}
+    )
+
+    assert response.status_code == 200
+    mock_user_service.invite_user.assert_awaited_once()
+    assert mock_user_service.invite_user.await_args.kwargs["actor_role"] == "manager"
 
 
 def test_invite_user_forbidden(client, mock_user_service, mock_current_user):

@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 
 from utils.schema_utils import to_camel
 
+INVITABLE_USER_ROLES = {"admin", "manager", "member", "viewer"}
+
 
 class UserBase(BaseModel):
     """Base user schema."""
@@ -94,6 +96,14 @@ class UserInvite(BaseModel):
         if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v):
             raise ValueError("Invalid email format")
         return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str | None) -> str:
+        role = (v or "member").strip().lower()
+        if role not in INVITABLE_USER_ROLES:
+            raise ValueError("Invalid user role")
+        return role
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

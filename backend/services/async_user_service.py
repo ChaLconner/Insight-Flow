@@ -503,13 +503,17 @@ class AsyncUserService:
                 raise ValueError("Username already taken")
             raise ValueError("User update failed")
 
-    async def invite_user(self, user_invite: UserInvite) -> User:
+    async def invite_user(self, user_invite: UserInvite, actor_role: str | None = None) -> User:
         """Invite an existing user (update role and activate)."""
+        requested_role = user_invite.role or "member"
+        if actor_role and actor_role != "admin" and requested_role in {"admin", "manager"}:
+            raise ValueError("Managers cannot assign privileged roles")
+
         db_user = await self.get_user_by_email(user_invite.email)
         if not db_user:
             raise ValueError("User not found. Please ask them to register first.")
 
-        db_user.role = user_invite.role or "member"
+        db_user.role = requested_role
         db_user.is_active = True
 
         try:

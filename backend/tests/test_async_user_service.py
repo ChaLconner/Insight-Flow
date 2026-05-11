@@ -267,11 +267,20 @@ class TestAsyncUserService:
         service = AsyncUserService(mock_db)
 
         invite = UserInvite(email="invite@test.com", role="admin")
-        result = await service.invite_user(invite)
+        result = await service.invite_user(invite, actor_role="admin")
 
         assert result.role == "admin"
         assert result.is_active is True
         mock_db.commit.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_manager_cannot_invite_privileged_role(self, async_user_service):
+        from schemas.user import UserInvite
+
+        invite = UserInvite(email="invite@test.com", role="admin")
+
+        with pytest.raises(ValueError, match="privileged roles"):
+            await async_user_service.invite_user(invite, actor_role="manager")
 
     @pytest.mark.asyncio
     async def test_verify_email_legacy(self, async_user_service):
