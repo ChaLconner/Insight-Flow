@@ -119,7 +119,7 @@ class TestServiceNotConfigured:
         # Valid payload but service not configured
         response = client.post(
             "/api/v1/payment/methods",
-            json={"payment_method_id": "pm_123", "customer_id": "cus_123", "set_as_default": True},
+            json={"payment_method_id": "pm_123", "set_as_default": True},
         )
         assert response.status_code == 503
 

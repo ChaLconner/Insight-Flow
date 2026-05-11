@@ -141,6 +141,22 @@ async def test_attach_payment_method(payment_service, mock_db_session):
 
 
 @pytest.mark.asyncio
+async def test_attach_payment_method_rejects_foreign_customer(payment_service, mock_db_session):
+    user_id = uuid4()
+    data = MagicMock(payment_method_id="pm_123", set_as_default=True)
+    customer_id = "cus_123"
+
+    pm_stripe = MagicMock()
+    pm_stripe.customer = "cus_foreign"
+
+    with (
+        patch("stripe.PaymentMethod.retrieve", return_value=pm_stripe),
+        pytest.raises(ValueError, match="current customer"),
+    ):
+        await payment_service.attach_payment_method(mock_db_session, user_id, data, customer_id)
+
+
+@pytest.mark.asyncio
 async def test_list_payment_history(payment_service, mock_db_session):
     user_id = uuid4()
 

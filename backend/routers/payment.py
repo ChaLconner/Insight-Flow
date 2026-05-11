@@ -239,8 +239,15 @@ async def add_payment_method(
         )
 
     try:
+        customer_id = await service.get_or_create_stripe_customer(
+            db=db,
+            user_id=current_user.id,
+            email=current_user.email,
+            name=current_user.name,
+            user=current_user,
+        )
         method = await service.attach_payment_method(
-            db=db, user_id=current_user.id, data=data, customer_id=data.customer_id
+            db=db, user_id=current_user.id, data=data, customer_id=customer_id
         )
         logger.info(f"Successfully added payment method {method.id}")
         return PaymentMethodResponse.model_validate(method)

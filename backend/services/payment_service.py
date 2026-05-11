@@ -340,6 +340,9 @@ class PaymentService:
         # Get payment method details from Stripe
         pm = await self._run_stripe_cmd(stripe.PaymentMethod.retrieve, data.payment_method_id)
 
+        if pm.customer and str(pm.customer) != customer_id:
+            raise ValueError("Payment method does not belong to current customer")
+
         # Attach to customer if not already attached
         if not pm.customer:
             await self._run_stripe_cmd(

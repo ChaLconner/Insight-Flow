@@ -63,7 +63,9 @@ class PaymentMethodCreate(BaseModel):
     """Schema for creating a new payment method via Stripe SetupIntent."""
 
     payment_method_id: str = Field(..., description="Stripe payment_method_id from frontend")
-    customer_id: str = Field(..., description="Stripe customer_id")
+    customer_id: str | None = Field(
+        default=None, description="Deprecated. The server derives the Stripe customer."
+    )
     set_as_default: bool = Field(
         default=True, description="Whether to set as default payment method"
     )
