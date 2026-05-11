@@ -227,6 +227,7 @@ kilocode/
 
 # User uploaded files
 backend/static/uploads/
+backend/storage/private_uploads/
 uploads/
 *.uploaded
 
