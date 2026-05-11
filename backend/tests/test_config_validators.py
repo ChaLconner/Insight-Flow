@@ -86,3 +86,23 @@ class TestConfigValidators:
         with pytest.raises(ValidationError) as exc:
             AppSettings(ENVIRONMENT="production", APP_DEBUG=True)
         assert "APP_DEBUG cannot be True in production" in str(exc.value)
+
+    def test_docs_and_metrics_default_off_in_production(self, monkeypatch):
+        """Docs and metrics require explicit opt-in in production."""
+        monkeypatch.delenv("ENABLE_DOCS", raising=False)
+        monkeypatch.delenv("ENABLE_METRICS", raising=False)
+
+        settings = AppSettings(ENVIRONMENT="production")
+
+        assert settings.docs_enabled is False
+        assert settings.metrics_enabled is False
+
+    def test_docs_and_metrics_can_be_enabled_in_production(self, monkeypatch):
+        """Production deployments can explicitly opt in when protected upstream."""
+        monkeypatch.setenv("ENABLE_DOCS", "true")
+        monkeypatch.setenv("ENABLE_METRICS", "true")
+
+        settings = AppSettings(ENVIRONMENT="production")
+
+        assert settings.docs_enabled is True
+        assert settings.metrics_enabled is True

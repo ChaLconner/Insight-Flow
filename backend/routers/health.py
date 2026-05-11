@@ -23,7 +23,12 @@ def _settings():
 
 def _require_metrics_enabled() -> Any:
     settings = _settings()
-    if not settings.enable_metrics:
+    metrics_enabled = getattr(settings, "metrics_enabled", None)
+    if metrics_enabled is None:
+        metrics_enabled = settings.enable_metrics
+        if settings.is_production:
+            metrics_enabled = False
+    if not metrics_enabled:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Metrics endpoint is disabled",

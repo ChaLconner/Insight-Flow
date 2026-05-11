@@ -30,6 +30,20 @@ def test_metrics_returns_404_when_disabled(monkeypatch):
     assert response.status_code == 404
 
 
+def test_metrics_returns_404_by_default_in_production(monkeypatch):
+    from routers import health
+
+    monkeypatch.delenv("ENABLE_METRICS", raising=False)
+    monkeypatch.setattr(
+        health, "get_settings", lambda: _make_settings(environment="production", is_production=True)
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/metrics")
+
+    assert response.status_code == 404
+
+
 def test_detailed_health_returns_404_when_not_enabled(monkeypatch):
     from routers import health
 

@@ -283,6 +283,23 @@ class AppSettings(BaseSettings):
             self.environment.lower() == "testing" or os.getenv("TESTING", "false").lower() == "true"
         )
 
+    def _setting_was_provided(self, field_name: str, env_name: str) -> bool:
+        return field_name in self.model_fields_set or env_name in os.environ
+
+    @property
+    def docs_enabled(self) -> bool:
+        if self.is_production and not self._setting_was_provided("enable_docs", "ENABLE_DOCS"):
+            return False
+        return self.enable_docs
+
+    @property
+    def metrics_enabled(self) -> bool:
+        if self.is_production and not self._setting_was_provided(
+            "enable_metrics", "ENABLE_METRICS"
+        ):
+            return False
+        return self.enable_metrics
+
     @property
     def allowed_hosts_list(self) -> list[str]:
         return [host.strip() for host in self.allowed_hosts.split(",")]

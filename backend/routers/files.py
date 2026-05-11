@@ -9,6 +9,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,7 +28,8 @@ logger = setup_logger("files_router")
 
 router = APIRouter(prefix="/files", tags=["files"])
 
-UPLOAD_DIR = "static/uploads"
+UPLOAD_DIR = "storage/private_uploads"
+DOWNLOAD_URL_PREFIX = "/api/v1/files/download"
 
 # Ensure upload directory exists
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -81,8 +83,7 @@ async def upload_file(
         with open(validated_path, "wb") as buffer:
             buffer.write(content)
 
-        # Return URL (assuming static mount at /static)
-        url = f"/static/uploads/{unique_name}"
+        url = f"{DOWNLOAD_URL_PREFIX}/{unique_name}"
 
         # Save to DB
         db_file = FileModel(
@@ -159,7 +160,7 @@ async def get_file_info(
             raise HTTPException(status_code=404, detail="File not found")
 
         return {
-            "url": db_file.url if db_file else f"/static/uploads/{filename}",
+            "url": db_file.url if db_file else f"{DOWNLOAD_URL_PREFIX}/{filename}",
             "filename": db_file.filename if db_file else filename,
             "unique_filename": db_file.unique_filename if db_file else filename,
             "size_bytes": db_file.size_bytes if db_file else os.path.getsize(validated_path),
@@ -172,6 +173,44 @@ async def get_file_info(
     except Exception as e:
         logger.error(f"File info error: {e}")
         raise HTTPException(status_code=500, detail="File info lookup failed")
+
+
+@router.get("/download/{filename}")
+async def download_file(
+    filename: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Download an uploaded file after ownership verification."""
+    try:
+        resolved_filename, validated_path = _resolve_upload_path(filename, current_user)
+        result = await db.execute(
+            select(FileModel).where(FileModel.unique_filename == resolved_filename)
+        )
+        db_file = result.scalar_one_or_none()
+
+        if not db_file:
+            raise HTTPException(status_code=404, detail="File not found")
+        if db_file.user_id != current_user.id:
+            logger.warning(
+                f"Unauthorized file download attempt by user {mask_user_id(str(current_user.id))} "
+                f"on file owned by {mask_user_id(str(db_file.user_id))}"
+            )
+            raise HTTPException(status_code=403, detail="Not authorized to access this file")
+        if not os.path.exists(validated_path):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return FileResponse(
+            validated_path,
+            media_type=db_file.mime_type or "application/octet-stream",
+            filename=db_file.filename,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File download error: {e}")
+        raise HTTPException(status_code=500, detail="File download failed")
 
 
 @router.delete("/delete")

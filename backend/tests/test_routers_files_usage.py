@@ -39,7 +39,7 @@ class TestFilesRouter:
         assert "url" in data
         assert "filename" in data
         assert "id" in data
-        assert data["url"].startswith("/static/uploads/")
+        assert data["url"].startswith("/api/v1/files/download/")
 
     def test_upload_file_generates_unique_name(self, client):
         """Test that uploaded files get unique names."""
@@ -104,6 +104,34 @@ class TestFilesRouter:
         assert data["size_bytes"] == len(file_content)
         assert data["mime_type"] == "text/plain"
         assert data["exists"] is True
+
+    def test_download_file_success(self, client):
+        """Test downloading an owned uploaded file through authenticated route."""
+        file_content = b"download me"
+        upload_response = client.post(
+            "/api/v1/files/upload",
+            files={"file": ("download.txt", io.BytesIO(file_content), "text/plain")},
+        )
+        assert upload_response.status_code == 200
+
+        response = client.get(upload_response.json()["url"])
+
+        assert response.status_code == 200
+        assert response.content == file_content
+
+    def test_static_upload_url_no_longer_serves_private_upload(self, client):
+        """Private file uploads are not returned as public static URLs."""
+        file_content = b"private"
+        upload_response = client.post(
+            "/api/v1/files/upload",
+            files={"file": ("private.txt", io.BytesIO(file_content), "text/plain")},
+        )
+        assert upload_response.status_code == 200
+
+        static_url = f"/static/uploads/{upload_response.json()['filename']}"
+        response = client.get(static_url)
+
+        assert response.status_code == 404
 
     def test_get_file_info_prevents_directory_traversal(self, client):
         """Test that file info blocks directory traversal."""
@@ -282,16 +310,16 @@ class TestFileOwnership:
 
         # So we create a file on disk manually
         filename = "ghost_file.txt"
-        os.makedirs("static/uploads", exist_ok=True)
-        with open(f"static/uploads/{filename}", "w") as f:
+        os.makedirs("storage/private_uploads", exist_ok=True)
+        with open(f"storage/private_uploads/{filename}", "w") as f:
             f.write("ghost")
 
-        url = f"/static/uploads/{filename}"
+        url = f"/api/v1/files/download/{filename}"
 
         delete_response = client.delete("/api/v1/files/delete", params={"url": url})
 
         assert delete_response.status_code == 200
-        assert not os.path.exists(f"static/uploads/{filename}")
+        assert not os.path.exists(f"storage/private_uploads/{filename}")
 
     def test_delete_file_path_traversal_payload(self, client):
         """Test delete with various malicious payloads."""
