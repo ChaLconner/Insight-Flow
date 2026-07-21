@@ -1,5 +1,6 @@
 # Core Framework
 fastapi==0.136.1
+orjson==3.11.9
 uvicorn[standard]==0.34.3
 python-multipart==0.0.31
 

@@ -78,7 +78,8 @@ describe('API Client Configuration', () => {
     expect(textRes.data).toBe('plain text response');
 
     const blobRes = await apiClient.get('/blob-endpoint', { responseType: 'blob' });
-    expect(blobRes.data).toBeInstanceOf(Blob);
+    expect(Object.prototype.toString.call(blobRes.data)).toBe('[object Blob]');
+    expect(blobRes.data.size).toBeGreaterThan(0);
   });
 
   it('should handle non-JSON text responses gracefully', async () => {
