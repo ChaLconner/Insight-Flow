@@ -62,7 +62,7 @@ class TestFilesRouter:
 
     def test_upload_file_preserves_extension(self, client):
         """Test that file extension is preserved after upload."""
-        file_content = b"test content"
+        file_content = b"%PDF-1.7\n%test content"
 
         response = client.post(
             "/api/v1/files/upload",

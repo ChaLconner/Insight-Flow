@@ -3,7 +3,7 @@ Tests for database configuration and utilities.
 Focuses on safe testing of database.py logic without full DB connection.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -55,23 +55,27 @@ class TestDatabaseUtils:
 
         assert callable(database.drop_tables)
 
-    def test_drop_tables_mocked(self):
+    @pytest.mark.asyncio
+    async def test_drop_tables_mocked(self):
         """Test drop_tables logic."""
         import database
 
-        # Fix RuntimeWarning by awaiting the result of drop_tables implementation if it calls async?
-        # drop_tables uses asyncio.run(_drop())
-        # So we patch asyncio.run
-        with patch("asyncio.run") as mock_run:
-            database.drop_tables()
-            mock_run.assert_called_once()
+        mock_engine = AsyncMock()
+        mock_engine.begin = MagicMock()
+        mock_cm = MagicMock()
+        mock_engine.begin.return_value = mock_cm
+        mock_conn = AsyncMock()
 
-            # Retrieve the coroutine passed to asyncio.run and close it to prevent RuntimeWarning
-            args, _ = mock_run.call_args
-            if args and len(args) > 0:
-                coro = args[0]
-                if hasattr(coro, "close"):
-                    coro.close()
+        mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+
+        original_engine = database.async_engine
+        database.async_engine = mock_engine
+        try:
+            await database.drop_tables()
+            mock_conn.run_sync.assert_called_once_with(database.Base.metadata.drop_all)
+        finally:
+            database.async_engine = original_engine
 
     # init_database tests removed due to global state mocking complexity (TESTING env var)
     # The logic is covered by integration tests and real app startup.

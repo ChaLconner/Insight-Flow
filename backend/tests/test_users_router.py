@@ -314,6 +314,8 @@ def test_update_user_settings(client, mock_user_service, mock_current_user):
 # Avatar Upload Tests (Mocking Cloudinary & Local)
 # ============================================================================
 
+VALID_PNG_BYTES = b"\x89PNG\r\n\x1a\nminimal"
+
 
 def test_upload_avatar_local_success(client, mock_user_service, mock_current_user):
     """Test uploading avatar to local storage (Cloudinary disabled)."""
@@ -334,7 +336,7 @@ def test_upload_avatar_local_success(client, mock_user_service, mock_current_use
             "updated_at": datetime.now(),
         }
 
-        files = {"file": ("avatar.png", b"image_content", "image/png")}
+        files = {"file": ("avatar.png", VALID_PNG_BYTES, "image/png")}
         response = client.post("/api/v1/users/me/avatar", files=files)
 
         assert response.status_code == 200
@@ -362,7 +364,7 @@ def test_upload_avatar_cloudinary_success(client, mock_user_service, mock_curren
             "updated_at": datetime.now(),
         }
 
-        files = {"file": ("avatar.png", b"content", "image/png")}
+        files = {"file": ("avatar.png", VALID_PNG_BYTES, "image/png")}
         response = client.post("/api/v1/users/me/avatar", files=files)
 
         assert response.status_code == 200
@@ -388,7 +390,7 @@ def test_upload_avatar_cloudinary_fail_fallback(client, mock_user_service, mock_
             "updated_at": datetime.now(),
         }
 
-        files = {"file": ("avatar.png", b"content", "image/png")}
+        files = {"file": ("avatar.png", VALID_PNG_BYTES, "image/png")}
         response = client.post("/api/v1/users/me/avatar", files=files)
 
         assert response.status_code == 200
