@@ -34,4 +34,3 @@ class UserRole(BaseEnum):
     MANAGER = "manager"
     MEMBER = "member"
     USER = "user"
-

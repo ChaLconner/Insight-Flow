@@ -45,7 +45,9 @@ async def run_deadline_check_job():
                 except Exception as e:
                     logger.error(f"Deadline check failed: {e}")
     except Exception as lock_err:
-        logger.info(f"Skipping scheduled deadline check (already running in another worker or locked): {lock_err}")
+        logger.info(
+            f"Skipping scheduled deadline check (already running in another worker or locked): {lock_err}"
+        )
 
 
 def setup_scheduled_jobs(sched: AsyncIOScheduler):

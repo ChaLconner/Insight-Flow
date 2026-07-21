@@ -55,7 +55,7 @@ export class ApiError<T = unknown> extends Error {
 // Type alias for backward compatibility
 export type AxiosError<T = unknown> = ApiError<T>;
 
-export function isAxiosError(error: unknown): error is ApiError {
+export function isAxiosError(error: unknown): error is ApiError<any> {
   return Boolean(
     error &&
       typeof error === "object" &&
@@ -152,7 +152,7 @@ async function executeFetch<T = any>(
   if (config.params) {
     const searchParams = new URLSearchParams();
     Object.entries(config.params).forEach(([key, val]) => {
-      if (val !== undefined && val !== null) {
+      if (val != null) {
         searchParams.append(key, String(val));
       }
     });

@@ -114,7 +114,9 @@ class AsyncTaskHistoryService:
         query = select(TaskHistory).filter(TaskHistory.project_id == project_id)
 
         if before_id:
-            subquery = select(TaskHistory.timestamp).filter(TaskHistory.id == before_id).scalar_subquery()
+            subquery = (
+                select(TaskHistory.timestamp).filter(TaskHistory.id == before_id).scalar_subquery()
+            )
             query = query.filter(TaskHistory.timestamp < subquery)
 
         if activity_types:

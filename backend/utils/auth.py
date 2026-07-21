@@ -2,7 +2,6 @@
 Authentication utilities for JWT token handling and password management.
 """
 
-import json
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
