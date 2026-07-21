@@ -1,7 +1,7 @@
 # Core Framework
 fastapi==0.136.1
 uvicorn[standard]==0.34.3
-python-multipart==0.0.28
+python-multipart==0.0.31
 
 # Database
 sqlalchemy==2.0.49
@@ -10,10 +10,10 @@ alembic==1.18.4
 
 # Validation & Settings
 pydantic[email]==2.13.4
-pydantic-settings==2.14.1
+pydantic-settings==2.14.2
 
 # Authentication & Security
-PyJWT[crypto]==2.12.1
+PyJWT[crypto]==2.13.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.3.0
 argon2-cffi==23.1.0
