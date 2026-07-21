@@ -35,14 +35,6 @@ module = [
     "requests",
     "psycopg2",
     "psycopg2.*",
-    "models.user_productivity",
-    "models.task_attachment",
-    "models.task_comment",
-    "models.task_dependency",
-    "models.task_time_tracking",
-    "models.project_analytics",
-    "models.project_milestone",
-    "models.project_tag_association",
 ]
 ignore_missing_imports = true
 [tool.pydantic-mypy]

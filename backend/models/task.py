@@ -50,6 +50,10 @@ class Task(BaseModel):
     """
 
     __tablename__ = "tasks"
+    __table_args__ = (
+        Index("ix_tasks_project_status", "project_id", "status"),
+        Index("ix_tasks_assignee_status", "assignee_id", "status"),
+    )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

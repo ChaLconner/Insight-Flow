@@ -12,7 +12,8 @@ const ReactQueryDevtools = lazy(async () => {
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000, // 1 minute
+      staleTime: 5 * 60 * 1000, // 5 minutes stale time
+      gcTime: 10 * 60 * 1000, // 10 minutes cache garbage collection time
       retry: 1,
       refetchOnWindowFocus: false, // Prevent excessive refetching
     },

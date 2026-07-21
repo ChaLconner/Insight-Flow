@@ -2,7 +2,7 @@
 // Zustand Auth Store
 // ===========================================
 
-import axios from "axios";
+import { isAxiosError } from "@/lib/api-client";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { authJsonStorage } from "./browser-storage";
@@ -64,7 +64,7 @@ function clearPersistedAuthStorage(): void {
 }
 
 function isAuthInvalidationError(error: unknown): boolean {
-  if (!axios.isAxiosError(error)) {
+  if (!isAxiosError(error)) {
     return false;
   }
 

@@ -28,14 +28,9 @@ class TestDatabaseConfiguration:
 
     def test_async_engine_exists(self):
         """Test that async_engine is properly configured."""
-        import os
-
         from database import async_engine
 
-        if os.environ.get("TESTING") == "true":
-            assert async_engine is None
-        else:
-            assert async_engine is not None
+        assert async_engine is not None
 
 
 class TestGetAsyncDb:

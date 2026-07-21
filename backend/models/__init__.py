@@ -16,6 +16,7 @@ from .analytics import (
 )
 from .auth_audit import AuthAudit, AuthStatus
 from .base import Base, BaseModel
+from .base_enum import UserRole
 from .file import File
 from .notification import Notification, NotificationType
 from .password_reset import PasswordReset

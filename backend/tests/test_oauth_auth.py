@@ -55,7 +55,7 @@ class TestGitHubOAuth:
                 # Restore environment
                 os.environ.update(env_backup)
 
-    @patch("utils.github_oauth.requests.post")
+    @patch("utils.github_oauth.httpx.post")
     def test_exchange_code_for_token_success(self, mock_post):
         """Test successful code exchange for GitHub access token."""
         mock_response = MagicMock()
@@ -84,7 +84,7 @@ class TestGitHubOAuth:
             call_args = mock_post.call_args
             assert call_args[0][0] == "https://github.com/login/oauth/access_token"
 
-    @patch("utils.github_oauth.requests.post")
+    @patch("utils.github_oauth.httpx.post")
     def test_exchange_code_for_token_error_response(self, mock_post):
         """Test code exchange when GitHub returns an error."""
         mock_response = MagicMock()
@@ -107,7 +107,7 @@ class TestGitHubOAuth:
             result = github_oauth_module.exchange_code_for_token("invalid_code")
             assert result is None
 
-    @patch("utils.github_oauth.requests.post")
+    @patch("utils.github_oauth.httpx.post")
     def test_exchange_code_for_token_failed_request(self, mock_post):
         """Test code exchange when the HTTP request fails."""
         mock_response = MagicMock()
@@ -127,7 +127,7 @@ class TestGitHubOAuth:
             result = github_oauth_module.exchange_code_for_token("test_code")
             assert result is None
 
-    @patch("utils.github_oauth.requests.get")
+    @patch("utils.github_oauth.httpx.get")
     def test_get_github_user_info_success(self, mock_get):
         """Test successful retrieval of GitHub user info."""
         # Mock user info response
@@ -155,7 +155,7 @@ class TestGitHubOAuth:
         assert result["picture"] == "https://avatars.githubusercontent.com/u/12345678"
         assert result["email_verified"] is True
 
-    @patch("utils.github_oauth.requests.get")
+    @patch("utils.github_oauth.httpx.get")
     def test_get_github_user_info_with_private_email(self, mock_get):
         """Test retrieval of GitHub user info when email is private."""
         # First call returns user without email
@@ -186,7 +186,7 @@ class TestGitHubOAuth:
         assert result is not None
         assert result["email"] == "primary@example.com"
 
-    @patch("utils.github_oauth.requests.get")
+    @patch("utils.github_oauth.httpx.get")
     def test_get_github_user_info_failed_request(self, mock_get):
         """Test GitHub user info retrieval when the request fails."""
         mock_response = MagicMock()
@@ -199,7 +199,7 @@ class TestGitHubOAuth:
         result = get_github_user_info("invalid_token")
         assert result is None
 
-    @patch("utils.github_oauth.requests.get")
+    @patch("utils.github_oauth.httpx.get")
     def test_verify_github_access_token(self, mock_get):
         """Test verify_github_access_token function."""
         mock_response = MagicMock()

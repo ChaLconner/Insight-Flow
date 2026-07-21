@@ -101,6 +101,28 @@ class AsyncTaskHistoryService:
         result = await self.db.execute(query.order_by(TaskHistory.timestamp.desc()).limit(limit))
         return list(result.scalars().all())
 
+    async def get_recent_activities_paginated(
+        self,
+        project_id: uuid.UUID,
+        limit: int = 20,
+        before_id: uuid.UUID | None = None,
+        activity_types: list[ActivityType] | None = None,
+    ) -> list[TaskHistory]:
+        """
+        Get recent activities using cursor-based pagination for high performance on large datasets.
+        """
+        query = select(TaskHistory).filter(TaskHistory.project_id == project_id)
+
+        if before_id:
+            subquery = select(TaskHistory.timestamp).filter(TaskHistory.id == before_id).scalar_subquery()
+            query = query.filter(TaskHistory.timestamp < subquery)
+
+        if activity_types:
+            query = query.filter(TaskHistory.activity_type.in_(activity_types))
+
+        result = await self.db.execute(query.order_by(TaskHistory.timestamp.desc()).limit(limit))
+        return list(result.scalars().all())
+
     async def log_project_updated(
         self, project_id: uuid.UUID, updated_by: uuid.UUID, changes: dict[str, Any]
     ) -> TaskHistory:

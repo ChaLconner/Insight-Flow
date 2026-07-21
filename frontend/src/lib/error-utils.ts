@@ -1,4 +1,4 @@
-import { isAxiosError } from "axios";
+import { isAxiosError } from "@/lib/api-client";
 
 /**
  * Extracts a user-friendly error message from various error objects.

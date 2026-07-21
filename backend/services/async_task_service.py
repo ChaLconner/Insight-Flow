@@ -238,6 +238,7 @@ class AsyncTaskService:
                 selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
             )
             .filter(*filters)
+            .order_by(Task.created_at.desc())
         )
 
         if search:

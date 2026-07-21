@@ -207,29 +207,22 @@ async def async_verify_token_with_blacklist(
 
 def get_token_expiration(token: str) -> datetime | None:
     """
-    Extract expiration time from a JWT token.
+    Extract expiration time from a JWT token after signature verification.
 
     Args:
         token: JWT token
 
     Returns:
-        datetime: Expiration time of the token, or None if cannot be extracted
+        datetime: Expiration time of the token, or None if cannot be extracted or signature is invalid
     """
     try:
-        token_parts = token.split(".")
-        if len(token_parts) != 3:
-            return None
-
-        # Decode payload
-        import base64
-
-        payload_b64 = token_parts[1]
-        padding_needed = 4 - (len(payload_b64) % 4)
-        if padding_needed and padding_needed != 4:
-            payload_b64 += "=" * padding_needed
-        payload_json = base64.b64decode(payload_b64)
-        payload_data = json.loads(payload_json)
-
+        # Verify signature while ignoring expiration check to extract exp timestamp securely
+        payload_data = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False},
+        )
         exp_timestamp = payload_data.get("exp")
         if exp_timestamp:
             return datetime.fromtimestamp(exp_timestamp, tz=UTC)

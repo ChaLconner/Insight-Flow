@@ -15,7 +15,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
 
+from config import get_settings
 from dependencies.services import get_user_service
+from models.base_enum import UserRole
 from models.user import User
 from routers.auth import get_current_active_user
 from schemas.user import (
@@ -41,10 +43,11 @@ router = APIRouter(prefix="/users", tags=["user management"])
 # Route-level rate limiting for user operations
 from rate_limiter import RateLimits, limiter
 
-UPLOAD_DIR = "static/uploads"
+_settings = get_settings()
+UPLOAD_DIR = getattr(_settings, "upload_dir", "static/uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-USER_ADMIN_ROLES = {"admin", "manager"}
-PRIVILEGED_INVITE_ROLES = {"admin", "manager"}
+USER_ADMIN_ROLES = {UserRole.ADMIN, UserRole.MANAGER}
+PRIVILEGED_INVITE_ROLES = {UserRole.ADMIN, UserRole.MANAGER}
 
 # Initialize Cloudinary on module load
 if is_cloudinary_configured():

@@ -80,74 +80,16 @@ if is_external_pooler:
     db_logger.info("Detected external PostgreSQL pooler host; disabling asyncpg statement cache.")
 
 # Create Async Engine
-# Create Async Engine
-if os.environ.get("TESTING") == "true":
-    db_logger.info("TESTING MODE: Skipping Async Engine Creation")
-    async_engine = None
-
-    class DummyResult:
-        def scalars(self):
-            return self
-
-        def scalar_one_or_none(self):
-            return None
-
-        def scalar(self):
-            return None
-
-        def first(self):
-            return None
-
-        def all(self):
-            return []
-
-        def one_or_none(self):
-            return None
-
-        def fetchone(self):
-            return None
-
-    class DummySession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args):
-            pass
-
-        async def commit(self):
-            pass
-
-        async def rollback(self):
-            pass
-
-        async def close(self):
-            pass
-
-        async def execute(self, *_args, **_kwargs):
-            return DummyResult()
-
-        async def scalar(self, *_args, **_kwargs):
-            return None
-
-        async def scalars(self, *_args, **_kwargs):
-            return DummyResult()
-
-        def add(self, *_args, **_kwargs):
-            pass
-
-        async def refresh(self, *_args, **_kwargs):
-            pass
-
-        async def get(self, *_args, **_kwargs):
-            return None
-
-        async def delete(self, *_args, **_kwargs):
-            pass
-
-    AsyncSessionLocal: Callable[..., AsyncSession] = DummySession  # type: ignore
+if "sqlite" in database_url:
+    if database_url.startswith("sqlite://"):
+        database_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+    async_engine = create_async_engine(
+        database_url,
+        echo=settings.database.echo,
+    )
 else:
     async_engine = create_async_engine(
-        database_url,  # ... original args ...
+        database_url,
         echo=settings.database.echo,
         pool_size=settings.database.pool_size,
         max_overflow=settings.database.max_overflow,
@@ -157,14 +99,14 @@ else:
         connect_args=async_connect_args,
     )
 
-    # Create Async Session Factory
-    AsyncSessionLocal = async_sessionmaker(
-        bind=async_engine,
-        class_=AsyncSession,
-        autocommit=False,
-        autoflush=False,
-        expire_on_commit=False,
-    )
+# Create Async Session Factory
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
+)
 
 
 async def get_async_db() -> AsyncGenerator[AsyncSession]:
@@ -217,17 +159,12 @@ async def execute_sql(sql_statement: str):
         return result
 
 
-def drop_tables():
+async def drop_tables():
     """
-    Drop all database tables.
+    Drop all database tables asynchronously.
     DANGEROUS: For testing only.
     """
-    import asyncio
-
-    async def _drop():
-        if async_engine is None:
-            return
-        async with async_engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-
-    asyncio.run(_drop())
+    if async_engine is None:
+        return
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)

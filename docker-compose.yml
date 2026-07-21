@@ -17,7 +17,12 @@ services:
       - .env.docker
     environment:
       # Override or add environment-specific values
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-insightflow}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-insightflow}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-insightflow}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-insightflow}
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
     depends_on:
       db:
         condition: service_healthy
@@ -42,6 +47,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
     healthcheck:
       test:
         [
@@ -68,10 +78,15 @@ services:
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-insightflow}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - POSTGRES_DB=${POSTGRES_DB:-insightflow}
     ports:
       - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1536M
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -89,10 +104,18 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:-insightflow_redis_secret}
     ports:
       - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-insightflow_redis_secret}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -105,3 +128,4 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:

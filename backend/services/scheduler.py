@@ -27,19 +27,25 @@ def get_scheduler() -> AsyncIOScheduler:
     return scheduler
 
 
+from security.distributed_locks import resource_lock
+
+
 async def run_deadline_check_job():
     """
     Async job function for deadline check.
-    Creates its own database session.
+    Creates its own database session and uses a distributed lock to prevent duplicate worker runs.
     """
-    logger.info("Running scheduled deadline check...")
-
-    async with AsyncSessionLocal() as db:
-        try:
-            summary = await run_async_deadline_check(db)
-            logger.info(f"Deadline check completed: {summary}")
-        except Exception as e:
-            logger.error(f"Deadline check failed: {e}")
+    try:
+        async with resource_lock("scheduler", "deadline_check", timeout=2.0):
+            logger.info("Running scheduled deadline check...")
+            async with AsyncSessionLocal() as db:
+                try:
+                    summary = await run_async_deadline_check(db)
+                    logger.info(f"Deadline check completed: {summary}")
+                except Exception as e:
+                    logger.error(f"Deadline check failed: {e}")
+    except Exception as lock_err:
+        logger.info(f"Skipping scheduled deadline check (already running in another worker or locked): {lock_err}")
 
 
 def setup_scheduled_jobs(sched: AsyncIOScheduler):

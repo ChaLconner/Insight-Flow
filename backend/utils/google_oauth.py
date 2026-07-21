@@ -62,12 +62,13 @@ def verify_google_access_token(access_token: str) -> dict | None:
     """
     Verify Google access token and return user information.
     """
-    import requests
+    import httpx
 
     try:
-        response = requests.get(
+        response = httpx.get(
             "https://www.googleapis.com/oauth2/v3/userinfo",
             headers={"Authorization": f"Bearer {access_token}"},
+            timeout=30.0,
         )
 
         if response.status_code != 200:

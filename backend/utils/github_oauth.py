@@ -4,7 +4,7 @@ GitHub OAuth utilities for authenticating users via GitHub.
 
 import os
 
-import requests
+import httpx
 
 from utils.logger import mask_email, setup_logger
 
@@ -95,7 +95,7 @@ def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str |
         return None
 
     try:
-        response = requests.post(
+        response = httpx.post(
             "https://github.com/login/oauth/access_token",
             headers={"Accept": "application/json"},
             data={
@@ -104,6 +104,7 @@ def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str |
                 "code": code,
                 "redirect_uri": resolve_github_redirect_uri(redirect_uri),
             },
+            timeout=30.0,
         )
 
         if response.status_code != 200:
@@ -131,12 +132,13 @@ def get_github_user_info(access_token: str) -> dict | None:
     """
     try:
         # Get user profile
-        user_response = requests.get(
+        user_response = httpx.get(
             "https://api.github.com/user",
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "Accept": "application/vnd.github.v3+json",
             },
+            timeout=30.0,
         )
 
         if user_response.status_code != 200:
@@ -150,12 +152,13 @@ def get_github_user_info(access_token: str) -> dict | None:
 
         if not email:
             # Fetch emails from separate endpoint
-            emails_response = requests.get(
+            emails_response = httpx.get(
                 "https://api.github.com/user/emails",
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Accept": "application/vnd.github.v3+json",
                 },
+                timeout=30.0,
             )
 
             if emails_response.status_code == 200:

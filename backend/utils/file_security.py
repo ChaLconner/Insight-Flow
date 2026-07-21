@@ -255,6 +255,25 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
+MAGIC_BYTES_MAP: dict[str, tuple[bytes, ...]] = {
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".gif": (b"GIF87a", b"GIF89a"),
+    ".pdf": (b"%PDF",),
+}
+
+
+def validate_file_magic_bytes(content: bytes, extension: str) -> None:
+    expected_headers = MAGIC_BYTES_MAP.get(extension.lower())
+    if expected_headers and content:
+        if not any(content.startswith(header) for header in expected_headers):
+            raise FileSecurityError(
+                f"File content magic bytes do not match extension '{extension}'",
+                "MAGIC_BYTES_MISMATCH",
+            )
+
+
 def validate_avatar_upload(
     filename: str | None,
     content_type: str | None,
@@ -279,6 +298,9 @@ def validate_avatar_upload(
 
     # Validate MIME type
     validate_mime_type(content_type, extension, AVATAR_ALLOWED_MIME_TYPES)
+
+    # Validate magic bytes
+    validate_file_magic_bytes(content, extension)
 
     # Validate file size (smaller limit for avatars)
     file_size = validate_file_size(content, AVATAR_MAX_FILE_SIZE_BYTES)
@@ -312,6 +334,9 @@ def validate_general_upload(
 
     # Validate MIME type
     validate_mime_type(content_type, extension)
+
+    # Validate magic bytes
+    validate_file_magic_bytes(content, extension)
 
     # Validate file size
     file_size = validate_file_size(content)

@@ -67,7 +67,7 @@ class TestExchangeCodeForToken:
         with (
             patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
             patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
-            patch("utils.github_oauth.requests.post") as mock_post,
+            patch("utils.github_oauth.httpx.post") as mock_post,
         ):
             mock_response = MagicMock()
             mock_response.status_code = 200
@@ -89,7 +89,7 @@ class TestExchangeCodeForToken:
         with (
             patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
             patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
-            patch("utils.github_oauth.requests.post") as mock_post,
+            patch("utils.github_oauth.httpx.post") as mock_post,
         ):
             mock_response = MagicMock()
             mock_response.status_code = 401
@@ -107,7 +107,7 @@ class TestExchangeCodeForToken:
         with (
             patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
             patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
-            patch("utils.github_oauth.requests.post") as mock_post,
+            patch("utils.github_oauth.httpx.post") as mock_post,
         ):
             mock_response = MagicMock()
             mock_response.status_code = 200
@@ -128,7 +128,7 @@ class TestExchangeCodeForToken:
         with (
             patch("utils.github_oauth.GITHUB_CLIENT_ID", "test_client_id"),
             patch("utils.github_oauth.GITHUB_CLIENT_SECRET", "test_secret"),
-            patch("utils.github_oauth.requests.post") as mock_post,
+            patch("utils.github_oauth.httpx.post") as mock_post,
         ):
             mock_post.side_effect = Exception("Network error")
 
@@ -144,7 +144,7 @@ class TestGetGitHubUserInfo:
 
     def test_get_user_info_success_with_email(self):
         """Test successful user info retrieval with email in profile."""
-        with patch("utils.github_oauth.requests.get") as mock_get:
+        with patch("utils.github_oauth.httpx.get") as mock_get:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -168,7 +168,7 @@ class TestGetGitHubUserInfo:
 
     def test_get_user_info_email_from_separate_endpoint(self):
         """Test getting email from separate emails endpoint."""
-        with patch("utils.github_oauth.requests.get") as mock_get:
+        with patch("utils.github_oauth.httpx.get") as mock_get:
             # First call returns user without email
             user_response = MagicMock()
             user_response.status_code = 200
@@ -198,7 +198,7 @@ class TestGetGitHubUserInfo:
 
     def test_get_user_info_api_failure(self):
         """Test returns None on API failure."""
-        with patch("utils.github_oauth.requests.get") as mock_get:
+        with patch("utils.github_oauth.httpx.get") as mock_get:
             mock_response = MagicMock()
             mock_response.status_code = 401
             mock_response.text = "Bad credentials"
@@ -212,7 +212,7 @@ class TestGetGitHubUserInfo:
 
     def test_get_user_info_exception(self):
         """Test returns None on exception."""
-        with patch("utils.github_oauth.requests.get") as mock_get:
+        with patch("utils.github_oauth.httpx.get") as mock_get:
             mock_get.side_effect = Exception("Network error")
 
             from utils.github_oauth import get_github_user_info

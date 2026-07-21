@@ -140,7 +140,7 @@ async def test_async_get_github_user_info_private_email():
         assert info["email"] == "private@github.com"
 
 
-@patch("requests.get")
+@patch("httpx.get")
 def test_verify_google_access_token(mock_get):
     mock_response = MagicMock()
     mock_response.status_code = 200

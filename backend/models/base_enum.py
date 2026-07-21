@@ -27,3 +27,11 @@ class BaseEnum(enum.StrEnum):
     def list(cls) -> list[str]:
         """Return list of values."""
         return [c.value for c in cls]
+
+
+class UserRole(BaseEnum):
+    ADMIN = "admin"
+    MANAGER = "manager"
+    MEMBER = "member"
+    USER = "user"
+

@@ -27,7 +27,6 @@ pytest-cov==6.3.0
 ruff==0.15.12
 
 # HTTP & OAuth
-requests==2.33.1
 google-auth==2.52.0
 
 # External Services
