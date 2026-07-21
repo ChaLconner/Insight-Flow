@@ -61,13 +61,13 @@ describe("useAnalytics", () => {
 
   it("fetches analytics with enabled true and false", () => {
     const { result: resEnabled } = renderHook(
-      () => useAnalytics("7d", { enabled: true }),
+      () => useAnalytics(AnalyticsPeriod.WEEK, { enabled: true }),
       { wrapper: createWrapper() },
     );
     expect(resEnabled.current).toBeDefined();
 
     const { result: resDisabled } = renderHook(
-      () => useAnalytics("7d", { enabled: false }),
+      () => useAnalytics(AnalyticsPeriod.WEEK, { enabled: false }),
       { wrapper: createWrapper() },
     );
     expect(resDisabled.current.isPending).toBe(true);
