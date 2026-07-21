@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { useAnalytics, useTeamWorkload } from "@/hooks/use-analytics";
 import { AnalyticsPeriod } from "@/types";
 
 vi.mock("@/lib/api-endpoints", () => ({
@@ -13,6 +14,7 @@ vi.mock("@/lib/api-endpoints", () => ({
       teamWorkload: [],
       statusDistribution: [],
       priorityDistribution: [],
+      totalTasks: 10,
     }),
     getTeamWorkload: vi.fn().mockResolvedValue({
       items: [],
@@ -48,7 +50,6 @@ describe("useAnalytics", () => {
 
   it("should not fetch analytics data when disabled", async () => {
     const { analyticsApi } = await import("@/lib/api-endpoints");
-    const { useAnalytics } = await import("@/hooks/use-analytics");
 
     renderHook(
       () => useAnalytics(AnalyticsPeriod.MONTH, { enabled: false }),
@@ -56,5 +57,27 @@ describe("useAnalytics", () => {
     );
 
     expect(analyticsApi.getAnalytics).not.toHaveBeenCalled();
+  });
+
+  it("fetches analytics with enabled true and false", () => {
+    const { result: resEnabled } = renderHook(
+      () => useAnalytics("7d", { enabled: true }),
+      { wrapper: createWrapper() },
+    );
+    expect(resEnabled.current).toBeDefined();
+
+    const { result: resDisabled } = renderHook(
+      () => useAnalytics("7d", { enabled: false }),
+      { wrapper: createWrapper() },
+    );
+    expect(resDisabled.current.isPending).toBe(true);
+  });
+
+  it("fetches team workload with options", () => {
+    const { result } = renderHook(
+      () => useTeamWorkload({ page: 1 }, { enabled: true }),
+      { wrapper: createWrapper() },
+    );
+    expect(result.current).toBeDefined();
   });
 });
