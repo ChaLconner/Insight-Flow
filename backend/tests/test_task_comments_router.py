@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -121,7 +121,7 @@ def test_list_task_comments(client, mock_db_session, current_user, authorized_ta
 
 
 def test_create_task_comment_triggers_mention_notifications(
-    client, mock_db_session, mock_notification_service, current_user, authorized_task
+    client, mock_db_session, current_user, authorized_task
 ):
     mentioned_user = User(
         id=uuid4(),
@@ -138,12 +138,13 @@ def test_create_task_comment_triggers_mention_notifications(
     result.scalars.return_value.all.return_value = [mentioned_user]
     mock_db_session.execute.return_value = result
 
-    response = client.post(
-        f"/api/v1/tasks/{authorized_task.id}/comments",
-        json={"content": "Please review this, @teammate"},
-    )
+    with patch("routers.tasks.enqueue_job", new_callable=AsyncMock) as mock_enqueue:
+        response = client.post(
+            f"/api/v1/tasks/{authorized_task.id}/comments",
+            json={"content": "Please review this, @teammate"},
+        )
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["mentions"] == ["teammate"]
-    mock_notification_service.notify_mention.assert_awaited_once()
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["mentions"] == ["teammate"]
+        mock_enqueue.assert_awaited_once()

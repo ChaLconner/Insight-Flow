@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   cn,
   formatDate,
+  formatLastLogin,
   getRelativeTime,
   isOverdue,
   getTimeUntil,
@@ -67,6 +68,24 @@ describe("Utils", () => {
       // Since it's dynamic, we might check if it contains "ago".
       expect(getRelativeTime(past)).toContain("ago");
       expect(getRelativeTime("invalid")).toBe("Invalid date");
+    });
+
+    it("formatLastLogin preserves users-list time labels", () => {
+      const now = new Date("2026-08-08T12:00:00.000Z");
+      vi.useFakeTimers();
+      vi.setSystemTime(now);
+
+      try {
+        expect(formatLastLogin()).toBe("Never");
+        expect(formatLastLogin("invalid")).toBe("Invalid date");
+        expect(formatLastLogin("2026-08-08T11:30:00.000Z")).toBe("Just now");
+        expect(formatLastLogin("2026-08-08T10:00:00.000Z")).toBe("2h ago");
+        expect(formatLastLogin("2026-08-07T12:00:00.000Z")).toBe("Yesterday");
+        expect(formatLastLogin("2026-08-05T12:00:00.000Z")).toBe("3d ago");
+        expect(formatLastLogin("2026-08-01T12:00:00.000Z")).toBe("Aug 1, 2026");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("isOverdue checks correctly", () => {

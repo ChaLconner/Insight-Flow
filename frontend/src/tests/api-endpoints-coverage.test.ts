@@ -65,6 +65,7 @@ describe("api endpoints coverage", () => {
       email: "user@example.com",
       password: "secret123",
     });
+    expect(apiClientMock.post).toHaveBeenCalledWith("/auth/refresh");
     expect(apiClientMock.post).toHaveBeenCalledWith(
       "/files/upload",
       formData,

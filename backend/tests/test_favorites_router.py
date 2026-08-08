@@ -152,6 +152,18 @@ def test_toggle_favorite_project_not_found(client, mock_db):
     assert response.status_code == 404
 
 
+def test_toggle_favorite_inaccessible_project_is_not_disclosed(client, mock_db):
+    """Projects outside caller's membership scope must not be favoritable."""
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+
+    response = client.post("/api/v1/favorites/toggle", json={"projectId": str(uuid4())})
+
+    assert response.status_code == 404
+    mock_db.add.assert_not_called()
+
+
 # ============================================================================
 # Tests for Remove Favorite
 # ============================================================================

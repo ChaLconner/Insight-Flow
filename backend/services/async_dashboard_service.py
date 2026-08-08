@@ -37,7 +37,10 @@ class AsyncDashboardService:
         return (
             select(Project.id)
             .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
-            .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+            .filter(
+                Project.is_active.is_(True),
+                or_(Project.owner_id == user_id, ProjectMember.user_id == user_id),
+            )
         )
 
     async def get_overview_stats(self, user_id: uuid.UUID) -> dict[str, Any]:
@@ -72,7 +75,9 @@ class AsyncDashboardService:
         project_stats = project_stats_result.first()
 
         if not project_stats or not project_stats.total:
-            return self._get_empty_stats_response()
+            empty_response = self._get_empty_stats_response()
+            await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
+            return empty_response
 
         task_stats_result = await self.db.execute(
             select(
@@ -219,7 +224,9 @@ class AsyncDashboardService:
 
         # Process Results
         if total_projects == 0:
-            return self._get_empty_stats_response()
+            empty_response = self._get_empty_stats_response()
+            await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
+            return empty_response
 
         total_tasks = task_stats.total if task_stats else 0
         completed_tasks = task_stats.completed if task_stats and task_stats.completed else 0
@@ -350,7 +357,7 @@ class AsyncDashboardService:
                     "name": project.name,
                     "description": project.description,
                     "progress": progress,
-                    "color": "#6366f1",
+                    "color": project.color or "#6366f1",
                     "updated_at": project.updated_at.isoformat() if project.updated_at else None,
                 }
             )

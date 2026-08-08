@@ -61,16 +61,17 @@ def client(mock_payment_service, mock_current_user):
 # ============================================================================
 
 
-def test_ip_helpers():
+def test_ip_helpers(monkeypatch):
     """Unit test for IP checking helpers."""
     # CIDR check
     assert is_ip_in_cidr("192.168.1.5", "192.168.1.0/24") is True
     assert is_ip_in_cidr("192.168.2.1", "192.168.1.0/24") is False
     assert is_ip_in_cidr("invalid", "192.168.1.0/24") is False
 
-    # Stripe IP check
-    assert is_stripe_ip("3.18.12.63") is True  # Direct match
-    assert is_stripe_ip("54.88.130.50") is True  # CIDR match (54.88.130.0/24)
+    # Operator-managed webhook allowlist
+    monkeypatch.setenv("STRIPE_WEBHOOK_IP_ALLOWLIST", "3.18.12.63/32,54.88.130.0/24")
+    assert is_stripe_ip("3.18.12.63") is True
+    assert is_stripe_ip("54.88.130.50") is True
     assert is_stripe_ip("1.2.3.4") is False
 
 
@@ -170,27 +171,23 @@ class TestWebhookSecurity:
             response = client.post("/api/v1/payment/webhook")
             assert response.status_code == 503
 
-    def test_webhook_ip_check_production_bypass(self, client):
+    def test_webhook_signature_is_authoritative_without_static_ip_allowlist(self, client):
         with patch("config.get_settings") as mock_settings:
             mock_settings.return_value.is_production = True
             mock_settings.return_value.stripe.webhook_secret = "whsec_test"
 
-            # Mock get_client_ip
             with patch("routers.payment.get_client_ip", return_value="1.2.3.4"):
-                # Should fail IP check
                 response = client.post("/api/v1/payment/webhook")
-                assert response.status_code == 403
+                assert response.status_code == 400
 
-    def test_webhook_ip_check_production_pass(self, client):
+    def test_webhook_optional_ip_allowlist(self, client, monkeypatch):
         with patch("config.get_settings") as mock_settings:
             mock_settings.return_value.is_production = True
             mock_settings.return_value.stripe.webhook_secret = "whsec_test"
 
-            with patch("routers.payment.get_client_ip", return_value="3.18.12.63"):
-                # Pass IP check, fail signature (expected 400)
+            monkeypatch.setenv("STRIPE_WEBHOOK_IP_ALLOWLIST", "3.18.12.63/32")
+            with patch("routers.payment.get_client_ip", return_value="1.2.3.4"):
                 response = client.post(
                     "/api/v1/payment/webhook", headers={"stripe-signature": "sig"}
                 )
-                assert response.status_code == 400
-                # Real stripe SDK raises SignatureVerificationError on garbage sig
-                assert response.json()["message"] == "Invalid signature"
+                assert response.status_code == 403

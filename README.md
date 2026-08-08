@@ -12,7 +12,7 @@
 
 - **💎 Premium UX**: Glassmorphism aesthetic, responsive Framer Motion animations, and WCAG AA accessibility.
 - **🛡️ Enterprise Security**: **Argon2id** hashing, HIBP breach detection, and Role-Based Access Control (RBAC).
-- **⚡ High Performance**: Optimized with **Redis** caching, optimistic UI updates, and **OpenTelemetry** tracing.
+- **⚡ High Performance**: Optimized with **Redis** caching, optimistic UI updates, and request performance metrics.
 
 ---
 
@@ -68,7 +68,7 @@ For a production-ready setup with database and caching included:
 
 ```bash
 cp .env.docker.example .env.docker
-docker-compose up -d --build
+docker compose --env-file .env.docker up -d --build
 ```
 
 ---

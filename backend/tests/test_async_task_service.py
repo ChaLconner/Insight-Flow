@@ -191,6 +191,27 @@ async def test_update_task_status(task_service, user_id, mock_db_session):
 
 
 @pytest.mark.asyncio
+async def test_assignee_cannot_update_task_metadata(task_service, user_id):
+    task = Task(
+        id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        assignee_id=user_id,
+        status=TaskStatus.TODO,
+    )
+    task_service.get_task_by_id = AsyncMock(return_value=task)
+    task_service._check_task_permission = AsyncMock(return_value=None)
+    task_service._is_project_admin = AsyncMock(return_value=False)
+
+    with pytest.raises(ValueError, match="status only"):
+        await task_service.update_task(
+            task.id,
+            TaskUpdate(title="Unauthorized title"),
+            user_id,
+        )
+
+
+@pytest.mark.asyncio
 async def test_assign_task(task_service, user_id, mock_db_session):
     tid = uuid.uuid4()
     task = Task(id=tid, project_id=uuid.uuid4(), created_by=user_id, assignee_id=None)
@@ -199,6 +220,7 @@ async def test_assign_task(task_service, user_id, mock_db_session):
 
     task_service.get_task_by_id = AsyncMock(return_value=task)
     task_service._check_task_permission = AsyncMock(return_value=None)
+    task_service._ensure_project_member = AsyncMock()
 
     # Mock assignee check
     res_assignee = MagicMock()

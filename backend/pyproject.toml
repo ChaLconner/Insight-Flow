@@ -119,8 +119,6 @@ omit = [
     # Development/debugging scripts - not production code
     "test_db_write.py",
     "verify_limits.py",
-    # Response utilities that are rarely used directly
-    "utils/responses.py",
     # Scheduler runs in background - tested via integration
     "services/scheduler.py",
     # Cloudinary requires external service
@@ -139,8 +137,6 @@ omit = [
     # Notification rate limiter requires Redis
     "services/notification_rate_limiter.py",
     # OAuth modules require external services to fully test
-    # Query optimizer rarely used directly
-    "utils/query_optimizer.py",
     # Distributed locks require Redis
     "security/distributed_locks.py",
     "security/payment_operations.py",
@@ -173,11 +169,8 @@ omit = [
     # Hard to test integrations and boilerplate
     "security/ip_blocking.py",
     "services/payment/*",
-    "core/database.py",
-    "middleware/performance.py",
     "middleware/request_id.py",
     "middleware/security_headers.py",
-    "middleware/tracing.py",
     "middleware/monitoring.py",
     "middleware/csrf.py",
 

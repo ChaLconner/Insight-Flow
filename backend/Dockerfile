@@ -86,7 +86,7 @@ EXPOSE ${PORT}
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
+    CMD curl -f http://localhost:${PORT}/health/ready || exit 1
 
 # Default command - Gunicorn with Uvicorn workers
 CMD ["sh", "-c", "gunicorn main:app \

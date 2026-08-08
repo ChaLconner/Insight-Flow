@@ -23,6 +23,8 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any
 from uuid import UUID, uuid4
 
+from config import get_settings
+
 logger = logging.getLogger("payment.locks")
 
 
@@ -34,7 +36,6 @@ logger = logging.getLogger("payment.locks")
 class BaseLockManager(ABC):
     """Abstract base class for lock managers."""
 
-    @abstractmethod
     @abstractmethod
     def acquire(
         self, lock_key: str, timeout: float = 30.0, ttl: int = 60
@@ -161,7 +162,7 @@ class RedisLockManager(BaseLockManager):
     end
     """
 
-    def __init__(self, redis_url: str):
+    def __init__(self, redis_url: str, password: str | None = None):
         """
         Initialize Redis lock manager.
 
@@ -169,6 +170,7 @@ class RedisLockManager(BaseLockManager):
             redis_url: Redis connection URL (e.g., redis://localhost:6379/0)
         """
         self._redis_url = redis_url
+        self._password = password
         self._redis: Any | None = None
         self._release_script: Any | None = None
         logger.info("Initialized RedisLockManager (multi-worker mode)")
@@ -180,7 +182,10 @@ class RedisLockManager(BaseLockManager):
                 import redis.asyncio as aioredis
 
                 redis_client = aioredis.from_url(
-                    self._redis_url, encoding="utf-8", decode_responses=True
+                    self._redis_url,
+                    password=self._password,
+                    encoding="utf-8",
+                    decode_responses=True,
                 )
                 self._redis = redis_client
                 # Register release script
@@ -287,17 +292,23 @@ def get_lock_manager() -> BaseLockManager:
     """
     Get the appropriate lock manager based on configuration.
 
-    Uses Redis if REDIS_URL environment variable is set,
+    Uses Redis if REDIS_URL is configured,
     otherwise falls back to in-memory locks.
     """
     global _lock_manager
 
     if _lock_manager is None:
-        redis_url = os.environ.get("REDIS_URL")
+        try:
+            cache_settings = get_settings().cache
+            redis_url = os.getenv("REDIS_URL") or cache_settings.redis_url
+            redis_password = os.getenv("REDIS_PASSWORD") or cache_settings.redis_password
+        except Exception:
+            redis_url = os.getenv("REDIS_URL")
+            redis_password = os.getenv("REDIS_PASSWORD")
 
         if redis_url:
             try:
-                _lock_manager = RedisLockManager(redis_url)
+                _lock_manager = RedisLockManager(redis_url, password=redis_password)
             except ImportError:
                 logger.warning(
                     "Redis package not installed. Falling back to in-memory locks. "

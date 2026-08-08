@@ -3,6 +3,7 @@ Async Unit tests for AsyncUserService.
 """
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 
@@ -198,7 +199,7 @@ class TestAsyncUserService:
 
         mock_db = MagicMock()
         mock_db.add = MagicMock()
-        mock_db.commit = AsyncMock(side_effect=IntegrityError(None, None, Exception("Error")))
+        mock_db.flush = AsyncMock(side_effect=IntegrityError(None, None, Exception("Error")))
         mock_db.rollback = AsyncMock()
         mock_db.refresh = AsyncMock()
         # Mock execute for get_user_by_email checks if unique
@@ -327,23 +328,16 @@ class TestAsyncUserService:
         result_mock.scalars.return_value.first.return_value = user
         mock_db.execute.return_value = result_mock
         mock_db.commit = AsyncMock()
+        mock_db.flush = AsyncMock()
 
         from services.async_user_service import AsyncUserService
 
         service = AsyncUserService(mock_db)
 
-        # Mock EmailService
-
-        with pytest.MonkeyPatch.context():
-            # MonkeyPatch doesn't work well with async mocks sometimes?
-            # Use patch
-            from unittest.mock import patch
-
-            with patch(
-                "services.async_user_service.EmailService.send_verification_email",
-                new_callable=AsyncMock,
-            ) as mock_send:
-                result = await service.resend_verification_email("resend@test.com")
-                assert result is True
-                mock_send.assert_awaited()
-                assert user.verification_token is not None
+        with patch(
+            "services.async_user_service.enqueue_job", new_callable=AsyncMock
+        ) as mock_enqueue:
+            result = await service.resend_verification_email("resend@test.com")
+            assert result is True
+            mock_enqueue.assert_awaited_once()
+            assert user.verification_token is not None

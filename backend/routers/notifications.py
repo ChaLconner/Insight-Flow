@@ -5,7 +5,7 @@ Refactored to use AsyncNotificationService and Dependency Injection.
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from dependencies.services import get_async_notification_service
 from models.user import User
@@ -31,8 +31,8 @@ from rate_limiter import RateLimits, limiter
 @limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def get_notifications(
     request: Request,
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     unread_only: bool = False,
     notification_service: AsyncNotificationService = Depends(get_async_notification_service),
     current_user: User = Depends(get_current_active_user),

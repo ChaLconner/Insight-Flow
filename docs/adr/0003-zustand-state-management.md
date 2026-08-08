@@ -14,7 +14,7 @@ The Next.js frontend requires a state management solution for:
 - Global authentication state
 - Notification state with real-time updates
 - Theme preferences with persistence
-- App-wide settings and feature flags
+- App-wide settings
 
 The team evaluated multiple options considering:
 - Bundle size impact

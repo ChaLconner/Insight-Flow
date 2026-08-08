@@ -3,6 +3,7 @@
 // ===========================================
 
 import { apiClient, createDeduplicatedRequest } from "./api-client";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 import type {
   User,
   Project,
@@ -35,6 +36,7 @@ const userSettingsCache: UserSettingsCache = {
   value: null,
   timestamp: 0,
 };
+let userSettingsCacheGeneration = 0;
 
 function hasFreshUserSettingsCache(): boolean {
   return userSettingsCache.value != null && Date.now() - userSettingsCache.timestamp < USER_SETTINGS_CACHE_TTL_MS;
@@ -45,10 +47,17 @@ function updateUserSettingsCache(value: unknown): void {
   userSettingsCache.timestamp = Date.now();
 }
 
-export function __clearUsersSettingsCacheForTests(): void {
+export function clearUsersSettingsCache(): void {
+  userSettingsCacheGeneration += 1;
   userSettingsCache.value = null;
   userSettingsCache.timestamp = 0;
 }
+
+export function __clearUsersSettingsCacheForTests(): void {
+  clearUsersSettingsCache();
+}
+
+registerAuthenticatedCacheClearer(clearUsersSettingsCache);
 import type {
   AnalyticsResponse,
   TeamWorkloadPaginatedResponse,
@@ -78,16 +87,10 @@ export const authApi = {
   },
 
   // Refresh token
-  refreshToken: async (refreshToken: string): Promise<AuthResponse> => {
-    const { data } = await apiClient.post(
-      "/auth/refresh",
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${refreshToken}`,
-        },
-      },
-    );
+  refreshToken: async (_refreshToken?: string): Promise<AuthResponse> => {
+    // The backend reads the HttpOnly refresh_token cookie. Never copy a
+    // refresh token into a JavaScript-visible Authorization header.
+    const { data } = await apiClient.post("/auth/refresh");
     return data;
   },
 
@@ -333,10 +336,12 @@ export const tasksApi = {
   },
 
   // Get task comments
-  getTaskComments: async (taskId: string): Promise<TaskComment[]> => {
-    const cacheKey = `tasks-getTaskComments-${taskId}`;
+  getTaskComments: async (taskId: string, offset = 0, limit = 100): Promise<TaskComment[]> => {
+    const cacheKey = `tasks-getTaskComments-${taskId}-${offset}-${limit}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get(`/tasks/${taskId}/comments`);
+      const { data } = await apiClient.get(`/tasks/${taskId}/comments`, {
+        params: { offset, limit },
+      });
       return data;
     }, cacheKey);
   },
@@ -422,10 +427,12 @@ export const projectsApi = {
   },
 
   // Get project members
-  getProjectMembers: async (projectId: string): Promise<unknown[]> => {
-    const cacheKey = `projects-getProjectMembers-${projectId}`;
+  getProjectMembers: async (projectId: string, offset = 0, limit = 100): Promise<unknown[]> => {
+    const cacheKey = `projects-getProjectMembers-${projectId}-${offset}-${limit}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get(`/projects/${projectId}/members`);
+      const { data } = await apiClient.get(`/projects/${projectId}/members`, {
+        params: { offset, limit },
+      });
       return data;
     }, cacheKey);
   },
@@ -531,18 +538,24 @@ export const usersApi = {
     }
 
     const cacheKey = "users-getSettings";
+    const generation = userSettingsCacheGeneration;
     const settings = await createDeduplicatedRequest(async () => {
       const { data } = await apiClient.get("/users/me/settings");
       return data;
     }, cacheKey);
-    updateUserSettingsCache(settings);
+    if (generation === userSettingsCacheGeneration) {
+      updateUserSettingsCache(settings);
+    }
     return settings;
   },
 
   // Update user settings
   updateSettings: async (settingsData: unknown): Promise<unknown> => {
+    const generation = userSettingsCacheGeneration;
     const { data } = await apiClient.patch("/users/me/settings", settingsData);
-    updateUserSettingsCache(data);
+    if (generation === userSettingsCacheGeneration) {
+      updateUserSettingsCache(data);
+    }
     return data;
   },
 

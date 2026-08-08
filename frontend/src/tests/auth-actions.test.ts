@@ -98,6 +98,16 @@ describe("auth actions", () => {
     });
   });
 
+  it("rejects a login response without a user profile", async () => {
+    const { authActions } = await import("@/stores/auth-actions");
+
+    await expect(authActions.loginSuccess({ message: "Login successful" })).rejects.toThrow(
+      "Authentication response did not include a user profile",
+    );
+    expect(loginMock).not.toHaveBeenCalled();
+    expect(clearDeduplicatedRequestsMock).not.toHaveBeenCalled();
+  });
+
   it("logs out through the server and clears local state", async () => {
     const dispatchEventSpy = vi.spyOn(window, "dispatchEvent");
     apiClientMock.post.mockResolvedValueOnce({ data: {} });

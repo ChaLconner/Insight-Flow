@@ -7,6 +7,7 @@ Security features are centralized in utils/file_security.py
 
 import os
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -18,7 +19,9 @@ from models.file import File as FileModel
 from models.user import User
 from routers.auth import get_current_active_user
 from utils.file_security import (
+    MAX_FILE_SIZE_BYTES,
     FileSecurityError,
+    read_upload_with_limit,
     validate_file_path,
     validate_general_upload,
 )
@@ -28,7 +31,7 @@ logger = setup_logger("files_router")
 
 router = APIRouter(prefix="/files", tags=["files"])
 
-UPLOAD_DIR = "storage/private_uploads"
+UPLOAD_DIR = str(Path(__file__).resolve().parent.parent / "storage" / "private_uploads")
 DOWNLOAD_URL_PREFIX = "/api/v1/files/download"
 
 # Ensure upload directory exists
@@ -51,9 +54,17 @@ async def upload_file(
     - Path traversal protection
     - UUID-based filenames to prevent collisions
     """
+    validated_path: str | None = None
+    file_committed = False
     try:
-        # Read file content
-        content = await file.read()
+        # Read in bounded chunks so the request body cannot exhaust process memory.
+        try:
+            content = await read_upload_with_limit(file, MAX_FILE_SIZE_BYTES)
+        except FileSecurityError as e:
+            logger.warning(
+                f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
+            )
+            raise HTTPException(status_code=400, detail=e.message)
 
         # Security: Validate file upload (extension, MIME type, size)
         try:
@@ -96,13 +107,25 @@ async def upload_file(
         )
         db.add(db_file)
         await db.commit()
+        file_committed = True
 
         logger.info(f"File uploaded by user {mask_user_id(str(current_user.id))}: {unique_name}")
         return {"url": url, "filename": unique_name, "id": str(db_file.id)}
 
     except HTTPException:
+        if not file_committed and validated_path and os.path.exists(validated_path):
+            try:
+                os.remove(validated_path)
+            except OSError as cleanup_error:
+                logger.warning(f"Failed to remove rejected upload: {cleanup_error}")
         raise
     except Exception as e:
+        await db.rollback()
+        if not file_committed and validated_path and os.path.exists(validated_path):
+            try:
+                os.remove(validated_path)
+            except OSError as cleanup_error:
+                logger.warning(f"Failed to remove incomplete upload: {cleanup_error}")
         logger.error(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail="File upload failed")
 

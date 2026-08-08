@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -193,7 +193,7 @@ def test_create_task_success(client, mock_project, mock_task_service, mock_task_
 
 
 def test_create_task_with_assignee_sends_notification(
-    client, mock_project, mock_task_service, mock_notification_service, mock_task_factory
+    client, mock_project, mock_task_service, mock_task_factory
 ):
     task = mock_task_factory()
     assignee = User(id=uuid4(), email="assignee@example.com", name="Assignee")
@@ -211,10 +211,11 @@ def test_create_task_with_assignee_sends_notification(
         "assignee_id": str(assignee.id),
     }
 
-    response = client.post(f"/api/v1/projects/{mock_project.id}/tasks", json=payload)
+    with patch("routers.project_tasks.enqueue_job", new_callable=AsyncMock) as mock_enqueue:
+        response = client.post(f"/api/v1/projects/{mock_project.id}/tasks", json=payload)
 
-    assert response.status_code == 200
-    mock_notification_service.notify_task_assigned.assert_called_once()
+        assert response.status_code == 200
+        mock_enqueue.assert_awaited_once()
 
 
 def test_create_task_value_error(client, mock_project, mock_task_service):
@@ -307,7 +308,7 @@ def test_update_status_success(client, mock_project, mock_task_service, mock_tas
 
 
 def test_update_status_sends_notifications(
-    client, mock_project, mock_task_service, mock_notification_service, mock_task_factory
+    client, mock_project, mock_task_service, mock_task_factory
 ):
     task = mock_task_factory()
     assignee = User(id=uuid4(), email="assignee@example.com", name="Assignee")
@@ -330,13 +331,13 @@ def test_update_status_sends_notifications(
     mock_task_service.get_task_by_id.return_value = task
     mock_task_service.update_task_status.return_value = updated_task
 
-    response = client.put(
-        f"/api/v1/projects/{mock_project.id}/tasks/{task.id}/status", json={"status": "done"}
-    )
+    with patch("routers.project_tasks.enqueue_job", new_callable=AsyncMock) as mock_enqueue:
+        response = client.put(
+            f"/api/v1/projects/{mock_project.id}/tasks/{task.id}/status", json={"status": "done"}
+        )
 
-    assert response.status_code == 200
-    mock_notification_service.notify_task_status_changed.assert_called_once()
-    mock_notification_service.notify_task_completed.assert_called_once()
+        assert response.status_code == 200
+        mock_enqueue.assert_awaited_once()
 
 
 def test_update_status_missing_field(client, mock_project):
@@ -362,7 +363,6 @@ def test_assign_task_sends_notification(
     client,
     mock_project,
     mock_task_service,
-    mock_notification_service,
     mock_db_session,
     mock_task_factory,
 ):
@@ -382,13 +382,14 @@ def test_assign_task_sends_notification(
     execute_result.scalars.return_value.first.return_value = assignee
     mock_db_session.execute.return_value = execute_result
 
-    response = client.put(
-        f"/api/v1/projects/{mock_project.id}/tasks/{task.id}/assign",
-        json={"assignee_id": str(assignee.id)},
-    )
+    with patch("routers.project_tasks.enqueue_job", new_callable=AsyncMock) as mock_enqueue:
+        response = client.put(
+            f"/api/v1/projects/{mock_project.id}/tasks/{task.id}/assign",
+            json={"assignee_id": str(assignee.id)},
+        )
 
-    assert response.status_code == 200
-    mock_notification_service.notify_task_assigned.assert_called_once()
+        assert response.status_code == 200
+        mock_enqueue.assert_awaited_once()
 
 
 def test_assign_task_not_member(client, mock_project, mock_project_service):

@@ -62,15 +62,18 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
                     redis_client=cache_service.backend.client,
                     calls=200,
                     period=60,
+                    fail_closed=settings.is_production,
                 )
                 logger.info("Using Redis-based rate limiting")
                 return
+            if settings.is_production:
+                raise RuntimeError("Configured Redis backend is unavailable for rate limiting.")
         except Exception as e:
             if settings.is_production:
                 raise RuntimeError("Redis-backed rate limiting is required in production.") from e
             logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
 
-    # VULN-01: Warn critically in production when Redis is not available
+    # VULN-01: Development-only fallback. Production fails during app setup.
     if settings.is_production:
         logger.critical(
             "⚠️ SECURITY WARNING: Using in-memory rate limiting in production! "

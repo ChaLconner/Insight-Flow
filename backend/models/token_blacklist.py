@@ -5,7 +5,7 @@ Token blacklist model for managing revoked tokens.
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, delete, select
+from sqlalchemy import DateTime, Index, String, delete, select
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.logger import setup_logger
@@ -28,6 +28,8 @@ class TokenBlacklist(BaseModel):
 
     token_jti: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (Index("ix_token_blacklist_expires_at", "expires_at"),)
 
     def __repr__(self):
         return f"<TokenBlacklist(jti={self.token_jti}, expires_at={self.expires_at})>"

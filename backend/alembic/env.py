@@ -42,6 +42,26 @@ logger = logging.getLogger("alembic.env")
 # Target metadata for autogenerate support
 target_metadata = Base.metadata
 
+
+def compare_server_default(
+    _context,
+    inspected_column,
+    metadata_column,
+    _inspected_default,
+    _metadata_default,
+    _rendered_metadata_default,
+):
+    """Avoid PostgreSQL's unsupported equality comparison for JSON defaults."""
+    if metadata_column.table.name == "projects" and metadata_column.name == "settings":
+        return False
+    if metadata_column.table.name == "security_logs" and metadata_column.name in {
+        "id",
+        "severity",
+    }:
+        return False
+    return None
+
+
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -120,7 +140,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,  # Detect column type changes
-        compare_server_default=True,  # Detect default value changes
+        compare_server_default=compare_server_default,
     )
 
     with context.begin_transaction():
@@ -140,7 +160,7 @@ def do_run_migrations(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,  # Detect column type changes
-        compare_server_default=True,  # Detect default value changes
+        compare_server_default=compare_server_default,
     )
 
     with context.begin_transaction():

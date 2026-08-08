@@ -255,5 +255,10 @@ describe("useDashboard - Query Keys", () => {
     expect(dashboardKeys).toBeDefined();
     expect(dashboardKeys.all).toEqual(["dashboard"]);
     expect(dashboardKeys.overview()).toEqual(["dashboard", "overview"]);
+    expect(dashboardKeys.overview("user-a")).toEqual([
+      "dashboard",
+      "overview",
+      "user-a",
+    ]);
   });
 });

@@ -94,6 +94,11 @@ jobs:
       - name: Ruff format check
         run: python -m ruff format --check .
 
+      - name: Validate offline migration SQL generation
+        env:
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+        run: python -m alembic upgrade head --sql > /tmp/insight-flow-migrations.sql
+
   backend-test:
     name: Backend Tests
     needs: backend-quality
@@ -172,6 +177,12 @@ jobs:
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
         run: python scripts/init_db_for_ci.py
 
+      - name: Verify migration chain is current
+        env:
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+          DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+        run: python -m alembic check
+
       - name: Run tests with coverage
         env:
           SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
@@ -245,6 +256,22 @@ jobs:
           name: frontend-build
           path: frontend/.next
           retention-days: 1
+
+  container-build:
+    name: Container Build Contracts
+    needs: [backend-quality, frontend-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Build backend image
+        run: docker build --tag insight-flow-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build --build-arg API_URL=http://backend:8000 --tag insight-flow-frontend:ci ./frontend
 
   e2e-tests:
     name: E2E Tests

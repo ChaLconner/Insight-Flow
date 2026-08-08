@@ -158,6 +158,25 @@ class TestCreateAccessToken:
         assert "jti" in payload
         assert len(payload["jti"]) > 0
 
+    def test_auth_tokens_carry_distinct_types_and_claims(self):
+        """Access and refresh JWTs must be distinguishable at verification time."""
+        from fastapi import HTTPException
+
+        from utils.auth import create_access_token, verify_token
+
+        access_payload = verify_token(create_access_token({"sub": "user"}))
+        refresh_payload = verify_token(create_access_token({"sub": "user"}, token_type="refresh"))
+
+        assert access_payload["typ"] == "access"
+        assert refresh_payload["typ"] == "refresh"
+        assert access_payload["iss"] == "insight-flow"
+        assert access_payload["aud"] == "insight-flow"
+
+        with pytest.raises(HTTPException, match="Invalid token type"):
+            verify_token(
+                create_access_token({"sub": "user"}, token_type="refresh"), expected_type="access"
+            )
+
 
 class TestVerifyToken:
     """Tests for JWT token verification."""

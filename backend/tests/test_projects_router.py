@@ -206,7 +206,7 @@ def test_read_project_members(client, mock_project_service, mock_project):
     assert response.json() == []
 
 
-def test_add_project_member(client, mock_project_service, mock_notification_service, mock_project):
+def test_add_project_member(client, mock_project_service, mock_project):
     # Mock return value needs a user model
     new_member_user = User(id=uuid.uuid4(), email="new@test.com")
     member_mock = MagicMock()
@@ -218,27 +218,26 @@ def test_add_project_member(client, mock_project_service, mock_notification_serv
 
     payload = {"user_id": str(new_member_user.id), "role": "member"}
     # The endpoint route is /projects/{project_id}/members
-    response = client.post(f"/api/v1/projects/{mock_project.id}/members", json=payload)
+    with patch("routers.projects.enqueue_job", new_callable=AsyncMock) as mock_enqueue:
+        response = client.post(f"/api/v1/projects/{mock_project.id}/members", json=payload)
 
-    assert response.status_code == 200
-    # Check notification sent
-    mock_notification_service.notify_project_member_added.assert_called_once()
+        assert response.status_code == 200
+        mock_enqueue.assert_awaited_once()
 
 
-def test_remove_project_member(
-    client, mock_project_service, mock_notification_service, mock_project
-):
+def test_remove_project_member(client, mock_project_service, mock_project):
     uid = uuid.uuid4()
     member_mock = MagicMock()
     member_mock.user_id = uid
     member_mock.user = User(id=uid, email="removed@test.com", name="Removed User")
     mock_project_service.get_project_members.return_value = [member_mock]
 
-    response = client.delete(f"/api/v1/projects/{mock_project.id}/members/{uid}")
+    with patch("routers.projects.enqueue_job", new_callable=AsyncMock) as mock_enqueue:
+        response = client.delete(f"/api/v1/projects/{mock_project.id}/members/{uid}")
 
-    assert response.status_code == 200
-    mock_project_service.remove_project_member.assert_called_once()
-    mock_notification_service.notify_project_member_removed.assert_called_once()
+        assert response.status_code == 200
+        mock_project_service.remove_project_member.assert_called_once()
+        mock_enqueue.assert_awaited_once()
 
 
 def test_update_member_role(client, mock_project_service, mock_project):

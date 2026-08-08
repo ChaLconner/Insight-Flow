@@ -5,7 +5,7 @@ User Favorite model for storing user's favorite projects.
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import UUID, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import UUID, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -39,5 +39,4 @@ class UserFavorite(BaseModel):
 
     __table_args__ = (
         UniqueConstraint("user_id", "project_id", name="uq_user_favorites_user_project"),
-        Index("ix_user_favorites_user_project", "user_id", "project_id"),
     )

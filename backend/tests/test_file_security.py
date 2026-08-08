@@ -2,6 +2,7 @@ import pytest
 
 from utils.file_security import (
     FileSecurityError,
+    read_upload_with_limit,
     sanitize_filename,
     validate_extension,
     validate_file_path,
@@ -9,6 +10,16 @@ from utils.file_security import (
     validate_general_upload,
     validate_mime_type,
 )
+
+
+class _ChunkedUpload:
+    def __init__(self, chunks: list[bytes]):
+        self.chunks = iter(chunks)
+        self.requested_sizes: list[int] = []
+
+    async def read(self, size: int) -> bytes:
+        self.requested_sizes.append(size)
+        return next(self.chunks)
 
 
 class TestFileSecurity:
@@ -115,3 +126,24 @@ class TestFileSecurity:
         # Failure
         with pytest.raises(FileSecurityError):
             validate_general_upload("test.exe", "application/octet-stream", b"abc")
+
+    @pytest.mark.asyncio
+    async def test_read_upload_with_limit_rejects_oversized_stream(self):
+        upload = _ChunkedUpload([b"abc", b"def"])
+
+        with pytest.raises(FileSecurityError, match="File too large"):
+            await read_upload_with_limit(upload, max_size=5)
+
+        assert upload.requested_sizes == [6, 6]
+
+    @pytest.mark.asyncio
+    async def test_read_upload_with_limit_returns_bounded_content(self):
+        upload = _ChunkedUpload(
+            [
+                b"abc",
+                b"",
+            ]
+        )
+
+        assert await read_upload_with_limit(upload, max_size=5) == b"abc"
+        assert upload.requested_sizes == [6, 6]

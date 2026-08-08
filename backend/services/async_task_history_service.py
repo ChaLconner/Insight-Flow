@@ -7,7 +7,7 @@ import json
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.task_history import ActivityType, TaskHistory
@@ -32,6 +32,7 @@ class AsyncTaskHistoryService:
         description: str | None = None,
         old_values: dict[str, Any] | None = None,
         new_values: dict[str, Any] | None = None,
+        commit: bool = True,
     ) -> TaskHistory:
         """
         Create a new activity record.
@@ -54,8 +55,11 @@ class AsyncTaskHistoryService:
         self.db.add(activity)
 
         try:
-            await self.db.commit()
-            await self.db.refresh(activity)
+            if commit:
+                await self.db.commit()
+                await self.db.refresh(activity)
+            else:
+                await self.db.flush()
             logger.debug(f"Activity created with ID: {activity.id}")
             return activity
         except Exception as e:
@@ -77,7 +81,9 @@ class AsyncTaskHistoryService:
         if activity_types:
             query = query.filter(TaskHistory.activity_type.in_(activity_types))
 
-        result = await self.db.execute(query.order_by(TaskHistory.timestamp.desc()).limit(limit))
+        result = await self.db.execute(
+            query.order_by(TaskHistory.timestamp.desc(), TaskHistory.id.desc()).limit(limit)
+        )
         return list(result.scalars().all())
 
     async def get_recent_activities_for_projects(
@@ -98,7 +104,9 @@ class AsyncTaskHistoryService:
         if activity_types:
             query = query.filter(TaskHistory.activity_type.in_(activity_types))
 
-        result = await self.db.execute(query.order_by(TaskHistory.timestamp.desc()).limit(limit))
+        result = await self.db.execute(
+            query.order_by(TaskHistory.timestamp.desc(), TaskHistory.id.desc()).limit(limit)
+        )
         return list(result.scalars().all())
 
     async def get_recent_activities_paginated(
@@ -114,19 +122,37 @@ class AsyncTaskHistoryService:
         query = select(TaskHistory).filter(TaskHistory.project_id == project_id)
 
         if before_id:
-            subquery = (
-                select(TaskHistory.timestamp).filter(TaskHistory.id == before_id).scalar_subquery()
+            cursor_result = await self.db.execute(
+                select(TaskHistory.timestamp, TaskHistory.id).filter(TaskHistory.id == before_id)
             )
-            query = query.filter(TaskHistory.timestamp < subquery)
+            cursor = cursor_result.first()
+            if cursor:
+                cursor_timestamp, cursor_task_id = cursor
+                query = query.filter(
+                    or_(
+                        TaskHistory.timestamp < cursor_timestamp,
+                        and_(
+                            TaskHistory.timestamp == cursor_timestamp,
+                            TaskHistory.id < cursor_task_id,
+                        ),
+                    )
+                )
 
         if activity_types:
             query = query.filter(TaskHistory.activity_type.in_(activity_types))
 
-        result = await self.db.execute(query.order_by(TaskHistory.timestamp.desc()).limit(limit))
+        result = await self.db.execute(
+            query.order_by(TaskHistory.timestamp.desc(), TaskHistory.id.desc()).limit(limit)
+        )
         return list(result.scalars().all())
 
     async def log_project_updated(
-        self, project_id: uuid.UUID, updated_by: uuid.UUID, changes: dict[str, Any]
+        self,
+        project_id: uuid.UUID,
+        updated_by: uuid.UUID,
+        changes: dict[str, Any],
+        *,
+        commit: bool = True,
     ) -> TaskHistory:
         """
         Log project update activity.
@@ -137,10 +163,16 @@ class AsyncTaskHistoryService:
             user_id=updated_by,
             description="Updated project information",
             new_values=changes,
+            commit=commit,
         )
 
     async def log_project_member_added(
-        self, project_id: uuid.UUID, member_name: str, added_by: uuid.UUID
+        self,
+        project_id: uuid.UUID,
+        member_name: str,
+        added_by: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> TaskHistory:
         """
         Log project member addition activity.
@@ -151,10 +183,16 @@ class AsyncTaskHistoryService:
             user_id=added_by,
             description=f"Added {member_name} to project",
             new_values={"member_name": member_name},
+            commit=commit,
         )
 
     async def log_project_member_removed(
-        self, project_id: uuid.UUID, member_name: str, removed_by: uuid.UUID
+        self,
+        project_id: uuid.UUID,
+        member_name: str,
+        removed_by: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> TaskHistory:
         """
         Log project member removal activity.
@@ -165,10 +203,17 @@ class AsyncTaskHistoryService:
             user_id=removed_by,
             description=f"Removed {member_name} from project",
             old_values={"member_name": member_name},
+            commit=commit,
         )
 
     async def log_project_member_role_changed(
-        self, project_id: uuid.UUID, member_name: str, new_role: str, changed_by: uuid.UUID
+        self,
+        project_id: uuid.UUID,
+        member_name: str,
+        new_role: str,
+        changed_by: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> TaskHistory:
         """
         Log project member role change activity.
@@ -179,9 +224,12 @@ class AsyncTaskHistoryService:
             user_id=changed_by,
             description=f"Changed {member_name}'s role to {new_role}",
             new_values={"member_name": member_name, "new_role": new_role},
+            commit=commit,
         )
 
-    async def log_task_created(self, task: Any, created_by: uuid.UUID) -> TaskHistory:
+    async def log_task_created(
+        self, task: Any, created_by: uuid.UUID, *, commit: bool = True
+    ) -> TaskHistory:
         """Log task creation."""
         return await self.create_activity(
             activity_type=ActivityType.TASK_CREATED,
@@ -193,10 +241,16 @@ class AsyncTaskHistoryService:
             new_values={
                 "status": task.status.value if hasattr(task.status, "value") else task.status
             },
+            commit=commit,
         )
 
     async def log_task_assigned(
-        self, task: Any, assignee_id: uuid.UUID, assigned_by: uuid.UUID
+        self,
+        task: Any,
+        assignee_id: uuid.UUID,
+        assigned_by: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> TaskHistory:
         """Log task assignment."""
         return await self.create_activity(
@@ -207,6 +261,7 @@ class AsyncTaskHistoryService:
             task_title=task.title,
             description=f"Assigned task to user {assignee_id}",
             new_values={"assignee_id": str(assignee_id)},
+            commit=commit,
         )
 
     async def log_task_updated(
@@ -215,6 +270,8 @@ class AsyncTaskHistoryService:
         updated_by: uuid.UUID,
         old_values: dict[str, Any],
         new_values: dict[str, Any],
+        *,
+        commit: bool = True,
     ) -> TaskHistory:
         """Log task update."""
         return await self.create_activity(
@@ -226,9 +283,12 @@ class AsyncTaskHistoryService:
             description="Updated task details",
             old_values=old_values,
             new_values=new_values,
+            commit=commit,
         )
 
-    async def log_task_completed(self, task: Any, completed_by: uuid.UUID) -> TaskHistory:
+    async def log_task_completed(
+        self, task: Any, completed_by: uuid.UUID, *, commit: bool = True
+    ) -> TaskHistory:
         """Log task completion."""
         return await self.create_activity(
             activity_type=ActivityType.TASK_COMPLETED,
@@ -238,9 +298,12 @@ class AsyncTaskHistoryService:
             task_title=task.title,
             description="Completed task",
             new_values={"status": "DONE"},
+            commit=commit,
         )
 
-    async def log_task_deleted(self, task: Any, deleted_by: uuid.UUID) -> TaskHistory:
+    async def log_task_deleted(
+        self, task: Any, deleted_by: uuid.UUID, *, commit: bool = True
+    ) -> TaskHistory:
         """Log task deletion."""
         return await self.create_activity(
             activity_type=ActivityType.TASK_DELETED,
@@ -250,4 +313,5 @@ class AsyncTaskHistoryService:
             task_title=task.title,
             description="Deleted task",
             old_values={"title": task.title},
+            commit=commit,
         )

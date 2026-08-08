@@ -18,7 +18,15 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-from alembic import op
+from alembic import context, op
+
+
+def _is_offline_mode() -> bool:
+    """Return whether Alembic is generating SQL without a live connection."""
+    try:
+        return context.is_offline_mode()
+    except Exception:
+        return False
 
 
 def get_inspector():
@@ -29,6 +37,8 @@ def get_inspector():
 
 def column_exists(table_name: str, column_name: str) -> bool:
     """Check if a column exists in a table."""
+    if _is_offline_mode():
+        return False
     inspector = get_inspector()
     columns = [col["name"] for col in inspector.get_columns(table_name)]
     return column_name in columns
@@ -36,6 +46,8 @@ def column_exists(table_name: str, column_name: str) -> bool:
 
 def index_exists(table_name: str, index_name: str) -> bool:
     """Check if an index exists on a table."""
+    if _is_offline_mode():
+        return False
     inspector = get_inspector()
     indexes = [idx["name"] for idx in inspector.get_indexes(table_name)]
     return index_name in indexes
@@ -43,12 +55,16 @@ def index_exists(table_name: str, index_name: str) -> bool:
 
 def table_exists(table_name: str) -> bool:
     """Check if a table exists in the database."""
+    if _is_offline_mode():
+        return False
     inspector = get_inspector()
     return table_name in inspector.get_table_names()
 
 
 def constraint_exists(table_name: str, constraint_name: str) -> bool:
     """Check if a constraint exists on a table."""
+    if _is_offline_mode():
+        return False
     inspector = get_inspector()
     # Check unique constraints
     unique_constraints = inspector.get_unique_constraints(table_name)
@@ -116,6 +132,7 @@ def safe_create_index(
         True if index was created, False if it already existed
     """
     if not index_exists(table_name, index_name):
+        kwargs.setdefault("if_not_exists", True)
         op.create_index(index_name, table_name, columns, unique=unique, **kwargs)
         return True
     return False
@@ -134,6 +151,7 @@ def safe_drop_index(index_name: str, table_name: str, **kwargs: Any) -> bool:
         True if index was dropped, False if it didn't exist
     """
     if index_exists(table_name, index_name):
+        kwargs.setdefault("if_exists", True)
         op.drop_index(index_name, table_name=table_name, **kwargs)
         return True
     return False

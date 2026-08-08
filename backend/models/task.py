@@ -50,11 +50,6 @@ class Task(BaseModel):
     """
 
     __tablename__ = "tasks"
-    __table_args__ = (
-        Index("ix_tasks_project_status", "project_id", "status"),
-        Index("ix_tasks_assignee_status", "assignee_id", "status"),
-    )
-
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[TaskStatus] = mapped_column(
@@ -120,9 +115,23 @@ class Task(BaseModel):
 
     __table_args__ = (
         Index("ix_tasks_project_status", "project_id", "status"),
+        Index("ix_tasks_project_status_priority", "project_id", "status", "priority"),
+        Index("ix_tasks_assignee_status", "assignee_id", "status"),
         Index("ix_tasks_project_due_date", "project_id", "due_date"),
         Index("ix_tasks_project_updated_at", "project_id", "updated_at"),
         Index("ix_tasks_assignee_updated_at", "assignee_id", "updated_at"),
+        Index(
+            "ix_tasks_title_trgm",
+            "title",
+            postgresql_using="gin",
+            postgresql_ops={"title": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_tasks_description_trgm",
+            "description",
+            postgresql_using="gin",
+            postgresql_ops={"description": "gin_trgm_ops"},
+        ),
     )
 
     def __init__(self, **kwargs):

@@ -15,17 +15,21 @@ Development: Falls back to in-memory storage for simplicity.
 """
 
 import logging
-import time
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from services.cache_service import cache_service
+from utils.request_security import get_client_ip
 
 logger = logging.getLogger(__name__)
+
+
+def get_remote_address(request: Request) -> str:
+    """Compatibility wrapper that now uses the trusted-proxy IP parser."""
+    return get_client_ip(request)
 
 
 def get_user_identifier(request: Request) -> str:
@@ -50,10 +54,12 @@ def create_limiter() -> Limiter:
 
     settings = get_settings()
 
-    # Try to use Redis if configured
     redis_url = settings.cache.redis_url
 
-    if redis_url and settings.is_production:
+    if settings.is_production and not redis_url:
+        raise RuntimeError("REDIS_URL is required in production for distributed rate limiting.")
+
+    if redis_url:
         try:
             # Test Redis connection
             import redis
@@ -61,27 +67,19 @@ def create_limiter() -> Limiter:
             r = redis.from_url(redis_url)
             r.ping()
 
-            logger.info(f"Rate limiter using Redis: {redis_url[:20]}...")
+            logger.info("Rate limiter using Redis-backed distributed storage")
             return Limiter(
                 key_func=get_user_identifier,
                 storage_uri=redis_url,
                 strategy="fixed-window",
             )
         except Exception as e:
-            logger.critical(
-                f"Redis connection FAILED for SlowAPI rate limiting: {e}. "
-                "Falling back to in-memory storage — NOT suitable for production "
-                "multi-worker deployments! Rate limits will NOT be shared across workers."
-            )
+            if settings.is_production:
+                raise RuntimeError("Redis-backed rate limiting is required in production.") from e
+            logger.warning(f"Redis connection failed; using development-only in-memory limits: {e}")
 
     # Fallback to in-memory storage
-    if settings.is_production:
-        logger.warning(
-            "Using in-memory rate limiting in production - "
-            "rate limits won't be shared across workers. "
-            "Configure REDIS_URL for distributed rate limiting."
-        )
-    else:
+    if not settings.is_production:
         logger.info("Using in-memory rate limiting (development mode)")
 
     return Limiter(key_func=get_user_identifier)
@@ -219,43 +217,33 @@ class AuthRateLimiter:
         if settings.is_testing:
             return
 
-        # Get client IP
-        client_ip = request.client.host if request.client else "unknown"
+        if settings.is_production and not await self.cache_service.ensure_connected():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Rate limiting service unavailable. Please retry shortly.",
+            )
+
+        client_ip = get_client_ip(request)
         path = request.url.path
 
         key = f"rate_limit:{client_ip}:{path}"
+        try:
+            count = await self.cache_service.increment_with_window(
+                key,
+                self.window,
+                fail_closed=settings.is_production,
+            )
+        except Exception as exc:
+            logger.error("Rate-limit counter unavailable: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Rate limiting service unavailable. Please retry shortly.",
+            ) from exc
 
-        # Get current usage
-        usage_data = await self.cache_service.get(key)
-        current_time = time.time()
-
-        if usage_data:
-            count = usage_data["content"]["count"]
-            start_time = usage_data["content"]["start_time"]
-
-            # Check if window expired
-            if current_time - start_time > self.window:
-                # Reset
-                await self.cache_service.set(
-                    key, {"content": {"count": 1, "start_time": current_time}}, timeout=self.window
-                )
-            else:
-                # Increment
-                if count >= self.requests:
-                    raise HTTPException(
-                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                        detail="Too many requests. Please try again later.",
-                    )
-
-                await self.cache_service.set(
-                    key,
-                    {"content": {"count": count + 1, "start_time": start_time}},
-                    timeout=self.window,
-                )
-        else:
-            # First request
-            await self.cache_service.set(
-                key, {"content": {"count": 1, "start_time": current_time}}, timeout=self.window
+        if count > self.requests:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many requests. Please try again later.",
             )
 
 

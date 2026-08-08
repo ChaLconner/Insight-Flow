@@ -8,15 +8,20 @@ import uuid
 from datetime import UTC
 from typing import Any
 
-from sqlalchemy import asc, desc, func, or_, select
+from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from models.analytics import TaskAttachment, TaskComment, TaskDependency, TaskTimeTracking
 from models.project import MemberRole, Project, ProjectMember
 from models.task import Task, TaskPriority, TaskStatus, TaskType
 from models.user import User
 from schemas.task import TaskAssign, TaskCreate, TaskStatusUpdate, TaskUpdate
+from services.cache_invalidation import (
+    get_project_cache_user_ids,
+    invalidate_dashboard_and_analytics_cache,
+)
 from utils.logger import logger
 
 
@@ -29,17 +34,6 @@ def escape_like_pattern(pattern: str) -> str:
     return re.sub(r"([%_\\])", r"\\\1", pattern)
 
 
-async def _invalidate_dashboard_cache_after_mutation(user_id: uuid.UUID | None = None) -> None:
-    try:
-        from services.async_analytics_service import invalidate_analytics_cache
-        from services.async_dashboard_service import invalidate_dashboard_cache
-
-        await invalidate_dashboard_cache(user_id)
-        await invalidate_analytics_cache(user_id)
-    except Exception as e:
-        logger.error(f"Failed to invalidate dashboard/analytics cache: {e}")
-
-
 class AsyncTaskService:
     """Async Service class for task operations."""
 
@@ -47,20 +41,21 @@ class AsyncTaskService:
         self.db = db
 
     async def get_task_by_id(self, task_id: uuid.UUID) -> Task | None:
-        """Get task by ID."""
-        result = await self.db.execute(select(Task).filter(Task.id == task_id))
-        return result.scalars().first()
-
-    async def get_task_with_details(self, task_id: uuid.UUID) -> Task | None:
-        """Get task by ID with all relationships eagerly loaded."""
+        """Get task by ID with relationships safe for AsyncSession access."""
         result = await self.db.execute(
             select(Task)
             .options(
-                selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
+                selectinload(Task.assignee),
+                selectinload(Task.creator),
+                selectinload(Task.project),
             )
             .filter(Task.id == task_id)
         )
         return result.scalars().first()
+
+    async def get_task_with_details(self, task_id: uuid.UUID) -> Task | None:
+        """Get task by ID with response relationships eagerly loaded."""
+        return await self.get_task_by_id(task_id)
 
     async def get_tasks(
         self,
@@ -82,7 +77,7 @@ class AsyncTaskService:
         if status:
             query = query.filter(Task.status == status)
 
-        query = query.offset(skip).limit(limit)
+        query = query.order_by(desc(Task.updated_at), desc(Task.id)).offset(skip).limit(limit)
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
@@ -102,6 +97,11 @@ class AsyncTaskService:
         )
         return member_result.scalars().first() is not None
 
+    async def _ensure_project_member(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Reject task links to users outside the project membership boundary."""
+        if not await self._is_project_member(project_id, user_id):
+            raise ValueError("User must be a project member or owner")
+
     async def _is_project_admin(self, project_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Check if user is admin or owner of the project."""
         # Check if owner
@@ -120,7 +120,9 @@ class AsyncTaskService:
         )
         return member_result.scalars().first() is not None
 
-    async def create_task(self, task_data: TaskCreate, created_by: uuid.UUID) -> Task:
+    async def create_task(
+        self, task_data: TaskCreate, created_by: uuid.UUID, *, commit: bool = True
+    ) -> Task:
         """Create a new task."""
         logger.info(f"Creating task with data: {task_data}, created_by: {created_by}")
 
@@ -142,6 +144,7 @@ class AsyncTaskService:
         # Check if assignee exists (if provided)
         assignee = None
         if task_data.assignee_id:
+            await self._ensure_project_member(task_data.project_id, task_data.assignee_id)
             assignee_result = await self.db.execute(
                 select(User).filter(User.id == task_data.assignee_id)
             )
@@ -172,22 +175,27 @@ class AsyncTaskService:
             )
 
             self.db.add(db_task)
-            await self.db.commit()
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                task_data.project_id,
+                (created_by, task_data.assignee_id) if task_data.assignee_id else (created_by,),
+            )
+
+            from services.async_task_history_service import AsyncTaskHistoryService
+
+            history_service = AsyncTaskHistoryService(self.db)
+            await history_service.log_task_created(db_task, created_by, commit=False)
+            if task_data.assignee_id:
+                await history_service.log_task_assigned(
+                    db_task, task_data.assignee_id, created_by, commit=False
+                )
+
+            if commit:
+                await self.db.commit()
+            else:
+                await self.db.flush()
             await self.db.refresh(db_task)
-            await _invalidate_dashboard_cache_after_mutation()
-
-            # Log activity asynchronously
-            try:
-                from services.async_task_history_service import AsyncTaskHistoryService
-
-                history_service = AsyncTaskHistoryService(self.db)
-                await history_service.log_task_created(db_task, created_by)
-                if task_data.assignee_id:
-                    await history_service.log_task_assigned(
-                        db_task, task_data.assignee_id, created_by
-                    )
-            except Exception as e:
-                logger.error(f"Failed to log task creation activity: {e}")
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             return db_task
 
@@ -238,9 +246,10 @@ class AsyncTaskService:
                 selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
             )
             .filter(*filters)
-            .order_by(Task.created_at.desc())
         )
 
+        if search:
+            search = search.strip()[:100]
         if search:
             escaped_search = escape_like_pattern(search)
             search_term = f"%{escaped_search}%"
@@ -259,13 +268,40 @@ class AsyncTaskService:
         return query, filters
 
     async def update_task(  # noqa: PLR0912, PLR0915
-        self, task_id: uuid.UUID, task_data: TaskUpdate, user_id: uuid.UUID
+        self,
+        task_id: uuid.UUID,
+        task_data: TaskUpdate,
+        user_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> Task:
         """Update task information."""
         task = await self._get_authorized_task(task_id, user_id, allow_assignee=True)
 
+        # Assignees may advance their own task's status, but task metadata and
+        # assignment remain controlled by the creator/project administrator.
+        # This keeps the broad read/update permission from becoming a
+        # field-level privilege escalation.
+        is_creator = task.created_by == user_id
+        if not is_creator and task.assignee_id == user_id:
+            is_project_admin = await self._is_project_admin(task.project_id, user_id)
+            if not is_project_admin:
+                protected_fields = (
+                    "title",
+                    "description",
+                    "priority",
+                    "type",
+                    "assignee_id",
+                    "due_date",
+                )
+                if any(getattr(task_data, field) is not None for field in protected_fields):
+                    raise ValueError(
+                        "Assignees may update task status only; task metadata requires project authority"
+                    )
+
         # Check if assignee exists (if provided)
         if task_data.assignee_id:
+            await self._ensure_project_member(task.project_id, task_data.assignee_id)
             assignee_result = await self.db.execute(
                 select(User).filter(User.id == task_data.assignee_id)
             )
@@ -321,26 +357,34 @@ class AsyncTaskService:
             task.due_date = task_data.due_date
 
         try:
-            await self.db.commit()
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                task.project_id,
+                (user_id, old_assignee_id, task.assignee_id)
+                if old_assignee_id
+                else (user_id, task.assignee_id),
+            )
+
+            from services.async_task_history_service import AsyncTaskHistoryService
+
+            history_service = AsyncTaskHistoryService(self.db)
+            if old_values or new_values:
+                await history_service.log_task_updated(
+                    task, user_id, old_values, new_values, commit=False
+                )
+            if task_data.assignee_id and task_data.assignee_id != old_assignee_id:
+                await history_service.log_task_assigned(
+                    task, task_data.assignee_id, user_id, commit=False
+                )
+            if task.status == TaskStatus.DONE and old_status != TaskStatus.DONE:
+                await history_service.log_task_completed(task, user_id, commit=False)
+
+            if commit:
+                await self.db.commit()
+            else:
+                await self.db.flush()
             await self.db.refresh(task)
-            await _invalidate_dashboard_cache_after_mutation()
-
-            # Log activity
-            try:
-                from services.async_task_history_service import AsyncTaskHistoryService
-
-                history_service = AsyncTaskHistoryService(self.db)
-
-                if old_values or new_values:
-                    await history_service.log_task_updated(task, user_id, old_values, new_values)
-
-                if task_data.assignee_id and task_data.assignee_id != old_assignee_id:
-                    await history_service.log_task_assigned(task, task_data.assignee_id, user_id)
-
-                if task.status == TaskStatus.DONE and old_status != TaskStatus.DONE:
-                    await history_service.log_task_completed(task, user_id)
-            except Exception as e:
-                logger.error(f"Failed to log task update activity: {e}")
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             return task
         except IntegrityError:
@@ -356,22 +400,46 @@ class AsyncTaskService:
             from services.async_task_history_service import AsyncTaskHistoryService
 
             history_service = AsyncTaskHistoryService(self.db)
-            await history_service.log_task_deleted(task, user_id)
+            await history_service.log_task_deleted(task, user_id, commit=False)
         except Exception as e:
             logger.error(f"Failed to log task deletion activity: {e}")
 
         try:
-            # Note: delete() is synchronous in SQLAlchemy 2.0 AsyncSession (it stages the deletion)
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                task.project_id,
+                (user_id, task.created_by, task.assignee_id)
+                if task.assignee_id
+                else (user_id, task.created_by),
+            )
+            # Remove child rows explicitly because deployed foreign keys do not all cascade.
+            await self.db.execute(
+                delete(TaskDependency).where(
+                    (TaskDependency.task_id == task.id)
+                    | (TaskDependency.depends_on_task_id == task.id)
+                )
+            )
+            await self.db.execute(delete(TaskComment).where(TaskComment.task_id == task.id))
+            await self.db.execute(delete(TaskAttachment).where(TaskAttachment.task_id == task.id))
+            await self.db.execute(
+                delete(TaskTimeTracking).where(TaskTimeTracking.task_id == task.id)
+            )
+            # delete() is asynchronous in AsyncSession and stages the deletion.
             await self.db.delete(task)
             await self.db.commit()
-            await _invalidate_dashboard_cache_after_mutation()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
             return True
         except IntegrityError:
             await self.db.rollback()
             raise ValueError("Task deletion failed")
 
     async def update_task_status(
-        self, task_id: uuid.UUID, status_update: TaskStatusUpdate, user_id: uuid.UUID
+        self,
+        task_id: uuid.UUID,
+        status_update: TaskStatusUpdate,
+        user_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> Task:
         """Update task status."""
         task = await self._get_authorized_task(task_id, user_id, allow_assignee=True)
@@ -384,28 +452,35 @@ class AsyncTaskService:
                 raise ValueError("Invalid task status")
             task.status = new_status
 
-            await self.db.commit()
-            await self.db.refresh(task)
-            await _invalidate_dashboard_cache_after_mutation()
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                task.project_id,
+                (user_id, task.created_by, task.assignee_id)
+                if task.assignee_id
+                else (user_id, task.created_by),
+            )
 
-            # Log activity
+            from services.async_task_history_service import AsyncTaskHistoryService
+
+            history_service = AsyncTaskHistoryService(self.db)
             if old_status != task.status:
-                try:
-                    from services.async_task_history_service import AsyncTaskHistoryService
+                if task.status == TaskStatus.DONE:
+                    await history_service.log_task_completed(task, user_id, commit=False)
+                else:
+                    await history_service.log_task_updated(
+                        task,
+                        user_id,
+                        {"status": old_status.value},
+                        {"status": task.status.value},
+                        commit=False,
+                    )
 
-                    history_service = AsyncTaskHistoryService(self.db)
-
-                    if task.status == TaskStatus.DONE:
-                        await history_service.log_task_completed(task, user_id)
-                    else:
-                        await history_service.log_task_updated(
-                            task,
-                            user_id,
-                            {"status": old_status.value},
-                            {"status": task.status.value},
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to log status update activity: {e}")
+            if commit:
+                await self.db.commit()
+            else:
+                await self.db.flush()
+            await self.db.refresh(task)
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             return task
         except ValueError as e:
@@ -415,7 +490,12 @@ class AsyncTaskService:
             raise ValueError("Task status update failed")
 
     async def assign_task(
-        self, task_id: uuid.UUID, assign_data: TaskAssign, user_id: uuid.UUID
+        self,
+        task_id: uuid.UUID,
+        assign_data: TaskAssign,
+        user_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> Task:
         """Assign task to a user."""
         task = await self._get_authorized_task(task_id, user_id)
@@ -427,21 +507,32 @@ class AsyncTaskService:
         assignee = assignee_result.scalars().first()
         if not assignee:
             raise ValueError("Assignee not found")
+        await self._ensure_project_member(task.project_id, assign_data.assignee_id)
 
         try:
+            old_assignee_id = task.assignee_id
             task.assignee_id = assign_data.assignee_id
-            await self.db.commit()
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                task.project_id,
+                (user_id, task.created_by, assign_data.assignee_id, old_assignee_id)
+                if old_assignee_id
+                else (user_id, task.created_by, assign_data.assignee_id),
+            )
+
+            from services.async_task_history_service import AsyncTaskHistoryService
+
+            history_service = AsyncTaskHistoryService(self.db)
+            await history_service.log_task_assigned(
+                task, assign_data.assignee_id, user_id, commit=False
+            )
+
+            if commit:
+                await self.db.commit()
+            else:
+                await self.db.flush()
             await self.db.refresh(task)
-            await _invalidate_dashboard_cache_after_mutation()
-
-            # Log activity
-            try:
-                from services.async_task_history_service import AsyncTaskHistoryService
-
-                history_service = AsyncTaskHistoryService(self.db)
-                await history_service.log_task_assigned(task, assign_data.assignee_id, user_id)
-            except Exception as e:
-                logger.error(f"Failed to log assignment activity: {e}")
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             return task
         except IntegrityError:
@@ -468,8 +559,8 @@ class AsyncTaskService:
         count_result = await self.db.execute(count_query)
         total_count = count_result.scalar() or 0
 
-        # Order and paginate
-        query = query.order_by(desc(Task.updated_at)).offset(skip).limit(limit)
+        # Apply one deterministic primary ordering before pagination.
+        query = query.order_by(desc(Task.updated_at), desc(Task.id)).offset(skip).limit(limit)
         result = await self.db.execute(query)
 
         return list(result.scalars().all()), total_count
@@ -491,7 +582,8 @@ class AsyncTaskService:
         filters = [Task.project_id == project_id]
         query, filters = self._build_task_list_query(filters, search, status)
 
-        # Apply sorting
+        # Apply one deterministic primary ordering before pagination.
+        query = query.order_by(None)
         if sort_by:
             sort_field_map = {
                 "created_at": Task.created_at,
@@ -506,11 +598,11 @@ class AsyncTaskService:
             if sort_by in sort_field_map:
                 sort_field = sort_field_map[sort_by]
                 if sort_order and sort_order.lower() == "desc":
-                    query = query.order_by(desc(sort_field))
+                    query = query.order_by(desc(sort_field), desc(Task.id))
                 else:
-                    query = query.order_by(asc(sort_field))
+                    query = query.order_by(asc(sort_field), asc(Task.id))
         else:
-            query = query.order_by(desc(Task.updated_at))
+            query = query.order_by(desc(Task.updated_at), desc(Task.id))
 
         # Count total
         count_query = select(func.count(Task.id)).filter(*filters)
@@ -540,7 +632,7 @@ class AsyncTaskService:
                 Task.status != TaskStatus.DONE,
                 Task.due_date.isnot(None),
                 Task.due_date <= due_date_threshold,
-                Task.due_date >= now.date(),
+                Task.due_date >= now,
             )
             .order_by(asc(Task.due_date))
             .limit(limit)
@@ -553,7 +645,7 @@ class AsyncTaskService:
         """Get overdue tasks for a user."""
         from datetime import datetime
 
-        now = datetime.now(UTC).date()
+        now = datetime.now(UTC)
 
         query = (
             select(Task)

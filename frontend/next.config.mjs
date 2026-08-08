@@ -6,6 +6,9 @@ const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Required by the production Dockerfile's minimal runtime image.
+  output: "standalone",
+
   // Monorepo configuration - trace dependencies from the root directory
   outputFileTracingRoot: path.join(__dirname, "../"),
 
@@ -79,7 +82,6 @@ const nextConfig = {
     ],
     // CSS optimizations for faster critical path
     inlineCss: true, // Inline critical CSS to avoid render-blocking requests
-    cssChunking: "strict", // More aggressive CSS code-splitting
   },
 
   // Performance optimizations

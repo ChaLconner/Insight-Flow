@@ -181,6 +181,72 @@ class TestRefreshTokenEdgeCases:
             assert exc_info.value.status_code == 400
             assert "Inactive user" in exc_info.value.detail
 
+    @pytest.mark.asyncio
+    async def test_refresh_token_rejects_previous_session_version(
+        self, mock_request, mock_response, mock_db, mock_user_service
+    ):
+        """Password changes invalidate refresh tokens as well as access tokens."""
+        from routers.auth import refresh_token
+
+        mock_request.cookies = {"refresh_token": "valid_refresh_token"}
+        with patch(
+            "routers.auth.async_verify_token_with_blacklist", new_callable=AsyncMock
+        ) as mock_verify:
+            mock_verify.return_value = {
+                "sub": str(uuid.uuid4()),
+                "jti": "token-jti",
+                "sv": 0,
+            }
+            mock_user = MagicMock()
+            mock_user.is_active = True
+            mock_user.session_version = 1
+            mock_user_service.get_user_by_id = AsyncMock(return_value=mock_user)
+
+            with pytest.raises(HTTPException) as exc_info:
+                await refresh_token(mock_request, mock_response, mock_db, mock_user_service)
+
+        assert exc_info.value.status_code == 401
+        assert "Session invalid" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_rechecks_device_fingerprint(
+        self, mock_request, mock_response, mock_db, mock_user_service
+    ):
+        """A refresh token must remain bound to the device that received it."""
+        from routers.auth import refresh_token
+
+        mock_request.cookies = {"refresh_token": "valid_refresh_token"}
+        user_id = uuid.uuid4()
+        mock_user = MagicMock()
+        mock_user.id = user_id
+        mock_user.is_active = True
+        mock_user.session_version = 0
+        mock_user_service.get_user_by_id = AsyncMock(return_value=mock_user)
+
+        with (
+            patch(
+                "routers.auth.async_verify_token_with_blacklist", new_callable=AsyncMock
+            ) as mock_verify,
+            patch(
+                "routers.auth.verify_token_fingerprint", new_callable=AsyncMock
+            ) as mock_fingerprint,
+            patch("routers.auth.get_token_expiration", return_value=None),
+            patch("routers.auth.create_and_set_auth_cookies"),
+        ):
+            mock_verify.return_value = {
+                "sub": str(user_id),
+                "jti": "token-jti",
+                "sv": 0,
+                "fp": "fingerprint",
+            }
+
+            result = await refresh_token(mock_request, mock_response, mock_db, mock_user_service)
+
+        assert result["message"] == "Token refreshed successfully"
+        mock_fingerprint.assert_awaited_once_with(
+            mock_request, mock_verify.return_value, str(user_id), mock_db
+        )
+
 
 class TestGoogleLoginEdgeCases:
     """Tests for Google login edge cases."""

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { ProjectStatus, UserRole } from "@/types";
+import { ProjectStatus, UserRole, type Project } from "@/types";
 
 // Mock the API endpoints
 vi.mock("@/lib/api-endpoints", () => ({
@@ -200,6 +200,36 @@ describe("useUpdateProject Hook", () => {
           is_active: true
       }));
       expect(toast.success).toHaveBeenCalled();
+  });
+
+  it("should map frontend project fields to the backend update contract", async () => {
+      const { useUpdateProject } = await import("@/hooks/use-projects");
+      const { projectsApi } = await import("@/lib/api-endpoints");
+
+      vi.mocked(projectsApi.updateProject).mockResolvedValue(
+        { id: "p1", name: "Updated" } as unknown as Project,
+      );
+
+      const { result } = renderHook(() => useUpdateProject(), {
+          wrapper: createWrapper(),
+      });
+
+      await result.current.mutateAsync({
+          id: "p1",
+          data: {
+              name: "Updated",
+              color: "#123456",
+              memberIds: ["u1"],
+              settings: { defaultTaskVisibility: "private" },
+          },
+      });
+
+      expect(projectsApi.updateProject).toHaveBeenCalledWith("p1", {
+          name: "Updated",
+          color: "#123456",
+          member_ids: ["u1"],
+          settings: { defaultTaskVisibility: "private" },
+      });
   });
 });
 

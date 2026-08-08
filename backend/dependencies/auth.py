@@ -24,6 +24,16 @@ logger = setup_logger("auth_dependencies")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
+def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
+    """Reject tokens issued before the user's current session version."""
+    try:
+        token_version = int(payload.get("sv", 0))
+        current_version = int(getattr(user, "session_version", 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    return token_version == current_version
+
+
 def get_token_from_cookie_or_header(
     request: Request, token: str | None = Depends(oauth2_scheme)
 ) -> str | None:
@@ -39,9 +49,7 @@ def get_token_from_cookie_or_header(
     return request.cookies.get(ACCESS_TOKEN_KEY)
 
 
-async def _verify_token_fingerprint(
-    request: Request, payload: dict, user_id: str, db: AsyncSession
-):
+async def verify_token_fingerprint(request: Request, payload: dict, user_id: str, db: AsyncSession):
     """Verify token fingerprint if present and enabled."""
     stored_fingerprint = payload.get("fp")
     if not stored_fingerprint:
@@ -105,7 +113,7 @@ async def get_current_user(
             )
 
         # Verify token with blacklist checking (Async)
-        payload = await async_verify_token_with_blacklist(token, db)
+        payload = await async_verify_token_with_blacklist(token, db, expected_type="access")
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise HTTPException(
@@ -114,7 +122,7 @@ async def get_current_user(
             )
 
         # A+ Security: Verify token fingerprint (device binding)
-        await _verify_token_fingerprint(request, payload, user_id, db)
+        await verify_token_fingerprint(request, payload, user_id, db)
 
     except HTTPException:
         # Re-raise HTTP exceptions as-is
@@ -133,6 +141,12 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
+            )
+        if not _session_version_matches(payload, user):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session invalid - please login again",
+                headers={"WWW-Authenticate": "Bearer"},
             )
         return user
     except HTTPException:
@@ -157,7 +171,7 @@ async def get_current_user_optional(
 
     try:
         # Verify token with blacklist checking (Async)
-        payload = await async_verify_token_with_blacklist(token, db)
+        payload = await async_verify_token_with_blacklist(token, db, expected_type="access")
         user_id: str | None = payload.get("sub")
         if user_id is None:
             return None
@@ -167,6 +181,8 @@ async def get_current_user_optional(
     # Database lookup
     try:
         user = await user_service.get_user_by_id(user_id)
+        if user is not None and not _session_version_matches(payload, user):
+            return None
         return user
     except Exception:
         return None

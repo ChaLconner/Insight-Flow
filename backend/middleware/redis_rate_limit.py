@@ -39,6 +39,7 @@ class RedisRateLimitMiddleware:
         period: int = 60,
         key_prefix: str = "rate_limit",
         skip_paths: list | None = None,
+        fail_closed: bool = False,
     ):
         """
         Initialize Redis rate limiting middleware.
@@ -57,6 +58,7 @@ class RedisRateLimitMiddleware:
         self.key_prefix = key_prefix
         self.redis_client = redis_client
         self.skip_paths = skip_paths or ["/static", "/", "/health", "/metrics"]
+        self.fail_closed = fail_closed
         logger.info(f"Redis rate limiting initialized: {calls} requests per {period}s")
 
     def _get_rate_limit_key(self, request: Request) -> tuple[str, int, int]:
@@ -101,7 +103,7 @@ class RedisRateLimitMiddleware:
         member_id = f"{now}:{uuid.uuid4().hex[:8]}"
 
         try:
-            pipe = self.redis_client.pipeline()
+            pipe = self.redis_client.pipeline(transaction=True)
             pipe.zremrangebyscore(key, 0, window_start)
             pipe.zadd(key, {member_id: now})
             pipe.zcard(key)
@@ -121,7 +123,9 @@ class RedisRateLimitMiddleware:
 
         except Exception as e:
             logger.error(f"Redis rate limit check failed: {e}")
-            # Fail open: allow request if Redis fails
+            if self.fail_closed:
+                return False, -1
+            # Development fallback: allow request if Redis fails.
             return True, calls
 
     async def __call__(self, scope, receive, send):
@@ -152,6 +156,19 @@ class RedisRateLimitMiddleware:
 
         # Check rate limit
         is_allowed, remaining = await self._check_rate_limit(key, calls, period)
+
+        if remaining < 0:
+            response = JSONResponse(
+                status_code=503,
+                content={
+                    "success": False,
+                    "message": "Rate limiting service unavailable. Please retry shortly.",
+                    "code": "RATE_LIMIT_UNAVAILABLE",
+                },
+                headers={"Retry-After": "5"},
+            )
+            await response(scope, receive, send)
+            return
 
         if not is_allowed:
             client_info = scope.get("client")
@@ -216,7 +233,7 @@ class RedisRateLimiter:
         member_id = f"{now}:{uuid.uuid4().hex[:8]}"
 
         try:
-            pipe = self.redis_client.pipeline()
+            pipe = self.redis_client.pipeline(transaction=True)
             pipe.zremrangebyscore(key, 0, window_start)
             pipe.zadd(key, {member_id: now})
             pipe.zcard(key)

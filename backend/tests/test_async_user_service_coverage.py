@@ -20,6 +20,7 @@ def mock_db():
     session.execute = AsyncMock()
     session.add = MagicMock()
     session.commit = AsyncMock()
+    session.flush = AsyncMock()
     session.rollback = AsyncMock()
     session.refresh = AsyncMock()
     return session
@@ -145,7 +146,7 @@ async def test_update_settings_fail(service, mock_db):
 @pytest.mark.asyncio
 async def test_create_user_integrity_error_username(service, mock_db):
     user_data = UserCreate(email="test@test.com", username="taken")
-    mock_db.commit.side_effect = IntegrityError(None, None, Exception("username_key"))
+    mock_db.flush.side_effect = IntegrityError(None, None, Exception("username_key"))
 
     with pytest.raises(ValueError, match="Username already taken"):
         await service.create_user(user_data)
@@ -154,7 +155,7 @@ async def test_create_user_integrity_error_username(service, mock_db):
 @pytest.mark.asyncio
 async def test_create_user_integrity_error_google(service, mock_db):
     user_data = UserCreate(email="test@test.com")
-    mock_db.commit.side_effect = IntegrityError(None, None, Exception("google_id_key"))
+    mock_db.flush.side_effect = IntegrityError(None, None, Exception("google_id_key"))
 
     with pytest.raises(ValueError, match="Google account already linked"):
         await service.create_user(user_data)
@@ -164,11 +165,7 @@ async def test_create_user_integrity_error_google(service, mock_db):
 async def test_create_user_trial_subscription_failure(service, mock_db):
     user_data = UserCreate(email="test@test.com", plan="pro")
 
-    # Commit first time (user) -> Success
-    # Commit second time (subscription) -> Fail
-
-    # We need checks on call count.
-    # Note: create_user calls commit twice if plan is provided.
+    # Flush the user successfully, then fail while staging the subscription.
 
     # Simulate DB user logic (mock refresh)
     def refresh_side_effect(obj):
@@ -178,16 +175,17 @@ async def test_create_user_trial_subscription_failure(service, mock_db):
 
     # Simulate subscription error
     # We can mock Subscription creation raising error or db.add raising error
-    # Or db.commit raising error on second call.
+    # Or db.flush raising an error on the second call.
 
-    mock_db.commit.side_effect = [None, Exception("Sub Error")]
+    mock_db.flush.side_effect = [None, Exception("Sub Error")]
 
-    with patch("services.async_user_service.logger") as mock_logger:
+    with (
+        patch("services.async_user_service.enqueue_job", new_callable=AsyncMock),
+        pytest.raises(ValueError, match="staging subscription"),
+    ):
         await service.create_user(user_data)
 
-        # Should not raise, just log error
-        assert mock_logger.error.called
-        assert "Failed to create trial subscription" in mock_logger.error.call_args[0][0]
+    mock_db.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio

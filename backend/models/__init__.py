@@ -15,6 +15,7 @@ from .analytics import (
     UserProductivity,
 )
 from .auth_audit import AuthAudit, AuthStatus
+from .background_job import BackgroundJob, BackgroundJobStatus
 from .base import Base, BaseModel
 from .base_enum import UserRole
 from .file import File
@@ -29,6 +30,7 @@ from .payment import (
     SubscriptionStatus,
 )
 from .project import MemberRole, Project, ProjectMember
+from .security_log import SecurityLog
 from .task import Task, TaskStatus
 from .task_history import ActivityType, TaskHistory
 from .token_blacklist import TokenBlacklist
@@ -42,6 +44,8 @@ __all__ = [
     "AnalyticsPeriod",
     "AuthAudit",
     "AuthStatus",
+    "BackgroundJob",
+    "BackgroundJobStatus",
     "Base",
     "BaseModel",
     "File",
@@ -58,6 +62,7 @@ __all__ = [
     "ProjectMilestone",
     "ProjectTag",
     "ProjectTagAssociation",
+    "SecurityLog",
     "Subscription",
     "SubscriptionPlan",
     "SubscriptionStatus",

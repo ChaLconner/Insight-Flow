@@ -5,7 +5,7 @@ Notification model for Insight-Flow application.
 import enum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, UUID, Boolean, ForeignKey, String, Text
+from sqlalchemy import JSON, UUID, Boolean, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -44,8 +44,7 @@ class Notification(BaseModel):
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="notifications")
 
-    from sqlalchemy import Index
-
     __table_args__ = (
         Index("ix_notifications_user_read_created", "user_id", "is_read", "created_at"),
+        Index("ix_notifications_user_type_created_at", "user_id", "type", "created_at"),
     )

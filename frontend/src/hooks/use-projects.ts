@@ -20,6 +20,7 @@ interface ApiProjectData extends CreateProjectRequest {
 // Type for update API data
 interface ApiUpdateProjectData extends UpdateProjectRequest {
   is_active?: boolean;
+  member_ids?: string[];
 }
 
 interface UseProjectsOptions {
@@ -120,6 +121,10 @@ export function useUpdateProject() {
       if (apiData.status) {
         apiData.is_active = apiData.status === ProjectStatus.ACTIVE;
         delete apiData.status;
+      }
+      if (apiData.memberIds) {
+        apiData.member_ids = apiData.memberIds;
+        delete apiData.memberIds;
       }
 
       const response = await projectsApi.updateProject(id, apiData);

@@ -6,7 +6,6 @@ Create Date: 2025-12-27 23:39:36.450510
 
 Migration Description:
     Add authentication security features:
-    - Create webhook_event_logs table (if not exists)
     - Add user verification fields
     - Add login attempt tracking fields
     - Various index improvements
@@ -28,7 +27,6 @@ if backend_dir not in sys.path:
 from migration_helpers import (
     safe_add_column, safe_drop_column,
     safe_create_index, safe_drop_index,
-    safe_create_table, safe_drop_table,
     safe_drop_constraint, safe_create_unique_constraint,
     table_exists, column_exists, index_exists, constraint_exists
 )
@@ -42,27 +40,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Apply authentication security features migration."""
-    
-    # Create webhook_event_logs table only if it doesn't exist
-    # (May have been created by add_webhook_event_log migration)
-    if not table_exists('webhook_event_logs'):
-        op.create_table('webhook_event_logs',
-            sa.Column('stripe_event_id', sa.String(length=255), nullable=False),
-            sa.Column('event_type', sa.String(length=100), nullable=False),
-            sa.Column('processed', sa.Boolean(), nullable=False),
-            sa.Column('processed_at', sa.DateTime(timezone=True), nullable=True),
-            sa.Column('error_message', sa.Text(), nullable=True),
-            sa.Column('retry_count', sa.Integer(), nullable=False),
-            sa.Column('raw_payload', sa.Text(), nullable=True),
-            sa.Column('user_id', sa.UUID(), nullable=True),
-            sa.Column('id', sa.UUID(), nullable=False),
-            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-            sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-            sa.PrimaryKeyConstraint('id')
-        )
-        safe_create_index('ix_webhook_event_logs_event_type', 'webhook_event_logs', ['event_type'])
-        safe_create_index('ix_webhook_event_logs_stripe_event_id', 'webhook_event_logs', ['stripe_event_id'], unique=True)
-        safe_create_index('ix_webhook_event_logs_user_id', 'webhook_event_logs', ['user_id'])
     
     # Create notification index if not exists
     safe_create_index('ix_notifications_user_read_created', 'notifications', ['user_id', 'is_read', 'created_at'])
@@ -132,10 +109,4 @@ def downgrade() -> None:
     
     # Drop notification index
     safe_drop_index('ix_notifications_user_read_created', 'notifications')
-    
-    # Drop webhook_event_logs table and indexes
-    safe_drop_index('ix_webhook_event_logs_user_id', 'webhook_event_logs')
-    safe_drop_index('ix_webhook_event_logs_stripe_event_id', 'webhook_event_logs')
-    safe_drop_index('ix_webhook_event_logs_event_type', 'webhook_event_logs')
-    safe_drop_table('webhook_event_logs')
 

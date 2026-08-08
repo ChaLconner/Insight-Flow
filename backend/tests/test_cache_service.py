@@ -1,6 +1,6 @@
 import pytest
 
-from services.cache_service import RedisCache
+from services.cache_service import CacheService, InMemoryCache, RedisCache
 
 
 class FakeRedisClient:
@@ -62,6 +62,19 @@ class TestCacheServiceConfiguration:
 
         assert SHORT_TTL < MEDIUM_TTL < LONG_TTL
         assert LONG_TTL == 3600
+
+    @pytest.mark.asyncio
+    async def test_unavailable_redis_falls_back_to_memory(self, monkeypatch):
+        """An unreachable Redis server must not remain the active cache backend."""
+
+        class IsolatedCacheService(CacheService):
+            _instance = None
+
+        monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:1/0")
+        service = IsolatedCacheService()
+
+        assert await service.get("unavailable-redis") is None
+        assert isinstance(service.backend, InMemoryCache)
 
 
 class TestCacheKeyPatterns:

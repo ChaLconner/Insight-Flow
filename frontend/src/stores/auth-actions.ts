@@ -18,8 +18,12 @@ export const authActions = {
   ) => {
     const { login } = useAuthStore.getState();
 
-    // Backend may set HttpOnly cookies, but also returns tokens in body for fallback.
-    const user = response.user ?? null;
+    // Authentication state is established by the backend's HttpOnly cookies,
+    // but the user profile is still required to initialize the client store.
+    const user = response.user;
+    if (!user) {
+      throw new Error("Authentication response did not include a user profile");
+    }
 
     await clearClientCaches();
 
@@ -41,7 +45,7 @@ export const authActions = {
     login(user, { rememberMe: options.rememberMe === true });
 
     // Get display name with fallbacks
-    const displayName = user?.name || user?.firstName || user?.username || user?.email || "User";
+    const displayName = user.name || user.firstName || user.username || user.email || "User";
     
     toast.success(
       `Welcome back, ${displayName}!`,
@@ -124,6 +128,13 @@ export const authActions = {
 async function clearClientCaches(): Promise<void> {
   if (typeof window === "undefined") {
     return;
+  }
+
+  try {
+    const { clearAuthenticatedCaches } = await import("@/lib/auth-cache");
+    await clearAuthenticatedCaches();
+  } catch (_) {
+    // Cache clearing is best-effort; auth transition must continue.
   }
 
   try {

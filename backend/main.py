@@ -3,8 +3,8 @@ FastAPI Application Entry Point.
 Refactored for better maintainability - health endpoints and middleware moved to separate modules.
 """
 
-import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
@@ -54,11 +54,14 @@ def _build_lifespan(settings: AppSettings):
             app_logger.warning(f"Database initialization failed: {e}")
             app_logger.info("Continuing without database-backed functionality in non-production.")
 
-        try:
-            start_scheduler()
-            app_logger.info("Background scheduler started")
-        except Exception as e:
-            app_logger.error(f"Failed to start scheduler: {e}")
+        if settings.scheduler_enabled:
+            try:
+                start_scheduler()
+                app_logger.info("Background scheduler started")
+            except Exception as e:
+                app_logger.error(f"Failed to start scheduler: {e}")
+        else:
+            app_logger.info("Background scheduler disabled for this process")
 
         app_logger.info("=" * 50)
         app_logger.info(f"Server accessible at: http://{settings.host}:{settings.port}")
@@ -66,7 +69,17 @@ def _build_lifespan(settings: AppSettings):
 
         yield
 
-        shutdown_scheduler()
+        if settings.scheduler_enabled:
+            shutdown_scheduler()
+        try:
+            from database import async_engine
+            from services.cache_service import cache_service
+
+            await cache_service.close()
+            if async_engine is not None:
+                await async_engine.dispose()
+        except Exception as e:
+            app_logger.warning(f"Failed to release shared resources during shutdown: {e}")
         app_logger.info("FASTAPI SERVER SHUTTING DOWN")
 
     return lifespan
@@ -161,9 +174,9 @@ API requests are rate-limited. Please contact support for higher limits.
         openapi_url="/openapi.json" if docs_enabled else None,
     )
 
-    if not os.path.exists("static"):
-        os.makedirs("static")
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+    static_dir = Path(__file__).resolve().parent / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     setup_all_middleware(app)
 

@@ -151,10 +151,14 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-  user: User;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: string;
+  user?: User | null;
+  message?: string;
+  // Login and refresh use HttpOnly cookies; these fields remain optional for
+  // compatibility with older API clients that returned tokens in JSON.
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  expires_in?: number;
 }
 
 export interface TokenPayload {

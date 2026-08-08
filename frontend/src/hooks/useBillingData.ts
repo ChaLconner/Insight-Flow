@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@/lib/api-client";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 import type { PlanInfo } from "@/types";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth-store";
@@ -29,13 +30,19 @@ function hasFreshBillingCache(): boolean {
   return billingDataCache.timestamp > 0 && Date.now() - billingDataCache.timestamp < BILLING_DATA_CACHE_TTL_MS;
 }
 
-export function __clearBillingDataCacheForTests(): void {
+export function clearBillingDataCache(): void {
   billingDataCache.plans = {};
   billingDataCache.usageStats = { projects: 0, seats: 0 };
   billingDataCache.timestamp = 0;
   billingDataPromise = null;
-  billingDataRequestId = 0;
+  billingDataRequestId += 1;
 }
+
+export function __clearBillingDataCacheForTests(): void {
+  clearBillingDataCache();
+}
+
+registerAuthenticatedCacheClearer(clearBillingDataCache);
 
 interface UsageStats {
   projects: number;

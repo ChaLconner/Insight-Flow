@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from config import get_settings
 from models import Base
@@ -87,16 +88,26 @@ if "sqlite" in database_url:
         echo=settings.database.echo,
     )
 else:
-    async_engine = create_async_engine(
-        database_url,
-        echo=settings.database.echo,
-        pool_size=settings.database.pool_size,
-        max_overflow=settings.database.max_overflow,
-        pool_timeout=settings.database.pool_timeout,
-        pool_recycle=settings.database.pool_recycle,
-        pool_pre_ping=True,
-        connect_args=async_connect_args,
-    )
+    engine_options = {
+        "echo": settings.database.echo,
+        "pool_pre_ping": True,
+        "connect_args": async_connect_args,
+    }
+    if settings.is_testing:
+        # Pytest uses function-scoped event loops. asyncpg connections cannot
+        # safely move between loops, so testing must not retain them globally.
+        engine_options["poolclass"] = NullPool
+    else:
+        engine_options.update(
+            {
+                "pool_size": settings.database.pool_size,
+                "max_overflow": settings.database.max_overflow,
+                "pool_timeout": settings.database.pool_timeout,
+                "pool_recycle": settings.database.pool_recycle,
+            }
+        )
+
+    async_engine = create_async_engine(database_url, **engine_options)
 
 # Create Async Session Factory
 AsyncSessionLocal = async_sessionmaker(
@@ -117,7 +128,14 @@ async def get_async_db() -> AsyncGenerator[AsyncSession]:
     session = AsyncSessionLocal()
     try:
         yield session
-        await session.commit()
+        # Write services and mutating routers commit explicitly. Avoid an
+        # unconditional commit on read-only requests, which needlessly opens
+        # a transaction boundary and adds latency under load. Preserve the
+        # legacy safety net for callers that stage a mutation directly.
+        if session.new or session.dirty or session.deleted:
+            await session.commit()
+        else:
+            await session.rollback()
     except HTTPException:
         # Don't log HTTP exceptions as database errors, just rollback
         await session.rollback()

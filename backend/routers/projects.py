@@ -8,9 +8,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from async_dependencies import require_project_admin, require_project_member, require_project_owner
-from dependencies.services import get_notification_service, get_project_service
+from database import get_async_db
+from dependencies.services import get_project_service
 from models.project import Project
 from models.user import User
 from routers.auth import get_current_active_user
@@ -22,8 +24,8 @@ from schemas.project import (
     ProjectUpdate,
     ProjectWithMembers,
 )
-from services.async_notification_trigger_service import AsyncNotificationTriggerService
 from services.async_project_service import AsyncProjectService
+from services.job_queue import enqueue_job
 from utils.logger import setup_logger
 from utils.response_helpers import (
     build_project_member_response,
@@ -82,9 +84,9 @@ async def create_project(
 @limiter.limit(RateLimits.API_READ)
 async def read_projects_list(
     request: Request,
-    skip: int = 0,
-    limit: int = 100,
-    search: str | None = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    search: str | None = Query(None, max_length=100),
     status_filter: str | None = Query(None, alias="status"),
     sort_by: str = Query("newest"),
     user_projects_only: bool = Query(False),
@@ -97,6 +99,7 @@ async def read_projects_list(
             skip=skip,
             limit=limit,
             user_id=current_user.id,
+            user_projects_only=user_projects_only,
             search=search,
             status_filter=status_filter,
             sort_by=sort_by,
@@ -187,9 +190,11 @@ async def delete_project(
 async def read_project_members(
     project: Project = Depends(require_project_member),
     project_service: AsyncProjectService = Depends(get_project_service),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
 ) -> Any:
-    """Get all members of a project."""
-    members = await project_service.get_project_members(project.id)
+    """Get a bounded page of project members."""
+    members = await project_service.get_project_members(project.id, offset=offset, limit=limit)
 
     return [ProjectMemberResponse.model_validate(build_project_member_response(m)) for m in members]
 
@@ -200,25 +205,34 @@ async def add_project_member(
     request: Request,
     project_id: str,
     member_data: ProjectMemberCreate,
+    db: AsyncSession = Depends(get_async_db),
     project_service: AsyncProjectService = Depends(get_project_service),
-    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Add a member to a project."""
     try:
         pid = uuid.UUID(project_id)
-        member = await project_service.add_project_member(pid, member_data, current_user.id)
+        member = await project_service.add_project_member(
+            pid, member_data, current_user.id, commit=False
+        )
 
-        # Send notification
+        # Persist notification intent for the durable worker.
         project = await project_service.get_project_by_id(pid)
-        if project and member.user:
-            await notification_service.notify_project_member_added(
-                new_member=member.user,
-                project_id=pid,
-                project_name=project.name,
-                role=member.role,
-                inviter=current_user,
+        if project:
+            await enqueue_job(
+                db,
+                "notification.dispatch",
+                {
+                    "event": "project_member_added",
+                    "member_id": str(member.user_id),
+                    "project_id": str(pid),
+                    "project_name": project.name,
+                    "role": member.role,
+                    "inviter_id": str(current_user.id),
+                },
+                idempotency_key=f"project-member-added:{pid}:{member.user_id}",
             )
+        await db.commit()
 
         return ProjectMemberResponse.model_validate(build_project_member_response(member))
     except ValueError as e:
@@ -234,32 +248,30 @@ async def remove_project_member(
     request: Request,
     member_user_id: str,
     project: Project = Depends(require_project_admin),
+    db: AsyncSession = Depends(get_async_db),
     project_service: AsyncProjectService = Depends(get_project_service),
-    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Remove a member."""
     try:
         member_uuid = uuid.UUID(member_user_id)
-        project_members = await project_service.get_project_members(project.id)
-        removed_user = next(
-            (
-                member.user
-                for member in project_members
-                if member.user_id == member_uuid and member.user
-            ),
-            None,
+        await project_service.remove_project_member(
+            project.id, member_uuid, current_user.id, commit=False
         )
 
-        await project_service.remove_project_member(project.id, member_uuid, current_user.id)
-
-        if removed_user:
-            await notification_service.notify_project_member_removed(
-                removed_member=removed_user,
-                project_id=project.id,
-                project_name=project.name,
-                remover=current_user,
-            )
+        await enqueue_job(
+            db,
+            "notification.dispatch",
+            {
+                "event": "project_member_removed",
+                "member_id": str(member_uuid),
+                "project_id": str(project.id),
+                "project_name": project.name,
+                "remover_id": str(current_user.id),
+            },
+            idempotency_key=f"project-member-removed:{project.id}:{member_uuid}",
+        )
+        await db.commit()
         return {"message": "Member removed successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -112,6 +112,8 @@ def build_project_response(
         "id": project.id,
         "name": project.name,
         "description": project.description,
+        "color": getattr(project, "color", None) or "#6366f1",
+        "settings": getattr(project, "settings", {}) or {},
         "owner_id": project.owner_id,
         "is_active": project.is_active,
         "created_at": project.created_at,
@@ -163,6 +165,12 @@ def build_project_with_members_response(
     return response
 
 
+def normalize_task_status(status: Any) -> str:
+    """Return normalized task status text for API responses and activity logs."""
+    status_value = getattr(status, "value", status)
+    return str(status_value).lower() if status_value else "todo"
+
+
 def build_task_response(task: Any, include_relations: bool = True) -> dict[str, Any]:
     """
     Build a task response dictionary.
@@ -174,11 +182,7 @@ def build_task_response(task: Any, include_relations: bool = True) -> dict[str, 
     Returns:
         Dictionary with task response fields
     """
-    status_val = (
-        str(task.status.value if hasattr(task.status, "value") else task.status).lower()
-        if getattr(task, "status", None)
-        else "todo"
-    )
+    status_val = normalize_task_status(getattr(task, "status", None))
     priority_val = (
         task.priority.value
         if hasattr(task.priority, "value")
@@ -197,7 +201,6 @@ def build_task_response(task: Any, include_relations: bool = True) -> dict[str, 
         "project_id": task.project_id,
         "assignee_id": task.assignee_id,
         "created_by": creator_id,
-        "creator_id": creator_id,
         "due_date": task.due_date,
         "created_at": task.created_at,
         "updated_at": task.updated_at,
@@ -241,4 +244,5 @@ __all__ = [
     "build_project_with_members_response",
     "build_task_response",
     "build_user_response",
+    "normalize_task_status",
 ]

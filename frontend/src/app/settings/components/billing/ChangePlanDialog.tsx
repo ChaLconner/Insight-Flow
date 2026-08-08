@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { PlanInfo, PaymentMethod } from "@/types";
 import { apiClient } from "@/lib/api-client";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 import { toast } from "sonner";
 
 interface DowngradeWarning {
@@ -23,6 +24,7 @@ interface DowngradeWarning {
 
 const DOWNGRADE_ELIGIBILITY_CACHE_TTL_MS = 30_000;
 const DOWNGRADE_ELIGIBILITY_CACHE_MAX_ENTRIES = 8;
+let downgradeEligibilityCacheGeneration = 0;
 
 type DowngradeEligibilityCacheEntry = {
   canDowngrade: boolean;
@@ -56,9 +58,16 @@ function hasFreshDowngradeEligibilityCache(entry: DowngradeEligibilityCacheEntry
   return Date.now() - entry.timestamp < DOWNGRADE_ELIGIBILITY_CACHE_TTL_MS;
 }
 
-export function __clearDowngradeEligibilityCacheForTests(): void {
+export function clearDowngradeEligibilityCache(): void {
   downgradeEligibilityCache.clear();
+  downgradeEligibilityCacheGeneration += 1;
 }
+
+export function __clearDowngradeEligibilityCacheForTests(): void {
+  clearDowngradeEligibilityCache();
+}
+
+registerAuthenticatedCacheClearer(clearDowngradeEligibilityCache);
 
 interface ChangePlanDialogProps {
   open: boolean;
@@ -117,8 +126,12 @@ export function ChangePlanDialog({
       }
 
       setIsCheckingDowngrade(true);
+      const cacheGeneration = downgradeEligibilityCacheGeneration;
       try {
         const { data } = await apiClient.get(`/payment/plans/check-downgrade/${planKey}`);
+        if (cacheGeneration !== downgradeEligibilityCacheGeneration) {
+          return;
+        }
         downgradeEligibilityCache.set(cacheKey, {
           canDowngrade: Boolean(data.can_downgrade),
           warnings: data.warnings ?? [],

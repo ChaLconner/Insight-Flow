@@ -45,7 +45,10 @@ async def test_get_analytics_overview_cached(analytics_service, user_id):
 @pytest.mark.asyncio
 async def test_get_analytics_overview_no_projects(analytics_service, user_id):
     # Mock cache miss
-    with patch("services.cache_service.cache_service.get", return_value=None):
+    with (
+        patch("services.cache_service.cache_service.get", return_value=None),
+        patch("services.cache_service.cache_service.set", new_callable=AsyncMock) as cache_set,
+    ):
         # Mock total projects count = 0
         mock_scalar = MagicMock()
         mock_scalar.scalar.return_value = 0
@@ -54,6 +57,7 @@ async def test_get_analytics_overview_no_projects(analytics_service, user_id):
         result = await analytics_service.get_analytics_overview(user_id)
         assert result["overview"]["totalProjects"] == 0
         assert result["projects"] == []
+        cache_set.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,8 @@ import pytest
 from sqlalchemy import select
 
 from models.project import MemberRole, ProjectMember
+from models.task import Task
+from models.task_history import ActivityType, TaskHistory
 from models.user import User
 from schemas.project import ProjectCreate, ProjectMemberCreate, ProjectUpdate
 
@@ -92,6 +94,82 @@ async def test_update_project(async_project_service, test_user, project_data):
 
 
 @pytest.mark.asyncio
+async def test_update_project_persists_contract_and_membership_changes(
+    async_project_service, test_user, project_data, async_session
+):
+    project = await async_project_service.create_project(project_data, test_user.id)
+    member_user = User(
+        email="contract-member@test.com", name="Contract Member", hashed_password="p"
+    )
+    async_session.add(member_user)
+    await async_session.commit()
+    await async_session.refresh(member_user)
+
+    task = Task(
+        title="Assigned task",
+        project_id=project.id,
+        created_by=test_user.id,
+        assignee_id=member_user.id,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    updated = await async_project_service.update_project(
+        project.id,
+        ProjectUpdate(
+            color="#123456",
+            settings={"defaultTaskVisibility": "private"},
+            member_ids=[member_user.id],
+        ),
+        test_user.id,
+    )
+
+    assert updated.color == "#123456"
+    assert updated.settings == {"defaultTaskVisibility": "private"}
+    member = await async_session.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == member_user.id,
+        )
+    )
+    assert member is not None
+
+    await async_project_service.update_project(
+        project.id, ProjectUpdate(member_ids=[]), test_user.id
+    )
+    await async_session.refresh(task)
+    assert task.assignee_id is None
+
+
+@pytest.mark.asyncio
+async def test_delete_project_removes_history_and_task_children(
+    async_project_service, test_user, project_data, async_session
+):
+    project = await async_project_service.create_project(project_data, test_user.id)
+    task = Task(title="Delete me", project_id=project.id, created_by=test_user.id)
+    async_session.add(task)
+    await async_session.flush()
+    async_session.add(
+        TaskHistory(
+            activity_type=ActivityType.TASK_CREATED,
+            project_id=project.id,
+            task_id=task.id,
+            user_id=test_user.id,
+            task_title=task.title,
+        )
+    )
+    await async_session.commit()
+
+    assert await async_project_service.delete_project(project.id, test_user.id)
+    assert (
+        await async_session.scalar(
+            select(TaskHistory.id).where(TaskHistory.project_id == project.id)
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
 async def test_update_project_not_owner(
     async_project_service, test_user, project_data, async_session
 ):
@@ -149,6 +227,14 @@ async def test_remove_project_member(async_project_service, test_user, project_d
     await async_project_service.add_project_member(
         project.id, ProjectMemberCreate(user_id=str(other_user.id), role="member"), test_user.id
     )
+    task = Task(
+        title="Assigned task",
+        project_id=project.id,
+        created_by=test_user.id,
+        assignee_id=other_user.id,
+    )
+    async_session.add(task)
+    await async_session.commit()
 
     success = await async_project_service.remove_project_member(
         project.id, other_user.id, test_user.id
@@ -159,6 +245,9 @@ async def test_remove_project_member(async_project_service, test_user, project_d
     stmt = select(ProjectMember).filter_by(project_id=project.id, user_id=other_user.id)
     res = await async_session.execute(stmt)
     assert res.scalars().first() is None
+
+    task_result = await async_session.execute(select(Task).filter(Task.id == task.id))
+    assert task_result.scalar_one().assignee_id is None
 
 
 @pytest.mark.asyncio
@@ -171,6 +260,44 @@ async def test_get_projects_with_stats(async_project_service, test_user, project
     assert s["project"].name == project_data.name
     assert "task_count" in s
     assert "completed_tasks" in s
+
+
+@pytest.mark.asyncio
+async def test_get_projects_with_stats_can_limit_results_to_owned_projects(
+    async_project_service, test_user, project_data, async_session
+):
+    await async_project_service.create_project(project_data, test_user.id)
+
+    member_user = User(
+        email="member-project@test.com",
+        name="Member Project Owner",
+        hashed_password="pw",
+        is_active=True,
+    )
+    async_session.add(member_user)
+    await async_session.commit()
+    await async_session.refresh(member_user)
+
+    member_project = await async_project_service.create_project(
+        ProjectCreate(name="Member Project"), member_user.id
+    )
+    await async_project_service.add_project_member(
+        member_project.id,
+        ProjectMemberCreate(user_id=str(test_user.id), role="member"),
+        member_user.id,
+    )
+
+    accessible = await async_project_service.get_projects_with_stats(user_id=test_user.id)
+    owned = await async_project_service.get_projects_with_stats(
+        user_id=test_user.id,
+        user_projects_only=True,
+    )
+
+    assert {item["project"].name for item in accessible} == {
+        "Test Project",
+        "Member Project",
+    }
+    assert [item["project"].name for item in owned] == ["Test Project"]
 
 
 @pytest.mark.asyncio

@@ -19,10 +19,12 @@ class TestAsyncDashboardService:
 
         # Create projects
         projects = []
+        colors = ["#10b981", "#f59e0b", "#ef4444"]
         for i in range(3):
             project = Project(
                 name=f"Project {i}",
                 description=f"Description {i}",
+                color=colors[i],
                 owner_id=test_user.id,
                 is_active=True,
             )
@@ -104,6 +106,13 @@ class TestAsyncDashboardService:
             assert "id" in project
             assert "name" in project
             assert "progress" in project
+
+        colors_by_name = {project["name"]: project["color"] for project in projects}
+        assert colors_by_name == {
+            "Project 0": "#10b981",
+            "Project 1": "#f59e0b",
+            "Project 2": "#ef4444",
+        }
 
     @pytest.mark.asyncio
     async def test_get_recent_projects_limit(self, db_session, setup_dashboard_data):

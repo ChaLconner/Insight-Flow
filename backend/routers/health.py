@@ -3,11 +3,12 @@ Health check router for monitoring and observability.
 Provides endpoints for Kubernetes liveness/readiness probes and general health monitoring.
 """
 
+import asyncio
 import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from config import get_settings
 from utils.logger import setup_logger
@@ -15,6 +16,9 @@ from utils.logger import setup_logger
 logger = setup_logger("health_router")
 
 router = APIRouter(tags=["health"])
+
+_db_probe_lock = asyncio.Lock()
+_db_probe_cache: tuple[float, dict[str, Any]] | None = None
 
 
 def _settings():
@@ -62,8 +66,7 @@ def minimal_test():
 @router.get("/health")
 async def health_check():
     """
-    Basic health check endpoint.
-    Returns overall application health status.
+    Process liveness check. This endpoint intentionally avoids dependencies.
     """
     settings = _settings()
     return {
@@ -73,6 +76,31 @@ async def health_check():
     }
 
 
+@router.get("/health/ready")
+async def readiness_check():
+    """Return 200 only when required runtime dependencies are reachable."""
+    settings = _settings()
+    from sqlalchemy import text
+
+    from database import AsyncSessionLocal
+    from services.cache_service import cache_service
+
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+
+        if settings.cache.redis_url and not await cache_service.ensure_connected():
+            raise RuntimeError("Redis is unavailable")
+
+        return {"status": "ready"}
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready"},
+        )
+
+
 @router.get("/health/db")
 async def db_health_check():
     """
@@ -80,35 +108,26 @@ async def db_health_check():
     Useful for monitoring and debugging connection issues.
     """
     settings = _require_detailed_health_enabled()
-    from sqlalchemy import text
+    probe = await _probe_database(settings)
+    if not probe["healthy"]:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unhealthy", "database": "disconnected", "error": probe["error"]},
+        )
 
-    from database import AsyncSessionLocal, async_engine
-
-    try:
-        # Test async database connection
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
-
-        # Get pool statistics
-        pool_stats = {}
-        if async_engine:
-            pool_stats = _get_pool_stats(async_engine.pool)
-
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "async_pool": {
-                **pool_stats,
-                "pool_size": settings.database.pool_size,
-                "max_overflow": settings.database.max_overflow,
-            },
-            "host": settings.database.url.split("@")[-1].split("/")[0]
-            if "@" in settings.database.url
-            else "unknown",
-        }
-    except Exception as e:
-        logger.error(f"Database health check failed: {e}")
-        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+    return {
+        "status": "healthy",
+        "database": "connected",
+        "async_pool": {
+            **probe["pool"],
+            "pool_size": settings.database.pool_size,
+            "max_overflow": settings.database.max_overflow,
+        },
+        "host": settings.database.url.split("@")[-1].split("/")[0]
+        if "@" in settings.database.url
+        else "unknown",
+        "probe_cached": probe["cached"],
+    }
 
 
 @router.get("/health/cache")
@@ -121,9 +140,17 @@ async def cache_health_check():
 
     try:
         stats = await cache_service.get_stats()
+        if stats.get("health", {}).get("status") == "unhealthy":
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"status": "unhealthy", "cache": stats},
+            )
         return {"status": "healthy", "cache": stats}
     except Exception as e:
-        return {"status": "unhealthy", "error": str(e)}
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unhealthy", "error": str(e)},
+        )
 
 
 @router.get("/health/full")
@@ -134,9 +161,7 @@ async def full_health_check():
     """
     settings = _require_detailed_health_enabled()
     import psutil
-    from sqlalchemy import text
 
-    from database import AsyncSessionLocal, async_engine
     from services.cache_service import cache_service
 
     health_status: dict[str, Any] = {
@@ -147,25 +172,32 @@ async def full_health_check():
         "components": {},
     }
 
-    # Check database
-    try:
-        start = time.time()
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
-        db_latency = round((time.time() - start) * 1000, 2)
-
+    # Check database. Detailed probes are briefly cached to avoid turning a
+    # monitoring scrape into a burst of remote database connections.
+    probe = await _probe_database(settings)
+    if probe["healthy"]:
         health_status["components"]["database"] = {
             "status": "healthy",
-            "latency_ms": db_latency,
-            "pool": _get_pool_stats(async_engine.pool) if async_engine else {},
+            "latency_ms": probe["latency_ms"],
+            "pool": probe["pool"],
+            "probe_cached": probe["cached"],
         }
-    except Exception as e:
+    else:
         health_status["status"] = "degraded"
-        health_status["components"]["database"] = {"status": "unhealthy", "error": str(e)}
+        health_status["components"]["database"] = {
+            "status": "unhealthy",
+            "error": probe["error"],
+        }
 
     # Check cache
     try:
         cache_stats = await cache_service.get_stats()
+        cache_health = cache_stats.get("health", {})
+        if cache_health.get("status") == "unhealthy":
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"status": "unhealthy", "cache": cache_stats},
+            )
         health_status["components"]["cache"] = {"status": "healthy", **cache_stats}
     except Exception as e:
         health_status["components"]["cache"] = {"status": "unhealthy", "error": str(e)}
@@ -182,7 +214,12 @@ async def full_health_check():
     except Exception:
         health_status["components"]["system"] = {"status": "unknown"}
 
-    return health_status
+    response_status = (
+        status.HTTP_200_OK
+        if health_status["status"] == "healthy"
+        else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+    return JSONResponse(status_code=response_status, content=health_status)
 
 
 @router.get("/metrics")
@@ -224,17 +261,59 @@ async def prometheus_metrics():
     return PlainTextResponse(content="\n".join(metrics), media_type="text/plain")
 
 
+async def _probe_database(settings: Any) -> dict[str, Any]:
+    """Run or reuse a short-lived database probe for detailed health endpoints."""
+    global _db_probe_cache
+
+    ttl = float(getattr(settings, "health_check_cache_ttl_seconds", 1.0))
+    now = time.monotonic()
+    if _db_probe_cache and ttl > 0 and now - _db_probe_cache[0] < ttl:
+        return {**_db_probe_cache[1], "cached": True}
+
+    async with _db_probe_lock:
+        now = time.monotonic()
+        if _db_probe_cache and ttl > 0 and now - _db_probe_cache[0] < ttl:
+            return {**_db_probe_cache[1], "cached": True}
+
+        from sqlalchemy import text
+
+        from database import AsyncSessionLocal, async_engine
+
+        try:
+            start = time.perf_counter()
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+            result = {
+                "healthy": True,
+                "latency_ms": round((time.perf_counter() - start) * 1000, 2),
+                "pool": _get_pool_stats(async_engine.pool) if async_engine else {},
+                "cached": False,
+            }
+        except Exception as exc:
+            logger.error(f"Database health check failed: {exc}")
+            result = {"healthy": False, "error": str(exc), "cached": False}
+
+        if ttl > 0:
+            _db_probe_cache = (time.monotonic(), result)
+        return result
+
+
 def _get_pool_stats(pool: Any) -> dict[str, int]:
     """
     Helper to get pool statistics.
     Uses Any for pool to bypass Mypy checks on internal attributes.
     """
-    return {
-        "size": pool.size(),
-        "checked_out": pool.checkedout(),
-        "overflow": pool.overflow(),
-        "checked_in": pool.checkedin(),
-    }
+    stats = {}
+    for key, method_name in (
+        ("size", "size"),
+        ("checked_out", "checkedout"),
+        ("overflow", "overflow"),
+        ("checked_in", "checkedin"),
+    ):
+        method = getattr(pool, method_name, None)
+        if method is not None:
+            stats[key] = method()
+    return stats
 
 
 def _get_database_metrics(pool: Any) -> list[str]:

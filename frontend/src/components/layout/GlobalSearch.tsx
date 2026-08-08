@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Search, Folder, CheckSquare, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { projectsApi, tasksApi } from "@/lib/api-endpoints";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 import type { Project, Task } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
@@ -23,10 +24,18 @@ interface SearchResults {
 const SEARCH_DEBOUNCE_MS = 250;
 const SEARCH_CACHE_TTL_MS = 30_000;
 const SEARCH_CACHE_MAX_SIZE = 50;
+let searchCacheGeneration = 0;
 const searchCache = new Map<
   string,
   { expiresAt: number; data: { projects: Project[]; tasks: Task[] } }
 >();
+
+export function clearGlobalSearchCache() {
+  searchCache.clear();
+  searchCacheGeneration += 1;
+}
+
+registerAuthenticatedCacheClearer(clearGlobalSearchCache);
 
 // Evict expired entries to prevent unbounded memory growth
 function evictExpiredSearchCache() {
@@ -51,6 +60,7 @@ function evictExpiredSearchCache() {
 export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -75,14 +85,15 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
 
   useEffect(() => {
     const trimmedQuery = query.trim();
-    if (!isAuthenticated || trimmedQuery.length < 2) {
+    if (!isAuthenticated || !userId || trimmedQuery.length < 2) {
       requestIdRef.current += 1;
       setCachedData(null);
       setLoading(false);
       return;
     }
 
-    const cacheKey = trimmedQuery.toLowerCase();
+    const cacheKey = `${userId}:${trimmedQuery.toLowerCase()}`;
+    const cacheGeneration = searchCacheGeneration;
     const cached = searchCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       setCachedData(cached.data);
@@ -101,7 +112,11 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
           tasksApi.getMyTasks(0, 5, trimmedQuery),
         ]);
 
-        if (cancelled || requestId !== requestIdRef.current) {
+        if (
+          cancelled ||
+          requestId !== requestIdRef.current ||
+          cacheGeneration !== searchCacheGeneration
+        ) {
           return;
         }
 
@@ -135,7 +150,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [query, isAuthenticated]);
+  }, [query, isAuthenticated, userId]);
 
   // Filter results based on query
   const results = useMemo<SearchResults>(() => {

@@ -9,7 +9,7 @@ Security Enhancements:
 
 import os
 from datetime import timedelta
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from fastapi import Request, Response
 
@@ -37,7 +37,10 @@ COOKIE_SECURE = os.getenv("ENVIRONMENT") == "production"
 
 
 def create_auth_tokens(
-    user_id: str, fingerprint: str | None = None, remember_me: bool = False
+    user_id: str,
+    fingerprint: str | None = None,
+    remember_me: bool = False,
+    session_version: int = 0,
 ) -> tuple[str, str, int]:
     """
     Create access and refresh tokens for a user.
@@ -50,8 +53,11 @@ def create_auth_tokens(
     Returns:
         Tuple of (access_token, refresh_token, refresh_token_expire_days)
     """
+    if not isinstance(session_version, int) or session_version < 0:
+        session_version = 0
+
     # Base token data
-    token_data: dict[str, str] = {"sub": user_id}
+    token_data: dict[str, Any] = {"sub": user_id, "sv": session_version}
 
     # Add fingerprint if provided (device binding for A+ security)
     if fingerprint:
@@ -59,14 +65,18 @@ def create_auth_tokens(
 
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
+    access_token = create_access_token(
+        data=token_data, expires_delta=access_token_expires, token_type="access"
+    )
 
     # Create refresh token with appropriate expiration based on remember_me
     refresh_expire_days = (
         REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS if remember_me else REFRESH_TOKEN_EXPIRE_DAYS
     )
     refresh_token_expires = timedelta(days=refresh_expire_days)
-    refresh_token = create_access_token(data=token_data, expires_delta=refresh_token_expires)
+    refresh_token = create_access_token(
+        data=token_data, expires_delta=refresh_token_expires, token_type="refresh"
+    )
 
     return access_token, refresh_token, refresh_expire_days
 
@@ -174,6 +184,7 @@ def create_and_set_auth_cookies(
     log_user_info: str | None = None,
     request: Request | None = None,
     remember_me: bool = False,
+    session_version: int = 0,
 ) -> tuple[str, str]:
     """
     Create tokens and set cookies in one operation.
@@ -205,7 +216,7 @@ def create_and_set_auth_cookies(
             logger.warning(f"Failed to generate fingerprint: {e}")
 
     access_token, refresh_token, refresh_expire_days = create_auth_tokens(
-        user_id, fingerprint, remember_me
+        user_id, fingerprint, remember_me, session_version
     )
     refresh_cookie_expire_days = refresh_expire_days if remember_me else None
     set_auth_cookies(

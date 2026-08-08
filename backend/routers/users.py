@@ -11,6 +11,7 @@ Security features:
 import logging
 import os
 import uuid
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
@@ -31,7 +32,9 @@ from services.async_user_service import AsyncUserService
 from utils.cloudinary_upload import init_cloudinary, is_cloudinary_configured
 from utils.cloudinary_upload import upload_avatar as cloudinary_upload_avatar
 from utils.file_security import (
+    AVATAR_MAX_FILE_SIZE_BYTES,
     FileSecurityError,
+    read_upload_with_limit,
     validate_avatar_upload,
     validate_file_path,
 )
@@ -44,7 +47,12 @@ router = APIRouter(prefix="/users", tags=["user management"])
 from rate_limiter import RateLimits, limiter
 
 _settings = get_settings()
-UPLOAD_DIR = getattr(_settings, "upload_dir", "static/uploads")
+_configured_upload_dir = getattr(_settings, "upload_dir", None)
+_default_upload_dir = Path(__file__).resolve().parent.parent / "static" / "uploads"
+_upload_dir = Path(_configured_upload_dir) if _configured_upload_dir else _default_upload_dir
+if not _upload_dir.is_absolute():
+    _upload_dir = Path(__file__).resolve().parent.parent / _upload_dir
+UPLOAD_DIR = str(_upload_dir)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 USER_ADMIN_ROLES = {UserRole.ADMIN, UserRole.MANAGER}
 PRIVILEGED_INVITE_ROLES = {UserRole.ADMIN, UserRole.MANAGER}
@@ -84,8 +92,8 @@ def _query_matches_current_user(query: str, user: User) -> bool:
 
 @router.get("/", response_model=list[UserResponse])
 async def get_users(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -199,8 +207,8 @@ async def search_user_by_email(
 async def search_users(
     request: Request,
     q: str = "",
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     role: str | None = None,
     status_filter: str | None = Query(default=None, alias="status"),
     user_service: AsyncUserService = Depends(get_user_service),
@@ -278,9 +286,16 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
     - Maximum file size: 5 MB
     - Path traversal protection
     """
+    new_local_path: str | None = None
     try:
-        # Read file content
-        file_content = await file.read()
+        # Read in bounded chunks so oversized avatar bodies do not fill process memory.
+        try:
+            file_content = await read_upload_with_limit(file, AVATAR_MAX_FILE_SIZE_BYTES)
+        except FileSecurityError as e:
+            logger.warning(
+                f"Avatar upload security violation for user {current_user.id}: {e.message}"
+            )
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
 
         # Security: Validate file upload (extension, MIME type, size)
         try:
@@ -311,18 +326,6 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
                 avatar_url = result["secure_url"]
                 logger.info(f"Avatar uploaded to Cloudinary: {avatar_url}")
 
-                # Delete old local avatar if user is switching from local to Cloudinary
-                if old_avatar_url and old_avatar_url.startswith("/static/uploads/"):
-                    old_filename = os.path.basename(old_avatar_url)
-                    old_file_path = os.path.join(UPLOAD_DIR, old_filename)
-                    # Security: Validate path before deletion
-                    try:
-                        validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
-                        if os.path.exists(validated_old_path):
-                            os.remove(validated_old_path)
-                            logger.info(f"Deleted old local avatar: {validated_old_path}")
-                    except Exception as e:
-                        logger.warning(f"Error deleting old local avatar: {e}")
             else:
                 logger.warning("Cloudinary upload failed, falling back to local storage")
 
@@ -330,23 +333,13 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
         if not avatar_url:
             logger.info("Using local storage for avatar upload")
 
-            # Delete old local avatar if exists
-            if current_user.avatar_url and current_user.avatar_url.startswith("/static/uploads/"):
-                old_filename = os.path.basename(current_user.avatar_url)
-                old_file_path = os.path.join(UPLOAD_DIR, old_filename)
-                try:
-                    validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
-                    if os.path.exists(validated_old_path):
-                        os.remove(validated_old_path)
-                except Exception as e:
-                    logger.warning(f"Error deleting old avatar: {e}")
-
             # Generate unique filename with validated extension
             unique_filename = f"{uuid.uuid4()}{file_extension}"
             file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
             # Security: Validate final path
             validated_path = validate_file_path(UPLOAD_DIR, file_path)
+            new_local_path = validated_path
 
             # Save file locally
             with open(validated_path, "wb") as buffer:
@@ -357,13 +350,42 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
         # Update user in database - use model_construct to set avatar_url directly
         user_update = UserUpdate.model_construct(avatar_url=avatar_url)
         updated_user = await user_service.update_user(current_user.id, user_update)
+        committed_local_path = new_local_path
+        # The local file is now referenced by the database and must not be
+        # treated as an incomplete artifact if response handling raises later.
+        new_local_path = None
+
+        # Delete old local avatar only after the new database reference succeeds.
+        if old_avatar_url and old_avatar_url.startswith("/static/uploads/"):
+            old_filename = os.path.basename(old_avatar_url)
+            old_file_path = os.path.join(UPLOAD_DIR, old_filename)
+            try:
+                validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
+                if (
+                    os.path.exists(validated_old_path)
+                    and validated_old_path != committed_local_path
+                ):
+                    os.remove(validated_old_path)
+                    logger.info(f"Deleted old local avatar: {validated_old_path}")
+            except Exception as e:
+                logger.warning(f"Error deleting old local avatar: {e}")
 
         logger.info(f"Avatar updated for user {current_user.id}: {avatar_url}")
         return updated_user  # type: ignore[return-value]
 
     except HTTPException:
+        if new_local_path and os.path.exists(new_local_path):
+            try:
+                os.remove(new_local_path)
+            except OSError as cleanup_error:
+                logger.warning(f"Failed to remove rejected avatar: {cleanup_error}")
         raise
     except Exception as e:
+        if new_local_path and os.path.exists(new_local_path):
+            try:
+                os.remove(new_local_path)
+            except OSError as cleanup_error:
+                logger.warning(f"Failed to remove incomplete avatar: {cleanup_error}")
         logger.error(f"Failed to upload avatar: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

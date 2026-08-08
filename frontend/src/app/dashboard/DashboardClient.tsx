@@ -54,6 +54,7 @@ const KEYBOARD_SHORTCUTS = {
 export default function DashboardClient() {
   const authLoading = useAuthStore((state) => state.isLoading);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const queryClient = useQueryClient();
   const { data, isLoading, error, refetch, isFetching } =
@@ -84,9 +85,9 @@ export default function DashboardClient() {
 
   // Retry handler for error state
   const handleRetry = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: dashboardKeys.overview() });
+    queryClient.invalidateQueries({ queryKey: dashboardKeys.overview(userId) });
     refetch();
-  }, [queryClient, refetch]);
+  }, [queryClient, refetch, userId]);
 
   const handleKeyboardShortcut = useCallback(
     (event: KeyboardEvent) => {

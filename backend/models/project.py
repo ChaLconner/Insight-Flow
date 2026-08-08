@@ -5,9 +5,10 @@ Project models for Insight-Flow application.
 import enum
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import UUID, Boolean, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, UUID, Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -34,6 +35,15 @@ class Project(BaseModel):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(String, nullable=True)
+    color: Mapped[str] = mapped_column(
+        String(7), nullable=False, default="#6366f1", server_default="#6366f1"
+    )
+    settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=False,
+        default=dict,
+        server_default="{}",
+    )
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
@@ -61,6 +71,23 @@ class Project(BaseModel):
     )
     favorited_by: Mapped[list["UserFavorite"]] = relationship(
         "UserFavorite", back_populates="project", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_projects_name_trgm",
+            "name",
+            postgresql_using="gin",
+            postgresql_ops={"name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_projects_description_trgm",
+            "description",
+            postgresql_using="gin",
+            postgresql_ops={"description": "gin_trgm_ops"},
+        ),
+        Index("ix_projects_owner_created_at", "owner_id", "created_at"),
+        Index("ix_projects_owner_is_active", "owner_id", "is_active"),
     )
 
 
@@ -97,9 +124,7 @@ class ProjectMember(BaseModel):
     project: Mapped["Project"] = relationship("Project", back_populates="members")
     user: Mapped["User"] = relationship("User", back_populates="project_memberships")
 
-    from sqlalchemy import Index
-
     __table_args__ = (
-        Index("ix_project_members_project_user", "project_id", "user_id"),
         UniqueConstraint("project_id", "user_id", name="uq_project_members_project_user"),
+        Index("ix_project_members_project_created_at", "project_id", "created_at"),
     )

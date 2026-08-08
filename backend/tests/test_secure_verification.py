@@ -13,8 +13,7 @@ def user_service(mock_db_session):
 
 @pytest.fixture
 def mock_email_service():
-    with patch("services.async_user_service.EmailService") as mock:
-        mock.send_verification_email = AsyncMock()
+    with patch("services.async_user_service.enqueue_job", new_callable=AsyncMock) as mock:
         yield mock
 
 
@@ -83,7 +82,7 @@ async def test_resend_verification_email_success(user_service, mock_db_session, 
         assert user.verification_token == "new_hashed_token"
         assert user.verification_token_expires_at is not None
         mock_db_session.commit.assert_called_once()
-        mock_email_service.send_verification_email.assert_called_once()
+        mock_email_service.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -100,4 +99,4 @@ async def test_resend_verification_already_verified(
     # Should return True but not send email or update DB
     assert result is True
     mock_db_session.commit.assert_not_called()
-    mock_email_service.send_verification_email.assert_not_called()
+    mock_email_service.assert_not_awaited()

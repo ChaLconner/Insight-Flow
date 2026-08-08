@@ -5,19 +5,17 @@ Refactored to use async operations and Dependency Injection.
 
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from async_dependencies import require_project_member
 from database import get_async_db
 from dependencies.services import (
-    get_notification_service,
     get_project_service,
     get_task_service,
 )
 from models.project import Project
-from models.task import TaskStatus
 from models.user import User
 from routers.auth import get_current_active_user
 from schemas.task import (
@@ -29,11 +27,11 @@ from schemas.task import (
     TaskUpdate,
     TaskWithDetails,
 )
-from services.async_notification_trigger_service import AsyncNotificationTriggerService
 from services.async_project_service import AsyncProjectService
 from services.async_task_service import AsyncTaskService
+from services.job_queue import enqueue_job
 from utils.logger import mask_user_id, setup_logger
-from utils.response_helpers import build_task_response
+from utils.response_helpers import build_task_response, normalize_task_status
 from utils.validators import validate_uuid
 
 logger = setup_logger("project_tasks_router")
@@ -46,11 +44,7 @@ from rate_limiter import RateLimits, limiter
 
 def _get_status_value(status: Any) -> str:
     """Helper function to extract status value from enum or string."""
-    if hasattr(status, "value") or isinstance(status, TaskStatus):
-        status_value = status.value
-    else:
-        status_value = str(status)
-    return status_value.lower() if status_value else "todo"
+    return normalize_task_status(status)
 
 
 def _build_task_response(task: Any) -> dict:
@@ -60,22 +54,15 @@ def _build_task_response(task: Any) -> dict:
 
 def _build_task_with_details_response(task: Any) -> dict:
     """Helper to build task with details response dict using central helper."""
-    res = build_task_response(task, include_relations=True)
-    if hasattr(task, "assignee") and task.assignee and "assignee" not in res:
-        res["assignee"] = task.assignee
-    if hasattr(task, "creator") and task.creator and "creator" not in res:
-        res["creator"] = task.creator
-    if hasattr(task, "project") and task.project and "project" not in res:
-        res["project"] = task.project
-    return res
+    return build_task_response(task, include_relations=True)
 
 
 @router.get("/{project_id}/tasks", response_model=TaskListResponse)
 @limiter.limit(RateLimits.API_READ)
 async def get_project_tasks(
     request: Request,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
     sort_by: str | None = Query(None, description="Field to sort by"),
     sort_order: str | None = Query(None, description="Sort order (asc/desc)"),
     search: str | None = Query(None, description="Search term for title/description"),
@@ -119,11 +106,9 @@ async def get_project_tasks(
 async def create_task_for_project(
     request: Request,
     task_data: TaskCreate,
-    background_tasks: BackgroundTasks,
     project: Project = Depends(require_project_member),
     db: AsyncSession = Depends(get_async_db),
     task_service: AsyncTaskService = Depends(get_task_service),
-    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Create a new task for a specific project."""
@@ -133,27 +118,21 @@ async def create_task_for_project(
     task_data.project_id = project.id
 
     try:
-        task = await task_service.create_task(task_data, current_user.id)
+        task = await task_service.create_task(task_data, current_user.id, commit=False)
 
         if task.assignee_id and task.assignee_id != current_user.id:
-            assignee = task.assignee
-            if assignee is None:
-                assignee_result = await db.execute(select(User).filter(User.id == task.assignee_id))
-                assignee = assignee_result.scalars().first()
-
-            if assignee:
-
-                async def notify_task_created():
-                    await notification_service.notify_task_assigned(
-                        assignee=assignee,
-                        task_id=task.id,
-                        task_title=task.title,
-                        project_id=task.project_id,
-                        project_name=project.name,
-                        assigner=current_user,
-                    )
-
-                background_tasks.add_task(notify_task_created)
+            await enqueue_job(
+                db,
+                "notification.dispatch",
+                {
+                    "event": "task_assigned",
+                    "task_id": str(task.id),
+                    "assignee_id": str(task.assignee_id),
+                    "assigner_id": str(current_user.id),
+                },
+                idempotency_key=f"task-assigned:{task.id}:{task.assignee_id}",
+            )
+        await db.commit()
 
         logger.info(f"Task created successfully: {task.id}")
         return TaskResponse.model_validate(_build_task_response(task))
@@ -274,10 +253,9 @@ async def update_project_task_status(
     request: Request,
     task_id: str,
     status_data: dict[str, str],
-    background_tasks: BackgroundTasks,
     project: Project = Depends(require_project_member),
+    db: AsyncSession = Depends(get_async_db),
     task_service: AsyncTaskService = Depends(get_task_service),
-    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Update task status by project ID and task ID."""
@@ -308,34 +286,24 @@ async def update_project_task_status(
 
     try:
         updated_task = await task_service.update_task_status(
-            task_uuid, status_update, current_user.id
+            task_uuid, status_update, current_user.id, commit=False
         )
 
         if old_status != new_status:
-
-            async def send_status_notification():
-                await notification_service.notify_task_status_changed(
-                    task_id=updated_task.id,
-                    task_title=updated_task.title,
-                    project_id=task.project_id,
-                    old_status=old_status,
-                    new_status=new_status,
-                    changer=current_user,
-                    assignee=task.assignee,
-                    creator=task.creator,
-                )
-
-                if new_status.lower() in ["done", "completed"]:
-                    await notification_service.notify_task_completed(
-                        task_id=updated_task.id,
-                        task_title=updated_task.title,
-                        project_id=task.project_id,
-                        project_name=project.name,
-                        completer=current_user,
-                        creator=task.creator,
-                    )
-
-            background_tasks.add_task(send_status_notification)
+            await enqueue_job(
+                db,
+                "notification.dispatch",
+                {
+                    "event": "task_status_changed",
+                    "task_id": str(updated_task.id),
+                    "changer_id": str(current_user.id),
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "completed": new_status.lower() in ["done", "completed"],
+                },
+                idempotency_key=f"task-status:{updated_task.id}:{new_status}:{updated_task.updated_at}",
+            )
+        await db.commit()
 
         return updated_task
     except ValueError as e:
@@ -349,11 +317,9 @@ async def assign_project_task(
     project_id: str,
     task_id: str,
     assign_data: dict,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
     task_service: AsyncTaskService = Depends(get_task_service),
     project_service: AsyncProjectService = Depends(get_project_service),
-    notification_service: AsyncNotificationTriggerService = Depends(get_notification_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Assign task to a user by project ID and task ID."""
@@ -390,24 +356,26 @@ async def assign_project_task(
         )
 
     try:
-        updated_task = await task_service.assign_task(task_uuid, task_assign, current_user.id)
+        updated_task = await task_service.assign_task(
+            task_uuid, task_assign, current_user.id, commit=False
+        )
 
         assignee_result = await db.execute(select(User).filter(User.id == assignee_uuid))
         assignee = assignee_result.scalars().first()
 
         if assignee:
-
-            async def send_assign_notification():
-                await notification_service.notify_task_assigned(
-                    assignee=assignee,
-                    task_id=updated_task.id,
-                    task_title=updated_task.title,
-                    project_id=updated_task.project_id,
-                    project_name=task.project.name if task.project else "Unknown",
-                    assigner=current_user,
-                )
-
-            background_tasks.add_task(send_assign_notification)
+            await enqueue_job(
+                db,
+                "notification.dispatch",
+                {
+                    "event": "task_assigned",
+                    "task_id": str(updated_task.id),
+                    "assignee_id": str(assignee_uuid),
+                    "assigner_id": str(current_user.id),
+                },
+                idempotency_key=f"task-assigned:{updated_task.id}:{assignee_uuid}:{updated_task.updated_at}",
+            )
+        await db.commit()
 
         return updated_task
     except ValueError as e:

@@ -1,7 +1,7 @@
 import uuid
 
 from sqlalchemy import JSON, Column, DateTime, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from models.base import Base
 
@@ -24,7 +24,7 @@ class SecurityLog(Base):
     request_method = Column(String(10), nullable=True)
 
     # Detailed info
-    details = Column(JSON, nullable=True)
+    details = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)
 
     def __repr__(self):
         return f"<SecurityLog {self.event_type} at {self.timestamp}>"

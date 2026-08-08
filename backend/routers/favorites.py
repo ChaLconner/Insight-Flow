@@ -6,11 +6,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_async_db
-from models import Project, User, UserFavorite
+from models import Project, ProjectMember, User, UserFavorite
 from routers.auth import get_current_active_user
 from utils.logger import setup_logger
 from utils.schema_utils import to_camel
@@ -21,6 +21,23 @@ router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 # Route-level rate limiting for favorites operations
 from rate_limiter import RateLimits, limiter
+
+
+async def _get_favoritable_project(
+    db: AsyncSession, project_uuid: uuid.UUID, current_user: User
+) -> Project | None:
+    """Return project only when caller owns, administers, or belongs to it."""
+    filters = [Project.id == project_uuid]
+    if current_user.role != "admin":
+        filters.append(
+            or_(
+                Project.owner_id == current_user.id,
+                Project.members.any(ProjectMember.user_id == current_user.id),
+            )
+        )
+
+    result = await db.execute(select(Project).where(*filters))
+    return result.scalar_one_or_none()
 
 
 class FavoriteIdsResponse(BaseModel):
@@ -89,9 +106,7 @@ async def toggle_favorite(
     try:
         project_uuid = uuid.UUID(toggle_request.project_id)
 
-        # Verify project exists
-        project_result = await db.execute(select(Project).where(Project.id == project_uuid))
-        project = project_result.scalar_one_or_none()
+        project = await _get_favoritable_project(db, project_uuid, current_user)
 
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -200,9 +215,7 @@ async def add_favorite(
     try:
         project_uuid = uuid.UUID(project_id)
 
-        # Verify project exists
-        project_result = await db.execute(select(Project).where(Project.id == project_uuid))
-        project = project_result.scalar_one_or_none()
+        project = await _get_favoritable_project(db, project_uuid, current_user)
 
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")

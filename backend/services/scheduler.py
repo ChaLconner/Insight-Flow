@@ -5,12 +5,14 @@ Refactored to use async services.
 """
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from database import AsyncSessionLocal
-from services.async_deadline_reminder import run_async_deadline_check
+from services.job_handlers import DEADLINE_JOB_TYPE
+from services.job_queue import enqueue_job
 from utils.logger import setup_logger
 
 logger = setup_logger("scheduler")
@@ -27,47 +29,41 @@ def get_scheduler() -> AsyncIOScheduler:
     return scheduler
 
 
-from security.distributed_locks import resource_lock
-
-
-async def run_deadline_check_job():
-    """
-    Async job function for deadline check.
-    Creates its own database session and uses a distributed lock to prevent duplicate worker runs.
-    """
-    try:
-        async with resource_lock("scheduler", "deadline_check", timeout=2.0):
-            logger.info("Running scheduled deadline check...")
-            async with AsyncSessionLocal() as db:
-                try:
-                    summary = await run_async_deadline_check(db)
-                    logger.info(f"Deadline check completed: {summary}")
-                except Exception as e:
-                    logger.error(f"Deadline check failed: {e}")
-    except Exception as lock_err:
-        logger.info(
-            f"Skipping scheduled deadline check (already running in another worker or locked): {lock_err}"
+async def enqueue_deadline_check_job(slot: str) -> None:
+    """Persist one idempotent deadline check for the dedicated worker."""
+    today = datetime.now(UTC).date().isoformat()
+    async with AsyncSessionLocal() as db:
+        await enqueue_job(
+            db,
+            DEADLINE_JOB_TYPE,
+            {"slot": slot},
+            idempotency_key=f"deadline-check:{today}:{slot}",
         )
+        await db.commit()
+    logger.info("Queued deadline check for slot %s", slot)
 
 
 def setup_scheduled_jobs(sched: AsyncIOScheduler):
     """Configure all scheduled jobs."""
 
-    # Deadline check - runs every day at 8:00 AM (server time)
+    # Deadline checks use UTC explicitly so host/container timezone cannot
+    # silently change the notification schedule.
     sched.add_job(
-        run_deadline_check_job,
-        CronTrigger(hour=8, minute=0),
+        enqueue_deadline_check_job,
+        CronTrigger(hour=8, minute=0, timezone="UTC"),
         id="deadline_check_morning",
         name="Morning Deadline Check",
+        kwargs={"slot": "morning"},
         replace_existing=True,
     )
 
     # Optional: Run a second check at 2:00 PM for afternoon reminder
     sched.add_job(
-        run_deadline_check_job,
-        CronTrigger(hour=14, minute=0),
+        enqueue_deadline_check_job,
+        CronTrigger(hour=14, minute=0, timezone="UTC"),
         id="deadline_check_afternoon",
         name="Afternoon Deadline Check",
+        kwargs={"slot": "afternoon"},
         replace_existing=True,
     )
 

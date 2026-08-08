@@ -5,6 +5,7 @@ Centralized security validation for all file uploads.
 
 import os
 import re
+from typing import Any
 
 from utils.logger import setup_logger
 
@@ -196,6 +197,31 @@ def validate_file_size(
         )
 
     return size
+
+
+async def read_upload_with_limit(upload_file: Any, max_size: int) -> bytes:
+    """Read an upload in bounded chunks, rejecting oversized bodies before buffering them."""
+    if max_size <= 0:
+        raise ValueError("max_size must be positive")
+
+    chunks: list[bytes] = []
+    total_size = 0
+    chunk_size = min(1024 * 1024, max_size + 1)
+
+    while True:
+        chunk = await upload_file.read(chunk_size)
+        if not chunk:
+            break
+
+        total_size += len(chunk)
+        if total_size > max_size:
+            max_mb = max_size / (1024 * 1024)
+            raise FileSecurityError(
+                f"File too large. Maximum size is {max_mb:.1f} MB", "FILE_TOO_LARGE"
+            )
+        chunks.append(chunk)
+
+    return b"".join(chunks)
 
 
 def validate_file_path(base_dir: str, file_path: str) -> str:

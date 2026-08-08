@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.password_reset import PasswordReset
 from services.async_user_service import AsyncUserService
+from services.job_payload_security import encrypt_job_secret
+from services.job_queue import enqueue_job
 from utils.logger import mask_email, mask_token, setup_logger
 
 logger = setup_logger("async_password_reset_service")
@@ -40,9 +42,23 @@ class AsyncPasswordResetService:
         # Create new reset token
         # Note: create_reset_token likely returns a non-persistent object, which is fine
         reset_token, raw_token = PasswordReset.create_reset_token(email)
-        self.db.add(reset_token)
-        await self.db.commit()
-        await self.db.refresh(reset_token)
+        try:
+            self.db.add(reset_token)
+            await enqueue_job(
+                self.db,
+                "email.send",
+                {
+                    "method": "password_reset",
+                    "email": email,
+                    "token_encrypted": encrypt_job_secret(raw_token),
+                },
+                idempotency_key=f"password-reset:{email}:{PasswordReset.hash_token(raw_token)}",
+            )
+            await self.db.commit()
+            await self.db.refresh(reset_token)
+        except Exception:
+            await self.db.rollback()
+            raise
 
         logger.info(f"Password reset token created for email: {mask_email(email)}")
         # Return object but attach raw_token for email sending
@@ -98,6 +114,10 @@ class AsyncPasswordResetService:
             from utils.auth import get_password_hash
 
             user.hashed_password = get_password_hash(new_password)
+            current_session_version = getattr(user, "session_version", 0)
+            user.session_version = (
+                current_session_version + 1 if isinstance(current_session_version, int) else 1
+            )
 
             # Mark token as used
             reset_token.used = True
@@ -114,35 +134,25 @@ class AsyncPasswordResetService:
 
     async def send_reset_email(self, email: str, token: str) -> bool:
         """
-        Send password reset email to user in the background (non-blocking).
+        Queue a password reset email for legacy callers.
 
-        This method returns immediately and the email is sent asynchronously.
-        Any errors during email sending are logged but do not affect the caller.
-        """
-        from utils.background_tasks import fire_and_forget
-
-        # Fire and forget - don't wait for email to be sent
-        fire_and_forget(self._send_reset_email_internal(email, token))
-
-        # Always return True since we've queued the email
-        # Actual send errors will be logged in the background task
-        logger.info(f"Password reset email queued for {mask_email(email)}")
-        return True
-
-    async def _send_reset_email_internal(self, email: str, token: str) -> None:
-        """
-        Internal method that actually sends the reset email.
-        Called as a background task - errors are logged but not raised.
+        The worker performs delivery asynchronously. The idempotency key makes
+        this safe when a caller retries after token creation already queued it.
         """
         try:
-            from services.email_service import EmailService
-
-            result = await EmailService.send_password_reset_email(email, token)
-
-            if result:
-                logger.info(f"Password reset email sent successfully to {mask_email(email)}")
-            else:
-                logger.warning(f"Failed to send password reset email to {mask_email(email)}")
-
-        except Exception as e:
-            logger.error(f"Error sending reset email to {mask_email(email)}: {e}")
+            await enqueue_job(
+                self.db,
+                "email.send",
+                {
+                    "method": "password_reset",
+                    "email": email,
+                    "token_encrypted": encrypt_job_secret(token),
+                },
+                idempotency_key=f"password-reset:{email}:{PasswordReset.hash_token(token)}",
+            )
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
+        logger.info(f"Password reset email queued for {mask_email(email)}")
+        return True

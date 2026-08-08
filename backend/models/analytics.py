@@ -3,7 +3,20 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, UUID, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    UUID,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
@@ -56,6 +69,12 @@ class ProjectAnalytics(BaseModel):
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="analytics")
 
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "period", "date", name="uq_project_analytics_project_period_date"
+        ),
+    )
+
 
 class UserProductivity(BaseModel):
     """
@@ -89,6 +108,16 @@ class UserProductivity(BaseModel):
     user: Mapped["User"] = relationship("User", back_populates="productivity")
     project: Mapped["Project"] = relationship("Project", back_populates="user_productivity")
 
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "project_id",
+            "period",
+            "date",
+            name="uq_user_productivity_user_project_period_date",
+        ),
+    )
+
 
 class TaskTimeTracking(BaseModel):
     """
@@ -110,7 +139,9 @@ class TaskTimeTracking(BaseModel):
     duration_minutes: Mapped[int | None] = mapped_column(Integer)
 
     # Status tracking
-    is_active: Mapped[str] = mapped_column(String(20), default="active")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     # Notes
     notes: Mapped[str | None] = mapped_column(Text)
@@ -146,6 +177,17 @@ class ProjectMilestone(BaseModel):
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="milestones")
 
+    __table_args__ = (
+        CheckConstraint(
+            "is_completed IN ('pending', 'completed', 'cancelled')",
+            name="ck_project_milestones_status",
+        ),
+        CheckConstraint(
+            "progress_percentage BETWEEN 0 AND 100",
+            name="ck_project_milestones_progress",
+        ),
+    )
+
 
 class TaskDependency(BaseModel):
     """
@@ -170,6 +212,16 @@ class TaskDependency(BaseModel):
         "Task", foreign_keys="TaskDependency.depends_on_task_id", back_populates="dependents"
     )
 
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id",
+            "depends_on_task_id",
+            "dependency_type",
+            name="uq_task_dependencies_pair_type",
+        ),
+        CheckConstraint("task_id <> depends_on_task_id", name="ck_task_dependencies_not_self"),
+    )
+
 
 class TaskComment(BaseModel):
     """
@@ -187,12 +239,16 @@ class TaskComment(BaseModel):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Comment metadata
-    is_edited: Mapped[str] = mapped_column(String(10), default="false")
+    is_edited: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     task: Mapped["Task"] = relationship("Task", back_populates="comments")
     user: Mapped["User"] = relationship("User", back_populates="task_comments")
+
+    __table_args__ = (Index("ix_task_comments_task_created_at", "task_id", "created_at"),)
 
 
 class TaskAttachment(BaseModel):
@@ -254,3 +310,7 @@ class ProjectTagAssociation(BaseModel):
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="tag_associations")
     tag: Mapped["ProjectTag"] = relationship("ProjectTag", back_populates="project_associations")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "tag_id", name="uq_project_tag_associations_pair"),
+    )

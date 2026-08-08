@@ -17,8 +17,7 @@ def user_service(mock_db_session):
 
 @pytest.fixture
 def mock_email_service():
-    with patch("services.async_user_service.EmailService") as mock:
-        mock.send_verification_email = AsyncMock()
+    with patch("services.async_user_service.enqueue_job", new_callable=AsyncMock) as mock:
         yield mock
 
 
@@ -65,7 +64,7 @@ async def test_create_user_success(
         assert user.verification_token is not None
         mock_db_session.add.assert_called_once()
         mock_db_session.commit.assert_called_once()
-        mock_email_service.send_verification_email.assert_called_once()
+    mock_email_service.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -128,6 +127,34 @@ async def test_authenticate_user_wrong_password(user_service, mock_db_session, m
 
 
 @pytest.mark.asyncio
+async def test_authenticate_user_lockout_queue_failure_rolls_back(user_service, mock_db_session):
+    login_data = UserLogin(email="test@example.com", password="wrong")
+    user = User(
+        id=uuid.uuid4(),
+        email="test@example.com",
+        hashed_password="hashed_secret",
+        failed_login_attempts=4,
+    )
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = user
+    mock_db_session.execute.return_value = result
+    user_service.verify_password = AsyncMock(return_value=False)
+
+    with (
+        patch(
+            "services.async_user_service.enqueue_job",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("queue unavailable"),
+        ),
+        pytest.raises(RuntimeError, match="temporarily unavailable"),
+    ):
+        await user_service.authenticate_user(login_data)
+
+    mock_db_session.rollback.assert_awaited_once()
+    mock_db_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_change_password_success(
     user_service, mock_db_session, mock_auth_utils, mock_validators
 ):
@@ -149,6 +176,7 @@ async def test_change_password_success(
 
         assert result is True
         assert user.hashed_password == "new_hash"
+        assert user.session_version == 1
         mock_db_session.commit.assert_called_once()
 
 
@@ -205,10 +233,11 @@ async def test_create_or_update_google_user_existing_linked(user_service, mock_d
 
 @pytest.mark.asyncio
 async def test_get_user_stats(user_service, mock_db_session):
-    # Mock result row: (total, active, admins, managers, members, viewers)
+    # Mock result row: (total, active, verified, admins, managers, members, viewers)
     row = MagicMock()
     row.total = 10
     row.active = 8
+    row.verified = 7
     row.admins = 2
     row.managers = 1
     row.members = 6
@@ -222,6 +251,7 @@ async def test_get_user_stats(user_service, mock_db_session):
 
     assert stats["total"] == 10
     assert stats["active"] == 8
+    assert stats["verified"] == 7
     assert stats["admins"] == 2
 
 

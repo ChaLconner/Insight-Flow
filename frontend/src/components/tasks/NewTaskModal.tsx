@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { AnimatedModalShell } from "@/components/modals/AnimatedModalShell";
 import { tasksApi, projectsApi } from "@/lib/api-endpoints";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 import type { Project, Task, CreateTaskRequest, UpdateTaskRequest } from "@/types";
 import { TaskPriority, TaskType, TaskStatus } from "@/types";
 
@@ -31,7 +32,15 @@ interface NewTaskModalProps {
 }
 
 const PROJECT_CACHE_TTL_MS = 60_000;
+let projectsCacheGeneration = 0;
 let projectsCache: { expiresAt: number; data: Project[] } | null = null;
+
+export function clearNewTaskModalCache(): void {
+  projectsCache = null;
+  projectsCacheGeneration += 1;
+}
+
+registerAuthenticatedCacheClearer(clearNewTaskModalCache);
 
 export function NewTaskModal({
   isOpen,
@@ -93,6 +102,7 @@ export function NewTaskModal({
       }
 
       let cancelled = false;
+      const cacheGeneration = projectsCacheGeneration;
       const requestId = projectsRequestIdRef.current + 1;
       projectsRequestIdRef.current = requestId;
 
@@ -100,7 +110,11 @@ export function NewTaskModal({
       const fetchProjects = async () => {
         try {
           const response = await projectsApi.getProjects();
-          if (cancelled || requestId !== projectsRequestIdRef.current) {
+          if (
+            cancelled ||
+            requestId !== projectsRequestIdRef.current ||
+            cacheGeneration !== projectsCacheGeneration
+          ) {
             return;
           }
           const data = Array.isArray(response)

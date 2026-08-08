@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable
 from typing import Any
 
+from config import get_settings
 from utils.logger import setup_logger
 
 logger = setup_logger("cache_service")
@@ -34,6 +35,11 @@ class CacheBackend(ABC):
     @abstractmethod
     async def set(self, key: str, value: dict[str, Any], timeout: int | None = None) -> None:
         """Set a value in cache."""
+        pass
+
+    @abstractmethod
+    async def increment_with_window(self, key: str, timeout: int) -> int:
+        """Atomically increment a counter and apply its first-write expiry."""
         pass
 
     @abstractmethod
@@ -114,6 +120,28 @@ class InMemoryCache(CacheBackend):
             }
             self.stats["sets"] += 1
 
+    async def increment_with_window(self, key: str, timeout: int) -> int:
+        """Atomically increment a fixed-window counter in the process."""
+        if timeout <= 0:
+            raise ValueError("Cache counter timeout must be greater than zero")
+        with self._lock:
+            current_time = time.time()
+            cached_data = self.cache.get(key)
+            if cached_data is None or current_time - cached_data["timestamp"] >= cached_data.get(
+                "timeout", self.default_timeout
+            ):
+                count = 1
+            else:
+                count = int(cached_data.get("content", {}).get("count", 0)) + 1
+
+            self.cache[key] = {
+                "content": {"count": count},
+                "timestamp": current_time,
+                "timeout": timeout,
+            }
+            self.stats["sets"] += 1
+            return count
+
     async def delete(self, key: str) -> bool:
         with self._lock:
             if key in self.cache:
@@ -151,11 +179,16 @@ class InMemoryCache(CacheBackend):
 class RedisCache(CacheBackend):
     """Redis-based cache backend with connection pooling and health checks (async)."""
 
-    def __init__(self, redis_url: str, default_timeout: int = 300):
+    def __init__(self, redis_url: str, default_timeout: int = 300, password: str | None = None):
         self.default_timeout = default_timeout
         self.redis_url = redis_url
+        self.password = password
         self.stats = {"hits": 0, "misses": 0, "sets": 0, "errors": 0}
         self._connected = False
+        self._connection_checked = False
+        self._connection_lock = asyncio.Lock()
+        self._last_connection_check = 0.0
+        self._connection_check_interval = 30.0
 
         try:
             import redis.asyncio as redis
@@ -164,6 +197,7 @@ class RedisCache(CacheBackend):
             # Create connection pool for better performance
             self.pool = ConnectionPool.from_url(
                 redis_url,
+                password=password,
                 max_connections=20,
                 decode_responses=True,
                 socket_timeout=5,
@@ -171,7 +205,6 @@ class RedisCache(CacheBackend):
                 retry_on_timeout=True,
             )
             self.client = redis.Redis(connection_pool=self.pool)
-            self._connected = True
             logger.info("Redis async cache initialized with connection pooling")
         except ImportError:
             logger.error("Redis package not installed. Run: pip install redis")
@@ -179,6 +212,34 @@ class RedisCache(CacheBackend):
         except Exception as e:
             logger.error(f"Failed to initialize Redis: {e}")
             raise
+
+    async def ensure_connected(self) -> bool:
+        """Check Redis lazily with a bounded reconnect cadence."""
+        now = time.monotonic()
+        if (
+            self._connection_checked
+            and now - self._last_connection_check < self._connection_check_interval
+        ):
+            return self._connected
+
+        async with self._connection_lock:
+            now = time.monotonic()
+            if (
+                self._connection_checked
+                and now - self._last_connection_check < self._connection_check_interval
+            ):
+                return self._connected
+
+            self._connection_checked = True
+            self._last_connection_check = now
+            try:
+                await self.client.ping()
+                self._connected = True
+                return True
+            except Exception as e:
+                self._connected = False
+                logger.warning(f"Redis unavailable, using in-memory cache: {e}")
+                return False
 
     async def _execute_with_retry(self, operation, *args, max_retries: int = 2, **kwargs):
         """Execute Redis operation with non-blocking retry logic."""
@@ -191,6 +252,9 @@ class RedisCache(CacheBackend):
                 return res
             except Exception as e:
                 last_error = e
+                self._connected = False
+                self._connection_checked = False
+                self._last_connection_check = 0.0
                 self.stats["errors"] += 1
                 if attempt < max_retries:
                     logger.warning(f"Redis operation failed (attempt {attempt + 1}), retrying: {e}")
@@ -220,6 +284,23 @@ class RedisCache(CacheBackend):
         except Exception as e:
             logger.error(f"Redis set error: {e}")
             self.stats["errors"] += 1
+
+    async def increment_with_window(self, key: str, timeout: int) -> int:
+        """Atomically increment a Redis counter using a Lua fixed-window script."""
+        if timeout <= 0:
+            raise ValueError("Cache counter timeout must be greater than zero")
+
+        script = """
+        local current = redis.call('INCR', KEYS[1])
+        if current == 1 then
+            redis.call('EXPIRE', KEYS[1], ARGV[1])
+        end
+        return current
+        """
+        result = await self._execute_with_retry(self.client.eval, script, 1, key, timeout)
+        if result is None:
+            raise ConnectionError("Redis counter operation failed")
+        return int(result)
 
     async def delete(self, key: str) -> bool:
         try:
@@ -325,6 +406,18 @@ class RedisCache(CacheBackend):
 
         return {**self.stats, "backend": "redis", "hit_rate": round(hit_rate, 2), "health": health}
 
+    async def close(self) -> None:
+        """Release Redis client and pool resources during application shutdown."""
+        close = getattr(self.client, "aclose", None)
+        if close is not None:
+            await close()
+            return
+        disconnect = getattr(self.pool, "disconnect", None)
+        if disconnect is not None:
+            result = disconnect()
+            if asyncio.iscoroutine(result):
+                await result
+
 
 class CacheService:
     """
@@ -342,38 +435,114 @@ class CacheService:
 
     def _initialize(self):
         self.backend: CacheBackend
-        redis_url = os.getenv("REDIS_URL")
+        self.redis_backend: RedisCache | None = None
+        self.memory_backend = InMemoryCache()
+
+        try:
+            cache_settings = get_settings().cache
+            redis_url = os.getenv("REDIS_URL") or cache_settings.redis_url
+            redis_password = os.getenv("REDIS_PASSWORD") or cache_settings.redis_password
+            default_timeout = cache_settings.default_timeout
+        except Exception:
+            # Keep imports usable for small CLI tools and isolated unit tests
+            # that intentionally do not configure the full application.
+            redis_url = os.getenv("REDIS_URL")
+            redis_password = os.getenv("REDIS_PASSWORD")
+            default_timeout = 300
 
         if redis_url:
             try:
-                self.backend = RedisCache(redis_url)
+                self.redis_backend = RedisCache(
+                    redis_url,
+                    default_timeout=default_timeout,
+                    password=redis_password,
+                )
+                self.backend = self.redis_backend
                 logger.info("Using Redis cache backend")
             except Exception:
                 logger.warning("Redis unavailable, falling back to in-memory cache")
-                self.backend = InMemoryCache()
+                self.backend = self.memory_backend
         else:
-            self.backend = InMemoryCache()
+            self.backend = self.memory_backend
             logger.info("Using in-memory cache backend")
 
+    async def _get_backend(self) -> CacheBackend:
+        """Return Redis when healthy and temporarily use memory during outages."""
+        if self.redis_backend is not None:
+            if await self.redis_backend.ensure_connected():
+                if self.backend is not self.redis_backend:
+                    logger.info("Redis recovered; restoring distributed cache backend")
+                    self.backend = self.redis_backend
+            elif self.backend is not self.memory_backend:
+                self.backend = self.memory_backend
+                logger.warning("Redis unavailable, falling back to in-memory cache")
+        return self.backend
+
+    async def ensure_connected(self) -> bool:
+        """Check the configured distributed backend without changing callers."""
+        if self.redis_backend is None:
+            return False
+        return await self.redis_backend.ensure_connected()
+
+    async def close(self) -> None:
+        """Close the distributed backend, if configured."""
+        if self.redis_backend is not None:
+            await self.redis_backend.close()
+
     async def get(self, key: str) -> dict[str, Any] | None:
-        return await self.backend.get(key)
+        backend = await self._get_backend()
+        return await backend.get(key)
 
     async def set(self, key: str, value: dict[str, Any], timeout: int | None = None) -> None:
-        await self.backend.set(key, value, timeout)
+        backend = await self._get_backend()
+        await backend.set(key, value, timeout)
+
+    async def increment_with_window(
+        self,
+        key: str,
+        timeout: int,
+        *,
+        fail_closed: bool = False,
+    ) -> int:
+        """Increment a counter atomically, optionally refusing memory fallback."""
+        backend = await self._get_backend()
+        try:
+            return await backend.increment_with_window(key, timeout)
+        except Exception:
+            if fail_closed:
+                raise
+            self.backend = self.memory_backend
+            logger.warning("Cache counter unavailable; using in-memory rate-limit counter")
+            return await self.memory_backend.increment_with_window(key, timeout)
 
     async def delete(self, key: str) -> bool:
-        return await self.backend.delete(key)
+        backend = await self._get_backend()
+        return await backend.delete(key)
 
     async def clear(self) -> None:
-        await self.backend.clear()
+        backend = await self._get_backend()
+        await backend.clear()
 
     async def invalidate_pattern(self, pattern: str) -> int:
-        return await self.backend.invalidate_pattern(pattern)
+        backend = await self._get_backend()
+        return await backend.invalidate_pattern(pattern)
 
     async def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
-        if hasattr(self.backend, "get_stats"):
-            return await self.backend.get_stats()
+        if self.redis_backend is not None and not await self.redis_backend.ensure_connected():
+            memory_stats = await self.memory_backend.get_stats()
+            return {
+                **memory_stats,
+                "backend": "memory-fallback",
+                "health": {
+                    "status": "unhealthy",
+                    "connected": False,
+                    "reason": "Redis is unavailable",
+                },
+            }
+        backend = await self._get_backend()
+        if hasattr(backend, "get_stats"):
+            return await backend.get_stats()
         return {}
 
 

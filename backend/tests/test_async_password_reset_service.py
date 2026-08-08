@@ -52,6 +52,34 @@ async def test_create_password_reset_token_user_not_found(password_reset_service
 
 
 @pytest.mark.asyncio
+async def test_create_password_reset_token_queue_failure_rolls_back(
+    password_reset_service, mock_db_session
+):
+    email = "test@example.com"
+    password_reset_service.user_service.get_user_by_email = AsyncMock(
+        return_value=User(id=1, email=email)
+    )
+    mock_token = MagicMock(spec=PasswordReset)
+
+    with (
+        patch(
+            "models.password_reset.PasswordReset.create_reset_token",
+            return_value=(mock_token, "raw_123"),
+        ),
+        patch(
+            "services.async_password_reset_service.enqueue_job",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("queue unavailable"),
+        ),
+        pytest.raises(RuntimeError, match="queue unavailable"),
+    ):
+        await password_reset_service.create_password_reset_token(email)
+
+    mock_db_session.rollback.assert_awaited_once()
+    mock_db_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_validate_token_success(password_reset_service, mock_db_session):
     token_str = "valid_token"
     mock_reset = MagicMock(spec=PasswordReset)
@@ -112,6 +140,7 @@ async def test_reset_password_success(password_reset_service, mock_db_session):
 
         assert result is True
         assert mock_user.hashed_password == "hashed_pass"
+        assert mock_user.session_version == 1
         assert mock_reset.used is True
         mock_db_session.commit.assert_called_once()
 
@@ -152,35 +181,21 @@ async def test_reset_password_accepts_persisted_token_from_database(async_sessio
 
 @pytest.mark.asyncio
 async def test_send_reset_email_dev_mode(password_reset_service):
-    # Mock environment
-    with patch("os.getenv") as mock_env:
-
-        def env_val(key, default=None):
-            if key == "ENVIRONMENT":
-                return "development"
-            return default
-
-        mock_env.side_effect = env_val
-
+    with patch(
+        "services.async_password_reset_service.enqueue_job", new_callable=AsyncMock
+    ) as mock_enqueue:
         result = await password_reset_service.send_reset_email("test@example.com", "token")
         assert result is True
+        mock_enqueue.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_send_reset_email_resend_mode(password_reset_service):
-    """
-    Test that send_reset_email returns immediately (fire-and-forget pattern).
-    The actual email sending via Resend API happens in background task.
-    """
-    with (
-        patch("os.getenv") as mock_env,
-        patch("utils.background_tasks.fire_and_forget") as mock_fire_and_forget,
-    ):
-        mock_env.return_value = "configured_value"  # Return truthy for all env vars
-
+    """Test that reset delivery is persisted as a durable queue job."""
+    with patch(
+        "services.async_password_reset_service.enqueue_job", new_callable=AsyncMock
+    ) as mock_enqueue:
         result = await password_reset_service.send_reset_email("test@example.com", "token")
 
-        # Should return True immediately (email queued, not sent)
         assert result is True
-        # Should have called fire_and_forget with the internal email coroutine
-        mock_fire_and_forget.assert_called_once()
+        mock_enqueue.assert_awaited_once()

@@ -3,7 +3,9 @@ Async Deadline reminder service for checking due and overdue tasks.
 Runs periodically to send notifications about upcoming and overdue tasks.
 """
 
+import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,7 @@ from services.async_notification_trigger_service import AsyncNotificationTrigger
 from utils.logger import setup_logger
 
 logger = setup_logger("async_deadline_reminder")
+TASK_BATCH_SIZE = 250
 
 
 class AsyncDeadlineReminderService:
@@ -24,7 +27,7 @@ class AsyncDeadlineReminderService:
         self.db = db
         self.notification_service = AsyncNotificationTriggerService(db)
 
-    async def check_deadlines(self) -> dict:
+    async def check_deadlines(self) -> dict[str, int]:
         """
         Check all tasks for upcoming and overdue deadlines.
         Returns summary of notifications sent.
@@ -40,7 +43,23 @@ class AsyncDeadlineReminderService:
             "total_notifications": 0,
         }
 
-        # Get all active tasks with due dates that are not completed
+        # Process stable ID-ordered pages so large task tables do not occupy
+        # the worker's memory or transaction all at once.
+        last_task_id: uuid.UUID | None = None
+        while True:
+            tasks = await self._get_task_batch(last_task_id)
+            if not tasks:
+                break
+
+            notified_keys = await self._get_notified_keys(tasks, now)
+            await self._process_task_batch(tasks, today, notified_keys, summary)
+            last_task_id = tasks[-1].id
+
+        logger.info(f"Deadline check complete: {summary}")
+        return summary
+
+    async def _get_task_batch(self, last_task_id: uuid.UUID | None) -> list[Task]:
+        """Load one stable page of active tasks with due dates."""
         query = (
             select(Task)
             .options(
@@ -48,10 +67,21 @@ class AsyncDeadlineReminderService:
             )
             .filter(Task.due_date.isnot(None), Task.status != TaskStatus.DONE)
         )
+        if last_task_id is not None:
+            query = query.filter(Task.id > last_task_id)
+        query = query.order_by(Task.id.asc()).limit(TASK_BATCH_SIZE)
 
         result = await self.db.execute(query)
-        tasks = result.scalars().all()
+        return list(result.scalars().all())
 
+    async def _process_task_batch(
+        self,
+        tasks: list[Task],
+        today,
+        notified_keys: set[tuple[Any, Any, str]],
+        summary: dict[str, int],
+    ) -> None:
+        """Evaluate one task page and queue its due-date notifications."""
         for task in tasks:
             if not task.due_date:
                 continue
@@ -66,7 +96,8 @@ class AsyncDeadlineReminderService:
                 continue
 
             # Check if we already sent a notification today for this task
-            if await self._already_notified_today(task.assignee.id, task.id, days_until_due):
+            notification_type = "task_overdue" if days_until_due < 0 else "task_due_soon"
+            if (task.assignee.id, task.id, notification_type) in notified_keys:
                 continue
 
             project_name = task.project.name if task.project else "Unknown Project"
@@ -91,9 +122,12 @@ class AsyncDeadlineReminderService:
                 if (
                     task.creator
                     and task.creator.id != task.assignee.id
-                    and not await self._already_notified_today(
-                        task.creator.id, task.id, days_until_due
+                    and (
+                        task.creator.id,
+                        task.id,
+                        notification_type,
                     )
+                    not in notified_keys
                 ):
                     await self.notification_service.notify_task_overdue(
                         user=task.creator,
@@ -148,27 +182,45 @@ class AsyncDeadlineReminderService:
                 summary["due_in_3_days"] += 1
                 summary["total_notifications"] += 1
 
-        logger.info(f"Deadline check complete: {summary}")
-        return summary
+    async def _get_notified_keys(
+        self, tasks: list[Task], now: datetime
+    ) -> set[tuple[Any, Any, str]]:
+        """Load today's deadline notifications in one query instead of N+1 checks."""
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        task_ids = {str(task.id) for task in tasks}
+        user_ids = {
+            user_id
+            for task in tasks
+            for user_id in (
+                task.assignee.id if task.assignee else None,
+                task.creator.id if task.creator else None,
+            )
+            if user_id is not None
+        }
+        if not task_ids or not user_ids:
+            return set()
 
-    async def _already_notified_today(self, user_id, task_id, days_until_due: int) -> bool:
-        """Check if we already sent a deadline notification today for this task."""
-        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-
-        # Determine notification type based on days
-        notif_type = "task_overdue" if days_until_due < 0 else "task_due_soon"
-
-        query = select(Notification).filter(
-            Notification.user_id == user_id,
-            Notification.type == notif_type,
+        task_id_value = Notification.data["task_id"].as_string()
+        query = select(
+            Notification.user_id,
+            Notification.type,
+            task_id_value,
+        ).filter(
+            Notification.user_id.in_(user_ids),
+            Notification.type.in_(["task_due_soon", "task_overdue"]),
             Notification.created_at >= today_start,
-            Notification.data["task_id"].astext == str(task_id),
+            task_id_value.in_(task_ids),
         )
-
         result = await self.db.execute(query)
-        existing = result.scalars().first()
-
-        return existing is not None
+        notified_keys: set[tuple[Any, Any, str]] = set()
+        for user_id, notification_type, task_id in result.all():
+            if not task_id:
+                continue
+            try:
+                notified_keys.add((user_id, uuid.UUID(str(task_id)), notification_type))
+            except ValueError:
+                logger.warning("Ignoring malformed task ID in notification %s", task_id)
+        return notified_keys
 
 
 async def run_async_deadline_check(db: AsyncSession) -> dict:

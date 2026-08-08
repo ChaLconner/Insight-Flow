@@ -19,7 +19,9 @@ from models.payment import Subscription, SubscriptionPlan, SubscriptionStatus
 from models.user import User
 from models.user_settings import UserSettings
 from schemas.user import UserCreate, UserInvite, UserLogin, UserSettingsUpdate, UserUpdate
-from services.email_service import EmailService
+from services.cache_invalidation import invalidate_dashboard_and_analytics_cache
+from services.job_payload_security import encrypt_job_secret
+from services.job_queue import enqueue_job
 from utils.auth import get_password_hash, verify_password
 from utils.logger import logger, mask_email, mask_token, mask_user_id
 from utils.validators import validate_password_strength
@@ -98,7 +100,9 @@ class AsyncUserService:
             db_user.is_active = True
 
             self.db.add(db_user)
-            await self.db.commit()
+            # Flush assigns the user id without committing, allowing the
+            # verification job to join the same transaction.
+            await self.db.flush()
             await self.db.refresh(db_user)
 
             # Handle Trial Subscription
@@ -114,17 +118,28 @@ class AsyncUserService:
                         cancel_at_period_end=False,
                     )
                     self.db.add(new_sub)
-                    await self.db.commit()
+                    await self.db.flush()
                     logger.info(
-                        f"Created trial subscription ({user_data.plan}) for user {db_user.email}"
+                        f"Staged trial subscription ({user_data.plan}) for user {db_user.email}"
                     )
                 except Exception as e:
                     logger.error(
                         f"Failed to create trial subscription for user {db_user.email}: {e}"
                     )
+                    raise ValueError("User creation failed while staging subscription") from e
 
-            # Send verification email with raw token (not hashed)
-            await EmailService.send_verification_email(db_user.email, raw_token)
+            # Queue verification delivery in the same database-backed workflow.
+            await enqueue_job(
+                self.db,
+                "email.send",
+                {
+                    "method": "verification",
+                    "email": db_user.email,
+                    "token_encrypted": encrypt_job_secret(raw_token),
+                },
+                idempotency_key=f"verification:{db_user.id}:{self._hash_token(raw_token)}",
+            )
+            await self.db.commit()
 
             return db_user
 
@@ -138,6 +153,9 @@ class AsyncUserService:
                 raise ValueError("Username already taken")
             else:
                 raise ValueError("User creation failed")
+        except Exception:
+            await self.db.rollback()
+            raise
 
     async def verify_email(self, token: str) -> bool:
         """Verify user email with secure token check."""
@@ -192,10 +210,19 @@ class AsyncUserService:
         user.verification_token = self._hash_token(raw_token)
         user.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=24)
 
-        await self.db.commit()
+        await self.db.flush()
 
-        # Send email
-        await EmailService.send_verification_email(email, raw_token)
+        await enqueue_job(
+            self.db,
+            "email.send",
+            {
+                "method": "verification",
+                "email": email,
+                "token_encrypted": encrypt_job_secret(raw_token),
+            },
+            idempotency_key=f"verification:{user.id}:{self._hash_token(raw_token)}",
+        )
+        await self.db.commit()
         logger.info(f"Verification email resent to {mask_email(email)}")
         return True
 
@@ -266,21 +293,26 @@ class AsyncUserService:
                 user.locked_until = datetime.now(UTC) + timedelta(minutes=15)
                 logger.warning(f"Locking account for user: {mask_email(user.email)}")
 
-                # A+ Security: Send account lockout notification email
+                # A+ Security: queue account lockout notification durably.
                 try:
-                    from utils.background_tasks import fire_and_forget
-
-                    async def send_lockout_notification():
-                        await EmailService.send_account_lockout_notification(
-                            email=user.email,
-                            locked_until=user.locked_until,
-                            ip_address=ip_address,
-                            user_agent=user_agent,
-                        )
-
-                    fire_and_forget(send_lockout_notification())
+                    await enqueue_job(
+                        self.db,
+                        "email.send",
+                        {
+                            "method": "account_lockout",
+                            "email": user.email,
+                            "locked_until": user.locked_until.isoformat()
+                            if user.locked_until
+                            else None,
+                            "ip_address": ip_address,
+                            "user_agent": user_agent,
+                        },
+                        idempotency_key=f"account-lockout:{user.id}:{user.locked_until}",
+                    )
                 except Exception as e:
-                    logger.debug(f"Lockout notification skipped: {e}")
+                    await self.db.rollback()
+                    logger.error(f"Failed to queue account lockout notification: {e}")
+                    raise RuntimeError("Authentication temporarily unavailable") from e
 
             await self.db.commit()
 
@@ -330,6 +362,10 @@ class AsyncUserService:
 
         validate_password_strength(new_password)
         user.hashed_password = await self.hash_password(new_password)
+        current_session_version = getattr(user, "session_version", 0)
+        user.session_version = (
+            current_session_version + 1 if isinstance(current_session_version, int) else 1
+        )
         logger.info(f"Password updated for user: {mask_email(user.email)}")
 
         try:
@@ -487,14 +523,7 @@ class AsyncUserService:
             # Invalidate dashboard/analytics cache if user role or status changed
             # (affects team statistics displayed on dashboard)
             if "role" in update_data or "is_active" in update_data:
-                try:
-                    from services.async_analytics_service import invalidate_analytics_cache
-                    from services.async_dashboard_service import invalidate_dashboard_cache
-
-                    await invalidate_dashboard_cache()
-                    await invalidate_analytics_cache()
-                except Exception as e:
-                    logger.error(f"Failed to invalidate cache after user update: {e}")
+                await invalidate_dashboard_and_analytics_cache()
 
             return user
         except IntegrityError as e:
@@ -532,6 +561,7 @@ class AsyncUserService:
         query = select(
             func.count(User.id).label("total"),
             func.sum(case((User.is_active == True, 1), else_=0)).label("active"),
+            func.sum(case((User.is_verified == True, 1), else_=0)).label("verified"),
             func.sum(case((User.role == "admin", 1), else_=0)).label("admins"),
             func.sum(case((User.role == "manager", 1), else_=0)).label("managers"),
             func.sum(case((or_(User.role == "member", User.role == "user"), 1), else_=0)).label(
@@ -557,7 +587,7 @@ class AsyncUserService:
         return {
             "total": stats.total or 0,
             "active": stats.active or 0,
-            "verified": stats.active or 0,
+            "verified": stats.verified or 0,
             "admins": stats.admins or 0,
             "managers": stats.managers or 0,
             "members": stats.members or 0,

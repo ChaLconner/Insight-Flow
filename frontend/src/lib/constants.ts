@@ -98,16 +98,11 @@ export const STATUS_COLORS = {
 
 // Project Colors
 export const PROJECT_COLORS = [
-  "#3b82f6", // Blue
-  "#22c55e", // Green
+  "#6366f1",
+  "#10b981",
   "#f59e0b", // Amber
   "#ef4444", // Red
   "#8b5cf6", // Purple
-  "#06b6d4", // Cyan
-  "#f97316", // Orange
-  "#84cc16", // Lime
-  "#ec4899", // Pink
-  "#6b7280", // Gray
 ] as const;
 
 // Task Priorities

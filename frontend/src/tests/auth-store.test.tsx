@@ -59,7 +59,12 @@ vi.mock("@/lib/api-client", () => ({
     get: vi.fn(),
   },
   registerLogoutHandler: vi.fn(),
-  isAxiosError: vi.fn((err: any) => Boolean(err && (err.isAxiosError || err.response))),
+  isAxiosError: vi.fn((err: unknown) => {
+    if (!err || typeof err !== "object") {
+      return false;
+    }
+    return ["isAxiosError", "response"].some((key) => key in err);
+  }),
 }));
 
 describe("auth-store", () => {

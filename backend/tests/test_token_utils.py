@@ -97,6 +97,18 @@ class TestCookieFunctions:
         )
         assert "Max-Age=2592000" in refresh_cookie
 
+    def test_create_auth_tokens_include_session_version(self):
+        """New tokens carry the version used to revoke prior sessions."""
+        from utils.auth import verify_token
+        from utils.token_utils import create_auth_tokens
+
+        access_token, refresh_token, _ = create_auth_tokens(
+            "00000000-0000-0000-0000-000000000001", session_version=3
+        )
+
+        assert verify_token(access_token, expected_type="access")["sv"] == 3
+        assert verify_token(refresh_token, expected_type="refresh")["sv"] == 3
+
 
 class TestTokenExpiration:
     """Tests for token expiration handling."""

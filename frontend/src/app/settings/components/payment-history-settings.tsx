@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, Download, DollarSign, ChevronLeft, ChevronRight, CheckCircle2, XCircle } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiClient } from "@/lib/api-client";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 
 interface PaymentHistoryItem {
   id: string;
@@ -33,6 +34,7 @@ interface PaymentStats {
 const PAGE_SIZE = 10;
 const PAYMENT_HISTORY_CACHE_TTL_MS = 30_000;
 const PAYMENT_HISTORY_CACHE_MAX_ENTRIES = 12;
+let paymentHistoryCacheGeneration = 0;
 
 type PaymentHistoryCacheEntry = {
   payments: PaymentHistoryItem[];
@@ -76,13 +78,20 @@ function getHistoryCacheKey(page: number, statusFilter: string): string {
   return `${page}:${statusFilter}`;
 }
 
-export function __clearPaymentHistoryCacheForTests(): void {
+export function clearPaymentHistoryCache(): void {
   paymentStatsCache.value = null;
   paymentStatsCache.timestamp = 0;
   paymentHistoryCache.clear();
   paymentStatsPromise = null;
   paymentHistoryPromises.clear();
+  paymentHistoryCacheGeneration += 1;
 }
+
+export function __clearPaymentHistoryCacheForTests(): void {
+  clearPaymentHistoryCache();
+}
+
+registerAuthenticatedCacheClearer(clearPaymentHistoryCache);
 
 export function PaymentHistorySettings() {
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryItem[]>([]);
@@ -104,17 +113,23 @@ export function PaymentHistorySettings() {
       return paymentStatsPromise;
     }
 
-    paymentStatsPromise = apiClient.get("/payment/history/stats")
+    const cacheGeneration = paymentHistoryCacheGeneration;
+    const requestPromise = apiClient.get("/payment/history/stats")
       .then(({ data }) => {
-        paymentStatsCache.value = data;
-        paymentStatsCache.timestamp = Date.now();
+        if (cacheGeneration === paymentHistoryCacheGeneration) {
+          paymentStatsCache.value = data;
+          paymentStatsCache.timestamp = Date.now();
+        }
         return data;
       })
       .finally(() => {
-        paymentStatsPromise = null;
+        if (paymentStatsPromise === requestPromise) {
+          paymentStatsPromise = null;
+        }
       });
 
-    return paymentStatsPromise;
+    paymentStatsPromise = requestPromise;
+    return requestPromise;
   }, []);
 
   const requestPaymentHistory = useCallback(async (page: number, statusFilter: string) => {
@@ -130,6 +145,7 @@ export function PaymentHistorySettings() {
       params.status = statusFilter;
     }
 
+    const cacheGeneration = paymentHistoryCacheGeneration;
     const requestPromise = apiClient
       .get("/payment/history", { params })
       .then(({ data }) => {
@@ -137,15 +153,19 @@ export function PaymentHistorySettings() {
           payments: data?.payments ?? [],
           total: data?.total ?? data?.payments?.length ?? 0,
         };
-        paymentHistoryCache.set(cacheKey, {
-          ...result,
-          timestamp: Date.now(),
-        });
-        pruneHistoryCache();
+        if (cacheGeneration === paymentHistoryCacheGeneration) {
+          paymentHistoryCache.set(cacheKey, {
+            ...result,
+            timestamp: Date.now(),
+          });
+          pruneHistoryCache();
+        }
         return result;
       })
       .finally(() => {
-        paymentHistoryPromises.delete(cacheKey);
+        if (paymentHistoryPromises.get(cacheKey) === requestPromise) {
+          paymentHistoryPromises.delete(cacheKey);
+        }
       });
 
     paymentHistoryPromises.set(cacheKey, requestPromise);
@@ -160,19 +180,26 @@ export function PaymentHistorySettings() {
       return;
     }
 
+    const cacheGeneration = paymentHistoryCacheGeneration;
     const requestId = statsRequestIdRef.current + 1;
     statsRequestIdRef.current = requestId;
     setStatsLoading(true);
     try {
       const data = await requestStats();
-      if (requestId !== statsRequestIdRef.current) {
+      if (
+        requestId !== statsRequestIdRef.current ||
+        cacheGeneration !== paymentHistoryCacheGeneration
+      ) {
         return;
       }
       setStats(data);
     } catch {
       // Error state handled through UI
     } finally {
-      if (requestId === statsRequestIdRef.current) {
+      if (
+        requestId === statsRequestIdRef.current &&
+        cacheGeneration === paymentHistoryCacheGeneration
+      ) {
         setStatsLoading(false);
       }
     }
@@ -191,12 +218,16 @@ export function PaymentHistorySettings() {
       return;
     }
 
+    const cacheGeneration = paymentHistoryCacheGeneration;
     const requestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = requestId;
     setHistoryLoading(true);
     try {
       const data = await requestPaymentHistory(page, statusFilter);
-      if (requestId !== historyRequestIdRef.current) {
+      if (
+        requestId !== historyRequestIdRef.current ||
+        cacheGeneration !== paymentHistoryCacheGeneration
+      ) {
         return;
       }
       setPaymentHistory(data.payments);
@@ -204,7 +235,10 @@ export function PaymentHistorySettings() {
     } catch {
       // Error state handled through UI
     } finally {
-      if (requestId === historyRequestIdRef.current) {
+      if (
+        requestId === historyRequestIdRef.current &&
+        cacheGeneration === paymentHistoryCacheGeneration
+      ) {
         setHistoryLoading(false);
       }
     }

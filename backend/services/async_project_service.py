@@ -7,31 +7,35 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import String, and_, case, cast, delete, distinct, func, or_, select
+from sqlalchemy import String, and_, case, cast, delete, distinct, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from models.analytics import (
+    ProjectAnalytics,
+    ProjectMilestone,
+    ProjectTagAssociation,
+    TaskAttachment,
+    TaskComment,
+    TaskDependency,
+    TaskTimeTracking,
+    UserProductivity,
+)
 from models.payment import Subscription
 from models.project import MemberRole, Project, ProjectMember
 from models.task import Task, TaskStatus
 from models.task_history import TaskHistory
 from models.user import User
+from models.user_favorite import UserFavorite
 from schemas.payment import PLAN_DETAILS, SubscriptionPlanEnum
 from schemas.project import ProjectCreate, ProjectMemberCreate, ProjectUpdate
 from services.async_task_history_service import AsyncTaskHistoryService
+from services.cache_invalidation import (
+    get_project_cache_user_ids,
+    invalidate_dashboard_and_analytics_cache,
+)
 from utils.logger import logger
-
-
-async def _invalidate_dashboard_cache_after_mutation() -> None:
-    try:
-        from services.async_analytics_service import invalidate_analytics_cache
-        from services.async_dashboard_service import invalidate_dashboard_cache
-
-        await invalidate_dashboard_cache()
-        await invalidate_analytics_cache()
-    except Exception as e:
-        logger.error(f"Failed to invalidate dashboard/analytics cache: {e}")
 
 
 class AsyncProjectService:
@@ -126,6 +130,8 @@ class AsyncProjectService:
     ) -> Any:
         """Apply server-side project list search, status filter, and stable sort."""
         if search:
+            search = search.strip()[:100]
+        if search:
             escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             search_term = f"%{escaped_search}%"
             projects_query = projects_query.filter(
@@ -151,6 +157,7 @@ class AsyncProjectService:
         skip: int = 0,
         limit: int = 100,
         user_id: uuid.UUID | None = None,
+        user_projects_only: bool = False,
         search: str | None = None,
         status_filter: str | None = None,
         sort_by: str = "newest",
@@ -168,13 +175,16 @@ class AsyncProjectService:
         projects_query = select(Project)
 
         if user_id:
-            # Use exists or subquery for filtering
-            accessible_projects_subq = (
-                select(Project.id)
-                .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
-                .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
-            )
-            projects_query = projects_query.filter(Project.id.in_(accessible_projects_subq))
+            if user_projects_only:
+                projects_query = projects_query.filter(Project.owner_id == user_id)
+            else:
+                # Use exists or subquery for filtering
+                accessible_projects_subq = (
+                    select(Project.id)
+                    .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
+                    .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+                )
+                projects_query = projects_query.filter(Project.id.in_(accessible_projects_subq))
 
         projects_query = self._apply_project_list_filters(
             projects_query, search, status_filter, sort_by
@@ -259,10 +269,12 @@ class AsyncProjectService:
         async def get_activity():
             seven_days_ago = datetime.now(UTC) - timedelta(days=7)
             stmt = (
-                select(Task.project_id, func.count(TaskHistory.id))
-                .join(Task)
-                .filter(Task.project_id.in_(project_ids), TaskHistory.created_at >= seven_days_ago)
-                .group_by(Task.project_id)
+                select(TaskHistory.project_id, func.count(TaskHistory.id))
+                .filter(
+                    TaskHistory.project_id.in_(project_ids),
+                    TaskHistory.created_at >= seven_days_ago,
+                )
+                .group_by(TaskHistory.project_id)
             )
 
             res = await self.db.execute(stmt)
@@ -306,7 +318,11 @@ class AsyncProjectService:
         """Create a new project."""
         try:
             db_project = Project(
-                name=project_data.name, description=project_data.description, owner_id=owner_id
+                name=project_data.name,
+                description=project_data.description,
+                color=project_data.color,
+                settings=project_data.settings,
+                owner_id=owner_id,
             )
 
             # Check project limits before creation
@@ -323,47 +339,51 @@ class AsyncProjectService:
                 project_id=db_project.id, user_id=owner_id, role=MemberRole.OWNER.value
             )
             self.db.add(owner_member)
+            cache_user_ids = {owner_id}
 
             # Additional members
             if project_data.members:
-                # Check member limits (Owner + New Members)
-                current_count = 1  # Owner
-                new_count = len(project_data.members)
+                requested_members: dict[uuid.UUID, str] = {}
+                for member_data in project_data.members:
+                    try:
+                        member_id = uuid.UUID(str(member_data.user_id))
+                    except ValueError as exc:
+                        raise ValueError("Invalid project member ID") from exc
+                    if member_id == owner_id:
+                        continue
+                    requested_members.setdefault(member_id, member_data.role)
+
+                # Check member limits (owner plus unique requested members).
+                current_count = 1
+                new_count = len(requested_members)
                 if not await self._check_member_limit(owner_id, current_count + new_count):
                     raise ValueError(
                         "Team member limit reached. Your plan allows fewer members per project."
                     )
 
-                user_ids_to_add = []
-                for m in project_data.members:
-                    try:
-                        user_ids_to_add.append(uuid.UUID(str(m.user_id)))
-                    except ValueError:
-                        continue
-
-                if user_ids_to_add:
+                if requested_members:
                     res = await self.db.execute(
-                        select(User.id).filter(User.id.in_(user_ids_to_add))
+                        select(User.id).filter(User.id.in_(requested_members))
                     )
                     existing_ids = set(res.scalars().all())
+                    missing_ids = set(requested_members) - existing_ids
+                    if missing_ids:
+                        raise ValueError("One or more project members were not found")
 
-                    for member_data in project_data.members:
-                        uid = uuid.UUID(str(member_data.user_id))
-                        if uid in existing_ids:
-                            role_value = member_data.role
-                            if role_value == "admin":
-                                role_value = MemberRole.ADMIN.value
-                            elif role_value == "member":
-                                role_value = MemberRole.MEMBER.value
-
-                            new_member = ProjectMember(
-                                project_id=db_project.id, user_id=uid, role=role_value
-                            )
-                            self.db.add(new_member)
+                    for uid, role_value in requested_members.items():
+                        if role_value not in {
+                            MemberRole.ADMIN.value,
+                            MemberRole.MEMBER.value,
+                        }:
+                            role_value = MemberRole.MEMBER.value
+                        self.db.add(
+                            ProjectMember(project_id=db_project.id, user_id=uid, role=role_value)
+                        )
+                        cache_user_ids.add(uid)
 
             await self.db.commit()
             await self.db.refresh(db_project)
-            await _invalidate_dashboard_cache_after_mutation()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
             return db_project
 
         except IntegrityError as e:
@@ -380,6 +400,68 @@ class AsyncProjectService:
             await self.db.rollback()
             logger.error(f"Unexpected error creating project: {e}")
             raise ValueError(f"Project creation failed: {e!s}")
+
+    async def _sync_project_members(
+        self,
+        project_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        requested_member_ids: list[uuid.UUID],
+    ) -> tuple[set[uuid.UUID], set[uuid.UUID]]:
+        """Make project membership match requested user IDs and preserve owner access."""
+        requested_ids = set(requested_member_ids)
+        requested_ids.discard(owner_id)
+
+        if not await self._check_member_limit(owner_id, len(requested_ids) + 1):
+            raise ValueError(
+                "Team member limit reached. Your plan allows fewer members per project."
+            )
+
+        if requested_ids:
+            users_result = await self.db.execute(select(User.id).where(User.id.in_(requested_ids)))
+            valid_ids = set(users_result.scalars().all())
+            if missing_ids := requested_ids - valid_ids:
+                raise ValueError(f"One or more project members were not found: {missing_ids}")
+
+        existing_result = await self.db.execute(
+            select(ProjectMember).where(ProjectMember.project_id == project_id)
+        )
+        existing_members = list(existing_result.scalars().all())
+        existing_by_user = {member.user_id: member for member in existing_members}
+        existing_ids = set(existing_by_user)
+        desired_ids = requested_ids | {owner_id}
+        removed_ids = (existing_ids - desired_ids) - {owner_id}
+
+        if removed_ids:
+            await self.db.execute(
+                update(Task)
+                .where(Task.project_id == project_id, Task.assignee_id.in_(removed_ids))
+                .values(assignee_id=None)
+            )
+            await self.db.execute(
+                delete(ProjectMember).where(
+                    ProjectMember.project_id == project_id,
+                    ProjectMember.user_id.in_(removed_ids),
+                )
+            )
+
+        owner_member = existing_by_user.get(owner_id)
+        if owner_member is None:
+            self.db.add(
+                ProjectMember(project_id=project_id, user_id=owner_id, role=MemberRole.OWNER.value)
+            )
+        elif owner_member.role != MemberRole.OWNER.value:
+            owner_member.role = MemberRole.OWNER.value
+
+        for member_id in sorted(requested_ids - existing_ids, key=str):
+            self.db.add(
+                ProjectMember(
+                    project_id=project_id,
+                    user_id=member_id,
+                    role=MemberRole.MEMBER.value,
+                )
+            )
+
+        return desired_ids, existing_ids | desired_ids
 
     async def update_project(
         self, project_id: uuid.UUID, project_data: ProjectUpdate, user_id: uuid.UUID
@@ -399,25 +481,37 @@ class AsyncProjectService:
         if project_data.description is not None:
             changes["description"] = project_data.description
             project.description = project_data.description
+        if project_data.color is not None and project_data.color != project.color:
+            changes["color"] = project_data.color
+            project.color = project_data.color
+        if project_data.settings is not None and project_data.settings != project.settings:
+            changes["settings"] = project_data.settings
+            project.settings = project_data.settings
         if project_data.is_active is not None:
             changes["is_active"] = project_data.is_active
             project.is_active = project_data.is_active
 
-        # Member updates simplified relative to sync version for brevity in this step
-        # If member_ids is passed, we might simply skip it for now or implement if critical.
-        # Assuming minimal MVP for async migration: let's focus on basic attributes first.
-        # But if the frontend relies on it, we should implement it.
-        # For now, let's defer complex member diffing to a specialized method or next iteration,
-        # focusing on property updates.
+        cache_member_ids: set[uuid.UUID] = set()
+        if project_data.member_ids is not None:
+            desired_ids, cache_member_ids = await self._sync_project_members(
+                project_id, project.owner_id, project_data.member_ids
+            )
+            changes["member_ids"] = [str(member_id) for member_id in sorted(desired_ids, key=str)]
 
         try:
-            await self.db.commit()
-            await self.db.refresh(project)
-            await _invalidate_dashboard_cache_after_mutation()
-
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                project_id,
+                (user_id, *cache_member_ids),
+            )
             if changes:
                 history_service = AsyncTaskHistoryService(self.db)
-                await history_service.log_project_updated(project_id, user_id, changes)
+                await history_service.log_project_updated(
+                    project_id, user_id, changes, commit=False
+                )
+            await self.db.commit()
+            await self.db.refresh(project)
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             return project
         except SQLAlchemyError as e:
@@ -444,24 +538,47 @@ class AsyncProjectService:
             raise ValueError("Only project owners can delete projects")
 
         try:
-            # Cascading deletes manually if DB foreign keys don't handle it
-            # (Assuming code-level cascade is preferred as per Sync service)
+            cache_user_ids = await get_project_cache_user_ids(self.db, project_id, (user_id,))
 
-            # Simple approach: delete project members first, then project
-            # (Other relations like Tasks should cascade or be deleted too)
-            # Just deleting project and members for now as MVP safest
+            task_ids = select(Task.id).where(Task.project_id == project_id)
 
+            # Delete dependent rows explicitly. Existing deployments do not
+            # consistently define database-level cascades for this graph.
+            await self.db.execute(delete(TaskHistory).where(TaskHistory.project_id == project_id))
+            await self.db.execute(
+                delete(TaskDependency).where(
+                    TaskDependency.task_id.in_(task_ids)
+                    | TaskDependency.depends_on_task_id.in_(task_ids)
+                )
+            )
+            await self.db.execute(delete(TaskComment).where(TaskComment.task_id.in_(task_ids)))
+            await self.db.execute(
+                delete(TaskAttachment).where(TaskAttachment.task_id.in_(task_ids))
+            )
+            await self.db.execute(
+                delete(TaskTimeTracking).where(TaskTimeTracking.task_id.in_(task_ids))
+            )
+            await self.db.execute(
+                delete(ProjectAnalytics).where(ProjectAnalytics.project_id == project_id)
+            )
+            await self.db.execute(
+                delete(UserProductivity).where(UserProductivity.project_id == project_id)
+            )
+            await self.db.execute(
+                delete(ProjectMilestone).where(ProjectMilestone.project_id == project_id)
+            )
+            await self.db.execute(
+                delete(ProjectTagAssociation).where(ProjectTagAssociation.project_id == project_id)
+            )
+            await self.db.execute(delete(UserFavorite).where(UserFavorite.project_id == project_id))
             await self.db.execute(
                 delete(ProjectMember).where(ProjectMember.project_id == project_id)
             )
-            await self.db.execute(
-                delete(Task).where(Task.project_id == project_id)
-            )  # Tasks might have sub-resources
-            # Object deletion is synchronous in AsyncSession
-            await self.db.delete(project)
+            await self.db.execute(delete(Task).where(Task.project_id == project_id))
+            await self.db.execute(delete(Project).where(Project.id == project_id))
 
             await self.db.commit()
-            await _invalidate_dashboard_cache_after_mutation()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
             return True
         except SQLAlchemyError as e:
             await self.db.rollback()
@@ -514,17 +631,33 @@ class AsyncProjectService:
         )
         return res_member.scalars().first() is not None
 
-    async def get_project_members(self, project_id: uuid.UUID) -> list[ProjectMember]:
-        """Get all members of a project."""
-        result = await self.db.execute(
+    async def get_project_members(
+        self,
+        project_id: uuid.UUID,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> list[ProjectMember]:
+        """Get project members, optionally bounded for API list responses."""
+        query = (
             select(ProjectMember)
             .options(selectinload(ProjectMember.user))
             .filter(ProjectMember.project_id == project_id)
+            .order_by(ProjectMember.created_at.asc())
         )
+        if offset is not None:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def add_project_member(
-        self, project_id: uuid.UUID, member_data: ProjectMemberCreate, user_id: uuid.UUID
+    async def add_project_member(  # noqa: PLR0912
+        self,
+        project_id: uuid.UUID,
+        member_data: ProjectMemberCreate,
+        user_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> ProjectMember:
         """Add a member to a project."""
         project = await self.get_project_by_id(project_id)
@@ -567,9 +700,14 @@ class AsyncProjectService:
 
             db_member = ProjectMember(project_id=project_id, user_id=user_uuid, role=role_value)
             self.db.add(db_member)
-            await self.db.commit()
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db, project_id, (user_id, user_uuid)
+            )
+            await self.db.flush()
+            if commit:
+                await self.db.commit()
             await self.db.refresh(db_member)
-            await _invalidate_dashboard_cache_after_mutation()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             # Log activity
             try:
@@ -578,7 +716,10 @@ class AsyncProjectService:
                 added_user = added_user_res.scalars().first()
                 if added_user:
                     await history_service.log_project_member_added(
-                        project_id, added_user.name or "Unknown User", user_id
+                        project_id,
+                        added_user.name or "Unknown User",
+                        user_id,
+                        commit=commit,
                     )
             except Exception as e:
                 logger.error(f"Failed to log activity: {e}")
@@ -601,7 +742,12 @@ class AsyncProjectService:
             raise ValueError(f"Failed to add project member: {e}")
 
     async def remove_project_member(
-        self, project_id: uuid.UUID, member_user_id: uuid.UUID, user_id: uuid.UUID
+        self,
+        project_id: uuid.UUID,
+        member_user_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        commit: bool = True,
     ) -> bool:
         """Remove a member from a project."""
         project = await self.get_project_by_id(project_id)
@@ -629,15 +775,29 @@ class AsyncProjectService:
             user = user_res.scalars().first()
             member_name = user.name if user else "Unknown User"
 
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db, project_id, (user_id, member_user_id)
+            )
+            # Keep task assignments linked to active project members only.
+            await self.db.execute(
+                update(Task)
+                .where(Task.project_id == project_id, Task.assignee_id == member_user_id)
+                .values(assignee_id=None)
+            )
             await self.db.delete(member)
-            await self.db.commit()
-            await _invalidate_dashboard_cache_after_mutation()
+            await self.db.flush()
+            if commit:
+                await self.db.commit()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             # Log
             try:
                 history_service = AsyncTaskHistoryService(self.db)
                 await history_service.log_project_member_removed(
-                    project_id, member_name or "Unknown User", user_id
+                    project_id,
+                    member_name or "Unknown User",
+                    user_id,
+                    commit=commit,
                 )
             except Exception as e:
                 logger.error(f"Failed to log activity: {e}")
@@ -685,9 +845,12 @@ class AsyncProjectService:
                 role_value = MemberRole.OWNER.value
 
             member.role = role_value
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db, project_id, (user_id, member_user_id)
+            )
             await self.db.commit()
             await self.db.refresh(member)
-            await _invalidate_dashboard_cache_after_mutation()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             try:
                 history_service = AsyncTaskHistoryService(self.db)
@@ -768,9 +931,10 @@ class AsyncProjectService:
         # Separate query for recent activity (using join with TaskHistory)
         recent_activity = (
             await self.db.execute(
-                select(func.count(TaskHistory.id))
-                .join(Task)
-                .filter(Task.project_id == project_id, TaskHistory.created_at >= seven_days_ago)
+                select(func.count(TaskHistory.id)).filter(
+                    TaskHistory.project_id == project_id,
+                    TaskHistory.created_at >= seven_days_ago,
+                )
             )
         ).scalar() or 0
 
@@ -885,8 +1049,13 @@ class AsyncProjectService:
             if not new_members:
                 return []
 
+            cache_user_ids = await get_project_cache_user_ids(
+                self.db,
+                project_id,
+                (user_id, *(member.user_id for member in new_members)),
+            )
             await self.db.commit()
-            await _invalidate_dashboard_cache_after_mutation()
+            await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
             # Refresh all new members
             for member in new_members:

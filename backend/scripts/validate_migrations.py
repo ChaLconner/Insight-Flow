@@ -50,7 +50,7 @@ def parse_migration_file(filepath: Path) -> dict | None:
 
         # Extract down_revision (handle various type annotations)
         down_revision_match = re.search(
-            r"^down_revision(?:\s*:\s*Union\[str,\s*(?:Sequence\[str\],\s*)?None\])?\s*=\s*(.+?)$",
+            r"^down_revision(?:\s*:\s*[^=]+)?\s*=\s*(.+?)\s*$",
             content,
             re.MULTILINE,
         )

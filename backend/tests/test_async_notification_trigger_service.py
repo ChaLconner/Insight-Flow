@@ -63,7 +63,7 @@ async def test_notify_task_assigned_success(
         )
 
         mock_db_session.add.assert_called_once()
-        mock_db_session.commit.assert_called_once()
+        mock_db_session.flush.assert_awaited_once()
         args = mock_db_session.add.call_args[0][0]
         assert isinstance(args, Notification)
         assert args.type == "task_assigned"
@@ -81,9 +81,9 @@ async def test_notify_task_assigned_sends_email_when_enabled(trigger_service, us
             return_value={"inApp": {"tasks": False}, "email": {"tasks": True}},
         ),
         patch(
-            "services.async_notification_trigger_service.EmailService.send_email",
+            "services.async_notification_trigger_service.enqueue_job",
             new_callable=AsyncMock,
-        ) as mock_send_email,
+        ) as mock_enqueue,
     ):
         await trigger_service.notify_task_assigned(
             assignee=assignee,
@@ -94,7 +94,8 @@ async def test_notify_task_assigned_sends_email_when_enabled(trigger_service, us
             assigner=assigner,
         )
 
-        mock_send_email.assert_awaited_once()
+        mock_enqueue.assert_awaited_once()
+        assert mock_enqueue.call_args.args[1] == "email.send"
 
 
 @pytest.mark.asyncio
@@ -104,6 +105,9 @@ async def test_notify_task_assigned_rate_limited(
     assigner, assignee = users
 
     mock_rate_limiter.can_send.return_value = (False, "Limit reached")
+    preferences_result = MagicMock()
+    preferences_result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = preferences_result
 
     await trigger_service.notify_task_assigned(
         assignee=assignee,
@@ -298,5 +302,5 @@ async def test_grouping_existing_notification(trigger_service, mock_db_session, 
 
         # Should update existing, not create new
         mock_db_session.add.assert_not_called()
-        mock_db_session.commit.assert_called_once()
+        mock_db_session.commit.assert_not_called()
         assert existing_notif.data["count"] == 2

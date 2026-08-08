@@ -147,22 +147,50 @@ async def get_slow_queries(session: AsyncSession, min_calls: int = 10) -> list[d
 
 
 async def get_missing_fk_indexes(session: AsyncSession) -> list[dict[str, Any]]:
-    """Find foreign keys without corresponding indexes."""
+    """Find public-schema foreign keys without a left-prefix covering index."""
     query = text("""
-        SELECT
-            c.conrelid::regclass::text AS table_name,
-            a.attname AS column_name,
-            c.confrelid::regclass::text AS referenced_table
-        FROM pg_constraint c
-        JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
-        WHERE c.contype = 'f'
-        AND NOT EXISTS (
-            SELECT 1
+        WITH foreign_keys AS (
+            SELECT
+                c.conrelid,
+                c.confrelid,
+                c.conkey,
+                c.conrelid::regclass::text AS table_name,
+                c.confrelid::regclass::text AS referenced_table,
+                array_agg(a.attname ORDER BY key_columns.ordinality) AS column_names
+            FROM pg_constraint c
+            JOIN pg_namespace source_schema
+              ON source_schema.oid = c.connamespace
+            CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY
+              AS key_columns(attnum, ordinality)
+            JOIN pg_attribute a
+              ON a.attrelid = c.conrelid
+             AND a.attnum = key_columns.attnum
+            WHERE c.contype = 'f'
+              AND source_schema.nspname = 'public'
+            GROUP BY c.oid, c.conrelid, c.confrelid, c.conkey
+        ), indexes AS (
+            SELECT
+                i.indrelid,
+                array_agg(index_columns.attnum ORDER BY index_columns.ordinality) AS column_numbers
             FROM pg_index i
-            WHERE i.indrelid = c.conrelid
-            AND a.attnum = ANY(i.indkey)
+            CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY
+              AS index_columns(attnum, ordinality)
+            WHERE i.indpred IS NULL
+              AND i.indexprs IS NULL
+            GROUP BY i.indexrelid, i.indrelid
         )
-        ORDER BY table_name, column_name;
+        SELECT
+            foreign_keys.table_name,
+            array_to_string(foreign_keys.column_names, ',') AS column_name,
+            foreign_keys.referenced_table
+        FROM foreign_keys
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM indexes
+            WHERE indexes.indrelid = foreign_keys.conrelid
+              AND indexes.column_numbers[1:cardinality(foreign_keys.conkey)] = foreign_keys.conkey
+        )
+        ORDER BY foreign_keys.table_name, column_name;
     """)
 
     result = await session.execute(query)
@@ -185,7 +213,7 @@ async def get_unused_indexes(
     query = text("""
         SELECT
             schemaname,
-            tablename,
+            relname as table_name,
             indexrelname as index_name,
             idx_scan,
             pg_size_pretty(pg_relation_size(indexrelid)) as index_size,
@@ -274,19 +302,19 @@ def generate_recommendations(
         # Token blacklist
         {
             "table": "token_blacklist",
-            "columns": ["token_hash", "expires_at"],
-            "reason": "Token validation",
+            "columns": ["expires_at"],
+            "reason": "Expired-token cleanup",
         },
     ]
 
     # Check which suggested indexes don't exist
     existing_index_keys = set()
     for idx in existing_indexes:
-        key = f"{idx.table_name}:{','.join(sorted(idx.column_names))}"
+        key = f"{idx.table_name}:{','.join(idx.column_names)}"
         existing_index_keys.add(key)
 
     for suggestion in suggested_indexes:
-        key = f"{suggestion['table']}:{','.join(sorted(suggestion['columns']))}"
+        key = f"{suggestion['table']}:{','.join(suggestion['columns'])}"
 
         # Check if table exists in stats
         if suggestion["table"] not in table_stats:

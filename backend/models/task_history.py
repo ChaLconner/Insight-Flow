@@ -63,4 +63,14 @@ class TaskHistory(BaseModel):
     task: Mapped["Task"] = relationship("Task")
     user: Mapped["User"] = relationship("User")
 
-    __table_args__ = (Index("ix_task_history_project_timestamp", "project_id", "timestamp"),)
+    __table_args__ = (
+        Index("ix_task_history_project_timestamp", "project_id", "timestamp"),
+        Index(
+            "ix_task_history_project_activity_timestamp",
+            "project_id",
+            "activity_type",
+            "timestamp",
+        ),
+        Index("ix_task_history_user_activity_timestamp", "user_id", "activity_type", "timestamp"),
+        Index("ix_task_history_task_id_created_at", "task_id", "created_at"),
+    )

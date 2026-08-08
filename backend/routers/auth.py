@@ -15,6 +15,7 @@ from dependencies import (
     get_password_reset_service,
     get_user_service,
 )
+from dependencies.auth import verify_token_fingerprint
 from models.token_blacklist import TokenBlacklist
 from models.user import User
 from rate_limiter import auth_rate_limiter
@@ -60,6 +61,21 @@ logger = setup_logger("auth_router")
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+
+def _get_session_version(user: User) -> int:
+    """Return a normalized session version for token issuance."""
+    version = getattr(user, "session_version", 0)
+    return version if isinstance(version, int) else 0
+
+
+def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
+    """Reject refresh tokens issued before the user's current session version."""
+    try:
+        return int(payload.get("sv", 0)) == _get_session_version(user)
+    except (TypeError, ValueError):
+        return False
+
+
 # Log cookie security setting
 if not COOKIE_SECURE:
     logger.info("⚠️ COOKIE_SECURE is FALSE (Development Mode). Cookies will be accepted over HTTP.")
@@ -75,9 +91,12 @@ def _login_success_response(user: User, *, role: str | None = None) -> dict[str,
             "email": user.email,
             "username": user.username,
             "name": user.name,
+            "firstName": getattr(user, "first_name", None),
+            "lastName": getattr(user, "last_name", None),
             "avatar": user.avatar_url,
             "role": role or user.role,
-            "is_active": user.is_active,
+            "isActive": user.is_active,
+            "emailVerified": getattr(user, "is_verified", True),
         },
     }
 
@@ -207,6 +226,7 @@ async def login(
             log_user_info=mask_email(login_data.email),
             request=request,
             remember_me=login_data.remember_me,
+            session_version=_get_session_version(user),
         )
         logger.debug(
             f"Cookie settings: secure={COOKIE_SECURE}, samesite='lax', httponly=True, path='/'"
@@ -299,6 +319,7 @@ async def google_login(
             user_id=str(user.id),
             log_user_info=mask_email(user.email),
             request=request,
+            session_version=_get_session_version(user),
         )
 
         return _login_success_response(user)
@@ -380,6 +401,7 @@ async def github_login(
             user_id=str(user.id),
             log_user_info=mask_email(user.email),
             request=request,
+            session_version=_get_session_version(user),
         )
 
         return _login_success_response(user)
@@ -411,31 +433,30 @@ async def logout(
         # This is the most important part - it must run regardless of token validity
         clear_auth_cookies(response)
 
-        # Get token from cookie or header
-        token = request.cookies.get(ACCESS_TOKEN_KEY)
-        if not token:
+        tokens = [
+            (request.cookies.get(ACCESS_TOKEN_KEY), "access"),
+            (request.cookies.get(REFRESH_TOKEN_KEY), "refresh"),
+        ]
+        if not tokens[0][0]:
             auth_header = request.headers.get("authorization")
             if auth_header and auth_header.startswith("Bearer "):
-                token = auth_header.split(" ")[1]
+                tokens[0] = (auth_header.split(" ", 1)[1], "access")
 
-        if token:
-            # Get token payload to extract jti and expiration
-            from utils.auth import verify_token
+        # Blacklist both cookies so logout also invalidates refresh rotation.
+        from utils.auth import verify_token
 
+        for token, token_type in tokens:
+            if not token:
+                continue
             try:
-                # We catch verification errors here to ensure logout proceeds
-                payload = verify_token(token)
+                payload = verify_token(token, expected_type=token_type)
+                user_email = payload.get("sub", "unknown")
                 token_jti = payload.get("jti")
-                user_email = payload.get("sub", "unknown")  # Usually sub is ID or email
-
-                if token_jti:
-                    # Get token expiration
-                    token_expiration = get_token_expiration(token)
-                    if token_expiration:
-                        # Add token to blacklist (Async)
-                        await TokenBlacklist.async_blacklist_token(db, token_jti, token_expiration)
+                token_expiration = get_token_expiration(token)
+                if token_jti and token_expiration:
+                    await TokenBlacklist.async_blacklist_token(db, token_jti, token_expiration)
             except Exception:
-                # Token might be expired or invalid already, we just ignore
+                # Expired or invalid tokens need no further logout action.
                 pass
 
         return {"message": "Successfully logged out"}
@@ -474,7 +495,9 @@ async def refresh_token(
 
     try:
         # Verify refresh token with blacklist checking (Async)
-        payload = await async_verify_token_with_blacklist(refresh_token, db)
+        payload = await async_verify_token_with_blacklist(
+            refresh_token, db, expected_type="refresh"
+        )
 
         # Extract user_id from payload
         user_id = payload.get("sub")
@@ -506,6 +529,15 @@ async def refresh_token(
             detail="User not found",
         )
 
+    await verify_token_fingerprint(request, payload, str(user.id), db)
+
+    if not _session_version_matches(payload, user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalid - please login again",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     if not user.is_active:
         logger.warning(f"User {user_id} is not active")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
@@ -518,7 +550,12 @@ async def refresh_token(
 
     # Create and set new tokens using centralized utility
     # A+ Security: Pass request for token fingerprinting (device binding)
-    create_and_set_auth_cookies(response=response, user_id=str(user.id), request=request)
+    create_and_set_auth_cookies(
+        response=response,
+        user_id=str(user.id),
+        request=request,
+        session_version=_get_session_version(user),
+    )
 
     return {"message": "Token refreshed successfully", "expires_in": 1800}
 
@@ -546,27 +583,13 @@ async def forgot_password(
                 success=True,
             )
 
-        # Send reset email
-        # Use raw_token if available (it was attached in create_password_reset_token)
-        token_to_send = getattr(reset_token, "raw_token", reset_token.token)
-        email_sent = await password_reset_service.send_reset_email(
-            request_data.email, token_to_send
+        # Token creation atomically persisted the durable email job. Avoid a
+        # second enqueue/commit round trip for the same reset request.
+        logger.info(f"Password reset email queued for: {mask_email(request_data.email)}")
+        return ForgotPasswordResponse(
+            message="If your email is registered, you will receive a password reset link shortly.",
+            success=True,
         )
-
-        if email_sent:
-            logger.info(f"Password reset email sent to: {mask_email(request_data.email)}")
-            return ForgotPasswordResponse(
-                message="If your email is registered, you will receive a password reset link shortly.",
-                success=True,
-            )
-        else:
-            logger.error(
-                f"Failed to send password reset email to: {mask_email(request_data.email)}"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send password reset email",
-            )
 
     except HTTPException:
         raise

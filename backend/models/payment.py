@@ -149,6 +149,10 @@ class Subscription(BaseModel):
         "PaymentHistory", back_populates="subscription"
     )
 
+    __table_args__ = (
+        Index("ix_subscriptions_default_payment_method_id", "default_payment_method_id"),
+    )
+
 
 class PaymentHistory(BaseModel):
     """
@@ -206,4 +210,8 @@ class PaymentHistory(BaseModel):
         "PaymentMethod", back_populates="transactions"
     )
 
-    __table_args__ = (Index("ix_payment_history_user_created_at", "user_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_payment_history_user_created_at", "user_id", "created_at"),
+        Index("ix_payment_history_subscription_id", "subscription_id"),
+        Index("ix_payment_history_payment_method_id", "payment_method_id"),
+    )

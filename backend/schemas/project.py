@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from models.project import MemberRole
 from utils.schema_utils import to_camel
@@ -19,6 +19,8 @@ class ProjectBase(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
+    color: str = Field(default="#6366f1", min_length=7, max_length=7, pattern=r"^#[0-9A-Fa-f]{6}$")
+    settings: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -42,6 +44,10 @@ class ProjectUpdate(BaseModel):
 
     name: str | None = None
     description: str | None = None
+    color: str | None = Field(
+        default=None, min_length=7, max_length=7, pattern=r"^#[0-9A-Fa-f]{6}$"
+    )
+    settings: dict[str, Any] | None = None
     is_active: bool | None = None
     member_ids: list[uuid.UUID] | None = None
 
@@ -132,5 +138,17 @@ class ProjectSummary(ProjectBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("color", mode="before")
+    @classmethod
+    def normalize_legacy_color(cls, value: Any) -> Any:
+        """Keep task responses compatible with legacy project rows/mocks."""
+        return value if isinstance(value, str) else "#6366f1"
+
+    @field_validator("settings", mode="before")
+    @classmethod
+    def normalize_legacy_settings(cls, value: Any) -> dict[str, Any]:
+        """Keep task responses compatible with legacy project rows/mocks."""
+        return value if isinstance(value, dict) else {}
 
     model_config = ConfigDict(from_attributes=True, alias_generator=to_camel, populate_by_name=True)

@@ -36,7 +36,10 @@ class AsyncAnalyticsService:
         return (
             select(Project.id)
             .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
-            .filter(or_(Project.owner_id == user_id, ProjectMember.user_id == user_id))
+            .filter(
+                Project.is_active.is_(True),
+                or_(Project.owner_id == user_id, ProjectMember.user_id == user_id),
+            )
             .distinct()
         )
 
@@ -63,7 +66,9 @@ class AsyncAnalyticsService:
             total_projects = total_projects_result.scalar() or 0
 
             if total_projects == 0:
-                return self._get_empty_analytics_response()
+                result = self._get_empty_analytics_response()
+                await cache_service.set(cache_key, result, timeout=ANALYTICS_CACHE_TTL)
+                return result
 
             # Run DB work sequentially on the shared AsyncSession. AsyncSession is not
             # concurrency-safe; cache keeps the warm path fast.
@@ -109,7 +114,7 @@ class AsyncAnalyticsService:
 
         except Exception as e:
             logger.error(f"Error generating analytics overview for user {user_id}: {e}")
-            return self._get_empty_analytics_response()
+            raise
 
     async def _get_overview_metrics(
         self, project_ids: Any, _user_id: uuid.UUID, total_projects: int = 0
@@ -132,7 +137,7 @@ class AsyncAnalyticsService:
                     case(
                         (
                             and_(
-                                Task.due_date < datetime.now(),
+                                Task.due_date < datetime.now(UTC),
                                 cast(Task.status, String) != TaskStatus.DONE.value,
                             ),
                             1,
@@ -572,9 +577,13 @@ class AsyncAnalyticsService:
         else:
             query = query.order_by(task_count.desc(), sort_by_name.asc())
 
-        count_result = await self.db.execute(select(func.count()).select_from(query.subquery()))
+        count_result = await self.db.execute(
+            select(func.count()).select_from(query.order_by(None).subquery())
+        )
         total_count = count_result.scalar() or 0
 
+        page = max(page, 1)
+        page_size = min(max(page_size, 1), 100)
         offset = (page - 1) * page_size
         result = await self.db.execute(query.offset(offset).limit(page_size))
         stats = result.all()
@@ -633,10 +642,19 @@ class AsyncAnalyticsService:
         days = self._get_days_from_period(period)
         start_date = datetime.now(UTC) - timedelta(days=days)
 
+        group_by = group_by.lower()
+        if group_by == "day":
+            group_expression = func.date(TaskHistory.timestamp)
+        elif group_by == "month":
+            group_expression = func.date_trunc("month", TaskHistory.timestamp)
+        else:
+            group_by = "week"
+            group_expression = func.date_trunc("week", TaskHistory.timestamp)
+
         # Get task completions over time
         completions_result = await self.db.execute(
             select(
-                func.date(TaskHistory.timestamp).label("date"),
+                group_expression.label("date"),
                 func.count(TaskHistory.id).label("count"),
             )
             .filter(
@@ -644,7 +662,8 @@ class AsyncAnalyticsService:
                 cast(TaskHistory.activity_type, String) == ActivityType.TASK_COMPLETED.value,
                 TaskHistory.timestamp >= start_date,
             )
-            .group_by(func.date(TaskHistory.timestamp))
+            .group_by(group_expression)
+            .order_by(group_expression)
         )
         completions = completions_result.all()
 

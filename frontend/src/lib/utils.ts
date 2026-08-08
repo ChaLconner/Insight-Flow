@@ -44,6 +44,41 @@ export function getRelativeTime(date: string | Date): string {
 }
 
 /**
+ * Format a user's last-login timestamp for the users list.
+ */
+export function formatLastLogin(dateString?: string): string {
+  if (!dateString) {
+    return "Never";
+  }
+
+  const targetDate = new Date(dateString);
+  if (Number.isNaN(targetDate.getTime())) {
+    return "Invalid date";
+  }
+
+  const diffInHours = Math.floor(
+    (Date.now() - targetDate.getTime()) / (1000 * 60 * 60),
+  );
+
+  if (diffInHours < 1) {
+    return "Just now";
+  }
+  if (diffInHours < 24) {
+    return `${diffInHours}h ago`;
+  }
+
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays === 1) {
+    return "Yesterday";
+  }
+  if (diffInDays < 7) {
+    return `${diffInDays}d ago`;
+  }
+
+  return formatDate(targetDate);
+}
+
+/**
  * Check if date is overdue
  */
 export function isOverdue(date: string | Date): boolean {

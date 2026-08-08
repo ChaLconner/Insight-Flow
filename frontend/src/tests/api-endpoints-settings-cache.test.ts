@@ -53,4 +53,21 @@ describe("usersApi settings cache", () => {
     expect(fromCache).toEqual({ theme: "light" });
     expect(apiClientMock.get).toHaveBeenCalledTimes(1);
   });
+
+  it("does not repopulate settings from a request started before auth cache clear", async () => {
+    let resolveSettings!: (response: { data: unknown }) => void;
+    apiClientMock.get.mockImplementationOnce(
+      () => new Promise<{ data: unknown }>((resolve) => (resolveSettings = resolve)),
+    );
+
+    const { __clearUsersSettingsCacheForTests, usersApi } = await import("@/lib/api-endpoints");
+    const pending = usersApi.getSettings();
+    __clearUsersSettingsCacheForTests();
+    resolveSettings({ data: { theme: "old-user" } });
+    await pending;
+
+    apiClientMock.get.mockResolvedValueOnce({ data: { theme: "new-user" } });
+    await expect(usersApi.getSettings()).resolves.toEqual({ theme: "new-user" });
+    expect(apiClientMock.get).toHaveBeenCalledTimes(2);
+  });
 });

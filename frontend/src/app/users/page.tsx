@@ -19,8 +19,7 @@ import {
 } from "./components";
 
 import { useUsers } from "./hooks/useUsers";
-import { getRelativeTime } from "@/lib/utils";
-
+import { formatLastLogin } from "@/lib/utils";
 
 import { KEYBOARD_SHORTCUTS } from "./types";
 import {
@@ -234,10 +233,7 @@ export default function UsersPage() {
                 <ul className="divide-y divide-border" role="list">
                   {users.map((user) => (
                     <li key={user.id}>
-                      <UserCard
-                        user={user}
-                        formatLastLogin={(d) => (d ? getRelativeTime(d) : "Never")}
-                      />
+                      <UserCard user={user} formatLastLogin={formatLastLogin} />
                     </li>
                   ))}
                 </ul>

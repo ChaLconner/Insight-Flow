@@ -13,12 +13,14 @@ import {
   downloadFile,
   isAxiosError,
   ApiError,
+  setLoggingOut,
 } from '@/lib/api-client';
 
 describe('API Client Configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    setLoggingOut(false);
   });
 
   it('should be defined', () => {
@@ -102,6 +104,91 @@ describe('API Client Configuration', () => {
     );
 
     await expect(apiClient.get('/auth/login')).rejects.toThrow();
+  });
+
+  it('should refresh once and retry the original request', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Expired' }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: 'ok' }), { status: 200 }));
+
+    await expect(apiClient.get('/protected')).resolves.toMatchObject({ data: { data: 'ok' } });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(fetchSpy.mock.calls[1][0]).toContain('/auth/refresh');
+    expect(fetchSpy.mock.calls[2][0]).toContain('/protected');
+  });
+
+  it('should reject failed refresh without recursively retrying refresh', async () => {
+    window.history.pushState({}, '', '/');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Expired' }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Refresh failed' }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Unauthenticated' }), { status: 401 }));
+
+    await expect(apiClient.get('/protected')).rejects.toThrow('Refresh failed');
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('should release queued requests after a successful session fallback', async () => {
+    let resolveFallback!: (response: Response) => void;
+    const fallbackResponse = new Promise<Response>((resolve) => {
+      resolveFallback = resolve;
+    });
+    let protectedACalls = 0;
+    let protectedBCalls = 0;
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/protected-a')) {
+        protectedACalls += 1;
+        return protectedACalls === 1
+          ? new Response(JSON.stringify({ detail: 'Expired' }), { status: 401 })
+          : new Response(JSON.stringify({ data: 'a' }), { status: 200 });
+      }
+      if (url.includes('/protected-b')) {
+        protectedBCalls += 1;
+        return protectedBCalls === 1
+          ? new Response(JSON.stringify({ detail: 'Expired' }), { status: 401 })
+          : new Response(JSON.stringify({ data: 'b' }), { status: 200 });
+      }
+      if (url.includes('/auth/refresh')) {
+        return new Response(JSON.stringify({ detail: 'Refresh failed' }), { status: 401 });
+      }
+      if (url.includes('/auth/me')) {
+        return fallbackResponse;
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const first = apiClient.get('/protected-a');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = apiClient.get('/protected-b');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    resolveFallback(new Response(JSON.stringify({ id: 'user-1' }), { status: 200 }));
+
+    await expect(first).resolves.toMatchObject({ data: { data: 'a' } });
+    await expect(second).resolves.toMatchObject({ data: { data: 'b' } });
+    expect(protectedACalls).toBe(2);
+    expect(protectedBCalls).toBe(2);
+    expect(fetchSpy).toHaveBeenCalledWith(expect.stringContaining('/auth/me'), expect.anything());
+  });
+
+  it('should allow explicit logout request while logout guard is active', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    setLoggingOut(true);
+    await expect(
+      apiClient.post('/auth/logout', undefined, {
+        skipAuthRefresh: true,
+        skipLogoutGuard: true,
+      }),
+    ).resolves.toMatchObject({ data: { ok: true } });
+    setLoggingOut(false);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should handle network abort / timeout error', async () => {

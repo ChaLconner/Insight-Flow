@@ -1,15 +1,23 @@
 import type { Project, User, UserRole } from "@/types";
 import { ProjectStatus } from "@/types";
+import { PROJECT_COLORS } from "@/lib/constants";
 import { getAvatarUrl } from "@/lib/utils";
 
-// Colors for projects
-export const PROJECT_COLORS = [
-  "#6366f1",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-];
+const DEFAULT_PROJECT_COLOR = "#6366f1";
+
+/**
+ * Keep legacy projects visually distinct when backend still returns its
+ * default color. Explicit project colors remain unchanged.
+ */
+export function getProjectColor(color: unknown, index = 0): string {
+  const normalizedColor = typeof color === "string" ? color.trim() : "";
+
+  if (normalizedColor && normalizedColor.toLowerCase() !== DEFAULT_PROJECT_COLOR) {
+    return normalizedColor;
+  }
+
+  return PROJECT_COLORS[index % PROJECT_COLORS.length];
+}
 
 /**
  * Transforms backend project data into a fully typed Project object.
@@ -132,7 +140,7 @@ export function transformProjectData(
     id: p.id as string,
     name: (p.name as string) ?? "Unnamed Project",
     description: (p.description as string) ?? "",
-    color: (p.color as string) ?? PROJECT_COLORS[index % PROJECT_COLORS.length], // fallback color
+    color: getProjectColor(p.color, index),
     status:
       p.isActive !== false
         ? ProjectStatus.ACTIVE

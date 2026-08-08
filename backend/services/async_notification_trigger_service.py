@@ -3,6 +3,7 @@ Async Notification Trigger Service.
 Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -14,10 +15,12 @@ from models.notification import Notification
 from models.user import User
 from models.user_settings import UserSettings
 from services.email_service import EmailService
+from services.job_queue import enqueue_job
 from services.notification_rate_limiter import get_rate_limiter
 from utils.logger import setup_logger
 
 logger = setup_logger("async_notification_trigger")
+EMAIL_JOB_TYPE = "email.send"
 
 
 class AsyncNotificationTriggerService:
@@ -36,6 +39,8 @@ class AsyncNotificationTriggerService:
                 return settings.notification_preferences
         except Exception as e:
             logger.warning(f"Failed to get user preferences: {e}")
+            await self.db.rollback()
+            raise
 
         return {
             "inApp": {
@@ -87,9 +92,28 @@ class AsyncNotificationTriggerService:
             html_email = EmailService._get_base_template(
                 subject, content, action_url, "Open Insight Flow"
             )
-            await EmailService.send_email(user.email, f"Insight Flow - {subject}", html_email)
+            idempotency_key = (
+                "notification-email:"
+                + hashlib.sha256(f"{user.id}:{subject}:{message}".encode()).hexdigest()
+            )
+            await enqueue_job(
+                self.db,
+                EMAIL_JOB_TYPE,
+                {
+                    "method": "send_email",
+                    "to_email": user.email,
+                    "subject": f"Insight Flow - {subject}",
+                    "html_content": html_email,
+                },
+                idempotency_key=idempotency_key,
+            )
+            logger.info("Queued notification email for user %s", user.id)
         except Exception as e:
-            logger.warning(f"Failed to send notification email to user {user.id}: {e}")
+            logger.warning(f"Failed to queue notification email to user {user.id}: {e}")
+            await self.db.rollback()
+            # The caller is a durable notification job. Propagate the queue
+            # failure so the worker can retry instead of silently losing mail.
+            raise
 
     def _check_rate_limit(self, user_id: uuid.UUID, notification_type: str) -> bool:
         can_send, reason = self.rate_limiter.can_send(str(user_id), notification_type)
@@ -128,11 +152,11 @@ class AsyncNotificationTriggerService:
             }
             notification.created_at = datetime.now(UTC)
 
-            await self.db.commit()
             logger.info(f"Updated grouped notification for user {notification.user_id}")
         except Exception as e:
             logger.error(f"Failed to update grouped notification: {e}")
             await self.db.rollback()
+            raise
 
     def _get_grouped_title(self, notification_type: str, count: int) -> str:
         titles = {
@@ -185,7 +209,7 @@ class AsyncNotificationTriggerService:
                 data=data or {},
             )
             self.db.add(notification)
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(notification)
 
             self.rate_limiter.record_notification(str(user_id), notification_type)
@@ -194,7 +218,7 @@ class AsyncNotificationTriggerService:
         except Exception as e:
             logger.error(f"Failed to create notification: {e}")
             await self.db.rollback()
-            return None
+            raise
 
     # Public Async Methods
     async def notify_project_member_added(

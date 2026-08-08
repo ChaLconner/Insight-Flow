@@ -1,8 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- preserve backward-compatible client generics */
+
 // ===========================================
 // Fetch API Client Configuration (Native Fetch, No Axios)
 // ===========================================
 
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
+import { clearAuthenticatedCaches } from "@/lib/auth-cache";
 import { toast } from "sonner";
 
 // ===========================================
@@ -83,6 +86,10 @@ export interface FetchRequestConfig extends RequestInit {
   timeout?: number;
   responseType?: "json" | "blob" | "text";
   withCredentials?: boolean;
+  /** Internal auth-state controls; never forwarded to fetch. */
+  skipAuthRefresh?: boolean;
+  skipLogoutGuard?: boolean;
+  authRetry?: boolean;
 }
 
 export interface AxiosLikeResponse<T = unknown> {
@@ -142,7 +149,7 @@ async function executeFetch<T = any>(
   endpoint: string,
   config: FetchRequestConfig = {}
 ): Promise<AxiosLikeResponse<T>> {
-  if (isLoggingOut) {
+  if (isLoggingOut && !config.skipLogoutGuard) {
     return new Promise(() => {});
   }
 
@@ -176,8 +183,13 @@ async function executeFetch<T = any>(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  const requestConfig = { ...config };
+  delete requestConfig.skipAuthRefresh;
+  delete requestConfig.skipLogoutGuard;
+  delete requestConfig.authRetry;
+
   const fetchOptions: RequestInit = {
-    ...config,
+    ...requestConfig,
     headers,
     signal: controller.signal,
     credentials: config.withCredentials !== false ? "include" : "same-origin",
@@ -225,31 +237,43 @@ async function executeFetch<T = any>(
         endpoint.includes("/auth/forgot-password") ||
         endpoint.includes("/auth/reset-password") ||
         endpoint.includes("/auth/google") ||
-        endpoint.includes("/auth/github");
+        endpoint.includes("/auth/github") ||
+        endpoint.includes("/auth/refresh") ||
+        endpoint.includes("/auth/logout") ||
+        endpoint.includes("/auth/me");
 
-      if (res.status === 401 && !isAuthEndpoint) {
+      if (res.status === 401 && !config.skipAuthRefresh && !config.authRetry && !isAuthEndpoint) {
         if (isRefreshing) {
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
-          }).then(() => executeFetch<T>(endpoint, config));
+          }).then(() => executeFetch<T>(endpoint, { ...config, authRetry: true }));
         }
 
         isRefreshing = true;
         try {
-          await executeFetch("/auth/refresh", { method: "POST" });
+          await executeFetch("/auth/refresh", {
+            method: "POST",
+            skipAuthRefresh: true,
+            skipLogoutGuard: true,
+          });
           processQueue(null);
-          isRefreshing = false;
-          return executeFetch<T>(endpoint, config);
+          return executeFetch<T>(endpoint, { ...config, authRetry: true });
         } catch (refreshErr) {
-          processQueue(refreshErr as Error);
-          isRefreshing = false;
           try {
-            await executeFetch("/auth/me", { method: "GET" });
-            return executeFetch<T>(endpoint, config);
+            await executeFetch("/auth/me", {
+              method: "GET",
+              skipAuthRefresh: true,
+              skipLogoutGuard: true,
+            });
+            processQueue(null);
+            return executeFetch<T>(endpoint, { ...config, authRetry: true });
           } catch {
+            processQueue(refreshErr as Error);
             await clearAuthTokens();
             throw refreshErr;
           }
+        } finally {
+          isRefreshing = false;
         }
       }
 
@@ -337,9 +361,15 @@ async function clearAuthTokens(): Promise<void> {
 
   try {
     toast.error("Session expired", { description: "Please log in again." });
-    await apiClient.post("/auth/logout");
+    await apiClient.post(
+      "/auth/logout",
+      undefined,
+      { skipAuthRefresh: true, skipLogoutGuard: true }
+    );
   } catch {
     // ignore
+  } finally {
+    setLoggingOut(false);
   }
 
   window.location.href = "/auth/login";
@@ -466,6 +496,8 @@ export function clearDeduplicatedRequests(): void {
 }
 
 async function clearClientSideCaches(): Promise<void> {
+  await clearAuthenticatedCaches();
+
   try {
     const { clearQueryCache } = await import("@/providers/query-provider");
     clearQueryCache();

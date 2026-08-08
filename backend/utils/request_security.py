@@ -39,8 +39,9 @@ CLOUD_TRUSTED_PROXIES: dict[str, list[str]] = {
         "10.0.0.0/8",
     ],
     "vercel": [
-        # Vercel's edge network (they handle X-Forwarded-For properly)
-        "0.0.0.0/0",  # Trust Vercel's header handling
+        # Vercel's public edge ranges are not a stable application-owned
+        # trust boundary. Configure TRUSTED_PROXIES with the actual proxy
+        # addresses for a deployment that terminates requests behind Vercel.
     ],
     "cloudflare": [
         "173.245.48.0/20",

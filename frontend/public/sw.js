@@ -3,7 +3,6 @@
  * Provides offline support and caching for better performance.
  */
 
-/* eslint-env serviceworker */
 /* global self, caches, fetch, URL, console */
 
 var CACHE_NAME = "insight-flow-v1";
@@ -13,9 +12,7 @@ var LOCAL_DEV_HOSTS = ["localhost", "127.0.0.1", "::1"];
 
 // Static assets to cache on install
 var STATIC_ASSETS = [
-  "/",
-  "/dashboard",
-  "/manifest.json",
+  "/manifest.webmanifest",
 ];
 
 // Do not cache authenticated API responses. HttpOnly-cookie auth makes cache
@@ -64,7 +61,24 @@ self.addEventListener("activate", function(event) {
               console.log("[SW] Deleting old cache:", name);
               return caches.delete(name);
             })
-        );
+        ).then(function() {
+          // Remove document entries created by older workers. Keeping an old
+          // authenticated HTML response in the current cache defeats the
+          // cookie-aware cache policy even after this worker updates.
+          return caches.open(STATIC_CACHE_NAME).then(function(cache) {
+            return cache.keys().then(function(requests) {
+              return Promise.all(
+                requests
+                  .filter(function(request) {
+                    return !isSafeStaticCacheEntry(request);
+                  })
+                  .map(function(request) {
+                    return cache.delete(request);
+                  })
+              );
+            });
+          });
+        });
       });
     })
   );
@@ -79,6 +93,11 @@ function isStaticAsset(pathname) {
     pathname.startsWith("/static/") ||
     pathname.match(/\.(js|css|woff2?|ttf|eot|svg|png|jpg|jpeg|gif|webp|avif|ico)$/) !== null
   );
+}
+
+function isSafeStaticCacheEntry(request) {
+  var pathname = new URL(request.url).pathname;
+  return pathname === "/manifest.webmanifest" || isStaticAsset(pathname);
 }
 
 // Check if API request should be cached
@@ -187,7 +206,8 @@ self.addEventListener("fetch", function(event) {
 
   // HTML pages - Network first for freshness
   if (request.headers.get("accept") && request.headers.get("accept").includes("text/html")) {
-    event.respondWith(networkFirstWithCache(request, STATIC_CACHE_NAME));
+    // Never persist HTML that may contain an authenticated app shell or
+    // user-specific data. Static JS/CSS/image assets remain cacheable above.
     return;
   }
 });

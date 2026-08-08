@@ -1190,7 +1190,6 @@ class PaymentService:
         Process Stripe webhook events to keep local DB in sync.
         Implements idempotency using WebhookEventLog to prevent duplicate processing.
         """
-        import json
         from datetime import datetime
 
         from models.webhook_log import WebhookEventLog
@@ -1216,7 +1215,10 @@ class PaymentService:
             webhook_log = WebhookEventLog(
                 stripe_event_id=event_id,
                 event_type=event_type,
-                raw_payload=json.dumps(dict(event)) if event else None,
+                # The Stripe signature has already been verified. Keep only
+                # idempotency metadata; raw event bodies may contain customer
+                # and payment information and do not need durable retention.
+                raw_payload=None,
                 processed=False,
             )
             db.add(webhook_log)

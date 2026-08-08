@@ -11,6 +11,7 @@ import type {
 } from "@/types";
 
 import { apiClient } from "@/lib/api-client";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 
 const BILLING_CACHE_TTL_MS = 30_000;
 
@@ -54,14 +55,20 @@ function clearCachedValue<T>(cache: CachedValue<T>): void {
   cache.timestamp = 0;
 }
 
-export function __clearPaymentCachesForTests(): void {
+export function clearPaymentCaches(): void {
   clearCachedValue(paymentMethodsCache);
   clearCachedValue(subscriptionCache);
   paymentMethodsPromise = null;
   subscriptionPromise = null;
-  paymentMethodsRequestId = 0;
-  subscriptionRequestId = 0;
+  paymentMethodsRequestId += 1;
+  subscriptionRequestId += 1;
 }
+
+export function __clearPaymentCachesForTests(): void {
+  clearPaymentCaches();
+}
+
+registerAuthenticatedCacheClearer(clearPaymentCaches);
 
 // ============================================================================
 // usePaymentMethods Hook

@@ -1,10 +1,8 @@
-"""
-Initialize database for CI environment.
-Creates all tables using SQLAlchemy metadata and stamps Alembic version.
-"""
+"""Initialize CI or first-run deployment databases through Alembic."""
 
 import asyncio
 import os
+import subprocess
 import sys
 
 # Add backend to path
@@ -14,6 +12,22 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from models import Base
+
+# The repository predates Alembic and has no single historical bootstrap
+# revision. Seed the legacy model-owned tables, while leaving tables and
+# columns created by later revisions for those revisions to apply.
+MIGRATION_OWNED_TABLES = frozenset(
+    {"payment_methods", "subscriptions", "payment_history", "background_jobs"}
+)
+
+
+async def ensure_legacy_schema(engine) -> None:
+    """Create the pre-Alembic model schema required by the legacy chain."""
+    tables = [
+        table for table in Base.metadata.sorted_tables if table.name not in MIGRATION_OWNED_TABLES
+    ]
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn, tables=tables))
 
 
 async def wait_for_db(engine, max_retries: int = 30, delay: float = 1.0) -> bool:
@@ -41,8 +55,8 @@ async def wait_for_db(engine, max_retries: int = 30, delay: float = 1.0) -> bool
     return False
 
 
-async def init_database():
-    """Create all tables and stamp alembic version."""
+async def init_database():  # noqa: PLR0915
+    """Wait for Postgres, apply migrations, and verify critical tables."""
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise ValueError("DATABASE_URL environment variable is required")
@@ -68,32 +82,23 @@ async def init_database():
         if not await wait_for_db(engine):
             raise RuntimeError("Could not connect to database after maximum retries")
 
+        print("\n[2/5] Preparing legacy model schema...")
+        await ensure_legacy_schema(engine)
+        print("✓ Legacy model schema prepared")
+
+        print("\n[3/5] Applying Alembic migrations...")
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=backend_dir,
+            env=os.environ.copy(),
+            check=True,
+        )
+        print("✓ Alembic migrations applied successfully")
+
         async with engine.begin() as conn:
-            # Create all tables
-            print("\n[2/4] Creating tables from SQLAlchemy metadata...")
-            await conn.run_sync(Base.metadata.create_all)
-            print("✓ Tables created successfully")
-
-            # Create alembic_version table and stamp to latest
-            print("\n[3/4] Setting up Alembic version tracking...")
-            await conn.execute(
-                text("""
-                CREATE TABLE IF NOT EXISTS alembic_version (
-                    version_num VARCHAR(32) NOT NULL,
-                    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
-                )
-            """)
-            )
-
-            # Stamp to the latest revision (v_token_expiry_001 is current head)
-            await conn.execute(text("DELETE FROM alembic_version"))
-            await conn.execute(
-                text("INSERT INTO alembic_version (version_num) VALUES ('v_token_expiry_001')")
-            )
-            print("✓ Alembic stamped to version: v_token_expiry_001 (head)")
-
-            # Verify critical tables exist
-            print("\n[4/4] Verifying table creation...")
+            # Verify critical tables
+            print("\n[4/5] Verifying migrated tables...")
             result = await conn.execute(
                 text("""
                 SELECT table_name FROM information_schema.tables
@@ -104,7 +109,7 @@ async def init_database():
             tables = [row[0] for row in result.fetchall()]
 
             # Check for critical tables that caused errors in CI
-            critical_tables = ["users", "auth_audits", "projects", "tasks"]
+            critical_tables = ["users", "auth_audits", "projects", "tasks", "background_jobs"]
             missing_tables = [t for t in critical_tables if t not in tables]
 
             if missing_tables:
@@ -113,6 +118,59 @@ async def init_database():
             print(
                 f"✓ Found {len(tables)} tables: {', '.join(tables[:10])}{'...' if len(tables) > 10 else ''}"
             )
+
+            required_indexes = [
+                "ix_tasks_project_status_priority",
+                "ix_task_history_task_id_created_at",
+                "ix_task_history_project_activity_timestamp",
+                "ix_task_history_user_activity_timestamp",
+                "ix_tasks_assignee_status",
+                "ix_projects_owner_created_at",
+                "ix_projects_owner_is_active",
+                "ix_token_blacklist_expires_at",
+                "ix_projects_name_trgm",
+                "ix_tasks_title_trgm",
+            ]
+            index_result = await conn.execute(
+                text(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                    """
+                ),
+            )
+            found_indexes = {row[0] for row in index_result.fetchall()}
+            missing_indexes = sorted(set(required_indexes) - found_indexes)
+            if missing_indexes:
+                raise RuntimeError(f"Missing required indexes: {missing_indexes}")
+            print(f"✓ Verified required indexes: {', '.join(required_indexes)}")
+
+            column_result = await conn.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'projects'
+                    """
+                ),
+            )
+            found_columns = {row[0] for row in column_result.fetchall()}
+            required_project_columns = {"color", "settings"}
+            missing_project_columns = sorted(required_project_columns - found_columns)
+            if missing_project_columns:
+                raise RuntimeError(
+                    f"Project contract columns are incomplete: {missing_project_columns}"
+                )
+            print("✓ Verified project contract columns: color, settings")
+
+            print("\n[5/5] Verifying Alembic version...")
+            version_result = await conn.execute(text("SELECT version_num FROM alembic_version"))
+            versions = [row[0] for row in version_result.fetchall()]
+            if len(versions) != 1:
+                raise RuntimeError(f"Expected one Alembic head, found: {versions}")
+            print(f"✓ Database is at Alembic head: {versions[0]}")
 
         print("\n" + "=" * 60)
         print("✓ DATABASE INITIALIZATION COMPLETE")

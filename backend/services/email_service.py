@@ -24,6 +24,13 @@ class EmailService:
             cls._async_client = httpx.AsyncClient(timeout=30.0)
         return cls._async_client
 
+    @classmethod
+    async def close(cls) -> None:
+        """Close the shared HTTP client during worker/application shutdown."""
+        if cls._async_client is not None and not cls._async_client.is_closed:
+            await cls._async_client.aclose()
+        cls._async_client = None
+
     @staticmethod
     async def send_email(to_email: str, subject: str, html_content: str) -> bool:
         """

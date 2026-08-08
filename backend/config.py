@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import Any
 from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,10 +16,12 @@ class DatabaseSettings(BaseSettings):
     """Database configuration settings."""
 
     url: str = Field(..., alias="DATABASE_URL")
-    pool_size: int = Field(default=20, alias="DB_POOL_SIZE")
-    max_overflow: int = Field(default=20, alias="DB_MAX_OVERFLOW")
-    pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT")
-    pool_recycle: int = Field(default=300, alias="DB_POOL_RECYCLE")
+    # Defaults are per worker. Keep the aggregate bounded when Gunicorn runs
+    # multiple async workers against a standard Postgres connection limit.
+    pool_size: int = Field(default=5, alias="DB_POOL_SIZE", gt=0)
+    max_overflow: int = Field(default=5, alias="DB_MAX_OVERFLOW", ge=0)
+    pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT", gt=0)
+    pool_recycle: int = Field(default=300, alias="DB_POOL_RECYCLE", gt=0)
     echo: bool = Field(default=False, alias="DB_ECHO")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -30,6 +32,8 @@ class AuthSettings(BaseSettings):
 
     secret_key: str = Field(..., alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    issuer: str = Field(default="insight-flow", alias="JWT_ISSUER", min_length=1)
+    audience: str = Field(default="insight-flow", alias="JWT_AUDIENCE", min_length=1)
     access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default=7, alias="REFRESH_TOKEN_EXPIRE_DAYS")
 
@@ -77,6 +81,14 @@ class AuthSettings(BaseSettings):
         if v == v[0] * len(v):  # All same character
             raise ValueError("SECRET_KEY cannot be a repeated single character")
 
+        return v
+
+    @field_validator("algorithm")
+    @classmethod
+    def validate_algorithm(cls, v: str) -> str:
+        """Keep symmetric JWT verification on the explicitly supported algorithm."""
+        if v != "HS256":
+            raise ValueError("JWT_ALGORITHM must be HS256")
         return v
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -179,6 +191,7 @@ class CacheSettings(BaseSettings):
     enabled: bool = Field(default=True, alias="CACHE_ENABLED")
     default_timeout: int = Field(default=60, alias="CACHE_DEFAULT_TIMEOUT")
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
+    redis_password: str | None = Field(default=None, alias="REDIS_PASSWORD")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -259,6 +272,14 @@ class AppSettings(BaseSettings):
     enable_docs: bool = Field(default=True, alias="ENABLE_DOCS")
     enable_metrics: bool = Field(default=True, alias="ENABLE_METRICS")
     enable_detailed_health: bool = Field(default=False, alias="ENABLE_DETAILED_HEALTH")
+    health_check_cache_ttl_seconds: float = Field(
+        default=1.0, alias="HEALTH_CHECK_CACHE_TTL_SECONDS", ge=0
+    )
+    scheduler_enabled: bool = Field(default=True, alias="SCHEDULER_ENABLED")
+    job_poll_interval_seconds: float = Field(default=1.0, alias="JOB_POLL_INTERVAL_SECONDS", gt=0)
+    job_max_attempts: int = Field(default=5, alias="JOB_MAX_ATTEMPTS", gt=0)
+    job_lock_timeout_seconds: int = Field(default=300, alias="JOB_LOCK_TIMEOUT_SECONDS", gt=0)
+    job_retention_days: int = Field(default=30, alias="JOB_RETENTION_DAYS", gt=0)
 
     # Nested settings
     database: DatabaseSettings = Field(default_factory=lambda: DatabaseSettings())
@@ -268,6 +289,17 @@ class AppSettings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=lambda: LoggingSettings())
     stripe: StripeSettings = Field(default_factory=lambda: StripeSettings())
     security_report_uri: str | None = Field(default=None, alias="SECURITY_REPORT_URI")
+
+    @model_validator(mode="after")
+    def apply_production_runtime_defaults(self) -> "AppSettings":
+        """Keep process-local schedulers disabled unless explicitly opted in."""
+        if self.environment.lower() == "production":
+            provided = (
+                "scheduler_enabled" in self.model_fields_set or "SCHEDULER_ENABLED" in os.environ
+            )
+            if not provided:
+                self.scheduler_enabled = False
+        return self
 
     @property
     def is_production(self) -> bool:

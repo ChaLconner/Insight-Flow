@@ -3,7 +3,6 @@ Dashboard router for overview analytics and statistics.
 Refactored for Async operations with proper Dependency Injection.
 """
 
-import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -71,12 +70,12 @@ async def get_dashboard_overview(
     Uses async database operations for better performance.
     """
     try:
-        # Run all three independent queries in parallel for ~2-3x speedup
-        stats_data, recent_projects_data, activities_data = await asyncio.gather(
-            dashboard_service.get_overview_stats(current_user.id),
-            dashboard_service.get_recent_projects(current_user.id, limit=5),
-            dashboard_service.get_recent_activities(current_user.id, limit=10),
-        )
+        # AsyncSession is stateful and is not concurrency-safe. Keep the three
+        # operations on the dependency-injected session sequential; the
+        # service-level caches still keep warm requests fast.
+        stats_data = await dashboard_service.get_overview_stats(current_user.id)
+        recent_projects_data = await dashboard_service.get_recent_projects(current_user.id, limit=5)
+        activities_data = await dashboard_service.get_recent_activities(current_user.id, limit=10)
 
         stats = DashboardStatsResponse(**stats_data)
         recent_projects = [DashboardProjectResponse(**project) for project in recent_projects_data]

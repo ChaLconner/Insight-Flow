@@ -1,15 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "@/lib/api-endpoints";
+import { getProjectColor } from "@/lib/project-utils";
+import { useAuthStore } from "@/stores/auth-store";
 import type { RecentActivity } from "@/types";
-
-// Static colors array - defined outside to prevent recreation
-const PROJECT_COLORS = [
-  "#6366f1",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-] as const;
 
 // Type definitions for dashboard data
 export interface DashboardStats {
@@ -48,7 +41,10 @@ export interface DashboardData {
 // Query key factory for dashboard queries
 export const dashboardKeys = {
   all: ["dashboard"] as const,
-  overview: () => [...dashboardKeys.all, "overview"] as const,
+  overview: (userId?: string | null) =>
+    userId
+      ? ([...dashboardKeys.all, "overview", userId] as const)
+      : ([...dashboardKeys.all, "overview"] as const),
 };
 
 interface UseDashboardOptions {
@@ -56,8 +52,10 @@ interface UseDashboardOptions {
 }
 
 export function useDashboard(options: UseDashboardOptions = {}) {
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+
   return useQuery({
-    queryKey: dashboardKeys.overview(),
+    queryKey: dashboardKeys.overview(userId),
     queryFn: async () => {
       const data = await dashboardApi.getOverview();
       return data;
@@ -89,10 +87,7 @@ export function useDashboard(options: UseDashboardOptions = {}) {
         name: p.name,
         description: p.description,
         progress: p.progress ?? 0,
-        color:
-          p.color && p.color !== "#6366f1"
-            ? p.color
-            : PROJECT_COLORS[index % PROJECT_COLORS.length],
+        color: getProjectColor(p.color, index),
         status: (p.status as "active" | "archived" | "suspended") || "active",
       }));
 

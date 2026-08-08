@@ -5,7 +5,7 @@ Authentication utilities for JWT token handling and password management.
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 # Using PyJWT instead of python-jose for improved security (CVE-2024-33663, CVE-2024-33664)
 import jwt
@@ -43,7 +43,12 @@ if not SECRET_KEY and os.getenv("TESTING") != "true":
 elif not SECRET_KEY and os.getenv("TESTING") == "true":
     SECRET_KEY = "test_secret_key_placeholder"
 
-ALGORITHM = "HS256"
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+if ALGORITHM != "HS256":
+    raise ValueError("JWT_ALGORITHM must be HS256")
+JWT_ISSUER = os.getenv("JWT_ISSUER", "insight-flow")
+JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "insight-flow")
+TOKEN_TYPES = {"access", "refresh"}
 # Security: Default to 30 minutes for access tokens (recommended practice)
 # Note: token_utils.py handles actual token creation with secure defaults
 # This value is kept for backwards compatibility with any direct usage
@@ -65,10 +70,17 @@ def get_password_hash(password: str) -> str:
     return _hash_password(password)
 
 
-def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    data: dict[str, Any],
+    expires_delta: timedelta | None = None,
+    token_type: Literal["access", "refresh"] = "access",
+) -> str:
     """
     Create a JWT access token with JWT ID (jti) for blacklist functionality.
     """
+    if token_type not in TOKEN_TYPES:
+        raise ValueError("Unsupported token type")
+
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta
@@ -78,14 +90,23 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     # Add JWT ID (jti) for blacklist functionality
     jti = str(uuid.uuid4())
     to_encode.update(
-        {"exp": int(expire.timestamp()), "jti": jti, "iat": int(datetime.now(UTC).timestamp())}
+        {
+            "exp": int(expire.timestamp()),
+            "jti": jti,
+            "iat": int(datetime.now(UTC).timestamp()),
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
+            "typ": token_type,
+        }
     )
 
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
-def verify_token(token: str) -> dict[str, Any]:
+def verify_token(
+    token: str, *, expected_type: Literal["access", "refresh"] | None = None
+) -> dict[str, Any]:
     """
     Verify and decode a JWT token.
     """
@@ -99,7 +120,21 @@ def verify_token(token: str) -> dict[str, Any]:
         if len(token_parts) != 3:
             raise ValueError("Invalid token structure")
 
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+            options={"require": ["exp", "iat", "iss", "aud", "sub", "jti", "typ"]},
+        )
+
+        if expected_type and payload.get("typ") != expected_type:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         # Absolute Session Timeout Policy (A+ Security)
         # Force re-login after 365 days even if user is active
@@ -135,6 +170,8 @@ def verify_token(token: str) -> dict[str, Any]:
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -176,14 +213,17 @@ def verify_token_with_blacklist(token: str, db_session: "Session") -> dict[str, 
 
 
 async def async_verify_token_with_blacklist(
-    token: str, db_session: "AsyncSession"
+    token: str,
+    db_session: "AsyncSession",
+    *,
+    expected_type: Literal["access", "refresh"] | None = None,
 ) -> dict[str, Any]:
     """
     Verify and decode a JWT token, checking if it's blacklisted (Async).
     Uses Redis cache to avoid hitting PostgreSQL on every request.
     """
     # First verify the token normally
-    payload = verify_token(token)
+    payload = verify_token(token, expected_type=expected_type)
 
     # Check if token is blacklisted
     from models.token_blacklist import TokenBlacklist
@@ -234,7 +274,12 @@ def get_token_expiration(token: str) -> datetime | None:
             token,
             SECRET_KEY,
             algorithms=[ALGORITHM],
-            options={"verify_exp": False},
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+            options={
+                "verify_exp": False,
+                "require": ["exp", "iat", "iss", "aud", "sub", "jti", "typ"],
+            },
         )
         exp_timestamp = payload_data.get("exp")
         if exp_timestamp:
