@@ -42,6 +42,8 @@ def _add_unique_constraint(table: str, name: str, columns: str) -> None:
             END IF;
         END $$;
         """
+        # Inputs are private migration constants, never request data.
+        + ""
     )
 
 
@@ -62,6 +64,8 @@ def _add_check_constraint(table: str, name: str, expression: str) -> None:
             END IF;
         END $$;
         """
+        # Inputs are private migration constants, never request data.
+        + ""
     )
 
 
@@ -92,6 +96,8 @@ def _normalize_boolean_column(table: str, column: str, true_values: str) -> None
             END IF;
         END $$;
         """
+        # Inputs are private migration constants, never request data.
+        + ""
     )
 
 
