@@ -1,8 +1,4 @@
-"""
-Tests for services/cache_service.py
-
-Tests cache service functionality.
-"""
+import pytest
 
 from services.cache_service import RedisCache
 
@@ -103,7 +99,8 @@ class TestRedisCacheInvalidation:
         cache.stats = {"hits": 0, "misses": 0, "sets": 0, "errors": 0}
         return cache
 
-    def test_clear_deletes_only_application_cache_prefixes(self):
+    @pytest.mark.asyncio
+    async def test_clear_deletes_only_application_cache_prefixes(self):
         cache = self._make_cache(
             [
                 "dashboard:overview:user-1",
@@ -115,7 +112,7 @@ class TestRedisCacheInvalidation:
             ]
         )
 
-        cache.clear()
+        await cache.clear()
 
         client = cache.client
         assert isinstance(client, FakeRedisClient)
@@ -128,7 +125,8 @@ class TestRedisCacheInvalidation:
             "GET:http://testserver/health",
         }
 
-    def test_invalidate_pattern_uses_scan_not_keys(self):
+    @pytest.mark.asyncio
+    async def test_invalidate_pattern_uses_scan_not_keys(self):
         cache = self._make_cache(
             [
                 "dashboard:overview:user-1",
@@ -137,7 +135,7 @@ class TestRedisCacheInvalidation:
             ]
         )
 
-        deleted = cache.invalidate_pattern("dashboard:")
+        deleted = await cache.invalidate_pattern("dashboard:")
 
         client = cache.client
         assert isinstance(client, FakeRedisClient)
@@ -148,7 +146,8 @@ class TestRedisCacheInvalidation:
             "dashboard:recent_projects:user-1:5",
         }
 
-    def test_invalidate_pattern_decodes_redis_byte_keys(self):
+    @pytest.mark.asyncio
+    async def test_invalidate_pattern_decodes_redis_byte_keys(self):
         cache = self._make_cache(
             [
                 b"dashboard:overview:user-1",
@@ -157,7 +156,7 @@ class TestRedisCacheInvalidation:
             ]
         )
 
-        deleted = cache.invalidate_pattern("dashboard:")
+        deleted = await cache.invalidate_pattern("dashboard:")
 
         client = cache.client
         assert isinstance(client, FakeRedisClient)

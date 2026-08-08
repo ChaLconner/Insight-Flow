@@ -45,7 +45,9 @@ const BIO_MAX_LENGTH = 100;
 export function ProfileSettings({
   isLoading: initialLoading = false,
 }: ProfileSettingsProps) {
-  const { user, updateUserProfile, updateUserAvatar } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
+  const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
+  const updateUserAvatar = useAuthStore((state) => state.updateUserAvatar);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [profileData, setProfileData] = useState<ProfileData>({

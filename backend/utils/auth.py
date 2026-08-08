@@ -180,26 +180,40 @@ async def async_verify_token_with_blacklist(
 ) -> dict[str, Any]:
     """
     Verify and decode a JWT token, checking if it's blacklisted (Async).
+    Uses Redis cache to avoid hitting PostgreSQL on every request.
     """
     # First verify the token normally
     payload = verify_token(token)
 
     # Check if token is blacklisted
     from models.token_blacklist import TokenBlacklist
+    from services.cache_service import cache_service
 
     token_jti = payload.get("jti")
 
-    # Check if token is blacklisted
-    # Note: Grace period logic removed temporarily due to DB schema migration requirement
     if token_jti:
-        is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
+        cache_key = f"blacklist:jti:{token_jti}"
+        cached_status = await cache_service.get(cache_key)
 
-        if is_revoked:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-                headers={"WWW-Authenticate": "Bearer"},
+        if cached_status is not None:
+            if cached_status.get("revoked"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        else:
+            is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
+            await cache_service.set(
+                cache_key, {"revoked": is_revoked}, timeout=3600 if is_revoked else 300
             )
+
+            if is_revoked:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has been revoked",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
     return payload
 

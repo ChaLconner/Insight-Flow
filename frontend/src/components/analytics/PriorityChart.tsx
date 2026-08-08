@@ -83,8 +83,8 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1">
-        <div className="h-full w-full min-h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-full w-full min-h-[300px] min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <RechartsPieChart>
               <Pie
                 data={formattedData}

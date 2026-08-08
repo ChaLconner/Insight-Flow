@@ -5,17 +5,16 @@ Adds a unique request ID to each request for logging and debugging.
 
 import time
 import uuid
-from collections.abc import Callable
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request
+from starlette.datastructures import MutableHeaders
 
 from utils.logger import clear_request_context, set_request_context, setup_logger
 
 logger = setup_logger("request_id_middleware")
 
 
-class RequestIDMiddleware(BaseHTTPMiddleware):
+class RequestIDMiddleware:
     """
     Middleware that adds a unique request ID to each request.
     The request ID is:
@@ -27,50 +26,63 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
     HEADER_NAME = "X-Request-ID"
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Get or generate request ID
-        request_id = request.headers.get(self.HEADER_NAME)
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        header_name_bytes = self.HEADER_NAME.lower().encode("latin1")
+        request_id = headers.get(header_name_bytes, b"").decode("latin1")
+
         if not request_id:
             request_id = str(uuid.uuid4())
 
-        # Store in request state for access in routes
-        request.state.request_id = request_id
+        scope.setdefault("state", {})
+        scope["state"]["request_id"] = request_id
+
+        path = scope.get("path", "")
+        method = scope.get("method", "")
 
         # Set logging context for structured logs
         set_request_context(
             request_id=request_id,
-            path=request.url.path,
-            method=request.method,
+            path=path,
+            method=method,
         )
 
         # Track request timing
         start_time = time.perf_counter()
+        status_code = [500]
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_code[0] = message.get("status", 500)
+                duration_ms = (time.perf_counter() - start_time) * 1000
+                m_headers = MutableHeaders(scope=message)
+                m_headers.append(self.HEADER_NAME, request_id)
+                m_headers.append("X-Response-Time", f"{duration_ms:.2f}ms")
+            await send(message)
 
         try:
             # Process request
-            response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
 
             # Calculate duration
             duration_ms = (time.perf_counter() - start_time) * 1000
 
-            # Add headers to response
-            response.headers[self.HEADER_NAME] = request_id
-            response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
-
             # Log request (skip health checks to reduce noise)
-            if not request.url.path.startswith("/health"):
-                logger.info(
-                    f"{request.method} {request.url.path} - "
-                    f"{response.status_code} ({duration_ms:.2f}ms)"
-                )
-
-            return response  # type: ignore
+            if not path.startswith("/health"):
+                logger.info(f"{method} {path} - {status_code[0]} ({duration_ms:.2f}ms)")
         finally:
             # Always clear context after request
             clear_request_context()
 
 
-class RequestContextMiddleware(BaseHTTPMiddleware):
+class RequestContextMiddleware:
     """
     Enhanced middleware with request context for structured logging.
     """
@@ -78,57 +90,73 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     HEADER_NAME = "X-Request-ID"
     CORRELATION_HEADER = "X-Correlation-ID"
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Get or generate IDs
-        request_id = request.headers.get(self.HEADER_NAME, str(uuid.uuid4()))
-        correlation_id = request.headers.get(self.CORRELATION_HEADER, request_id)
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        req_id_bytes = self.HEADER_NAME.lower().encode("latin1")
+        corr_id_bytes = self.CORRELATION_HEADER.lower().encode("latin1")
+
+        request_id = headers.get(req_id_bytes, b"").decode("latin1") or str(uuid.uuid4())
+        correlation_id = headers.get(corr_id_bytes, b"").decode("latin1") or request_id
 
         # Store in request state
-        request.state.request_id = request_id
-        request.state.correlation_id = correlation_id
-        request.state.start_time = time.perf_counter()
+        scope.setdefault("state", {})
+        scope["state"]["request_id"] = request_id
+        scope["state"]["correlation_id"] = correlation_id
+        scope["state"]["start_time"] = time.perf_counter()
 
         # Extract user info if available (after auth)
-        request.state.user_id = None
+        scope["state"]["user_id"] = None
+
+        path = scope.get("path", "")
+        method = scope.get("method", "")
+        status_code = [500]
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_code[0] = message.get("status", 500)
+                duration_ms = (time.perf_counter() - scope["state"]["start_time"]) * 1000
+                m_headers = MutableHeaders(scope=message)
+                m_headers.append(self.HEADER_NAME, request_id)
+                m_headers.append(self.CORRELATION_HEADER, correlation_id)
+                m_headers.append("X-Response-Time", f"{duration_ms:.2f}ms")
+            await send(message)
 
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send_wrapper)
 
             # Calculate duration
-            duration_ms = (time.perf_counter() - request.state.start_time) * 1000
-
-            # Add headers
-            response.headers[self.HEADER_NAME] = request_id
-            response.headers[self.CORRELATION_HEADER] = correlation_id
-            response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
+            duration_ms = (time.perf_counter() - scope["state"]["start_time"]) * 1000
 
             # Structured log
-            self._log_request(request, response, duration_ms)
-
-            return response  # type: ignore
+            self._log_request(request_id, method, path, status_code[0], duration_ms)
 
         except Exception as e:
-            duration_ms = (time.perf_counter() - request.state.start_time) * 1000
-            logger.error(
-                f"[{request_id[:8]}] {request.method} {request.url.path} - "
-                f"ERROR: {e!s} ({duration_ms:.2f}ms)"
-            )
+            duration_ms = (time.perf_counter() - scope["state"]["start_time"]) * 1000
+            logger.error(f"[{request_id[:8]}] {method} {path} - ERROR: {e!s} ({duration_ms:.2f}ms)")
             raise
 
-    def _log_request(self, request: Request, response: Response, duration_ms: float):
+    def _log_request(
+        self, request_id: str, method: str, path: str, status: int, duration_ms: float
+    ):
         """Log request with structured information."""
         # Skip health checks
-        if request.url.path.startswith("/health"):
+        if path.startswith("/health"):
             return
 
         # Skip static files
-        if request.url.path.startswith("/static"):
+        if path.startswith("/static"):
             return
 
-        request_id = request.state.request_id[:8]
+        req_id_short = request_id[:8]
 
         # Determine log level based on status
-        status = response.status_code
         if status >= 500:
             log_fn = logger.error
         elif status >= 400:
@@ -136,9 +164,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         else:
             log_fn = logger.info
 
-        log_fn(
-            f"[{request_id}] {request.method} {request.url.path} - {status} ({duration_ms:.2f}ms)"
-        )
+        log_fn(f"[{req_id_short}] {method} {path} - {status} ({duration_ms:.2f}ms)")
 
 
 def get_request_id(request: Request) -> str:

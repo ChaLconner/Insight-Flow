@@ -33,32 +33,14 @@ from schemas.task import (
 from services.async_notification_trigger_service import AsyncNotificationTriggerService
 from services.async_task_service import AsyncTaskService
 from utils.logger import mask_user_id, setup_logger
+from utils.response_helpers import build_task_response
 
 MENTION_PATTERN = re.compile(r"(?<![\w])@([A-Za-z0-9_]{1,255})")
 
 
 def map_task_to_response(task: Task) -> dict[str, Any]:
     """Helper to map Task model to dict for TaskWithDetails schema with normalized status."""
-    status_value = str(task.status.value if hasattr(task.status, "value") else task.status).lower()
-    status_value = status_value if status_value else "todo"
-
-    return {
-        "id": task.id,
-        "title": task.title,
-        "description": task.description,
-        "status": status_value,
-        "project_id": task.project_id,
-        "assignee_id": task.assignee_id,
-        "created_by": task.created_by,
-        "due_date": task.due_date,
-        "created_at": task.created_at,
-        "updated_at": task.updated_at,
-        "assignee": task.assignee,
-        "creator": task.creator,
-        "project": task.project,
-        "priority": task.priority.value if hasattr(task.priority, "value") else task.priority,
-        "type": task.type.value if hasattr(task.type, "value") else task.type,
-    }
+    return build_task_response(task, include_relations=True)
 
 
 def parse_comment_mentions(content: str) -> list[str]:

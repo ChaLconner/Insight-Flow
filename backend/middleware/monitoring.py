@@ -10,8 +10,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 
 from utils.logger import setup_logger
 from utils.path_normalization import normalize_request_path
@@ -151,7 +150,7 @@ def get_request_metrics() -> RequestMetrics:
     return _request_metrics
 
 
-class PerformanceMiddleware(BaseHTTPMiddleware):
+class PerformanceMiddleware:
     """
     Middleware for tracking request performance and collecting metrics.
 
@@ -162,32 +161,46 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
     - Error rate tracking
     """
 
-    async def dispatch(self, request: Request, call_next):
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         start_time = time.time()
+        status_code = [500]
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_code[0] = message.get("status", 500)
+                process_time = time.time() - start_time
+                process_time_ms = round(process_time * 1000, 2)
+                headers = MutableHeaders(scope=message)
+                headers.append("X-Process-Time", str(process_time_ms))
+            await send(message)
 
         # Process request
-        response = await call_next(request)
+        await self.app(scope, receive, send_wrapper)
 
         # Calculate duration
         process_time = time.time() - start_time
         process_time_ms = round(process_time * 1000, 2)
 
+        method = scope.get("method", "")
+        path = scope.get("path", "")
+
         # Record metrics
         _request_metrics.record(
-            method=request.method,
-            path=request.url.path,
-            status_code=response.status_code,
+            method=method,
+            path=path,
+            status_code=status_code[0],
             duration=process_time,
         )
 
         # Log slow requests (> 1 second)
         if process_time > 1.0:
             logger.warning(
-                f"Slow Request: {request.method} {request.url.path} "
-                f"took {process_time_ms}ms - Status: {response.status_code}"
+                f"Slow Request: {method} {path} took {process_time_ms}ms - Status: {status_code[0]}"
             )
-
-        # Add header for debugging
-        response.headers["X-Process-Time"] = str(process_time_ms)
-
-        return response

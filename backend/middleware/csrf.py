@@ -6,9 +6,9 @@ Implements double-submit cookie pattern for CSRF protection.
 import hmac
 import secrets
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 
 from utils.logger import setup_logger
 
@@ -71,7 +71,7 @@ def validate_csrf_token(cookie_token: str | None, header_token: str | None) -> b
     return hmac.compare_digest(cookie_token, header_token)
 
 
-class CSRFMiddleware(BaseHTTPMiddleware):
+class CSRFMiddleware:
     """
     CSRF Protection using double-submit cookie pattern.
 
@@ -94,7 +94,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         exempt_paths: set[str] | None = None,
         enabled: bool = True,
     ):
-        super().__init__(app)
+        self.app = app
         self.cookie_name = cookie_name
         self.header_name = header_name
         self.cookie_secure = cookie_secure
@@ -114,52 +114,65 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # Prefix exemptions must be explicit; auth endpoints are exact-match only.
         return any(path.startswith(exempt_prefix) for exempt_prefix in CSRF_EXEMPT_PREFIXES)
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
         # Skip CSRF validation if disabled
         if not self.enabled:
-            return await call_next(request)  # type: ignore
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
 
         # Skip for safe methods
         if request.method in SAFE_METHODS:
-            response = await call_next(request)
             # Ensure CSRF cookie is set for subsequent requests
             if not request.cookies.get(self.cookie_name):
                 csrf_token = generate_csrf_token()
-                response.set_cookie(
-                    key=self.cookie_name,
-                    value=csrf_token,
-                    max_age=CSRF_COOKIE_MAX_AGE,
-                    secure=self.cookie_secure,
-                    httponly=self.cookie_httponly,
-                    samesite=self.cookie_samesite,
-                    path="/",
-                )
-            return response  # type: ignore
+
+                async def send_wrapper(message):
+                    if message["type"] == "http.response.start":
+                        headers = MutableHeaders(scope=message)
+                        cookie_val = f"{self.cookie_name}={csrf_token}; Max-Age={CSRF_COOKIE_MAX_AGE}; Path=/; SameSite={self.cookie_samesite}"
+                        if self.cookie_secure:
+                            cookie_val += "; Secure"
+                        if self.cookie_httponly:
+                            cookie_val += "; HttpOnly"
+                        headers.append("set-cookie", cookie_val)
+                    await send(message)
+
+                await self.app(scope, receive, send_wrapper)
+            else:
+                await self.app(scope, receive, send)
+            return
 
         # Skip for exempt paths
         if self.is_exempt(request):
-            response = await call_next(request)
-            return response  # type: ignore
+            await self.app(scope, receive, send)
+            return
 
         # Validate CSRF token for state-changing methods
         cookie_token = request.cookies.get(self.cookie_name)
         header_token = request.headers.get(self.header_name)
 
         if not validate_csrf_token(cookie_token, header_token):
+            client_host = request.client.host if request.client else "unknown"
             logger.warning(
-                f"CSRF validation failed for {request.method} {request.url.path} "
-                f"from {request.client.host if request.client else 'unknown'}"
+                f"CSRF validation failed for {request.method} {request.url.path} from {client_host}"
             )
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=403,
                 content={
                     "detail": "CSRF token validation failed",
                     "code": "CSRF_VALIDATION_FAILED",
                 },
             )
+            await response(scope, receive, send)
+            return
 
-        response = await call_next(request)
-        return response  # type: ignore
+        await self.app(scope, receive, send)
 
 
 def get_csrf_token_endpoint():

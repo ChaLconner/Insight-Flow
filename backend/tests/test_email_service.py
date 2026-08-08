@@ -55,11 +55,21 @@ class TestEmailServiceConfiguration:
 class TestEmailServiceSending:
     """Tests for email sending functionality."""
 
+    @pytest.fixture(autouse=True)
+    def reset_client(self):
+        """Reset cached HTTP client before and after test."""
+        from services.email_service import EmailService
+
+        EmailService._async_client = None
+        yield
+        EmailService._async_client = None
+
     @pytest.mark.asyncio
     async def test_send_email_success(self):
         """Test successful email sending via Resend API."""
         from services.email_service import EmailService
 
+        EmailService._async_client = None
         with (
             patch.dict(
                 os.environ,
@@ -68,7 +78,7 @@ class TestEmailServiceSending:
                     "SENDER_EMAIL": "noreply@test.com",
                 },
             ),
-            patch("httpx.AsyncClient") as mock_client,
+            patch("services.email_service.httpx.AsyncClient") as mock_client,
         ):
             mock_response = AsyncMock()
             mock_response.status_code = 200
@@ -95,6 +105,7 @@ class TestEmailServiceSending:
         """Test email sending with API error."""
         from services.email_service import EmailService
 
+        EmailService._async_client = None
         with (
             patch.dict(
                 os.environ,
@@ -102,7 +113,7 @@ class TestEmailServiceSending:
                     "RESEND_API_KEY": "re_test_api_key",
                 },
             ),
-            patch("httpx.AsyncClient") as mock_client,
+            patch("services.email_service.httpx.AsyncClient") as mock_client,
         ):
             mock_response = AsyncMock()
             mock_response.status_code = 400
@@ -125,6 +136,7 @@ class TestEmailServiceSending:
         """Test email uses default sender when SENDER_EMAIL not explicitly set."""
         from services.email_service import EmailService
 
+        EmailService._async_client = None
         with (
             patch.dict(
                 os.environ,
@@ -133,7 +145,7 @@ class TestEmailServiceSending:
                     "SENDER_EMAIL": "",  # Empty, should use default
                 },
             ),
-            patch("httpx.AsyncClient") as mock_client,
+            patch("services.email_service.httpx.AsyncClient") as mock_client,
         ):
             mock_response = AsyncMock()
             mock_response.status_code = 200
@@ -313,6 +325,7 @@ class TestEmailServiceErrorHandling:
         """Test that send_email catches and handles exceptions gracefully."""
         from services.email_service import EmailService
 
+        EmailService._async_client = None
         with (
             patch.dict(
                 os.environ,
@@ -320,7 +333,7 @@ class TestEmailServiceErrorHandling:
                     "RESEND_API_KEY": "re_test_api_key",
                 },
             ),
-            patch("httpx.AsyncClient") as mock_client,
+            patch("services.email_service.httpx.AsyncClient") as mock_client,
         ):
             # Simulate connection error
             mock_instance = AsyncMock()
@@ -341,6 +354,7 @@ class TestEmailServiceErrorHandling:
 
         from services.email_service import EmailService
 
+        EmailService._async_client = None
         with (
             patch.dict(
                 os.environ,
@@ -348,7 +362,7 @@ class TestEmailServiceErrorHandling:
                     "RESEND_API_KEY": "re_test_api_key",
                 },
             ),
-            patch("httpx.AsyncClient") as mock_client,
+            patch("services.email_service.httpx.AsyncClient") as mock_client,
         ):
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(

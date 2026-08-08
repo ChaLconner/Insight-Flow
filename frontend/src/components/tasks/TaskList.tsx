@@ -110,7 +110,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
     const PAGE_SIZE = 10; // Show 10 items per page
     const searchId = useId();
 
-    const { isAuthenticated } = useAuthStore();
+    const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
     // Refs
     const isMounted = useRef(true);

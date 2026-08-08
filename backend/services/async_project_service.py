@@ -23,13 +23,13 @@ from services.async_task_history_service import AsyncTaskHistoryService
 from utils.logger import logger
 
 
-def _invalidate_dashboard_cache_after_mutation() -> None:
+async def _invalidate_dashboard_cache_after_mutation() -> None:
     try:
         from services.async_analytics_service import invalidate_analytics_cache
         from services.async_dashboard_service import invalidate_dashboard_cache
 
-        invalidate_dashboard_cache()
-        invalidate_analytics_cache()
+        await invalidate_dashboard_cache()
+        await invalidate_analytics_cache()
     except Exception as e:
         logger.error(f"Failed to invalidate dashboard/analytics cache: {e}")
 
@@ -363,7 +363,7 @@ class AsyncProjectService:
 
             await self.db.commit()
             await self.db.refresh(db_project)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
             return db_project
 
         except IntegrityError as e:
@@ -413,7 +413,7 @@ class AsyncProjectService:
         try:
             await self.db.commit()
             await self.db.refresh(project)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             if changes:
                 history_service = AsyncTaskHistoryService(self.db)
@@ -461,7 +461,7 @@ class AsyncProjectService:
             await self.db.delete(project)
 
             await self.db.commit()
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
             return True
         except SQLAlchemyError as e:
             await self.db.rollback()
@@ -569,7 +569,7 @@ class AsyncProjectService:
             self.db.add(db_member)
             await self.db.commit()
             await self.db.refresh(db_member)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             try:
@@ -631,7 +631,7 @@ class AsyncProjectService:
 
             await self.db.delete(member)
             await self.db.commit()
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Log
             try:
@@ -687,7 +687,7 @@ class AsyncProjectService:
             member.role = role_value
             await self.db.commit()
             await self.db.refresh(member)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             try:
                 history_service = AsyncTaskHistoryService(self.db)
@@ -886,7 +886,7 @@ class AsyncProjectService:
                 return []
 
             await self.db.commit()
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Refresh all new members
             for member in new_members:

@@ -49,7 +49,7 @@ class AsyncAnalyticsService:
         """
         # Check cache using CacheService
         cache_key = f"analytics:overview:{user_id}:{period}"
-        cached = cache_service.get(cache_key)
+        cached = await cache_service.get(cache_key)
         if cached:
             logger.debug(f"Serving analytics from cache for user {user_id}")
             return cached
@@ -103,7 +103,7 @@ class AsyncAnalyticsService:
             }
 
             # Cache result using CacheService
-            cache_service.set(cache_key, result, timeout=ANALYTICS_CACHE_TTL)
+            await cache_service.set(cache_key, result, timeout=ANALYTICS_CACHE_TTL)
 
             return result
 
@@ -728,11 +728,11 @@ class AsyncAnalyticsService:
         }
 
 
-def invalidate_analytics_cache(user_id: uuid.UUID | None = None):
+async def invalidate_analytics_cache(user_id: uuid.UUID | None = None):
     """Invalidate analytics cache for a user or all users using CacheService."""
     if user_id:
         # Invalidate user-specific analytics cache
-        cache_service.invalidate_pattern(f"analytics:overview:{user_id}")
+        await cache_service.invalidate_pattern(f"analytics:overview:{user_id}")
     else:
         # Clear all analytics cache
-        cache_service.invalidate_pattern("analytics:")
+        await cache_service.invalidate_pattern("analytics:")

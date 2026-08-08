@@ -17,8 +17,11 @@ import {
   EmptyState,
   UsersPageHeader,
 } from "./components";
+
 import { useUsers } from "./hooks/useUsers";
-import { formatLastLogin } from "./utils/formatters";
+import { getRelativeTime } from "@/lib/utils";
+
+
 import { KEYBOARD_SHORTCUTS } from "./types";
 import {
   blurEditableTargetOnEscape,
@@ -231,7 +234,10 @@ export default function UsersPage() {
                 <ul className="divide-y divide-border" role="list">
                   {users.map((user) => (
                     <li key={user.id}>
-                      <UserCard user={user} formatLastLogin={formatLastLogin} />
+                      <UserCard
+                        user={user}
+                        formatLastLogin={(d) => (d ? getRelativeTime(d) : "Never")}
+                      />
                     </li>
                   ))}
                 </ul>

@@ -15,21 +15,19 @@ import { notificationsApi } from "@/lib/api-endpoints";
  * Provides access to notification state, CRUD operations, and API integration.
  */
 export const useNotifications = () => {
-  // Zustand store state
-  const store = useNotificationStore();
-
-  // Selectors
-  const notifications = notificationSelectors.getAllNotifications(store);
-  const unreadCount = notificationSelectors.getUnreadCount(store);
-  const isLoading = notificationSelectors.isLoading(store);
-  const isConnected = notificationSelectors.isConnected(store);
-  const filters = notificationSelectors.getFilters(store);
-  const unreadNotifications = notificationSelectors.getUnreadNotifications(store);
-  const readNotifications = notificationSelectors.getReadNotifications(store);
-  const filteredNotifications = notificationSelectors.getFilteredNotifications(store);
-  const notificationsByPriority = notificationSelectors.getNotificationsByPriority(store);
-  const notificationsByType = notificationSelectors.getNotificationsByType(store);
-  const latestNotifications = notificationSelectors.getLatestNotifications(store);
+  // Selectors with atomic subscription
+  const notifications = useNotificationStore(notificationSelectors.getAllNotifications);
+  const unreadCount = useNotificationStore(notificationSelectors.getUnreadCount);
+  const isLoading = useNotificationStore(notificationSelectors.isLoading);
+  const isConnected = useNotificationStore(notificationSelectors.isConnected);
+  const filters = useNotificationStore(notificationSelectors.getFilters);
+  const unreadNotifications = useNotificationStore(notificationSelectors.getUnreadNotifications);
+  const readNotifications = useNotificationStore(notificationSelectors.getReadNotifications);
+  const filteredNotifications = useNotificationStore(notificationSelectors.getFilteredNotifications);
+  const notificationsByPriority = useNotificationStore(notificationSelectors.getNotificationsByPriority);
+  const notificationsByType = useNotificationStore(notificationSelectors.getNotificationsByType);
+  const latestNotifications = useNotificationStore(notificationSelectors.getLatestNotifications);
+  const store = useNotificationStore.getState();
 
   // Actions
   const {

@@ -29,13 +29,13 @@ def escape_like_pattern(pattern: str) -> str:
     return re.sub(r"([%_\\])", r"\\\1", pattern)
 
 
-def _invalidate_dashboard_cache_after_mutation() -> None:
+async def _invalidate_dashboard_cache_after_mutation(user_id: uuid.UUID | None = None) -> None:
     try:
         from services.async_analytics_service import invalidate_analytics_cache
         from services.async_dashboard_service import invalidate_dashboard_cache
 
-        invalidate_dashboard_cache()
-        invalidate_analytics_cache()
+        await invalidate_dashboard_cache(user_id)
+        await invalidate_analytics_cache(user_id)
     except Exception as e:
         logger.error(f"Failed to invalidate dashboard/analytics cache: {e}")
 
@@ -174,7 +174,7 @@ class AsyncTaskService:
             self.db.add(db_task)
             await self.db.commit()
             await self.db.refresh(db_task)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Log activity asynchronously
             try:
@@ -323,7 +323,7 @@ class AsyncTaskService:
         try:
             await self.db.commit()
             await self.db.refresh(task)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             try:
@@ -364,7 +364,7 @@ class AsyncTaskService:
             # Note: delete() is synchronous in SQLAlchemy 2.0 AsyncSession (it stages the deletion)
             await self.db.delete(task)
             await self.db.commit()
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
             return True
         except IntegrityError:
             await self.db.rollback()
@@ -386,7 +386,7 @@ class AsyncTaskService:
 
             await self.db.commit()
             await self.db.refresh(task)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             if old_status != task.status:
@@ -432,7 +432,7 @@ class AsyncTaskService:
             task.assignee_id = assign_data.assignee_id
             await self.db.commit()
             await self.db.refresh(task)
-            _invalidate_dashboard_cache_after_mutation()
+            await _invalidate_dashboard_cache_after_mutation()
 
             # Log activity
             try:

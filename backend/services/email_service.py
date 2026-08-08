@@ -16,6 +16,13 @@ class EmailService:
     """Email service using Resend API."""
 
     RESEND_API_URL = "https://api.resend.com/emails"
+    _async_client: httpx.AsyncClient | None = None
+
+    @classmethod
+    def _get_client(cls) -> httpx.AsyncClient:
+        if cls._async_client is None or cls._async_client.is_closed:
+            cls._async_client = httpx.AsyncClient(timeout=30.0)
+        return cls._async_client
 
     @staticmethod
     async def send_email(to_email: str, subject: str, html_content: str) -> bool:
@@ -49,20 +56,20 @@ class EmailService:
                 "html": html_content,
             }
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    EmailService.RESEND_API_URL, headers=headers, json=payload, timeout=30.0
-                )
+            client = EmailService._get_client()
+            response = await client.post(
+                EmailService.RESEND_API_URL, headers=headers, json=payload, timeout=30.0
+            )
 
-                if response.status_code == 200:
-                    logger.info(f"Email sent successfully to {mask_email(to_email)}")
-                    return True
-                else:
-                    logger.error(
-                        f"Failed to send email to {mask_email(to_email)}: "
-                        f"Status {response.status_code}, Response: {response.text}"
-                    )
-                    return False
+            if response.status_code == 200:
+                logger.info(f"Email sent successfully to {mask_email(to_email)}")
+                return True
+            else:
+                logger.error(
+                    f"Failed to send email to {mask_email(to_email)}: "
+                    f"Status {response.status_code}, Response: {response.text}"
+                )
+                return False
 
         except httpx.TimeoutException:
             logger.error(f"Timeout sending email to {mask_email(to_email)}")

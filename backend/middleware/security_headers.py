@@ -1,50 +1,57 @@
 import os
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+
+from config import get_settings
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
+class SecurityHeadersMiddleware:
+    def __init__(self, app):
+        self.app = app
 
-        # Security Headers - Standard protection
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        # Content-Security-Policy for API
-        from config import get_settings
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
 
-        settings = get_settings()
+                # Security Headers - Standard protection
+                headers["X-Frame-Options"] = "DENY"
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["X-XSS-Protection"] = "1; mode=block"
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        csp_policy = "default-src 'none'; frame-ancestors 'none'"
+                settings = get_settings()
 
-        # Add reporting if configured (or default to our own endpoint)
-        report_uri = settings.security_report_uri or "/api/v1/security/csp-report"
-        csp_policy += f"; report-uri {report_uri}; report-to csp-endpoint"
+                csp_policy = "default-src 'none'; frame-ancestors 'none'"
 
-        response.headers["Content-Security-Policy"] = csp_policy
-        report_to_header = (
-            f'{{"group":"csp-endpoint","max_age":10886400,"endpoints":[{{"url":"{report_uri}"}}]}}'
-        )
-        response.headers["Report-To"] = report_to_header
+                # Add reporting if configured (or default to our own endpoint)
+                report_uri = settings.security_report_uri or "/api/v1/security/csp-report"
+                csp_policy += f"; report-uri {report_uri}; report-to csp-endpoint"
 
-        # Permissions-Policy - restrict browser features for API
-        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+                headers["Content-Security-Policy"] = csp_policy
+                report_to_header = f'{{"group":"csp-endpoint","max_age":10886400,"endpoints":[{{"url":"{report_uri}"}}]}}'
+                headers["Report-To"] = report_to_header
 
-        # Cross-Origin headers
-        # Use unsafe-none to allow OAuth popups to work correctly without COOP isolation issues
-        response.headers["Cross-Origin-Opener-Policy"] = "unsafe-none"
-        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+                # Permissions-Policy - restrict browser features for API
+                headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
-        # HSTS (Strict-Transport-Security) - Enable in production
-        # Only set when running in production/HTTPS environment
-        environment = os.getenv("ENVIRONMENT", "development")
-        if environment == "production":
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains; preload"
-            )
+                # Cross-Origin headers
+                # Use unsafe-none to allow OAuth popups to work correctly without COOP isolation issues
+                headers["Cross-Origin-Opener-Policy"] = "unsafe-none"
+                headers["Cross-Origin-Resource-Policy"] = "same-origin"
 
-        return response
+                # HSTS (Strict-Transport-Security) - Enable in production
+                # Only set when running in production/HTTPS environment
+                environment = os.getenv("ENVIRONMENT", "development")
+                if environment == "production":
+                    headers["Strict-Transport-Security"] = (
+                        "max-age=31536000; includeSubDomains; preload"
+                    )
+
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)

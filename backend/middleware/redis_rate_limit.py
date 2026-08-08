@@ -7,9 +7,10 @@ For fine-grained per-route limits, see ``rate_limiter.py`` (SlowAPI-based).
 """
 
 import time
+import uuid
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse
 
 from middleware.rate_limit import RATE_LIMIT_CONFIG, get_rate_limit_for_path
@@ -18,7 +19,7 @@ from utils.logger import setup_logger
 logger = setup_logger("redis_rate_limit")
 
 
-class RedisRateLimitMiddleware(BaseHTTPMiddleware):
+class RedisRateLimitMiddleware:
     """
     Redis-based rate limiting middleware using sliding window algorithm.
 
@@ -50,20 +51,13 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
             key_prefix: Prefix for Redis keys
             skip_paths: List of paths to skip rate limiting for
         """
-        super().__init__(app)
+        self.app = app
         self.calls = calls
         self.period = period
         self.key_prefix = key_prefix
         self.redis_client = redis_client
         self.skip_paths = skip_paths or ["/static", "/", "/health", "/metrics"]
-
-        # Validate Redis connection
-        try:
-            self.redis_client.ping()
-            logger.info(f"Redis rate limiting initialized: {calls} requests per {period}s")
-        except Exception as e:
-            logger.error(f"Redis connection failed for rate limiting: {e}")
-            raise RuntimeError("Redis is required for distributed rate limiting")
+        logger.info(f"Redis rate limiting initialized: {calls} requests per {period}s")
 
     def _get_rate_limit_key(self, request: Request) -> tuple[str, int, int]:
         """
@@ -90,7 +84,7 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
 
         return f"{self.key_prefix}:{client_ip}:{rate_key_path}", calls, period
 
-    def _check_rate_limit(self, key: str, calls: int, period: int) -> tuple[bool, int]:
+    async def _check_rate_limit(self, key: str, calls: int, period: int) -> tuple[bool, int]:
         """
         Check if the request should be rate limited using sliding window algorithm.
 
@@ -104,30 +98,23 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         """
         now = time.time()
         window_start = now - period
+        member_id = f"{now}:{uuid.uuid4().hex[:8]}"
 
         try:
-            # Use Redis pipeline for atomic operations
             pipe = self.redis_client.pipeline()
-
-            # Remove old entries outside the window
             pipe.zremrangebyscore(key, 0, window_start)
-
-            # Count current requests in the window
+            pipe.zadd(key, {member_id: now})
             pipe.zcard(key)
-
-            # Add current request timestamp
-            pipe.zadd(key, {str(now): now})
-
-            # Set TTL to period + 1 second buffer
             pipe.expire(key, period + 1)
 
-            # Execute pipeline
-            results = pipe.execute()
+            res = pipe.execute()
+            if hasattr(res, "__await__"):
+                results = await res
+            else:
+                results = res
 
-            # results[1] is the count after removing old entries
-            current_count = results[1]
+            current_count = results[2]
             remaining = max(0, calls - current_count)
-
             is_allowed = current_count <= calls
 
             return is_allowed, remaining
@@ -137,7 +124,7 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
             # Fail open: allow request if Redis fails
             return True, calls
 
-    async def dispatch(self, request: Request, call_next):
+    async def __call__(self, scope, receive, send):
         """
         Process request with rate limiting.
 
@@ -147,23 +134,32 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         - Metrics endpoints
         - Paths in skip_paths
         """
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope["path"]
+
         # Skip rate limiting for certain paths
-        if any(request.url.path.startswith(path) for path in self.skip_paths):
-            return await call_next(request)
+        if any(path.startswith(p) for p in self.skip_paths):
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive)
 
         # Get rate limit key and limits for this request
         key, calls, period = self._get_rate_limit_key(request)
 
         # Check rate limit
-        is_allowed, remaining = self._check_rate_limit(key, calls, period)
+        is_allowed, remaining = await self._check_rate_limit(key, calls, period)
 
         if not is_allowed:
-            client_host = request.client.host if request.client else "unknown"
+            client_info = scope.get("client")
+            client_host = client_info[0] if client_info else "unknown"
             logger.warning(
-                f"Rate limit exceeded for {client_host} on {request.url.path} "
-                f"(limit: {calls}/{period}s)"
+                f"Rate limit exceeded for {client_host} on {path} (limit: {calls}/{period}s)"
             )
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=429,
                 content={
                     "success": False,
@@ -177,16 +173,19 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
                     "X-RateLimit-Reset": str(int(time.time() + period)),
                 },
             )
+            await response(scope, receive, send)
+            return
 
-        # Process request
-        response = await call_next(request)
+        # Process request and add headers
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.append("X-RateLimit-Limit", str(calls))
+                headers.append("X-RateLimit-Remaining", str(remaining))
+                headers.append("X-RateLimit-Reset", str(int(time.time() + period)))
+            await send(message)
 
-        # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(calls)
-        response.headers["X-RateLimit-Remaining"] = str(remaining)
-        response.headers["X-RateLimit-Reset"] = str(int(time.time() + period))
-
-        return response
+        await self.app(scope, receive, send_wrapper)
 
 
 class RedisRateLimiter:
@@ -199,7 +198,7 @@ class RedisRateLimiter:
         self.redis_client = redis_client
         self.key_prefix = key_prefix
 
-    def check(self, identifier: str, calls: int, period: int) -> tuple[bool, int]:
+    async def check(self, identifier: str, calls: int, period: int) -> tuple[bool, int]:
         """
         Check rate limit for a given identifier.
 
@@ -214,16 +213,22 @@ class RedisRateLimiter:
         key = f"{self.key_prefix}:{identifier}"
         now = time.time()
         window_start = now - period
+        member_id = f"{now}:{uuid.uuid4().hex[:8]}"
 
         try:
             pipe = self.redis_client.pipeline()
             pipe.zremrangebyscore(key, 0, window_start)
+            pipe.zadd(key, {member_id: now})
             pipe.zcard(key)
-            pipe.zadd(key, {str(now): now})
             pipe.expire(key, period + 1)
-            results = pipe.execute()
 
-            current_count = results[1]
+            res = pipe.execute()
+            if hasattr(res, "__await__"):
+                results = await res
+            else:
+                results = res
+
+            current_count = results[2]
             remaining = max(0, calls - current_count)
             is_allowed = current_count <= calls
 
@@ -233,7 +238,7 @@ class RedisRateLimiter:
             logger.error(f"Redis rate limit check failed: {e}")
             return True, calls
 
-    def reset(self, identifier: str) -> bool:
+    async def reset(self, identifier: str) -> bool:
         """
         Reset rate limit for a given identifier.
 
@@ -245,7 +250,9 @@ class RedisRateLimiter:
         """
         key = f"{self.key_prefix}:{identifier}"
         try:
-            self.redis_client.delete(key)
+            res = self.redis_client.delete(key)
+            if hasattr(res, "__await__"):
+                await res
             return True
         except Exception as e:
             logger.error(f"Failed to reset rate limit: {e}")

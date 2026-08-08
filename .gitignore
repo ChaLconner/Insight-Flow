@@ -228,6 +228,7 @@ kilocode/
 # User uploaded files
 backend/static/uploads/
 backend/storage/private_uploads/
+storage/private_uploads/
 uploads/
 *.uploaded
 
@@ -305,3 +306,5 @@ site/
 # Debug/verification scripts
 verify_*.py
 coverage_report.txt
+pip-audit-report.json
+coverage.xml

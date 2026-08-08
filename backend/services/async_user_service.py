@@ -491,8 +491,8 @@ class AsyncUserService:
                     from services.async_analytics_service import invalidate_analytics_cache
                     from services.async_dashboard_service import invalidate_dashboard_cache
 
-                    invalidate_dashboard_cache()
-                    invalidate_analytics_cache()
+                    await invalidate_dashboard_cache()
+                    await invalidate_analytics_cache()
                 except Exception as e:
                     logger.error(f"Failed to invalidate cache after user update: {e}")
 

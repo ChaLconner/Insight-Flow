@@ -226,7 +226,7 @@ class AuthRateLimiter:
         key = f"rate_limit:{client_ip}:{path}"
 
         # Get current usage
-        usage_data = self.cache_service.get(key)
+        usage_data = await self.cache_service.get(key)
         current_time = time.time()
 
         if usage_data:
@@ -236,7 +236,7 @@ class AuthRateLimiter:
             # Check if window expired
             if current_time - start_time > self.window:
                 # Reset
-                self.cache_service.set(
+                await self.cache_service.set(
                     key, {"content": {"count": 1, "start_time": current_time}}, timeout=self.window
                 )
             else:
@@ -247,14 +247,14 @@ class AuthRateLimiter:
                         detail="Too many requests. Please try again later.",
                     )
 
-                self.cache_service.set(
+                await self.cache_service.set(
                     key,
                     {"content": {"count": count + 1, "start_time": start_time}},
                     timeout=self.window,
                 )
         else:
             # First request
-            self.cache_service.set(
+            await self.cache_service.set(
                 key, {"content": {"count": 1, "start_time": current_time}}, timeout=self.window
             )
 

@@ -120,7 +120,7 @@ async def cache_health_check():
     from services.cache_service import cache_service
 
     try:
-        stats = cache_service.get_stats()
+        stats = await cache_service.get_stats()
         return {"status": "healthy", "cache": stats}
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
@@ -165,7 +165,7 @@ async def full_health_check():
 
     # Check cache
     try:
-        cache_stats = cache_service.get_stats()
+        cache_stats = await cache_service.get_stats()
         health_status["components"]["cache"] = {"status": "healthy", **cache_stats}
     except Exception as e:
         health_status["components"]["cache"] = {"status": "unhealthy", "error": str(e)}
@@ -207,7 +207,7 @@ async def prometheus_metrics():
         metrics.extend(_get_database_metrics(async_engine.pool))
 
     # Cache metrics
-    metrics.extend(_get_cache_metrics(cache_service))
+    metrics.extend(await _get_cache_metrics(cache_service))
 
     # System metrics
     metrics.extend(_get_system_metrics())
@@ -259,11 +259,11 @@ def _get_database_metrics(pool: Any) -> list[str]:
         return [f"# db_pool_error: {e}"]
 
 
-def _get_cache_metrics(cache_service: Any) -> list[str]:
+async def _get_cache_metrics(cache_service: Any) -> list[str]:
     """Helper to get cache metrics."""
     metrics = []
     try:
-        cache_stats = cache_service.get_stats()
+        cache_stats = await cache_service.get_stats()
         metrics.extend(
             [
                 "# HELP cache_hits_total Total number of cache hits",

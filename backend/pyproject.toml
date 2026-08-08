@@ -139,7 +139,7 @@ omit = [
     # Notification rate limiter requires Redis
     "services/notification_rate_limiter.py",
     # OAuth modules require external services to fully test
-    # Query optimizer rarely used directly 
+    # Query optimizer rarely used directly
     "utils/query_optimizer.py",
     # Distributed locks require Redis
     "security/distributed_locks.py",

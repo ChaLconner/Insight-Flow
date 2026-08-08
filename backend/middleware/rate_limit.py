@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from typing import TYPE_CHECKING
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse
 
 from database import AsyncSessionLocal
@@ -65,14 +65,14 @@ def get_rate_limit_for_path(path: str, default_calls: int, default_period: int) 
     return (default_calls, default_period)
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+class RateLimitMiddleware:
     # Maximum number of IPs to track before forcing cleanup
     MAX_TRACKED_IPS = 10000
     # Cleanup interval in seconds
     CLEANUP_INTERVAL = 300  # 5 minutes
 
     def __init__(self, app, calls: int = 100, period: int = 60):
-        super().__init__(app)
+        self.app = app
         self.calls = calls
         self.period = period
         # Dictionary to store request timestamps per IP per path
@@ -181,12 +181,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             logger.debug(f"IP blocking check skipped: {e}")
         return None
 
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope["path"]
 
         # Skip rate limiting for static files or root
         if path.startswith("/static") or path == "/":
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # VULN-10: In production, only exempt health checks (for load balancers).
         # In development, also exempt docs/openapi for developer convenience.
@@ -200,18 +205,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             pass
 
         if any(path.startswith(p) for p in exempt_paths):
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
-        client_ip = request.client.host if request.client else "unknown"
+        client_info = scope.get("client")
+        client_ip = client_info[0] if client_info else "unknown"
+        request = Request(scope, receive)
 
         # A+ Security: Check if IP is blocked first
         blocked_response = await self._check_ip_block(request, client_ip)
         if blocked_response:
-            return blocked_response
+            await blocked_response(scope, receive, send)
+            return
 
         # Get rate limit key and limits for this request
         rate_key = self._get_rate_key(request)
-        path = request.url.path
         calls, period = get_rate_limit_for_path(path, self.calls, self.period)
 
         now = time.time()
@@ -229,63 +237,78 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             # Check if limit exceeded
             if len(history) >= calls:
-                logger.warning(
-                    f"Rate limit exceeded for IP: {client_ip}, path: {path} "
-                    f"(limit: {calls}/{period}s)"
+                await self._send_rate_limit_exceeded(
+                    scope, receive, send, request, client_ip, path, calls, period
                 )
-
-                # A+ Security: Record violation for potential blocking
-                try:
-                    from security.ip_blocking import get_ip_blocker
-
-                    blocker = get_ip_blocker()
-                    # Use fire_and_forget to not block the response
-                    import asyncio
-
-                    task = asyncio.create_task(
-                        blocker.record_violation(client_ip, f"rate_limit:{path}")
-                    )
-                    self.background_tasks.add(task)
-                    task.add_done_callback(self.background_tasks.discard)
-                except Exception:
-                    pass
-
-                # Log rate limit violation
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await SecurityLogService.log_event(
-                            db=db,
-                            event_type="rate_limit_exceeded",
-                            severity="warning",
-                            details={"limit": calls, "period": period, "path": path},
-                            request=request,
-                            ip_address=client_ip,
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to log rate limit: {e}")
-
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "success": False,
-                        "message": ("Too many requests. Please try again later."),
-                        "code": "RATE_LIMIT_EXCEEDED",
-                    },
-                    headers={"Retry-After": str(period)},
-                )
+                return
 
             # Add current timestamp
             history.append(now)
             remaining = calls - len(history)
 
-        response = await call_next(request)
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers.append("X-RateLimit-Limit", str(calls))
+                headers.append("X-RateLimit-Remaining", str(remaining))
+                headers.append("X-RateLimit-Reset", str(int(now + period)))
+            await send(message)
 
-        # Add rate limit headers
-        response.headers["X-RateLimit-Limit"] = str(calls)
-        response.headers["X-RateLimit-Remaining"] = str(remaining)
-        response.headers["X-RateLimit-Reset"] = str(int(now + period))
+        await self.app(scope, receive, send_wrapper)
 
-        return response
+    async def _send_rate_limit_exceeded(
+        self,
+        scope,
+        receive,
+        send,
+        request: Request,
+        client_ip: str,
+        path: str,
+        calls: int,
+        period: int,
+    ) -> None:
+        logger.warning(
+            f"Rate limit exceeded for IP: {client_ip}, path: {path} (limit: {calls}/{period}s)"
+        )
+
+        # A+ Security: Record violation for potential blocking
+        try:
+            from security.ip_blocking import get_ip_blocker
+
+            blocker = get_ip_blocker()
+            # Use fire_and_forget to not block the response
+            import asyncio
+
+            task = asyncio.create_task(blocker.record_violation(client_ip, f"rate_limit:{path}"))
+            self.background_tasks.add(task)
+            task.add_done_callback(self.background_tasks.discard)
+        except Exception:
+            pass
+
+        # Log rate limit violation
+        try:
+            async with AsyncSessionLocal() as db:
+                await SecurityLogService.log_event(
+                    db=db,
+                    event_type="rate_limit_exceeded",
+                    severity="warning",
+                    details={"limit": calls, "period": period, "path": path},
+                    request=request,
+                    ip_address=client_ip,
+                )
+        except Exception as e:
+            logger.error(f"Failed to log rate limit: {e}")
+
+        response = JSONResponse(
+            status_code=429,
+            content={
+                "success": False,
+                "message": "Too many requests. Please try again later.",
+                "code": "RATE_LIMIT_EXCEEDED",
+            },
+            headers={"Retry-After": str(period)},
+        )
+        await response(scope, receive, send)
 
     def _maybe_cleanup(self, now: float) -> None:
         """Cleanup old entries periodically to prevent memory leak."""

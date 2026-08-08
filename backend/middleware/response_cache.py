@@ -6,11 +6,10 @@ Adds appropriate Cache-Control headers based on endpoint type.
 import re
 from typing import ClassVar
 
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
 
 
-class ResponseCacheMiddleware(BaseHTTPMiddleware):
+class ResponseCacheMiddleware:
     """
     Middleware to add Cache-Control headers to API responses.
 
@@ -67,30 +66,47 @@ class ResponseCacheMiddleware(BaseHTTPMiddleware):
         re.compile(r"^/(?:api/v1/)?notifications/"),
     ]
 
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
+    def __init__(self, app):
+        self.app = app
 
-        # Skip for non-GET requests (mutations should never be cached)
-        if request.method != "GET":
-            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-            return response
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        path = request.url.path
+        method = scope.get("method", "")
+        path = scope.get("path", "")
 
-        # Check if path matches no-cache patterns
-        for pattern in self.NO_CACHE_PATTERNS:
-            if pattern.match(path):
-                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-                return response
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
 
-        # Check if path matches cacheable patterns
-        for pattern, cache_control in self.CACHEABLE_PATTERNS:
-            if pattern.match(path):
-                response.headers["Cache-Control"] = cache_control
-                return response
+                cache_control = None
 
-        # Default: private, no-cache (revalidate with server)
-        if "Cache-Control" not in response.headers:
-            response.headers["Cache-Control"] = "private, no-cache"
+                # Skip for non-GET requests (mutations should never be cached)
+                if method != "GET":
+                    cache_control = "no-store, no-cache, must-revalidate"
+                else:
+                    # Check if path matches no-cache patterns
+                    for pattern in self.NO_CACHE_PATTERNS:
+                        if pattern.match(path):
+                            cache_control = "no-store, no-cache, must-revalidate"
+                            break
 
-        return response
+                    if not cache_control:
+                        # Check if path matches cacheable patterns
+                        for pattern, c_control in self.CACHEABLE_PATTERNS:
+                            if pattern.match(path):
+                                cache_control = c_control
+                                break
+
+                    # Default: private, no-cache (revalidate with server)
+                    if not cache_control and "Cache-Control" not in headers:
+                        cache_control = "private, no-cache"
+
+                if cache_control:
+                    headers["Cache-Control"] = cache_control
+
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)

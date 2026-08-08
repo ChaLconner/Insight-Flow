@@ -163,39 +163,6 @@ class TestModuleGetattr:
         assert "nonexistent_attribute" in str(exc_info.value)
 
 
-class TestAsyncProjectPermissionClass:
-    """Tests for AsyncProjectPermission class (type hints)."""
-
-    def test_async_project_permission_init(self):
-        """Test AsyncProjectPermission initialization."""
-        from async_dependencies import AsyncProjectPermission
-
-        permission = AsyncProjectPermission(["owner", "admin"])
-
-        assert permission.allowed_roles == ["owner", "admin"]
-
-    def test_async_project_permission_callable(self):
-        """Test AsyncProjectPermission is callable."""
-        from async_dependencies import AsyncProjectPermission
-
-        permission = AsyncProjectPermission(["owner"])
-
-        # The __call__ method should exist
-        assert callable(permission)
-
-    @pytest.mark.asyncio
-    async def test_async_project_permission_call_returns_none(self):
-        """Test AsyncProjectPermission __call__ returns None (pass statement)."""
-        from async_dependencies import AsyncProjectPermission
-
-        permission = AsyncProjectPermission(["owner"])
-
-        # The stub implementation just passes
-        result = await permission("project-id", None, None)
-
-        assert result is None
-
-
 class TestModuleAll:
     """Tests for __all__ module attribute."""
 
@@ -204,7 +171,6 @@ class TestModuleAll:
         from async_dependencies import __all__
 
         expected = [
-            "AsyncProjectPermission",
             "get_async_authorized_task",
             "get_authorized_task",
             "require_project_admin",

@@ -169,32 +169,48 @@ def build_task_response(task: Any, include_relations: bool = True) -> dict[str, 
 
     Args:
         task: Task model object
-        include_relations: Whether to include assignee/creator details
+        include_relations: Whether to include assignee/creator/project details
 
     Returns:
         Dictionary with task response fields
     """
+    status_val = (
+        str(task.status.value if hasattr(task.status, "value") else task.status).lower()
+        if getattr(task, "status", None)
+        else "todo"
+    )
+    priority_val = (
+        task.priority.value
+        if hasattr(task.priority, "value")
+        else getattr(task, "priority", "medium")
+    )
+    type_val = task.type.value if hasattr(task.type, "value") else getattr(task, "type", "task")
+    creator_id = getattr(task, "created_by", None) or getattr(task, "creator_id", None)
+
     response = {
         "id": task.id,
         "title": task.title,
         "description": task.description,
-        "status": task.status.value if hasattr(task.status, "value") else task.status,
-        "priority": task.priority.value if hasattr(task.priority, "value") else task.priority,
+        "status": status_val,
+        "priority": priority_val,
+        "type": type_val,
         "project_id": task.project_id,
         "assignee_id": task.assignee_id,
-        "creator_id": task.creator_id,
+        "created_by": creator_id,
+        "creator_id": creator_id,
         "due_date": task.due_date,
         "created_at": task.created_at,
         "updated_at": task.updated_at,
     }
 
     if include_relations:
-        if hasattr(task, "assignee") and task.assignee:
-            response["assignee"] = build_user_response(task.assignee)
-        if hasattr(task, "creator") and task.creator:
-            response["creator"] = build_user_response(task.creator)
-        if hasattr(task, "project") and task.project:
-            response["project_name"] = task.project.name
+        if hasattr(task, "assignee"):
+            response["assignee"] = task.assignee
+        if hasattr(task, "creator"):
+            response["creator"] = task.creator
+        if hasattr(task, "project"):
+            response["project"] = task.project
+            response["project_name"] = getattr(task.project, "name", None) if task.project else None
 
     return response
 

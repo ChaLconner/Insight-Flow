@@ -44,7 +44,7 @@ export function BillingSettings() {
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(null);
   
   // Get user info for pre-filling form
-  const { user } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   
   // Hooks
   const { methods, isLoading: methodsLoading, fetchMethods, setDefault, deleteMethod } = usePaymentMethods();

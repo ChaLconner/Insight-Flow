@@ -47,7 +47,7 @@ class AsyncDashboardService:
         """
         # B6: Check cache first
         cache_key = f"dashboard:overview:{user_id}"
-        cached = cache_service.get(cache_key)
+        cached = await cache_service.get(cache_key)
         if cached:
             logger.debug(f"Serving dashboard overview from cache for user {user_id}")
             return cached
@@ -301,14 +301,14 @@ class AsyncDashboardService:
         }
 
         # B6: Cache result
-        cache_service.set(cache_key, result, timeout=DASHBOARD_CACHE_TTL)
+        await cache_service.set(cache_key, result, timeout=DASHBOARD_CACHE_TTL)
         return result
 
     async def get_recent_projects(self, user_id: uuid.UUID, limit: int = 5) -> list[dict[str, Any]]:
         """Get recent projects with progress stats using optimized async queries."""
         # B6: Cache recent projects (wrap in dict for cache compatibility)
         cache_key = f"dashboard:recent_projects:{user_id}:{limit}"
-        cached = cache_service.get(cache_key)
+        cached = await cache_service.get(cache_key)
         if isinstance(cached, dict):
             cached_list = cached.get("_list_data")
             if isinstance(cached_list, list):
@@ -356,7 +356,7 @@ class AsyncDashboardService:
             )
 
         # B6: Cache result (wrap list in dict for cache compatibility)
-        cache_service.set(cache_key, {"_list_data": projects}, timeout=DASHBOARD_CACHE_TTL)
+        await cache_service.set(cache_key, {"_list_data": projects}, timeout=DASHBOARD_CACHE_TTL)
         return projects
 
     async def get_recent_activities(
@@ -364,7 +364,7 @@ class AsyncDashboardService:
     ) -> list[dict[str, Any]]:
         """Get recent team activities using optimized async queries."""
         cache_key = f"dashboard:recent_activities:{user_id}:{limit}"
-        cached = cache_service.get(cache_key)
+        cached = await cache_service.get(cache_key)
         if isinstance(cached, dict):
             cached_list = cached.get("_list_data")
             if isinstance(cached_list, list):
@@ -434,14 +434,16 @@ class AsyncDashboardService:
                 }
             )
 
-        cache_service.set(cache_key, {"_list_data": activity_list}, timeout=DASHBOARD_CACHE_TTL)
+        await cache_service.set(
+            cache_key, {"_list_data": activity_list}, timeout=DASHBOARD_CACHE_TTL
+        )
         return activity_list
 
     async def get_today_tasks(self, user_id: uuid.UUID, limit: int = 10) -> list[dict[str, Any]]:
         """Get tasks assigned to user for today or overdue."""
         # B6: Check cache first (shorter TTL since tasks change more frequently)
         cache_key = f"dashboard:today_tasks:{user_id}:{limit}"
-        cached = cache_service.get(cache_key)
+        cached = await cache_service.get(cache_key)
         if isinstance(cached, dict):
             cached_list = cached.get("_list_data")
             if isinstance(cached_list, list):
@@ -483,7 +485,7 @@ class AsyncDashboardService:
         ]
 
         # B6: Cache result (shorter TTL for tasks)
-        cache_service.set(cache_key, {"_list_data": task_list}, timeout=60)
+        await cache_service.set(cache_key, {"_list_data": task_list}, timeout=60)
         return task_list
 
     @staticmethod
@@ -517,13 +519,13 @@ class AsyncDashboardService:
         return f"{prefix}{round(val, 1)}{suffix}"
 
 
-def invalidate_dashboard_cache(user_id: uuid.UUID | None = None) -> None:
+async def invalidate_dashboard_cache(user_id: uuid.UUID | None = None) -> None:
     """Invalidate cached dashboard data for one user, or all dashboard entries."""
     if user_id:
-        cache_service.invalidate_pattern(f"dashboard:overview:{user_id}")
-        cache_service.invalidate_pattern(f"dashboard:recent_projects:{user_id}:")
-        cache_service.invalidate_pattern(f"dashboard:recent_activities:{user_id}:")
-        cache_service.invalidate_pattern(f"dashboard:today_tasks:{user_id}:")
+        await cache_service.invalidate_pattern(f"dashboard:overview:{user_id}")
+        await cache_service.invalidate_pattern(f"dashboard:recent_projects:{user_id}:")
+        await cache_service.invalidate_pattern(f"dashboard:recent_activities:{user_id}:")
+        await cache_service.invalidate_pattern(f"dashboard:today_tasks:{user_id}:")
         return
 
-    cache_service.invalidate_pattern("dashboard:")
+    await cache_service.invalidate_pattern("dashboard:")

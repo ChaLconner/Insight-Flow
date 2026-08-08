@@ -51,6 +51,7 @@ async def seed_data():  # noqa: PLR0912, PLR0915
                     username=u_data["email"].split("@")[0],
                     hashed_password=get_password_hash("password123"),
                     is_active=True,
+                    is_verified=True,
                     role=u_data["role"],
                     created_at=datetime.now(UTC),
                     updated_at=datetime.now(UTC),
@@ -58,6 +59,8 @@ async def seed_data():  # noqa: PLR0912, PLR0915
                 session.add(user)
                 created_users.append(user)
             else:
+                existing_user.is_verified = True
+                existing_user.is_active = True
                 created_users.append(existing_user)
 
         await session.commit()

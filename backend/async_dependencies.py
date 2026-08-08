@@ -169,24 +169,7 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# For static type checkers and IDE support
-class AsyncProjectPermission:
-    """
-    Async permission checker for project access.
-    This class is provided for documentation and type hints.
-    Actual instances are created via factory functions.
-    """
-
-    def __init__(self, allowed_roles: list[str]):
-        self.allowed_roles = allowed_roles
-
-    async def __call__(self, project_id: str, current_user=None, db=None):
-        """Check if user has permission to access project."""
-        pass
-
-
 __all__ = [  # noqa: F822 - Names are dynamically provided by __getattr__
-    "AsyncProjectPermission",
     "get_async_authorized_task",
     "get_authorized_task",
     "require_project_admin",

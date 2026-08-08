@@ -207,8 +207,8 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
         )}
 
         {/* Chart */}
-        <div className="flex-1 min-h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="w-full flex-1 min-h-[250px] min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <BarChart
               layout="vertical"
               data={displayData}

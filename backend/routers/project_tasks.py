@@ -33,6 +33,7 @@ from services.async_notification_trigger_service import AsyncNotificationTrigger
 from services.async_project_service import AsyncProjectService
 from services.async_task_service import AsyncTaskService
 from utils.logger import mask_user_id, setup_logger
+from utils.response_helpers import build_task_response
 from utils.validators import validate_uuid
 
 logger = setup_logger("project_tasks_router")
@@ -43,45 +44,30 @@ router = APIRouter(prefix="/projects", tags=["project tasks"])
 from rate_limiter import RateLimits, limiter
 
 
-def _get_status_value(status) -> str:
+def _get_status_value(status: Any) -> str:
     """Helper function to extract status value from enum or string."""
     if hasattr(status, "value") or isinstance(status, TaskStatus):
         status_value = status.value
     else:
         status_value = str(status)
-
     return status_value.lower() if status_value else "todo"
 
 
 def _build_task_response(task: Any) -> dict:
-    """Helper to build task response dict."""
-    return {
-        "id": task.id,
-        "title": task.title,
-        "description": task.description,
-        "status": _get_status_value(task.status),
-        "project_id": task.project_id,
-        "assignee_id": task.assignee_id,
-        "created_by": task.created_by,
-        "due_date": task.due_date,
-        "created_at": task.created_at,
-        "updated_at": task.updated_at,
-        "priority": task.priority.value if hasattr(task.priority, "value") else task.priority,
-        "type": task.type.value if hasattr(task.type, "value") else task.type,
-    }
+    """Helper to build task response dict using central helper."""
+    return build_task_response(task, include_relations=False)
 
 
 def _build_task_with_details_response(task: Any) -> dict:
-    """Helper to build task with details response dict."""
-    response = _build_task_response(task)
-    response.update(
-        {
-            "assignee": task.assignee,
-            "creator": task.creator,
-            "project": task.project,
-        }
-    )
-    return response
+    """Helper to build task with details response dict using central helper."""
+    res = build_task_response(task, include_relations=True)
+    if hasattr(task, "assignee") and task.assignee and "assignee" not in res:
+        res["assignee"] = task.assignee
+    if hasattr(task, "creator") and task.creator and "creator" not in res:
+        res["creator"] = task.creator
+    if hasattr(task, "project") and task.project and "project" not in res:
+        res["project"] = task.project
+    return res
 
 
 @router.get("/{project_id}/tasks", response_model=TaskListResponse)

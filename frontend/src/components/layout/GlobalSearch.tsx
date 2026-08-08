@@ -50,7 +50,7 @@ function evictExpiredSearchCache() {
 
 export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
