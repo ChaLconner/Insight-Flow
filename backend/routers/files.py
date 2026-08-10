@@ -5,6 +5,7 @@ Implements: extension whitelist, MIME validation, size limits, path traversal pr
 Security features are centralized in utils/file_security.py
 """
 
+import asyncio
 import os
 import uuid
 from pathlib import Path
@@ -91,8 +92,7 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="Invalid file path")
 
         # Save file
-        with open(validated_path, "wb") as buffer:
-            buffer.write(content)
+        await asyncio.to_thread(_write_binary_file, validated_path, content)
 
         url = f"{DOWNLOAD_URL_PREFIX}/{unique_name}"
 
@@ -128,6 +128,12 @@ async def upload_file(
                 logger.warning(f"Failed to remove incomplete upload: {cleanup_error}")
         logger.error(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail="File upload failed")
+
+
+def _write_binary_file(path: str, content: bytes) -> None:
+    """Write upload bytes off the event loop."""
+    with open(path, "wb") as buffer:
+        buffer.write(content)
 
 
 def _resolve_upload_path(url: str, current_user: User) -> tuple[str, str]:
@@ -179,7 +185,9 @@ async def get_file_info(
             raise HTTPException(status_code=403, detail="Not authorized to access this file")
 
         exists = os.path.exists(validated_path)
-        if not db_file and not exists:
+        if not db_file:
+            # Do not expose or delete orphaned files by filename. A separate
+            # operator reconciliation job can remove rows/files safely.
             raise HTTPException(status_code=404, detail="File not found")
 
         return {
@@ -257,24 +265,47 @@ async def delete_file(
         result = await db.execute(select(FileModel).where(FileModel.unique_filename == filename))
         db_file = result.scalar_one_or_none()
 
-        if db_file:
-            # Security: Check ownership before deletion
-            if db_file.user_id != current_user.id:
-                logger.warning(
-                    f"Unauthorized delete attempt by user {mask_user_id(str(current_user.id))} "
-                    f"on file owned by {mask_user_id(str(db_file.user_id))}"
-                )
-                raise HTTPException(status_code=403, detail="Not authorized to delete this file")
+        if not db_file:
+            raise HTTPException(status_code=404, detail="File not found")
 
+        # Security: Check ownership before deletion.
+        if db_file.user_id != current_user.id:
+            logger.warning(
+                f"Unauthorized delete attempt by user {mask_user_id(str(current_user.id))} "
+                f"on file owned by {mask_user_id(str(db_file.user_id))}"
+            )
+            raise HTTPException(status_code=403, detail="Not authorized to delete this file")
+
+        if not os.path.exists(validated_path):
+            # Reconcile stale metadata without allowing a caller to target an
+            # unknown orphan. The ownership row is still checked above.
             await db.delete(db_file)
             await db.commit()
-
-        if os.path.exists(validated_path):
-            os.remove(validated_path)
-            logger.info(f"File deleted by user {mask_user_id(str(current_user.id))}: {filename}")
-            return {"message": "File deleted successfully"}
-        else:
             raise HTTPException(status_code=404, detail="File not found")
+
+        quarantine_path = os.path.join(UPLOAD_DIR, f".deleting-{uuid.uuid4()}-{filename}")
+        os.replace(validated_path, quarantine_path)
+        try:
+            await db.delete(db_file)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            try:
+                os.replace(quarantine_path, validated_path)
+            except OSError as restore_error:
+                logger.error("Failed to restore file after DB delete failure: %s", restore_error)
+            raise
+
+        try:
+            os.remove(quarantine_path)
+        except OSError as cleanup_error:
+            # The DB row is gone and the quarantined path is outside the
+            # public namespace; a maintenance cleanup can retry this safely.
+            logger.warning(
+                "Failed to remove quarantined file %s: %s", quarantine_path, cleanup_error
+            )
+        logger.info(f"File deleted by user {mask_user_id(str(current_user.id))}: {filename}")
+        return {"message": "File deleted successfully"}
 
     except HTTPException:
         raise

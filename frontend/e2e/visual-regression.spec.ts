@@ -1,6 +1,8 @@
 import { test, expect, Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
+
 /**
  * Visual Regression & Accessibility Tests - Staff/Principal Level
  *
@@ -17,6 +19,8 @@ import AxeBuilder from "@axe-core/playwright";
 
 test.describe("Visual Regression Tests", () => {
   test.describe("Dashboard", () => {
+    test.skip(!hasE2EAuth, "E2E credentials are not configured");
+
     test("dashboard visual regression - light mode", async ({ page }) => {
       await page.goto("/dashboard");
       await page.waitForLoadState("networkidle");
@@ -201,6 +205,7 @@ test.describe("Accessibility Tests", () => {
     });
 
     test("dropdown menus should be keyboard accessible", async ({ page }) => {
+      test.skip(!hasE2EAuth, "E2E credentials are not configured");
       await page.goto("/dashboard");
       await page.waitForLoadState("networkidle");
 
@@ -288,6 +293,7 @@ test.describe("Accessibility Tests", () => {
     });
 
     test("images should have alt text", async ({ page }) => {
+      test.skip(!hasE2EAuth, "E2E credentials are not configured");
       await page.goto("/dashboard");
       await page.waitForLoadState("networkidle");
 

@@ -63,10 +63,14 @@ async def get_project_tasks(
     request: Request,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
-    sort_by: str | None = Query(None, description="Field to sort by"),
-    sort_order: str | None = Query(None, description="Sort order (asc/desc)"),
-    search: str | None = Query(None, description="Search term for title/description"),
-    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
+    sort_by: str | None = Query(None, max_length=30, description="Field to sort by"),
+    sort_order: str | None = Query(None, pattern=r"^(asc|desc)$", description="Sort order"),
+    search: str | None = Query(
+        None, max_length=100, description="Search term for title/description"
+    ),
+    status_filter: str | None = Query(
+        None, alias="status", max_length=30, description="Filter by status"
+    ),
     project: Project = Depends(require_project_member),
     task_service: AsyncTaskService = Depends(get_task_service),
     current_user: User = Depends(get_current_active_user),

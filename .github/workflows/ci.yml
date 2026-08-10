@@ -86,7 +86,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
+          pip install ruff==0.15.12 mypy==1.19.1
 
       - name: Ruff lint
         run: python -m ruff check .
@@ -94,10 +94,16 @@ jobs:
       - name: Ruff format check
         run: python -m ruff format --check .
 
+      - name: Mypy type check
+        run: python -m mypy . --no-error-summary
+
       - name: Validate offline migration SQL generation
         env:
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
         run: python -m alembic upgrade head --sql > /tmp/insight-flow-migrations.sql
+
+      - name: Validate migration chain metadata
+        run: python -X utf8 scripts/validate_migrations.py
 
   backend-test:
     name: Backend Tests
@@ -175,6 +181,7 @@ jobs:
         env:
           SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+          LEGACY_SCHEMA_BOOTSTRAP: "true"
         run: python scripts/init_db_for_ci.py
 
       - name: Verify migration chain is current
@@ -336,6 +343,7 @@ jobs:
         env:
           SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+          LEGACY_SCHEMA_BOOTSTRAP: "true"
         run: python scripts/init_db_for_ci.py
 
       - name: Seed E2E user
@@ -350,11 +358,11 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: ./frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps
 
       - name: Run Playwright tests
         working-directory: ./frontend
-        run: npm run test:e2e -- --project=chromium
+        run: npm run test:e2e
         env:
           CI: true
           BASE_URL: "http://localhost:3000"

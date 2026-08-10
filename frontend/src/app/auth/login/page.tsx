@@ -37,16 +37,12 @@ function LoginForm() {
   const requestedRedirect =
     searchParams.get("callbackUrl") ?? searchParams.get("redirect");
   const prefilledEmail = searchParams.get("email") ?? "";
-  const prefilledPassword =
-    process.env.NODE_ENV === "production"
-      ? ""
-      : (searchParams.get("password") ?? "");
   
   const form = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: prefilledEmail,
-      password: prefilledPassword,
+      password: "",
       rememberMe: false,
     },
   });
@@ -112,7 +108,13 @@ function LoginForm() {
       router.replace(redirectUrl);
 
     } catch (error) {
-      console.error("❌ Login error:", error);
+      const status =
+        error && typeof error === "object" && "status" in error
+          ? error.status
+          : undefined;
+      if (typeof status !== "number" || status >= 500) {
+        console.error("❌ Login error:", error);
+      }
       const errorMessage = getErrorMessage(error);
       toast.error("Login failed", { description: errorMessage });
       // Reset password field on error

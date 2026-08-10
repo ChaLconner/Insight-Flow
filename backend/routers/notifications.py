@@ -27,7 +27,8 @@ router = APIRouter(
 from rate_limiter import RateLimits, limiter
 
 
-@router.get("/", response_model=list[NotificationResponse])
+@router.get("", response_model=list[NotificationResponse])
+@router.get("/", response_model=list[NotificationResponse], include_in_schema=False)
 @limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def get_notifications(
     request: Request,

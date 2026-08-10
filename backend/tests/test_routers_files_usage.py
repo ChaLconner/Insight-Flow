@@ -318,8 +318,10 @@ class TestFileOwnership:
 
         delete_response = client.delete("/api/v1/files/delete", params={"url": url})
 
-        assert delete_response.status_code == 200
-        assert not os.path.exists(f"storage/private_uploads/{filename}")
+        assert delete_response.status_code == 404
+        # Unknown database rows are deliberately not deleted by an
+        # authenticated caller; clean up this test fixture explicitly.
+        os.remove(f"storage/private_uploads/{filename}")
 
     def test_delete_file_path_traversal_payload(self, client):
         """Test delete with various malicious payloads."""

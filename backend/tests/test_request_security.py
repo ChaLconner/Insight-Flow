@@ -69,8 +69,9 @@ class TestRequestSecurity:
 
         assert get_client_ip(request) == "1.2.3.4"
 
-    def test_get_client_ip_x_forwarded_for_trusted(self):
+    def test_get_client_ip_x_forwarded_for_trusted(self, monkeypatch):
         """Test X-Forwarded-For when direct connection is trusted."""
+        monkeypatch.setenv("TRUSTED_PROXIES", "10.0.0.0/8")
         request = MagicMock(spec=Request)
         request.client.host = "127.0.0.1"  # Trusted
         request.headers = {
@@ -100,13 +101,17 @@ class TestRequestSecurity:
         assert get_client_ip(request) == "8.8.8.8"
 
         monkeypatch.setenv("ENVIRONMENT", "development")
-        # In dev, we trust blindly?
-        # Logic says: if not direct_ip ... return direct_ip (if not trusting proxies)
-        # return direct_ip regardless of trust?
-        # Check impl line 198: if not is_trusted(direct) and prod: return direct
+        # Development must not make client-supplied forwarding headers trusted.
+        assert get_client_ip(request) == "8.8.8.8"
 
-        # In Dev, it skips that check, so it proceeds to parse header.
-        assert get_client_ip(request) == "1.2.3.4"
+    def test_private_peer_does_not_implicitly_trust_forwarded_headers(self, monkeypatch):
+        """Private address space is not a proxy trust boundary by itself."""
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        request = MagicMock(spec=Request)
+        request.client.host = "172.20.0.5"
+        request.headers = {"x-forwarded-for": "203.0.113.10"}
+
+        assert get_client_ip(request) == "172.20.0.5"
 
     def test_get_client_ip_x_real_ip(self):
         """Test X-Real-IP fallback."""

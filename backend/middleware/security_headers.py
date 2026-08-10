@@ -29,7 +29,9 @@ class SecurityHeadersMiddleware:
                 csp_policy = "default-src 'none'; frame-ancestors 'none'"
 
                 # Add reporting if configured (or default to our own endpoint)
-                report_uri = settings.security_report_uri or "/api/v1/security/csp-report"
+                # The public Next.js rewrite is /api/security/csp-report;
+                # operators can override this for direct backend deployments.
+                report_uri = settings.security_report_uri or "/api/security/csp-report"
                 csp_policy += f"; report-uri {report_uri}; report-to csp-endpoint"
 
                 headers["Content-Security-Policy"] = csp_policy

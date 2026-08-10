@@ -5,6 +5,36 @@ import { transformProjectData } from "@/lib/project-utils";
 // Use backend directly for server-side fetching to avoid loopback overhead and URL issues
 const SERVER_BASE_URL = (process.env.API_URL ?? "http://127.0.0.1:8000") + "/api/v1";
 
+export function buildServerRequestHeaders(
+  incomingHeaders: Headers,
+  cookieHeader: string,
+  optionsHeaders?: HeadersInit,
+): Headers {
+  const outboundHeaders = new Headers(optionsHeaders);
+
+  // Never trust forwarding headers supplied by a caller. The proxy removes
+  // client-supplied values before Next.js renders the request; the value read
+  // here is the trusted value populated by Next.js from its request socket or
+  // configured upstream proxy.
+  outboundHeaders.delete("Forwarded");
+  outboundHeaders.delete("X-Forwarded-For");
+  outboundHeaders.delete("X-Real-IP");
+
+  const forwardedFor = incomingHeaders.get("x-forwarded-for");
+  if (forwardedFor) {
+    outboundHeaders.set("X-Forwarded-For", forwardedFor);
+  }
+
+  outboundHeaders.set("Content-Type", "application/json");
+  outboundHeaders.set("Cookie", cookieHeader);
+  outboundHeaders.set("User-Agent", incomingHeaders.get("user-agent") ?? "");
+  // The browser's socket identity is lost when Next.js performs this server-
+  // side hop. The backend accepts this marker only from a trusted proxy, and
+  // proxy.ts removes client-supplied copies before rendering.
+  outboundHeaders.set("X-Next-Server-Request", "1");
+  return outboundHeaders;
+}
+
 async function fetchServer<T>(
   path: string,
   options: RequestInit = {},
@@ -17,9 +47,7 @@ async function fetchServer<T>(
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
 
-  // Forward critical headers for fingerprint validation (User-Agent, IP)
-  const userAgent = headersStore.get("user-agent") ?? "";
-  const xForwardedFor = headersStore.get("x-forwarded-for") ?? "";
+  const outboundHeaders = buildServerRequestHeaders(headersStore, allCookies, options.headers);
 
   // Standardize path to ensure it starts with / but doesn't duplicate
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
@@ -29,13 +57,7 @@ async function fetchServer<T>(
 
   const res = await fetch(`${SERVER_BASE_URL}${cleanPath}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: allCookies,
-      "User-Agent": userAgent,
-      "X-Forwarded-For": xForwardedFor,
-      ...options.headers,
-    },
+    headers: outboundHeaders,
     cache: "no-store", // Default to dynamic for authenticated data
   });
 

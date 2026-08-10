@@ -8,6 +8,7 @@ Security features:
 - Rate limiting integration
 """
 
+import asyncio
 import logging
 import os
 import uuid
@@ -56,6 +57,13 @@ UPLOAD_DIR = str(_upload_dir)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 USER_ADMIN_ROLES = {UserRole.ADMIN, UserRole.MANAGER}
 PRIVILEGED_INVITE_ROLES = {UserRole.ADMIN, UserRole.MANAGER}
+
+
+def _write_binary_file(path: str, content: bytes) -> None:
+    """Write upload bytes off the event loop."""
+    with open(path, "wb") as buffer:
+        buffer.write(content)
+
 
 # Initialize Cloudinary on module load
 if is_cloudinary_configured():
@@ -206,11 +214,11 @@ async def search_user_by_email(
 @limiter.limit(RateLimits.USER_SEARCH)
 async def search_users(
     request: Request,
-    q: str = "",
+    q: str = Query("", max_length=100),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    role: str | None = None,
-    status_filter: str | None = Query(default=None, alias="status"),
+    role: str | None = Query(default=None, max_length=20),
+    status_filter: str | None = Query(default=None, alias="status", max_length=20),
     user_service: AsyncUserService = Depends(get_user_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -318,8 +326,11 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
             logger.info(f"Uploading avatar to Cloudinary for user {current_user.id}")
 
             filename = file.filename or "avatar.png"
-            result = cloudinary_upload_avatar(
-                file_content=file_content, filename=filename, user_id=str(current_user.id)
+            result = await asyncio.to_thread(
+                cloudinary_upload_avatar,
+                file_content=file_content,
+                filename=filename,
+                user_id=str(current_user.id),
             )
 
             if result and result.get("secure_url"):
@@ -342,8 +353,7 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
             new_local_path = validated_path
 
             # Save file locally
-            with open(validated_path, "wb") as buffer:
-                buffer.write(file_content)
+            await asyncio.to_thread(_write_binary_file, validated_path, file_content)
 
             avatar_url = f"/static/uploads/{unique_filename}"
 
@@ -365,7 +375,7 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
                     os.path.exists(validated_old_path)
                     and validated_old_path != committed_local_path
                 ):
-                    os.remove(validated_old_path)
+                    await asyncio.to_thread(os.remove, validated_old_path)
                     logger.info(f"Deleted old local avatar: {validated_old_path}")
             except Exception as e:
                 logger.warning(f"Error deleting old local avatar: {e}")

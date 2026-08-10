@@ -12,6 +12,16 @@ from utils.logger import setup_logger
 logger = setup_logger("cache_invalidation")
 
 
+async def invalidate_auth_user_cache(user_id: uuid.UUID | str) -> None:
+    """Invalidate the short-lived authenticated-user snapshot."""
+    try:
+        from services.auth_cache import invalidate_auth_user_cache as _invalidate
+
+        await _invalidate(user_id)
+    except Exception as exc:
+        logger.warning(f"Failed to invalidate auth cache: {exc}")
+
+
 async def invalidate_dashboard_and_analytics_cache(
     user_id: uuid.UUID | None = None,
     *,

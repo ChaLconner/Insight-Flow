@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Index, String, delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from utils.logger import setup_logger
@@ -33,6 +34,18 @@ class TokenBlacklist(BaseModel):
 
     def __repr__(self):
         return f"<TokenBlacklist(jti={self.token_jti}, expires_at={self.expires_at})>"
+
+    @staticmethod
+    async def _invalidate_cache(token_jti: str) -> None:
+        """Remove any cached blacklist decision after a revocation write."""
+        try:
+            from services.cache_service import cache_service
+
+            await cache_service.delete(f"blacklist:jti:{token_jti}")
+        except Exception as exc:
+            # Verification never trusts cached negative decisions, so a cache
+            # outage cannot turn a successful revocation into an acceptance.
+            logger.warning(f"Failed to invalidate token blacklist cache: {exc}")
 
     @classmethod
     def is_token_blacklisted(cls, db_session: "Session", token_jti: str) -> bool:
@@ -132,9 +145,12 @@ class TokenBlacklist(BaseModel):
     @classmethod
     async def async_blacklist_token(
         cls, db_session: "AsyncSession", token_jti: str, expires_at: datetime
-    ):
-        """
-        Add a token to the blacklist (Async).
+    ) -> bool:
+        """Atomically claim a JTI for revocation.
+
+        Returns ``True`` only for the request that inserted the JTI.  A
+        duplicate is a replay (including a concurrent insert), so callers that
+        rotate tokens can reject it instead of issuing another token pair.
         """
         # Clean up expired tokens probabilistically (10% chance) to reduce DB load
         import random
@@ -147,15 +163,16 @@ class TokenBlacklist(BaseModel):
         existing_token = result.scalars().first()
 
         if existing_token:
-            return
+            await cls._invalidate_cache(token_jti)
+            return False
 
         blacklisted_token = cls(token_jti=token_jti, expires_at=expires_at)
         db_session.add(blacklisted_token)
         try:
             await db_session.commit()
-        except Exception as e:
+            await cls._invalidate_cache(token_jti)
+            return True
+        except IntegrityError:
             await db_session.rollback()
-            if "duplicate key" in str(e).lower():
-                return
-            else:
-                raise e
+            await cls._invalidate_cache(token_jti)
+            return False

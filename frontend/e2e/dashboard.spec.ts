@@ -4,47 +4,34 @@
  */
 import { test, expect } from '@playwright/test';
 
+const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
+
 test.describe('Dashboard Page', () => {
+  test.skip(!hasE2EAuth, 'E2E credentials are not configured');
+
   test.beforeEach(async ({ page }) => {
     // Note: These tests assume authentication is handled
     // In a real scenario, you'd set up auth state
   });
 
-  test('should navigate to dashboard from login', async ({ page }) => {
-    await page.goto('/auth/login');
-    
-    // Check if redirect happens or login form exists
-    const currentUrl = page.url();
-    expect(currentUrl).toMatch(/login|dashboard/);
-  });
-
   test('should display dashboard layout', async ({ page }) => {
     await page.goto('/dashboard');
     
-    // Wait for either dashboard content or login redirect
     await page.waitForLoadState('networkidle');
-    
-    const currentUrl = page.url();
-    
-    if (currentUrl.includes('dashboard')) {
-      // Check for common dashboard elements
-      const heading = page.locator('h1, h2').first();
-      await expect(heading).toBeVisible();
-    } else {
-      // Redirected to login - that's expected without auth
-      expect(currentUrl).toMatch(/login/);
-    }
+    await expect(page).toHaveURL(/dashboard/);
+    await expect(page.locator('h1, h2').first()).toBeVisible();
   });
 });
 
 test.describe('Projects Page', () => {
-  test('should display projects page or redirect to login', async ({ page }) => {
+  test.skip(!hasE2EAuth, 'E2E credentials are not configured');
+
+  test('should display projects page when authenticated', async ({ page }) => {
     await page.goto('/projects');
     
     await page.waitForLoadState('networkidle');
     
-    // Either shows projects or redirects to login
-    await expect(page).toHaveURL(/projects|login/);
+    await expect(page).toHaveURL(/projects/);
   });
 
   test('should have create project button when authenticated', async ({ page }) => {
@@ -52,34 +39,36 @@ test.describe('Projects Page', () => {
     
     await page.waitForLoadState('networkidle');
     
-    if (page.url().includes('projects')) {
-      // Look for create button - it may or may not be visible depending on auth
-      const createButton = page.getByRole('button', { name: /create|new|add/i });
-      // Only assert if visible
-      if (await createButton.isVisible()) {
-        await expect(createButton).toBeEnabled();
-      }
-    }
+    await expect(page).toHaveURL(/projects/);
+    const createButton = page.getByRole('button', { name: /create|new|add/i });
+    await expect(createButton).toBeVisible();
+    await expect(createButton).toBeEnabled();
   });
 });
 
 test.describe('Tasks Page', () => {
-  test('should display tasks page or redirect to login', async ({ page }) => {
-    await page.goto('/tasks');
+  test.skip(!hasE2EAuth, 'E2E credentials are not configured');
+
+  test('should display tasks page when authenticated', async ({ page }) => {
+    const response = await page.goto('/tasks');
     
     await page.waitForLoadState('networkidle');
     
-    await expect(page).toHaveURL(/tasks|login/);
+    await expect(page).toHaveURL(/tasks/);
+    expect(response?.status()).toBeLessThan(400);
+    await expect(page.getByRole('heading', { name: /tasks/i }).first()).toBeVisible();
   });
 });
 
 test.describe('Settings Page', () => {
-  test('should display settings page or redirect to login', async ({ page }) => {
+  test.skip(!hasE2EAuth, 'E2E credentials are not configured');
+
+  test('should display settings page when authenticated', async ({ page }) => {
     await page.goto('/settings');
     
     await page.waitForLoadState('networkidle');
     
-    await expect(page).toHaveURL(/settings|login/);
+    await expect(page).toHaveURL(/settings/);
   });
 
   test('should have profile section when authenticated', async ({ page }) => {
@@ -87,11 +76,9 @@ test.describe('Settings Page', () => {
     
     await page.waitForLoadState('networkidle');
     
-    if (page.url().includes('settings')) {
-      // Look for profile-related content
-      const profileSection = page.getByText(/profile|account|settings/i).first();
-      await expect(profileSection).toBeVisible();
-    }
+    await expect(page).toHaveURL(/settings/);
+    const profileSection = page.getByText(/profile|account|settings/i).first();
+    await expect(profileSection).toBeVisible();
   });
 });
 

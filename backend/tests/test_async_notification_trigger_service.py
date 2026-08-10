@@ -99,6 +99,35 @@ async def test_notify_task_assigned_sends_email_when_enabled(trigger_service, us
 
 
 @pytest.mark.asyncio
+async def test_notification_email_escapes_user_controlled_task_title(trigger_service, users):
+    assigner, assignee = users
+
+    with (
+        patch.object(
+            trigger_service,
+            "_get_user_preferences",
+            return_value={"inApp": {"tasks": False}, "email": {"tasks": True}},
+        ),
+        patch(
+            "services.async_notification_trigger_service.enqueue_job",
+            new_callable=AsyncMock,
+        ) as mock_enqueue,
+    ):
+        await trigger_service.notify_task_assigned(
+            assignee=assignee,
+            task_id=uuid.uuid4(),
+            task_title="<script>alert(1)</script>",
+            project_id=uuid.uuid4(),
+            project_name="Test Project",
+            assigner=assigner,
+        )
+
+    html_content = mock_enqueue.call_args.args[2]["html_content"]
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_content
+    assert "<script>alert(1)</script>" not in html_content
+
+
+@pytest.mark.asyncio
 async def test_notify_task_assigned_rate_limited(
     trigger_service, mock_db_session, mock_rate_limiter, users
 ):

@@ -170,8 +170,9 @@ export function ProfileSettings({
 
     try {
       setIsSaving(true);
+      const { avatar: _avatar, ...profileFields } = profileData;
       const updateData = {
-        ...profileData,
+        ...profileFields,
         first_name: profileData.firstName,
         last_name: profileData.lastName,
         name: `${profileData.firstName} ${profileData.lastName}`.trim(),

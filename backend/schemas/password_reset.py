@@ -2,7 +2,7 @@
 Password reset schemas for API requests and responses.
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -21,8 +21,8 @@ class ForgotPasswordResponse(BaseModel):
 class ResetPasswordRequest(BaseModel):
     """Request schema for reset password."""
 
-    token: str
-    new_password: str
+    token: str = Field(..., max_length=512)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 class ResetPasswordResponse(BaseModel):

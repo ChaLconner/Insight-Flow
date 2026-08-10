@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.password_reset import PasswordReset
 from services.async_user_service import AsyncUserService
+from services.cache_invalidation import invalidate_auth_user_cache
 from services.job_payload_security import encrypt_job_secret
 from services.job_queue import enqueue_job
 from utils.logger import mask_email, mask_token, setup_logger
@@ -68,17 +69,21 @@ class AsyncPasswordResetService:
             raise ValueError("Invalid token type")
         return reset_token
 
-    async def validate_reset_token(self, token: str) -> PasswordReset | None:
+    async def validate_reset_token(
+        self, token: str, *, for_update: bool = False
+    ) -> PasswordReset | None:
         """
         Validate a password reset token.
         """
         hashed_token = PasswordReset.hash_token(token)
 
-        result = await self.db.execute(
-            select(PasswordReset).filter(
-                PasswordReset.token == hashed_token, PasswordReset.used.is_(False)
-            )
+        statement = select(PasswordReset).filter(
+            PasswordReset.token == hashed_token, PasswordReset.used.is_(False)
         )
+        if for_update:
+            statement = statement.with_for_update()
+
+        result = await self.db.execute(statement)
         reset_token = result.scalars().first()
 
         if not reset_token:
@@ -96,7 +101,9 @@ class AsyncPasswordResetService:
         Reset user's password using a valid token.
         """
         # Validate token
-        reset_token = await self.validate_reset_token(token)
+        # Lock the one-time token for the whole transaction.  Two concurrent
+        # requests cannot both observe ``used = false`` and change a password.
+        reset_token = await self.validate_reset_token(token, for_update=True)
         if not reset_token:
             logger.warning(f"Password reset attempted with invalid token: {mask_token(token)}")
             return False
@@ -108,12 +115,7 @@ class AsyncPasswordResetService:
             return False
 
         try:
-            # Update user password (userService.hash_password is sync or async? sync usually)
-            # Checking UserService... it calls get_password_hash which is sync.
-            # We can recreate hash_password here or use sync method.
-            from utils.auth import get_password_hash
-
-            user.hashed_password = get_password_hash(new_password)
+            user.hashed_password = await self.user_service.hash_password(new_password)
             current_session_version = getattr(user, "session_version", 0)
             user.session_version = (
                 current_session_version + 1 if isinstance(current_session_version, int) else 1
@@ -123,6 +125,7 @@ class AsyncPasswordResetService:
             reset_token.used = True
 
             await self.db.commit()
+            await invalidate_auth_user_cache(user.id)
 
             logger.info(f"Password reset successful for email: {mask_email(reset_token.email)}")
             return True

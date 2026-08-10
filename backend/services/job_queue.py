@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -13,6 +13,11 @@ from models.background_job import BackgroundJob, BackgroundJobStatus
 from utils.logger import setup_logger
 
 logger = setup_logger("job_queue")
+
+
+def _rowcount(result: Any) -> int:
+    """Read rowcount across SQLAlchemy Result/CursorResult implementations."""
+    return int(getattr(result, "rowcount", 0) or 0)
 
 
 def _is_postgres(db: AsyncSession) -> bool:
@@ -61,13 +66,16 @@ async def enqueue_job(
         )
         inserted_id = (await db.execute(statement)).scalar_one_or_none()
         if inserted_id is None:
-            existing = await db.scalar(
-                select(BackgroundJob).where(BackgroundJob.idempotency_key == idempotency_key)
+            existing = cast(
+                "BackgroundJob | None",
+                await db.scalar(
+                    select(BackgroundJob).where(BackgroundJob.idempotency_key == idempotency_key)
+                ),
             )
             if existing:
                 return existing
             raise RuntimeError("Idempotent job conflict could not be resolved")
-        job = await db.get(BackgroundJob, inserted_id)
+        job = cast("BackgroundJob | None", await db.get(BackgroundJob, inserted_id))
         if job is None:
             raise RuntimeError("Inserted background job could not be loaded")
         return job
@@ -108,7 +116,7 @@ async def cleanup_finished_jobs(
         .execution_options(synchronize_session=False)
     )
     await db.commit()
-    return result.rowcount or 0
+    return _rowcount(result)
 
 
 async def claim_job(
@@ -177,7 +185,7 @@ async def complete_job(db: AsyncSession, job_id: uuid.UUID, worker_id: str) -> b
         )
     )
     await db.commit()
-    return result.rowcount == 1
+    return _rowcount(result) == 1
 
 
 async def renew_job_lease(db: AsyncSession, job_id: uuid.UUID, worker_id: str) -> bool:
@@ -192,7 +200,7 @@ async def renew_job_lease(db: AsyncSession, job_id: uuid.UUID, worker_id: str) -
         .values(locked_at=datetime.now(UTC))
     )
     await db.commit()
-    return result.rowcount == 1
+    return _rowcount(result) == 1
 
 
 async def fail_job(
@@ -234,7 +242,7 @@ async def get_queue_stats(db: AsyncSession) -> dict[str, int]:
     result = await db.execute(
         select(BackgroundJob.status, func.count(BackgroundJob.id)).group_by(BackgroundJob.status)
     )
-    counts = dict(result.all())
+    counts: dict[str, int] = {str(status): int(count) for status, count in result.all()}
     return {
         "pending": counts.get(BackgroundJobStatus.PENDING.value, 0),
         "running": counts.get(BackgroundJobStatus.RUNNING.value, 0),

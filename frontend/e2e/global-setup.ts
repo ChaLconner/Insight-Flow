@@ -20,14 +20,18 @@ async function globalSetup(config: FullConfig) {
     fs.mkdirSync(authDir, { recursive: true });
   }
 
-  // Skip if auth file already exists and is recent (less than 1 hour old)
-  if (fs.existsSync(AUTH_FILE)) {
-    const stats = fs.statSync(AUTH_FILE);
-    const hourAgo = Date.now() - 60 * 60 * 1000;
-    if (stats.mtimeMs > hourAgo) {
-      console.log('Using existing auth state');
-      return;
-    }
+  const hasCredentials = Boolean(E2E_EMAIL && E2E_PASSWORD);
+
+  if (Boolean(E2E_EMAIL) !== Boolean(E2E_PASSWORD)) {
+    throw new Error('E2E_USER_EMAIL and E2E_USER_PASSWORD must be configured together');
+  }
+
+  if (!hasCredentials) {
+    // Never reuse a previous authenticated state when credentials are absent.
+    // Protected tests must skip instead of inheriting an unknown session.
+    fs.writeFileSync(AUTH_FILE, JSON.stringify({ cookies: [], origins: [] }));
+    console.log('No E2E credentials configured; protected tests must be skipped');
+    return;
   }
 
   // Create browser and authenticate
@@ -43,31 +47,22 @@ async function globalSetup(config: FullConfig) {
     // Wait for login form to be ready
     await page.waitForLoadState('networkidle');
     
-    // Check if we're already logged in (redirected to the role-based landing page)
-    if (page.url().includes(expectedRedirectPath)) {
-      console.log('Already authenticated');
-      await context.storageState({ path: AUTH_FILE });
-      await browser.close();
-      return;
-    }
-
-    if (E2E_EMAIL && E2E_PASSWORD) {
-      await page.getByRole('textbox', { name: /email/i }).fill(E2E_EMAIL);
-      await page.locator('input[type="password"]').fill(E2E_PASSWORD);
-      await page.getByRole('button', { name: /sign in|login/i }).click();
-      await page.waitForLoadState('networkidle');
-      await page.waitForURL(new RegExp(`${expectedRedirectPath}`));
-      console.log(`Created authenticated state for ${E2E_EMAIL}`);
-    } else {
-      console.log('Creating unauthenticated state for public page tests');
-    }
+    await page.getByRole('textbox', { name: /email/i }).fill(E2E_EMAIL as string);
+    await page.locator('input[type="password"]').fill(E2E_PASSWORD as string);
+    await page.getByRole('button', { name: /sign in|login/i }).click();
+    await page.waitForLoadState('networkidle');
+    const expectedUrl = new URL(expectedRedirectPath, baseURL);
+    await page.waitForURL((url) =>
+      url.pathname === expectedUrl.pathname &&
+      (!expectedUrl.search || url.search === expectedUrl.search),
+    );
+    console.log(`Created authenticated state for ${E2E_EMAIL}`);
 
     await context.storageState({ path: AUTH_FILE });
     
   } catch (error) {
-    console.log('Global setup completed (auth setup skipped):', error);
-    // Create empty auth file to prevent repeated failures
-    fs.writeFileSync(AUTH_FILE, JSON.stringify({ cookies: [], origins: [] }));
+    console.error('Global E2E authentication setup failed:', error);
+    throw error;
   } finally {
     await browser.close();
   }

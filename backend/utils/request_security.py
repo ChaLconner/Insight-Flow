@@ -23,13 +23,11 @@ logger = setup_logger("request_security")
 # Trusted Proxy Configuration
 # =============================================================================
 
-# Default trusted proxy IPs (loopback and common Docker networks)
+# Only loopback is trusted by default. Deployment-specific proxy addresses
+# must be configured explicitly with TRUSTED_PROXIES.
 DEFAULT_TRUSTED_PROXIES: set[str] = {
     "127.0.0.1",
     "::1",
-    "10.0.0.0/8",  # Private network
-    "172.16.0.0/12",  # Docker default
-    "192.168.0.0/16",  # Private network
 }
 
 # Cloud provider proxy ranges (these IPs are typically set by load balancers)
@@ -108,7 +106,7 @@ def is_trusted_proxy(ip: str, trusted_proxies: set[str] | None = None) -> bool:
         return False
 
     try:
-        proxies = trusted_proxies or get_trusted_proxies()
+        proxies = trusted_proxies if trusted_proxies is not None else get_trusted_proxies()
         ip_obj = ipaddress.ip_address(ip)
 
         for proxy in proxies:
@@ -190,13 +188,10 @@ def get_client_ip(request: Request, trust_proxy: bool = True) -> str:  # noqa: P
     if not trust_proxy:
         return direct_ip
 
-    # Check environment - in production, be more careful about trusting headers
-    environment = os.getenv("ENVIRONMENT", "development").lower()
-
-    # Check if the direct connection is from a trusted proxy
-    # Direct connection is not from a trusted proxy
-    # Don't trust X-Forwarded-For in this case
-    if not is_trusted_proxy(direct_ip) and environment == "production":
+    # Forwarding headers are untrusted unless the immediate peer is an
+    # explicitly configured proxy. Development mode must not weaken this
+    # boundary because clients can still send arbitrary headers locally.
+    if not is_trusted_proxy(direct_ip):
         logger.debug(f"Request not from trusted proxy, using direct IP: {direct_ip}")
         return direct_ip
 

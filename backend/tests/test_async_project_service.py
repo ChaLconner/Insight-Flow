@@ -1,8 +1,9 @@
 import pytest
 from sqlalchemy import select
 
+from models.payment import Subscription, SubscriptionPlan, SubscriptionStatus
 from models.project import MemberRole, ProjectMember
-from models.task import Task
+from models.task import Task, TaskStatus
 from models.task_history import ActivityType, TaskHistory
 from models.user import User
 from schemas.project import ProjectCreate, ProjectMemberCreate, ProjectUpdate
@@ -73,6 +74,29 @@ async def test_create_project_with_members(async_project_service, test_user, asy
     member = result.scalars().first()
     assert member is not None
     assert member.role == "member"
+
+
+@pytest.mark.asyncio
+async def test_paid_plan_with_unpaid_status_gets_free_limits(
+    async_project_service, test_user, async_session
+):
+    async_session.add(
+        Subscription(
+            user_id=test_user.id,
+            plan=SubscriptionPlan.PRO,
+            status=SubscriptionStatus.PAST_DUE,
+        )
+    )
+    await async_session.commit()
+
+    limits = await async_project_service._get_user_plan_limits(test_user.id)
+
+    assert limits == {"projects": 2, "members": 3}
+
+
+def test_project_member_schema_rejects_owner_role():
+    with pytest.raises(ValueError, match="Invalid member role"):
+        ProjectMemberCreate(user_id="00000000-0000-0000-0000-000000000001", role="owner")
 
 
 @pytest.mark.asyncio
@@ -260,6 +284,49 @@ async def test_get_projects_with_stats(async_project_service, test_user, project
     assert s["project"].name == project_data.name
     assert "task_count" in s
     assert "completed_tasks" in s
+
+
+@pytest.mark.asyncio
+async def test_get_projects_with_stats_does_not_multiply_tasks_by_members(
+    async_project_service, test_user, project_data, async_session
+):
+    project = await async_project_service.create_project(project_data, test_user.id)
+    member_user = User(
+        email="stats-member@test.com", name="Stats Member", hashed_password="pw", is_active=True
+    )
+    async_session.add(member_user)
+    await async_session.commit()
+    await async_session.refresh(member_user)
+    await async_project_service.add_project_member(
+        project.id,
+        ProjectMemberCreate(user_id=str(member_user.id), role="member"),
+        test_user.id,
+    )
+
+    async_session.add_all(
+        [
+            Task(
+                title="Done",
+                project_id=project.id,
+                created_by=test_user.id,
+                status=TaskStatus.DONE,
+            ),
+            Task(
+                title="Todo",
+                project_id=project.id,
+                created_by=test_user.id,
+                status=TaskStatus.TODO,
+            ),
+        ]
+    )
+    await async_session.commit()
+
+    result = await async_project_service.get_projects_with_stats(user_id=test_user.id)
+
+    assert result[0]["task_count"] == 2
+    assert result[0]["completed_tasks"] == 1
+    assert result[0]["member_count"] == 2
+    assert len(result[0]["members"]) == 2
 
 
 @pytest.mark.asyncio

@@ -169,8 +169,6 @@ async def execute_sql(sql_statement: str):
     """
     Execute raw SQL statement asynchronously.
     """
-    if async_engine is None:
-        raise RuntimeError("Database engine is not initialized")
     async with async_engine.begin() as conn:
         result = await conn.execute(text(sql_statement))
         return result
@@ -181,7 +179,5 @@ async def drop_tables():
     Drop all database tables asynchronously.
     DANGEROUS: For testing only.
     """
-    if async_engine is None:
-        return
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

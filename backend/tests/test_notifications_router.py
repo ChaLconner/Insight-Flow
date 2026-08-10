@@ -65,6 +65,17 @@ def test_get_notifications(client, mock_notification_service):
     assert response.json()[0]["title"] == "Test"
 
 
+def test_get_notifications_without_trailing_slash_does_not_redirect(
+    client, mock_notification_service
+):
+    mock_notification_service.get_user_notifications.return_value = []
+
+    response = client.get("/api/v1/notifications", follow_redirects=False)
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_get_unread_count(client, mock_notification_service):
     mock_notification_service.get_unread_count.return_value = 5
     response = client.get("/api/v1/notifications/unread-count")

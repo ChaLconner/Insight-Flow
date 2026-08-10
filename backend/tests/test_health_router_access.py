@@ -1,5 +1,7 @@
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import pytest
 from fastapi.testclient import TestClient
 
 from main import app
@@ -53,3 +55,42 @@ def test_detailed_health_returns_404_when_not_enabled(monkeypatch):
         response = client.get("/health/full")
 
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_readiness_reuses_short_lived_probe(monkeypatch):
+    from routers import health
+
+    settings = _make_settings(
+        cache=SimpleNamespace(redis_url=None), health_check_cache_ttl_seconds=60
+    )
+    probe = AsyncMock(return_value={"healthy": True})
+    monkeypatch.setattr(health, "get_settings", lambda: settings)
+    monkeypatch.setattr(health, "_probe_database", probe)
+    health._readiness_cache = None
+
+    first = await health.readiness_check()
+    second = await health.readiness_check()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    probe.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_readiness_ignores_redis_when_cache_is_disabled(monkeypatch):
+    from routers import health
+    from services.cache_service import cache_service
+
+    settings = _make_settings(
+        cache=SimpleNamespace(enabled=False, redis_url="redis://configured-but-disabled"),
+        health_check_cache_ttl_seconds=0,
+    )
+    monkeypatch.setattr(health, "get_settings", lambda: settings)
+    monkeypatch.setattr(health, "_probe_database", AsyncMock(return_value={"healthy": True}))
+    monkeypatch.setattr(cache_service, "ensure_connected", AsyncMock(return_value=False))
+    health._readiness_cache = None
+
+    response = await health.readiness_check()
+
+    assert response.status_code == 200

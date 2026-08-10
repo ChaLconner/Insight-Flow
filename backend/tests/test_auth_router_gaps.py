@@ -36,7 +36,7 @@ class TestAuthRouterGaps:
     async def test_login_success_full_flow(
         self, mock_db, mock_user_service, mock_response, mock_request
     ):
-        """Test full login success flow including update_last_login and cookies."""
+        """Test full login success flow after authentication has persisted login state."""
         from schemas.user import UserLogin
 
         login_data = UserLogin(email="test@example.com", password="password")
@@ -54,8 +54,8 @@ class TestAuthRouterGaps:
         with patch("routers.auth.create_and_set_auth_cookies") as mock_set_cookies:
             result = await login(login_data, mock_response, mock_request, mock_user_service)
 
-            # Verify update_last_login called
-            mock_user_service.update_last_login.assert_called_with("user_id_123")
+            # authenticate_user persists the audit record and last-login state atomically.
+            mock_user_service.update_last_login.assert_not_called()
 
             # Verify cookies set
             mock_set_cookies.assert_called_once()

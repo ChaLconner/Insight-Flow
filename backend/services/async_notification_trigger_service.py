@@ -6,11 +6,13 @@ Refactored for SQLAlchemy 2.0+ Async operations.
 import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
+from html import escape
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.background_job import BackgroundJob
 from models.notification import Notification
 from models.user import User
 from models.user_settings import UserSettings
@@ -82,13 +84,18 @@ class AsyncNotificationTriggerService:
         prefs = await self._get_user_preferences(user.id)
         if not self._should_notify_email(prefs, email_type):
             return
+        if not await self._check_email_rate_limit(user, email_type):
+            return
 
         try:
             import os
 
             frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
             action_url = f"{frontend_url}{action_path}" if action_path else frontend_url
-            content = f"<p>{message}</p>"
+            # Notification fields include task, project, comment, and actor
+            # text supplied by users. Keep the email template HTML-capable,
+            # but escape this untrusted text before placing it in the body.
+            content = f"<p>{escape(message)}</p>"
             html_email = EmailService._get_base_template(
                 subject, content, action_url, "Open Insight Flow"
             )
@@ -107,6 +114,7 @@ class AsyncNotificationTriggerService:
                 },
                 idempotency_key=idempotency_key,
             )
+            self.rate_limiter.record_notification(f"email:{user.id}", email_type)
             logger.info("Queued notification email for user %s", user.id)
         except Exception as e:
             logger.warning(f"Failed to queue notification email to user {user.id}: {e}")
@@ -120,6 +128,32 @@ class AsyncNotificationTriggerService:
         if not can_send:
             logger.info(f"Rate limited notification for user {user_id}: {reason}")
         return can_send
+
+    async def _check_email_rate_limit(self, user: User, email_type: str) -> bool:
+        """Bound outbound email fan-out separately from in-app notices."""
+        key = f"email:{user.id}"
+        allowed, reason = self.rate_limiter.can_send(key, email_type)
+        if not allowed:
+            logger.info("Rate limited email notification for %s: %s", user.id, reason)
+            return False
+
+        cutoff = datetime.now(UTC) - timedelta(hours=1)
+        try:
+            result = await self.db.execute(
+                select(func.count(BackgroundJob.id)).where(
+                    BackgroundJob.job_type == EMAIL_JOB_TYPE,
+                    BackgroundJob.created_at >= cutoff,
+                    BackgroundJob.payload["to_email"].as_string() == user.email,
+                )
+            )
+            count = result.scalar_one()
+            if isinstance(count, int) and count >= self.rate_limiter.max_per_hour:
+                logger.info("Durable email rate limit reached for %s", user.id)
+                return False
+        except Exception as exc:
+            logger.warning("Email rate-limit lookup failed: %s", exc)
+            return False
+        return True
 
     async def _find_existing_group_notification(
         self, user_id: uuid.UUID, notification_type: str, hours: int = 24

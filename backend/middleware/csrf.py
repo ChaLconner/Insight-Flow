@@ -30,7 +30,6 @@ CSRF_EXEMPT_PATHS: set[str] = {
     "/auth/register",
     "/auth/google",
     "/auth/github",
-    "/auth/refresh",
     "/auth/forgot-password",
     "/auth/reset-password",
     "/auth/validate-reset-token",
@@ -38,10 +37,17 @@ CSRF_EXEMPT_PATHS: set[str] = {
     "/api/v1/auth/register",
     "/api/v1/auth/google",
     "/api/v1/auth/github",
-    "/api/v1/auth/refresh",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
     "/api/v1/auth/validate-reset-token",
+    # Stripe authenticates webhooks with the Stripe-Signature header. Browser
+    # double-submit CSRF cannot be supplied by Stripe and must not gate this
+    # exact endpoint; signature verification remains mandatory in the router.
+    "/api/v1/payment/webhook",
+    # CSP reports are browser-generated telemetry and cannot carry the
+    # application's custom CSRF header. Body/schema/rate limits protect this
+    # unauthenticated endpoint from becoming an ingestion sink.
+    "/api/v1/security/csp-report",
     "/health",
     "/health/db",
     "/health/cache",
@@ -53,6 +59,7 @@ CSRF_EXEMPT_PATHS: set[str] = {
 }
 
 CSRF_EXEMPT_PREFIXES: set[str] = set()
+CSRF_BEARER_ONLY_PATHS: set[str] = {"/auth/refresh", "/api/v1/auth/refresh"}
 
 
 def generate_csrf_token() -> str:
@@ -109,6 +116,17 @@ class CSRFMiddleware:
 
         # Check exact match
         if path in self.exempt_paths:
+            return True
+
+        # A caller that supplies a refresh token in an Authorization header
+        # is not relying on ambient browser cookies and is therefore not
+        # exposed to cross-site cookie submission. Cookie-based refreshes
+        # still require the double-submit token.
+        if (
+            path in CSRF_BEARER_ONLY_PATHS
+            and request.headers.get("authorization", "").startswith("Bearer ")
+            and not request.cookies.get("refresh_token")
+        ):
             return True
 
         # Prefix exemptions must be explicit; auth endpoints are exact-match only.

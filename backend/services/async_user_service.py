@@ -19,7 +19,10 @@ from models.payment import Subscription, SubscriptionPlan, SubscriptionStatus
 from models.user import User
 from models.user_settings import UserSettings
 from schemas.user import UserCreate, UserInvite, UserLogin, UserSettingsUpdate, UserUpdate
-from services.cache_invalidation import invalidate_dashboard_and_analytics_cache
+from services.cache_invalidation import (
+    invalidate_auth_user_cache,
+    invalidate_dashboard_and_analytics_cache,
+)
 from services.job_payload_security import encrypt_job_secret
 from services.job_queue import enqueue_job
 from utils.auth import get_password_hash, verify_password
@@ -188,6 +191,7 @@ class AsyncUserService:
         user.verification_token = None
         user.verification_token_expires_at = None
         await self.db.commit()
+        await invalidate_auth_user_cache(user.id)
 
         logger.info(f"Email verified successfully for {mask_email(user.email)}")
         return True
@@ -236,7 +240,23 @@ class AsyncUserService:
     ):
         """Log authentication attempt."""
         try:
-            audit = AuthAudit(
+            self._add_auth_attempt(email, status, ip_address, user_agent, user_id)
+            await self.db.commit()
+        except Exception as e:
+            logger.error(f"Failed to log auth attempt: {e}")
+            await self.db.rollback()
+
+    def _add_auth_attempt(
+        self,
+        email: str,
+        status: AuthStatus,
+        ip_address: str | None,
+        user_agent: str | None,
+        user_id: uuid.UUID | None = None,
+    ) -> None:
+        """Stage an authentication audit row in the caller's transaction."""
+        self.db.add(
+            AuthAudit(
                 user_id=user_id,
                 email=email,
                 ip_address=ip_address,
@@ -244,11 +264,7 @@ class AsyncUserService:
                 status=status.value,
                 attempt_at=datetime.now(UTC),
             )
-            self.db.add(audit)
-            await self.db.commit()
-        except Exception as e:
-            logger.error(f"Failed to log auth attempt: {e}")
-            await self.db.rollback()
+        )
 
     async def authenticate_user(
         self,
@@ -314,23 +330,26 @@ class AsyncUserService:
                     logger.error(f"Failed to queue account lockout notification: {e}")
                     raise RuntimeError("Authentication temporarily unavailable") from e
 
-            await self.db.commit()
-
-            await self.log_auth_attempt(
+            self._add_auth_attempt(
                 login_data.email, AuthStatus.FAILURE, ip_address, user_agent, user.id
             )
+            await self.db.commit()
+            await invalidate_auth_user_cache(user.id)
             return None
 
         # 4. Success
         if (user.failed_login_attempts or 0) > 0 or user.locked_until:
             user.failed_login_attempts = 0
             user.locked_until = None
-            await self.db.commit()
 
-        logger.info(f"Authentication successful for email: {mask_email(login_data.email)}")
-        await self.log_auth_attempt(
+        user.last_login_at = datetime.now(UTC)
+        self._add_auth_attempt(
             login_data.email, AuthStatus.SUCCESS, ip_address, user_agent, user.id
         )
+        await self.db.commit()
+        await invalidate_auth_user_cache(user.id)
+
+        logger.info(f"Authentication successful for email: {mask_email(login_data.email)}")
         return user
 
     async def verify_password(self, password: str, hashed_password: str) -> bool:
@@ -345,16 +364,24 @@ class AsyncUserService:
             return False
 
     async def change_password(
-        self, user_id: uuid.UUID, current_password: str, new_password: str
+        self,
+        user_id: uuid.UUID,
+        current_password: str,
+        new_password: str,
+        *,
+        verified_user: User | None = None,
+        current_password_verified: bool = False,
     ) -> bool:
         """Change user password."""
         logger.info(f"Password change request for user ID: {mask_user_id(str(user_id))}")
-        user = await self.get_user_by_id(user_id)
+        user = verified_user or await self.get_user_by_id(user_id)
         if not user:
             logger.error(f"User not found for ID: {mask_user_id(str(user_id))}")
             raise ValueError("User not found")
 
-        if not verify_password(current_password, user.hashed_password or ""):
+        if not current_password_verified and not await self.verify_password(
+            current_password, user.hashed_password or ""
+        ):
             logger.warning(
                 f"Current password verification failed for user: {mask_email(user.email)}"
             )
@@ -370,6 +397,7 @@ class AsyncUserService:
 
         try:
             await self.db.commit()
+            await invalidate_auth_user_cache(user.id)
             logger.info(
                 f"Password change committed successfully for user: {mask_email(user.email)}"
             )
@@ -391,6 +419,7 @@ class AsyncUserService:
                 user.avatar_url = avatar_url
             await self.db.commit()
             await self.db.refresh(user)
+            await invalidate_auth_user_cache(user.id)
             return user
 
         user = await self.get_user_by_email(email)
@@ -401,6 +430,7 @@ class AsyncUserService:
                 user.avatar_url = avatar_url
             await self.db.commit()
             await self.db.refresh(user)
+            await invalidate_auth_user_cache(user.id)
             return user
 
         user_data = UserCreate(email=email, name=name, avatar_url=avatar_url, google_id=google_id)
@@ -418,6 +448,7 @@ class AsyncUserService:
                 user.avatar_url = avatar_url
             await self.db.commit()
             await self.db.refresh(user)
+            await invalidate_auth_user_cache(user.id)
             return user
 
         user = await self.get_user_by_email(email)
@@ -429,6 +460,7 @@ class AsyncUserService:
                 user.avatar_url = avatar_url
             await self.db.commit()
             await self.db.refresh(user)
+            await invalidate_auth_user_cache(user.id)
             return user
 
         user_data = UserCreate(email=email, name=name, avatar_url=avatar_url, github_id=github_id)
@@ -443,6 +475,7 @@ class AsyncUserService:
                 update(User).where(User.id == user_id).values(last_login_at=datetime.now(UTC))
             )
             await self.db.commit()
+            await invalidate_auth_user_cache(user_id)
         except (ValueError, TypeError) as e:
             logger.warning(f"Invalid user ID for last login update: {e}")
         except Exception as e:
@@ -519,6 +552,7 @@ class AsyncUserService:
         try:
             await self.db.commit()
             await self.db.refresh(user)
+            await invalidate_auth_user_cache(user.id)
 
             # Invalidate dashboard/analytics cache if user role or status changed
             # (affects team statistics displayed on dashboard)
@@ -548,6 +582,7 @@ class AsyncUserService:
         try:
             await self.db.commit()
             await self.db.refresh(db_user)
+            await invalidate_auth_user_cache(db_user.id)
             return db_user
         except Exception as e:
             await self.db.rollback()

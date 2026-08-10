@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
@@ -167,7 +166,6 @@ API requests are rate-limited. Please contact support for higher limits.
             },
         ],
         redirect_slashes=True,
-        default_response_class=ORJSONResponse,
         lifespan=_build_lifespan(settings),
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,

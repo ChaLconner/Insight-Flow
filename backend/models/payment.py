@@ -7,7 +7,7 @@ import enum
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -27,6 +27,7 @@ class SubscriptionStatus(enum.StrEnum):
     TRIALING = "trialing"
     UNPAID = "unpaid"
     INCOMPLETE = "incomplete"
+    INCOMPLETE_EXPIRED = "incomplete_expired"
 
 
 class SubscriptionPlan(enum.StrEnum):
@@ -175,7 +176,7 @@ class PaymentHistory(BaseModel):
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, index=True
     )
-    stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_charge_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Transaction details
@@ -214,4 +215,5 @@ class PaymentHistory(BaseModel):
         Index("ix_payment_history_user_created_at", "user_id", "created_at"),
         Index("ix_payment_history_subscription_id", "subscription_id"),
         Index("ix_payment_history_payment_method_id", "payment_method_id"),
+        UniqueConstraint("stripe_invoice_id", name="uq_payment_history_stripe_invoice_id"),
     )

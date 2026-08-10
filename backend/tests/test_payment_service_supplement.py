@@ -79,7 +79,9 @@ async def test_resume_subscription_errors(payment_service, mock_db_session):
 
 
 @pytest.mark.asyncio
-async def test_webhook_duplicate_payment_error(payment_service, mock_db_session):
+async def test_webhook_duplicate_payment_error_is_owned_by_webhook_transaction(
+    payment_service, mock_db_session
+):
     invoice = {
         "id": "in_1",
         "customer": "c",
@@ -87,10 +89,26 @@ async def test_webhook_duplicate_payment_error(payment_service, mock_db_session)
         "subscription": "s",
         "status": "paid",
     }
-    mock_db_session.execute.side_effect = [MagicMock(), MagicMock(), MagicMock(), MagicMock()]
-    mock_db_session.commit.side_effect = IntegrityError("Dup", "p", "o")
-    await payment_service._handle_payment_succeeded(mock_db_session, invoice)
-    mock_db_session.rollback.assert_called()
+
+    def result(value):
+        query_result = MagicMock()
+        query_result.scalar_one_or_none.return_value = value
+        return query_result
+
+    mock_db_session.execute.side_effect = [
+        result(make_test_user()),
+        result(None),
+        result(None),
+        result(None),
+    ]
+    mock_db_session.flush.side_effect = IntegrityError("Dup", "p", "o")
+
+    with pytest.raises(IntegrityError):
+        await payment_service._handle_payment_succeeded(mock_db_session, invoice)
+
+    # process_webhook owns rollback/ retry logging so direct handlers do not
+    # commit or rollback an enclosing transaction.
+    mock_db_session.rollback.assert_not_awaited()
 
 
 @pytest.mark.asyncio

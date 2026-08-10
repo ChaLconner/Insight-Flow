@@ -247,6 +247,43 @@ class TestRefreshTokenEdgeCases:
             mock_request, mock_verify.return_value, str(user_id), mock_db
         )
 
+    @pytest.mark.asyncio
+    async def test_refresh_token_rejects_duplicate_rotation_claim(
+        self, mock_request, mock_response, mock_db, mock_user_service
+    ):
+        """A concurrent refresh loser must receive 401 and no new cookies."""
+        from routers.auth import refresh_token
+
+        mock_request.cookies = {"refresh_token": "valid_refresh_token"}
+        user_id = uuid.uuid4()
+        mock_user = MagicMock(id=user_id, is_active=True, session_version=0)
+        mock_user_service.get_user_by_id = AsyncMock(return_value=mock_user)
+
+        with (
+            patch(
+                "routers.auth.async_verify_token_with_blacklist", new_callable=AsyncMock
+            ) as mock_verify,
+            patch("routers.auth.verify_token_fingerprint", new_callable=AsyncMock),
+            patch("routers.auth.get_token_expiration", return_value=object()),
+            patch(
+                "routers.auth.TokenBlacklist.async_blacklist_token",
+                new=AsyncMock(return_value=False),
+            ),
+            patch("routers.auth.create_and_set_auth_cookies") as mock_set_cookies,
+        ):
+            mock_verify.return_value = {
+                "sub": str(user_id),
+                "jti": "token-jti",
+                "sv": 0,
+            }
+
+            with pytest.raises(HTTPException) as exc_info:
+                await refresh_token(mock_request, mock_response, mock_db, mock_user_service)
+
+        assert exc_info.value.status_code == 401
+        assert "already been used" in exc_info.value.detail
+        mock_set_cookies.assert_not_called()
+
 
 class TestGoogleLoginEdgeCases:
     """Tests for Google login edge cases."""

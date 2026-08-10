@@ -66,6 +66,7 @@ async def test_process_webhook_payment_failed(payment_service, mock_db_session, 
     mock_db_session.execute.side_effect = [
         MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # Idempotency check
         MagicMock(scalar_one_or_none=MagicMock(return_value=test_user)),  # User lookup
+        MagicMock(scalar_one_or_none=MagicMock(return_value=None)),  # Existing failure lookup
     ]
 
     test_user.id = uuid4()

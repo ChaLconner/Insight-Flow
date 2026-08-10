@@ -3,7 +3,7 @@ Authentication router for login, register, and token management.
 Refactored for Async operations.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -103,7 +103,9 @@ def _login_success_response(user: User, *, role: str | None = None) -> dict[str,
 
 @router.post("/register", response_model=UserResponse)
 async def register(
-    user_data: UserCreate, user_service: AsyncUserService = Depends(get_user_service)
+    user_data: UserCreate,
+    user_service: AsyncUserService = Depends(get_user_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Register a new user and send verification email.
@@ -159,7 +161,9 @@ async def register(
 
 @router.get("/verify-email")
 async def verify_email(
-    token: str, user_service: AsyncUserService = Depends(get_user_service)
+    token: str,
+    user_service: AsyncUserService = Depends(get_user_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Verify email address.
@@ -215,9 +219,6 @@ async def login(
                 detail="Email not verified. Please check your email inbox.",
             )
 
-        # Update last login time
-        await user_service.update_last_login(user.id)
-
         # Create and set auth tokens using centralized utility
         # A+ Security: Pass request for token fingerprinting (device binding)
         create_and_set_auth_cookies(
@@ -240,7 +241,7 @@ async def login(
         return _login_success_response(user, role=user_role)
 
     except HTTPException as http_err:
-        logger.error(f"HTTP error during login: {http_err.detail}")
+        logger.warning(f"Login rejected: {http_err.detail}")
         raise
     except Exception as e:
         logger.error(f"Unexpected error during login: {e!s}", exc_info=True)
@@ -264,6 +265,7 @@ async def google_login(
     response: Response,
     google_data: GoogleAuth,
     user_service: AsyncUserService = Depends(get_user_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Authenticate user with Google OAuth.
@@ -338,6 +340,7 @@ async def github_login(
     response: Response,
     github_data: GithubAuth,
     user_service: AsyncUserService = Depends(get_user_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Authenticate user with GitHub OAuth.
@@ -433,7 +436,7 @@ async def logout(
         # This is the most important part - it must run regardless of token validity
         clear_auth_cookies(response)
 
-        tokens = [
+        tokens: list[tuple[str | None, Literal["access", "refresh"]]] = [
             (request.cookies.get(ACCESS_TOKEN_KEY), "access"),
             (request.cookies.get(REFRESH_TOKEN_KEY), "refresh"),
         ]
@@ -473,6 +476,7 @@ async def refresh_token(
     response: Response,
     db: AsyncSession = Depends(get_async_db),
     user_service: AsyncUserService = Depends(get_user_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Refresh access token using a refresh token from HttpOnly cookie.
@@ -542,19 +546,34 @@ async def refresh_token(
         logger.warning(f"User {user_id} is not active")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
 
+    # Capture scalar auth state before token-rotation writes.  A concurrent
+    # duplicate JTI claim rolls the SQLAlchemy session back; rollback expires
+    # ORM attributes, and reading ``user`` afterwards would trigger an async
+    # lazy refresh from synchronous response code (MissingGreenlet).
+    refresh_user_id = str(user.id)
+    refresh_session_version = _get_session_version(user)
+
     # Blacklist the old refresh token (rotation)
     if token_jti:
         old_token_expiration = get_token_expiration(refresh_token)
         if old_token_expiration:
-            await TokenBlacklist.async_blacklist_token(db, token_jti, old_token_expiration)
+            claimed = await TokenBlacklist.async_blacklist_token(
+                db, token_jti, old_token_expiration
+            )
+            if not claimed:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token has already been used",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
 
     # Create and set new tokens using centralized utility
     # A+ Security: Pass request for token fingerprinting (device binding)
     create_and_set_auth_cookies(
         response=response,
-        user_id=str(user.id),
+        user_id=refresh_user_id,
         request=request,
-        session_version=_get_session_version(user),
+        session_version=refresh_session_version,
     )
 
     return {"message": "Token refreshed successfully", "expires_in": 1800}
@@ -604,6 +623,7 @@ async def forgot_password(
 async def reset_password(
     request_data: ResetPasswordRequest,
     password_reset_service: AsyncPasswordResetService = Depends(get_password_reset_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Reset user's password using a valid token.
@@ -650,12 +670,12 @@ async def reset_password(
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str = Field(..., alias="currentPassword")
-    new_password: str = Field(..., alias="newPassword")
+    current_password: str = Field(..., max_length=128, alias="currentPassword")
+    new_password: str = Field(..., min_length=8, max_length=128, alias="newPassword")
 
 
 class ValidateResetTokenRequest(BaseModel):
-    token: str
+    token: str = Field(..., max_length=512)
 
 
 class ValidateResetTokenResponse(BaseModel):
@@ -667,6 +687,7 @@ class ValidateResetTokenResponse(BaseModel):
 async def validate_reset_token(
     request_data: ValidateResetTokenRequest,
     password_reset_service: AsyncPasswordResetService = Depends(get_password_reset_service),
+    _=Depends(auth_rate_limiter),
 ) -> Any:
     """
     Validate a password reset token.
@@ -705,9 +726,18 @@ async def change_password(
     try:
         logger.info(f"Password change attempt for user: {mask_email(current_user.email)}")
 
-        # Verify current password before changing
-        if not current_user.hashed_password or not await user_service.verify_password(
-            password_data.current_password, current_user.hashed_password
+        # Cached auth snapshots intentionally omit password hashes. Sensitive
+        # password verification remains database-backed on this endpoint.
+        password_user: User | None = current_user
+        if not getattr(password_user, "hashed_password", None):
+            password_user = await user_service.get_user_by_id(current_user.id)
+
+        if (
+            not password_user
+            or not password_user.hashed_password
+            or not await user_service.verify_password(
+                password_data.current_password, password_user.hashed_password
+            )
         ):
             logger.warning(
                 f"Current password verification failed for user: {mask_email(current_user.email)}"
@@ -735,7 +765,11 @@ async def change_password(
             )
 
         await user_service.change_password(
-            current_user.id, password_data.current_password, password_data.new_password
+            current_user.id,
+            password_data.current_password,
+            password_data.new_password,
+            verified_user=password_user,
+            current_password_verified=True,
         )
         logger.info(f"Password changed successfully for user: {mask_email(current_user.email)}")
         return {"message": "Password changed successfully"}

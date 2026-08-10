@@ -12,6 +12,7 @@ from typing import Any
 
 from starlette.datastructures import MutableHeaders
 
+from config import get_settings
 from utils.logger import setup_logger
 from utils.path_normalization import normalize_request_path
 
@@ -98,17 +99,20 @@ class RequestMetrics:
             )
             for key, buckets in self.request_latency_bucket.items():
                 method, path = key.split(":", 1)
-                cumulative = 0
                 for bucket in self.BUCKETS:
-                    cumulative += buckets.get(bucket, 0)
                     metrics.append(
                         f"http_request_duration_seconds_bucket"
-                        f'{{method="{method}",path="{path}",le="{bucket}"}} {cumulative}'
+                        f'{{method="{method}",path="{path}",le="{bucket}"}} '
+                        f"{buckets.get(bucket, 0)}"
                     )
-                cumulative += buckets.get(float("inf"), 0) - cumulative
                 metrics.append(
                     f"http_request_duration_seconds_bucket"
-                    f'{{method="{method}",path="{path}",le="+Inf"}} {self.request_count[key]}'
+                    f'{{method="{method}",path="{path}",le="+Inf"}} '
+                    f"{buckets.get(float('inf'), self.request_count[key])}"
+                )
+                metrics.append(
+                    f'http_request_duration_seconds_count{{method="{method}",path="{path}"}} '
+                    f"{self.request_count[key]}"
                 )
 
             # Error count
@@ -199,8 +203,10 @@ class PerformanceMiddleware:
             duration=process_time,
         )
 
-        # Log slow requests (> 1 second)
-        if process_time > 1.0:
+        # Keep the threshold configurable so repeatable sub-second regressions
+        # are visible without changing the request path.
+        threshold = get_settings().slow_request_threshold_seconds
+        if process_time > threshold:
             logger.warning(
                 f"Slow Request: {method} {path} took {process_time_ms}ms - Status: {status_code[0]}"
             )

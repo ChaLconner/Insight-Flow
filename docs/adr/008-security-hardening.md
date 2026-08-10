@@ -19,6 +19,18 @@ Insight-Flow implements industry-standard security practices across all layers o
 | IP Security | ✅ Excellent | Trusted proxy validation, IP sanitization |
 | Error Handling | ✅ Excellent | No information leakage in production |
 
+### Payment entitlement and webhook invariants
+
+- Stripe subscription create/update calls use explicit fail-closed payment behavior.
+- Paid quotas are granted only for locally persisted `active` or `trialing` statuses;
+  `past_due`, `unpaid`, `incomplete`, and `incomplete_expired` receive Free limits.
+- Create, cancel, resume, and update operations share one per-user subscription lock and
+  use a row lock when reading the subscription.
+- `/api/v1/payment/webhook` is exempt from browser CSRF only because Stripe signature
+  verification is mandatory; the route has a 256 KiB body cap and rate limit.
+- Stripe webhook failures preserve retry counts, and payment-history duplicate handling
+  suppresses only `IntegrityError`.
+
 ---
 
 ## 🔒 Authentication Security
@@ -45,7 +57,7 @@ argon2__salt_len=16
 - **Library:** PyJWT (avoiding CVE-2024-33663, CVE-2024-33664 in python-jose)
 - **Algorithm:** HS256
 - **Access Token Expiry:** 30 minutes
-- **Refresh Token Expiry:** 30 days
+- **Refresh Token Expiry:** 7 days by default; 30 days with "Remember me"
 - **Token Blacklist:** Tokens are blacklisted on logout
 
 ### Cookie Security
@@ -73,15 +85,20 @@ IP addresses are extracted securely from `X-Forwarded-For` headers with:
 
 Configure via environment variables:
 ```env
-TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12
+# Use exact reverse-proxy addresses or narrowly scoped CIDRs only.
+TRUSTED_PROXIES=172.30.0.4
 CLOUD_PROVIDER=render  # or: vercel, cloudflare
 ```
+
+Private network ranges are not trusted by default. Set `TRUSTED_PROXIES` to
+the actual immediate proxy peer for each deployment; never use an entire
+private network as a substitute for proxy identification.
 
 ### Rate Limiting
 
 | Endpoint Type | Limit |
 |---------------|-------|
-| Login | 5 requests/minute (per IP) |
+| Login | 10 requests/minute (per IP) |
 | Registration | 5 requests/minute |
 | Password Reset | 3 requests/minute |
 | Payment Operations | 5-10 requests/minute |
@@ -111,6 +128,12 @@ All file uploads are validated with:
    - All paths normalized and validated
    - UUID-based filenames prevent collisions
 
+5. **Content/container validation**
+   - WebP RIFF/WEBP signatures, legacy OLE Office files, and OOXML ZIP containers are
+     checked before persistence; text uploads reject binary NUL data.
+   - Unknown database rows cannot be inspected or deleted by filename. Known files are
+     quarantined before the database row is committed for deletion.
+
 ---
 
 ## 🌐 Security Headers
@@ -137,7 +160,10 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains; preload  # Produ
 2. Client sends token in `X-CSRF-Token` header
 3. Server validates header matches cookie (constant-time comparison)
 
-**Exempt Paths:** Authentication endpoints (login, register, OAuth)
+**Exempt Paths:** Authentication endpoints (login, register, OAuth) and the exact Stripe
+webhook path. CSP reports are intentionally exempt because browsers cannot send the
+custom header; the report endpoint instead enforces a 64 KiB body cap, scalar-field
+normalization, and 30 requests/minute.
 
 ---
 
@@ -208,6 +234,10 @@ All security-relevant events are logged:
 - Payment operations
 
 Log location: `logs/security_audit.log`
+
+Persistent `security_logs` rows are retained for `SECURITY_LOG_RETENTION_DAYS` (30 days
+by default) and cleaned by the dedicated worker. CSP reports are normalized to at most
+10 reports with 2,048-character scalar fields before storage.
 
 ---
 

@@ -76,9 +76,18 @@ class TestCSRFProtection:
 
         # Login should be exempt
         assert "/api/v1/auth/login" in CSRF_EXEMPT_PATHS
+        # Cookie-based refresh must use CSRF protection; bearer-only callers
+        # are handled explicitly by CSRFMiddleware.
+        assert "/api/v1/auth/refresh" not in CSRF_EXEMPT_PATHS
 
         # Health endpoints should be exempt
         assert "/health" in CSRF_EXEMPT_PATHS
+
+        # Browser-generated CSP reports and Stripe webhooks cannot send the
+        # application's double-submit header; each has endpoint-specific
+        # authentication/limits instead.
+        assert "/api/v1/security/csp-report" in CSRF_EXEMPT_PATHS
+        assert "/api/v1/payment/webhook" in CSRF_EXEMPT_PATHS
 
     def test_safe_methods(self):
         """Test safe HTTP methods are defined."""

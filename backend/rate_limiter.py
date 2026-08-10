@@ -106,7 +106,7 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
         },
         headers={
             "Retry-After": str(exc.detail),
-            "X-RateLimit-Limit": request.state.view_rate_limit
+            "X-RateLimit-Limit": str(request.state.view_rate_limit)
             if hasattr(request.state, "view_rate_limit")
             else "unknown",
         },
@@ -147,6 +147,7 @@ class RateLimits:
 
     # Webhooks (from Stripe) - high limit
     WEBHOOK = "300/minute"  # Webhook processing
+    CSP_REPORT = "30/minute"  # Public CSP telemetry, bounded by body size
 
     # Stricter limits for known abuse vectors
     SENSITIVE_READ = "30/minute"  # Sensitive data access

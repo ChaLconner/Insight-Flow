@@ -9,7 +9,7 @@ import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable
-from typing import Any
+from typing import Any, cast
 
 from config import get_settings
 from utils.logger import setup_logger
@@ -17,6 +17,8 @@ from utils.logger import setup_logger
 logger = setup_logger("cache_service")
 
 APP_CACHE_PREFIXES = (
+    "auth:",
+    "blacklist:",
     "dashboard:",
     "analytics:",
     "rate_limit:",
@@ -61,6 +63,33 @@ class CacheBackend(ABC):
     async def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         pass
+
+
+class DisabledCache(CacheBackend):
+    """Explicitly disabled cache backend used when CACHE_ENABLED is false."""
+
+    async def get(self, _key: str) -> dict[str, Any] | None:
+        return None
+
+    async def set(self, _key: str, _value: dict[str, Any], _timeout: int | None = None) -> None:
+        return None
+
+    async def increment_with_window(self, _key: str, _timeout: int) -> int:
+        # CacheService.increment_with_window falls back to its local counter
+        # backend for rate limiting when the shared cache is disabled.
+        raise RuntimeError("Cache is disabled")
+
+    async def delete(self, _key: str) -> bool:
+        return False
+
+    async def clear(self) -> None:
+        return None
+
+    async def invalidate_pattern(self, _pattern: str) -> int:
+        return 0
+
+    async def get_stats(self) -> dict[str, Any]:
+        return {"hits": 0, "misses": 0, "sets": 0, "size": 0, "disabled": True}
 
 
 class InMemoryCache(CacheBackend):
@@ -195,7 +224,7 @@ class RedisCache(CacheBackend):
             from redis.asyncio import ConnectionPool
 
             # Create connection pool for better performance
-            self.pool = ConnectionPool.from_url(
+            self.pool: Any = ConnectionPool.from_url(
                 redis_url,
                 password=password,
                 max_connections=20,
@@ -346,7 +375,7 @@ class RedisCache(CacheBackend):
             if asyncio.iscoroutine(res):
                 cursor, keys = await res
             else:
-                cursor, keys = res
+                cursor, keys = cast("tuple[Any, Any]", res)
             for key in keys:
                 yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
             if int(cursor) == 0:
@@ -384,7 +413,7 @@ class RedisCache(CacheBackend):
             if asyncio.iscoroutine(info_res):
                 info = await info_res
             else:
-                info = info_res
+                info = cast("dict[str, Any]", info_res)
 
             return {
                 "status": "healthy",
@@ -440,6 +469,7 @@ class CacheService:
 
         try:
             cache_settings = get_settings().cache
+            enabled = bool(cache_settings.enabled)
             redis_url = os.getenv("REDIS_URL") or cache_settings.redis_url
             redis_password = os.getenv("REDIS_PASSWORD") or cache_settings.redis_password
             default_timeout = cache_settings.default_timeout
@@ -449,6 +479,12 @@ class CacheService:
             redis_url = os.getenv("REDIS_URL")
             redis_password = os.getenv("REDIS_PASSWORD")
             default_timeout = 300
+            enabled = True
+
+        if not enabled:
+            self.backend = DisabledCache()
+            logger.info("Cache disabled by CACHE_ENABLED=false")
+            return
 
         if redis_url:
             try:
@@ -511,8 +547,9 @@ class CacheService:
         except Exception:
             if fail_closed:
                 raise
-            self.backend = self.memory_backend
-            logger.warning("Cache counter unavailable; using in-memory rate-limit counter")
+            if not isinstance(self.backend, DisabledCache):
+                self.backend = self.memory_backend
+                logger.warning("Cache counter unavailable; using in-memory rate-limit counter")
             return await self.memory_backend.increment_with_window(key, timeout)
 
     async def delete(self, key: str) -> bool:

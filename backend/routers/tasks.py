@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +16,7 @@ from async_dependencies import get_async_authorized_task
 from database import get_async_db
 from dependencies.services import get_task_service
 from models.analytics import TaskComment
-from models.project import Project
+from models.project import Project, ProjectMember
 from models.task import Task
 from models.user import User
 from routers.auth import get_current_active_user
@@ -37,6 +37,7 @@ from utils.logger import mask_user_id, setup_logger
 from utils.response_helpers import build_task_response
 
 MENTION_PATTERN = re.compile(r"(?<![\w])@([A-Za-z0-9_]{1,255})")
+MAX_MENTION_RECIPIENTS = 20
 
 
 def map_task_to_response(task: Task) -> dict[str, Any]:
@@ -216,10 +217,24 @@ async def create_task_comment(
     await db.refresh(comment)
     comment.user = current_user
 
-    mentioned_usernames = parse_comment_mentions(comment.content)
+    mentioned_usernames = parse_comment_mentions(comment.content)[:MAX_MENTION_RECIPIENTS]
     if mentioned_usernames:
         mentioned_result = await db.execute(
-            select(User).filter(func.lower(User.username).in_(mentioned_usernames))
+            select(User)
+            .join(Project, Project.id == task.project_id)
+            .outerjoin(
+                ProjectMember,
+                and_(
+                    ProjectMember.project_id == task.project_id,
+                    ProjectMember.user_id == User.id,
+                ),
+            )
+            .filter(
+                func.lower(User.username).in_(mentioned_usernames),
+                User.is_active.is_(True),
+                or_(User.id == Project.owner_id, ProjectMember.user_id.is_not(None)),
+            )
+            .distinct()
         )
         mentioned_users = mentioned_result.scalars().all()
         for mentioned_user in mentioned_users:

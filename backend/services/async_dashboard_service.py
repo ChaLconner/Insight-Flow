@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import String, and_, case, cast, desc, distinct, func, or_, select
+from sqlalchemy import String, and_, case, cast, desc, distinct, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -64,30 +64,28 @@ class AsyncDashboardService:
         seven_days_ago = now - timedelta(days=7)
         fourteen_days_ago = now - timedelta(days=14)
 
-        project_stats_result = await self.db.execute(
+        # Each CTE returns one aggregate row. Selecting them together keeps
+        # the three independent aggregates in one database round trip while
+        # retaining one AsyncSession for the request.
+        project_stats = (
             select(
-                func.count(distinct(Project.id)).label("total"),
+                func.count(distinct(Project.id)).label("total_projects"),
                 func.count(
                     distinct(case((Project.created_at >= thirty_days_ago, Project.id)))
-                ).label("created_30d"),
-            ).filter(Project.id.in_(accessible_projects_subq))
+                ).label("projects_created_30d"),
+            )
+            .filter(Project.id.in_(accessible_projects_subq))
+            .cte("dashboard_project_stats")
         )
-        project_stats = project_stats_result.first()
-
-        if not project_stats or not project_stats.total:
-            empty_response = self._get_empty_stats_response()
-            await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
-            return empty_response
-
-        task_stats_result = await self.db.execute(
+        task_stats = (
             select(
-                func.count(Task.id).label("total"),
+                func.count(Task.id).label("total_tasks"),
                 func.sum(
                     case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
-                ).label("completed"),
+                ).label("completed_tasks"),
                 func.sum(
                     case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)
-                ).label("in_progress"),
+                ).label("in_progress_tasks"),
                 func.sum(
                     case(
                         (
@@ -99,7 +97,7 @@ class AsyncDashboardService:
                         ),
                         else_=0,
                     )
-                ).label("pending_review"),
+                ).label("pending_review_tasks"),
                 func.sum(
                     case(
                         (
@@ -111,7 +109,7 @@ class AsyncDashboardService:
                         ),
                         else_=0,
                     )
-                ).label("new_active"),
+                ).label("new_active_tasks"),
                 func.sum(
                     case(
                         (
@@ -123,7 +121,7 @@ class AsyncDashboardService:
                         ),
                         else_=0,
                     )
-                ).label("new_completed"),
+                ).label("new_completed_tasks"),
                 func.sum(
                     case(
                         (
@@ -136,7 +134,7 @@ class AsyncDashboardService:
                         ),
                         else_=0,
                     )
-                ).label("my_new_active"),
+                ).label("my_new_active_tasks"),
                 func.sum(
                     case(
                         (
@@ -149,12 +147,12 @@ class AsyncDashboardService:
                         ),
                         else_=0,
                     )
-                ).label("my_new_completed"),
-            ).filter(Task.project_id.in_(accessible_projects_subq))
+                ).label("my_new_completed_tasks"),
+            )
+            .filter(Task.project_id.in_(accessible_projects_subq))
+            .cte("dashboard_task_stats")
         )
-        task_stats = task_stats_result.first()
-
-        history_stats_result = await self.db.execute(
+        history_stats = (
             select(
                 func.sum(
                     case(
@@ -210,63 +208,52 @@ class AsyncDashboardService:
                         else_=0,
                     )
                 ).label("velocity_prev_7d"),
-            ).filter(
+            )
+            .filter(
                 TaskHistory.project_id.in_(accessible_projects_subq),
                 TaskHistory.timestamp >= thirty_days_ago,
             )
+            .cte("dashboard_history_stats")
         )
-        history_stats = history_stats_result.first()
-
-        total_projects = project_stats.total if project_stats and project_stats.total else 0
-        projects_created_last_30_days = (
-            project_stats.created_30d if project_stats and project_stats.created_30d else 0
+        combined_stmt = (
+            select(project_stats, task_stats, history_stats)
+            .select_from(project_stats)
+            .join(task_stats, true())
+            .join(history_stats, true())
         )
+        combined_result = await self.db.execute(combined_stmt)
+        row = combined_result.first()
+        if row is None:
+            empty_response = self._get_empty_stats_response()
+            await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
+            return empty_response
 
-        # Process Results
+        values = row._mapping
+        total_projects = values["total_projects"] or 0
+        projects_created_last_30_days = values["projects_created_30d"] or 0
         if total_projects == 0:
             empty_response = self._get_empty_stats_response()
             await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
             return empty_response
 
-        total_tasks = task_stats.total if task_stats else 0
-        completed_tasks = task_stats.completed if task_stats and task_stats.completed else 0
-        in_progress_tasks = task_stats.in_progress if task_stats and task_stats.in_progress else 0
-        pending_review_tasks = (
-            task_stats.pending_review if task_stats and task_stats.pending_review else 0
-        )
+        total_tasks = values["total_tasks"] or 0
+        completed_tasks = values["completed_tasks"] or 0
+        in_progress_tasks = values["in_progress_tasks"] or 0
+        pending_review_tasks = values["pending_review_tasks"] or 0
 
         # Trends processing
         previous_total_projects = total_projects - projects_created_last_30_days
         projects_change = self._calculate_percentage_change(total_projects, previous_total_projects)
 
-        tasks_completed_last_30_days = (
-            history_stats.completed_30d if history_stats and history_stats.completed_30d else 0
-        )
-        my_completed_last_30_days = (
-            history_stats.my_completed_30d
-            if history_stats and history_stats.my_completed_30d
-            else 0
-        )
-        team_velocity_val = (
-            history_stats.velocity_7d if history_stats and history_stats.velocity_7d else 0
-        )
-        prev_velocity_val = (
-            history_stats.velocity_prev_7d
-            if history_stats and history_stats.velocity_prev_7d
-            else 0
-        )
+        tasks_completed_last_30_days = values["completed_30d"] or 0
+        my_completed_last_30_days = values["my_completed_30d"] or 0
+        team_velocity_val = values["velocity_7d"] or 0
+        prev_velocity_val = values["velocity_prev_7d"] or 0
 
-        new_active_tasks = task_stats.new_active if task_stats and task_stats.new_active else 0
-        new_completed_tasks = (
-            task_stats.new_completed if task_stats and task_stats.new_completed else 0
-        )
-
-        my_new_active_tasks = (
-            task_stats.my_new_active if task_stats and task_stats.my_new_active else 0
-        )
-        my_new_completed_tasks = (
-            task_stats.my_new_completed if task_stats and task_stats.my_new_completed else 0
-        )
+        new_active_tasks = values["new_active_tasks"] or 0
+        new_completed_tasks = values["new_completed_tasks"] or 0
+        my_new_active_tasks = values["my_new_active_tasks"] or 0
+        my_new_completed_tasks = values["my_new_completed_tasks"] or 0
 
         # Calculate changes
         # Logic: Previous Active = Current Active - New Active + (Total Completed in Period - Completed in Period that were Created in Period)

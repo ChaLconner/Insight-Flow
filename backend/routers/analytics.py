@@ -83,7 +83,9 @@ async def _get_user_map(db: AsyncSession, user_ids: set[Any]) -> dict[Any, User]
 @limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_analytics_overview(
     request: Request,
-    period: str = Query("30d", description="Time period: 7d, 30d, 90d, 1y"),
+    period: str = Query(
+        "30d", pattern=r"^(7d|30d|90d|1y)$", description="Time period: 7d, 30d, 90d, 1y"
+    ),
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -97,9 +99,9 @@ async def get_team_workload(
     request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(10, ge=1, le=100, description="Number of items per page"),
-    search: str = Query(None, description="Search term for user names"),
-    sort_by: str = Query("tasks", description="Sort by: 'tasks' or 'name'"),
-    sort_order: str = Query("desc", description="Sort order: 'asc' or 'desc'"),
+    search: str | None = Query(None, max_length=100, description="Search term for user names"),
+    sort_by: str = Query("tasks", pattern=r"^(tasks|name)$", description="Sort by tasks or name"),
+    sort_order: str = Query("desc", pattern=r"^(asc|desc)$", description="Sort order"),
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -132,8 +134,8 @@ async def get_dashboard_metrics(
 async def get_productivity_data(
     request: Request,
     project_id: str,
-    period: str = Query("30d", description="Time period: 7d, 30d, 90d"),
-    group_by: str = Query("week", description="Group by: day, week, month"),
+    period: str = Query("30d", pattern=r"^(7d|30d|90d|1y)$", description="Time period"),
+    group_by: str = Query("week", pattern=r"^(day|week|month)$", description="Group by"),
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
     project: Project = Depends(require_project_member),

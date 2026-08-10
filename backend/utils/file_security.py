@@ -3,8 +3,10 @@ File Upload Security Utilities.
 Centralized security validation for all file uploads.
 """
 
+import io
 import os
 import re
+import zipfile
 from typing import Any
 
 from utils.logger import setup_logger
@@ -287,10 +289,18 @@ MAGIC_BYTES_MAP: dict[str, tuple[bytes, ...]] = {
     ".png": (b"\x89PNG\r\n\x1a\n",),
     ".gif": (b"GIF87a", b"GIF89a"),
     ".pdf": (b"%PDF",),
+    ".webp": (b"RIFF",),
+    ".doc": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
+    ".xls": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
+    ".ppt": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
+    ".docx": (b"PK\x03\x04",),
+    ".xlsx": (b"PK\x03\x04",),
+    ".pptx": (b"PK\x03\x04",),
 }
 
 
 def validate_file_magic_bytes(content: bytes, extension: str) -> None:
+    extension = extension.lower()
     expected_headers = MAGIC_BYTES_MAP.get(extension.lower())
     if (
         expected_headers
@@ -301,6 +311,36 @@ def validate_file_magic_bytes(content: bytes, extension: str) -> None:
             f"File content magic bytes do not match extension '{extension}'",
             "MAGIC_BYTES_MISMATCH",
         )
+
+    if extension == ".webp" and (len(content) < 12 or content[8:12] != b"WEBP"):
+        raise FileSecurityError("Invalid WebP container", "INVALID_CONTAINER")
+
+    if extension in {".docx", ".xlsx", ".pptx"}:
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                names = set(archive.namelist())
+                if "[Content_Types].xml" not in names:
+                    raise FileSecurityError("Invalid Office container", "INVALID_CONTAINER")
+                required_prefix = {
+                    ".docx": "word/",
+                    ".xlsx": "xl/",
+                    ".pptx": "ppt/",
+                }[extension]
+                if not any(name.startswith(required_prefix) for name in names):
+                    raise FileSecurityError("Invalid Office container", "INVALID_CONTAINER")
+                if len(names) > 2_000:
+                    raise FileSecurityError(
+                        "Office container has too many entries", "INVALID_CONTAINER"
+                    )
+                if sum(info.file_size for info in archive.infolist()) > MAX_FILE_SIZE_BYTES * 20:
+                    raise FileSecurityError(
+                        "Office container is too large when expanded", "INVALID_CONTAINER"
+                    )
+        except zipfile.BadZipFile as exc:
+            raise FileSecurityError("Invalid Office container", "INVALID_CONTAINER") from exc
+
+    if extension in {".txt", ".csv", ".md"} and b"\x00" in content:
+        raise FileSecurityError("Text file contains binary data", "INVALID_CONTENT")
 
 
 def validate_avatar_upload(

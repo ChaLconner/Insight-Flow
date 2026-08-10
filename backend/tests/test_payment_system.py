@@ -399,7 +399,8 @@ class TestWebhookHandlers:
             # Verify subscription was downgraded
             assert mock_subscription.plan == SubscriptionPlan.FREE
             assert mock_subscription.status == SubscriptionStatus.CANCELED
-            mock_db.commit.assert_called_once()
+            # Webhook transaction owner commits after handler completion.
+            mock_db.commit.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_handle_payment_failed_records_history(self, mock_db, mock_user):
@@ -408,9 +409,11 @@ class TestWebhookHandlers:
         from services.payment_service import PaymentService
 
         # Setup mock for user lookup
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_user
-        mock_db.execute.return_value = mock_result
+        user_result = MagicMock()
+        user_result.scalar_one_or_none.return_value = mock_user
+        existing_failure_result = MagicMock()
+        existing_failure_result.scalar_one_or_none.return_value = None
+        mock_db.execute.side_effect = [user_result, existing_failure_result]
 
         with patch.object(PaymentService, "__init__", return_value=None):
             service = PaymentService.__new__(PaymentService)
@@ -437,6 +440,8 @@ class TestWebhookHandlers:
             added_history = mock_db.add.call_args[0][0]
             assert added_history.status == PaymentStatus.FAILED
             assert added_history.failure_code == "card_declined"
+            mock_db.flush.assert_awaited_once()
+            mock_db.commit.assert_not_awaited()
 
 
 # ============================================================================

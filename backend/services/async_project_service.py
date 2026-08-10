@@ -11,6 +11,7 @@ from sqlalchemy import String, and_, case, cast, delete, distinct, func, or_, se
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from models.analytics import (
     ProjectAnalytics,
@@ -22,7 +23,7 @@ from models.analytics import (
     TaskTimeTracking,
     UserProductivity,
 )
-from models.payment import Subscription
+from models.payment import Subscription, SubscriptionStatus
 from models.project import MemberRole, Project, ProjectMember
 from models.task import Task, TaskStatus
 from models.task_history import TaskHistory
@@ -51,6 +52,23 @@ class AsyncProjectService:
 
         plan_enum = SubscriptionPlanEnum.FREE
         if subscription:
+            raw_status = (
+                subscription.status.value
+                if hasattr(subscription.status, "value")
+                else str(subscription.status)
+            )
+            # A plan name alone is not proof of paid entitlement. Stripe
+            # statuses that need payment/action must receive Free quotas until
+            # a successful webhook restores an eligible status.
+            eligible_statuses = {
+                SubscriptionStatus.ACTIVE.value,
+                SubscriptionStatus.TRIALING.value,
+            }
+            if raw_status not in eligible_statuses:
+                return {
+                    "projects": 2,
+                    "members": 3,
+                }
             # Map string plan to Enum
             try:
                 plan_enum = SubscriptionPlanEnum(
@@ -201,43 +219,38 @@ class AsyncProjectService:
 
         # 2. Batched Fetching of Related Stats
 
-        # B3: Combined Task Statistics + Member Count Query (merged 2 queries into 1)
-        async def get_task_and_member_stats():
-            stmt = (
-                select(
-                    Task.project_id,
-                    func.count(distinct(Task.id)).label("total"),
-                    func.sum(
-                        case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
-                    ).label("completed"),
-                    func.sum(
+        # B3: Combine task statistics and member counts into one grouped query.
+        # Distinct task IDs prevent the task/member join from multiplying counts.
+        stats_stmt = (
+            select(
+                Project.id.label("project_id"),
+                func.count(distinct(Task.id)).label("total"),
+                func.count(
+                    distinct(case((cast(Task.status, String) == TaskStatus.DONE.value, Task.id)))
+                ).label("completed"),
+                func.count(
+                    distinct(
                         case(
                             (
                                 and_(
                                     cast(Task.status, String) != TaskStatus.DONE.value,
                                     Task.due_date < datetime.now(UTC),
                                 ),
-                                1,
-                            ),
-                            else_=0,
+                                Task.id,
+                            )
                         )
-                    ).label("overdue"),
-                )
-                .filter(Task.project_id.in_(project_ids))
-                .group_by(Task.project_id)
+                    )
+                ).label("overdue"),
+                func.count(distinct(ProjectMember.id)).label("member_count"),
             )
-
-            res = await self.db.execute(stmt)
-            return {row.project_id: row for row in res.all()}
-
-        async def get_member_counts():
-            stmt = (
-                select(ProjectMember.project_id, func.count(ProjectMember.id))
-                .filter(ProjectMember.project_id.in_(project_ids))
-                .group_by(ProjectMember.project_id)
-            )
-            res = await self.db.execute(stmt)
-            return {row[0]: row[1] for row in res.all()}
+            .select_from(Project)
+            .outerjoin(Task, Task.project_id == Project.id)
+            .outerjoin(ProjectMember, ProjectMember.project_id == Project.id)
+            .filter(Project.id.in_(project_ids))
+            .group_by(Project.id)
+        )
+        stats_result = await self.db.execute(stats_stmt)
+        stats_map = {row.project_id: row for row in stats_result.all()}
 
         async def get_member_previews():
             ranked_members = (
@@ -254,15 +267,16 @@ class AsyncProjectService:
                 .subquery()
             )
             stmt = (
-                select(ProjectMember)
-                .options(selectinload(ProjectMember.user))
+                select(ProjectMember, User)
+                .join(User, ProjectMember.user_id == User.id)
                 .join(ranked_members, ProjectMember.id == ranked_members.c.id)
                 .filter(ranked_members.c.rank <= 5)
             )
             res = await self.db.execute(stmt)
             m_map: defaultdict[uuid.UUID, list[ProjectMember]] = defaultdict(list)
-            for m in res.scalars().all():
-                m_map[m.project_id].append(m)
+            for member, user in res.all():
+                set_committed_value(member, "user", user)
+                m_map[member.project_id].append(member)
             return m_map
 
         # Activity Query (Batched)
@@ -280,17 +294,15 @@ class AsyncProjectService:
             res = await self.db.execute(stmt)
             return {row[0]: row[1] for row in res.all()}
 
-        task_stats_map = await get_task_and_member_stats()
-        member_count_map = await get_member_counts()
         members_map = await get_member_previews()
         activity_map = await get_activity()
 
         # 3. Assemble Results
         formatted_results = []
         for project in projects:
-            stats = task_stats_map.get(project.id)
+            stats = stats_map.get(project.id)
             members = members_map.get(project.id, [])
-            member_count = member_count_map.get(project.id, 0)
+            member_count = stats.member_count if stats else 0
             activity = activity_map.get(project.id, 0)
 
             # Extract stats safely
@@ -314,7 +326,9 @@ class AsyncProjectService:
         logger.info(f"Async projects fetch optimized took {time.time() - start_time:.2f}s")
         return formatted_results
 
-    async def create_project(self, project_data: ProjectCreate, owner_id: uuid.UUID) -> Project:  # noqa: PLR0912
+    async def create_project(  # noqa: PLR0912, PLR0915
+        self, project_data: ProjectCreate, owner_id: uuid.UUID
+    ) -> Project:
         """Create a new project."""
         try:
             db_project = Project(
@@ -345,6 +359,10 @@ class AsyncProjectService:
             if project_data.members:
                 requested_members: dict[uuid.UUID, str] = {}
                 for member_data in project_data.members:
+                    if member_data.role == MemberRole.OWNER.value:
+                        raise ValueError(
+                            "Project ownership is assigned to the project owner and cannot be added as a member"
+                        )
                     try:
                         member_id = uuid.UUID(str(member_data.user_id))
                     except ValueError as exc:
@@ -669,6 +687,8 @@ class AsyncProjectService:
 
         try:
             user_uuid = uuid.UUID(str(member_data.user_id))
+            if member_data.role == MemberRole.OWNER.value:
+                raise ValueError("Ownership transfer requires the dedicated owner workflow")
             # Check existing
             res = await self.db.execute(
                 select(ProjectMember).filter(
@@ -1034,6 +1054,8 @@ class AsyncProjectService:
 
                 # Normalize role
                 role_value = member_data.role
+                if role_value == MemberRole.OWNER.value:
+                    raise ValueError("Ownership transfer requires the dedicated owner workflow")
                 if role_value == "admin":
                     role_value = MemberRole.ADMIN.value
                 elif role_value == "member":

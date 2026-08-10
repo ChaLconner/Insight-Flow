@@ -21,7 +21,7 @@ import sys
 from logging.config import fileConfig
 
 from dotenv import load_dotenv
-from sqlalchemy import pool
+from sqlalchemy import inspect, pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -34,6 +34,7 @@ sys.path.append(os.getcwd())
 load_dotenv()
 
 # Import Base from models for autogenerate support
+from legacy_schema import bootstrap_legacy_schema
 from models import Base
 
 # Setup logging
@@ -156,6 +157,14 @@ def do_run_migrations(connection: Connection) -> None:
     Args:
         connection: SQLAlchemy Connection object
     """
+    # The repository predates Alembic and has no historical baseline revision.
+    # Bootstrap the model-owned legacy tables before replaying the chain so a
+    # plain `alembic upgrade head` works on a new database as well as on an
+    # existing legacy database. The four revision-owned tables remain for
+    # their historical create-table migrations.
+    if "alembic_version" not in inspect(connection).get_table_names():
+        bootstrap_legacy_schema(connection)
+
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -190,7 +199,7 @@ async def run_async_migrations() -> None:
     )
 
     try:
-        async with connectable.connect() as connection:
+        async with connectable.begin() as connection:
             await connection.run_sync(do_run_migrations)
         logger.info("Migrations completed successfully")
     except Exception as e:

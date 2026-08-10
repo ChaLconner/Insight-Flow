@@ -11,23 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from models import Base
-
-# The repository predates Alembic and has no single historical bootstrap
-# revision. Seed the legacy model-owned tables, while leaving tables and
-# columns created by later revisions for those revisions to apply.
-MIGRATION_OWNED_TABLES = frozenset(
-    {"payment_methods", "subscriptions", "payment_history", "background_jobs"}
-)
+from legacy_schema import bootstrap_legacy_schema
 
 
 async def ensure_legacy_schema(engine) -> None:
     """Create the pre-Alembic model schema required by the legacy chain."""
-    tables = [
-        table for table in Base.metadata.sorted_tables if table.name not in MIGRATION_OWNED_TABLES
-    ]
     async with engine.begin() as conn:
-        await conn.run_sync(lambda sync_conn: Base.metadata.create_all(sync_conn, tables=tables))
+        await conn.run_sync(bootstrap_legacy_schema)
 
 
 async def wait_for_db(engine, max_retries: int = 30, delay: float = 1.0) -> bool:
@@ -61,6 +51,12 @@ async def init_database():  # noqa: PLR0915
     if not database_url:
         raise ValueError("DATABASE_URL environment variable is required")
 
+    if os.getenv("LEGACY_SCHEMA_BOOTSTRAP", "false").lower() != "true":
+        raise RuntimeError(
+            "This compatibility bootstrap is intentionally explicit. "
+            "Set LEGACY_SCHEMA_BOOTSTRAP=true only for the pre-Alembic schema path."
+        )
+
     print("=" * 60)
     print("CI DATABASE INITIALIZATION")
     print("=" * 60)
@@ -82,7 +78,7 @@ async def init_database():  # noqa: PLR0915
         if not await wait_for_db(engine):
             raise RuntimeError("Could not connect to database after maximum retries")
 
-        print("\n[2/5] Preparing legacy model schema...")
+        print("\n[2/5] Preparing explicitly requested legacy model schema...")
         await ensure_legacy_schema(engine)
         print("✓ Legacy model schema prepared")
 

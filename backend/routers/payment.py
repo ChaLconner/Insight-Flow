@@ -543,6 +543,7 @@ def is_stripe_ip(ip: str) -> bool:
 
 
 @router.post("/webhook", include_in_schema=False)
+@limiter.limit(RateLimits.WEBHOOK)
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
@@ -582,7 +583,18 @@ async def stripe_webhook(
             detail="Webhook endpoint is not configured",
         )
 
+    max_payload_bytes = 256 * 1024
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > max_payload_bytes:
+                raise HTTPException(status_code=413, detail="Webhook payload too large")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid content-length")
+
     payload = await request.body()
+    if len(payload) > max_payload_bytes:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
     sig_header = request.headers.get("stripe-signature")
 
     if not sig_header:

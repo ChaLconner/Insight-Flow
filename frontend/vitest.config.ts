@@ -12,7 +12,7 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
-    // Coverage configuration for 10/10 score
+    // Keep the client-side quality gate above the minimum branch threshold.
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
@@ -29,10 +29,10 @@ export default defineConfig({
         "**/components/analytics/web-vitals-reporter.tsx",
       ],
       thresholds: {
-        statements: 70,
+        statements: 80,
         branches: 65,
-        functions: 70,
-        lines: 70,
+        functions: 75,
+        lines: 80,
       },
     },
     // Performance optimizations

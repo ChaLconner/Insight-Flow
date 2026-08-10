@@ -99,11 +99,35 @@ async def test_handle_subscription_updated_downgrade(payment_service, async_sess
     # Act - downgrade
     data = {"id": "sub_cancel", "status": "canceled"}
     await payment_service._handle_subscription_updated(async_session, data)
+    await async_session.commit()
 
     # Assert
     await async_session.refresh(sub)
     assert sub.plan == SubscriptionPlan.FREE
     assert sub.status == SubscriptionStatus.CANCELED
+
+
+@pytest.mark.asyncio
+async def test_handle_subscription_updated_incomplete_expired_downgrades(
+    payment_service, async_session, test_user
+):
+    sub = Subscription(
+        user_id=test_user.id,
+        stripe_subscription_id="sub_expired",
+        plan=SubscriptionPlan.PRO,
+        status=SubscriptionStatus.INCOMPLETE,
+    )
+    async_session.add(sub)
+    await async_session.commit()
+
+    await payment_service._handle_subscription_updated(
+        async_session, {"id": "sub_expired", "status": "incomplete_expired"}
+    )
+    await async_session.commit()
+    await async_session.refresh(sub)
+
+    assert sub.plan == SubscriptionPlan.FREE
+    assert sub.status == SubscriptionStatus.INCOMPLETE_EXPIRED
 
 
 @pytest.mark.asyncio
@@ -121,6 +145,7 @@ async def test_handle_subscription_deleted(payment_service, async_session, test_
     # Act
     data = {"id": "sub_del"}
     await payment_service._handle_subscription_deleted(async_session, data)
+    await async_session.commit()
 
     # Assert
     await async_session.refresh(sub)
@@ -198,6 +223,71 @@ async def test_handle_payment_failed(payment_service, async_session, test_user):
 
 
 @pytest.mark.asyncio
+async def test_payment_stats_use_net_refunds_and_success_currency(
+    payment_service, async_session, test_user
+):
+    async_session.add_all(
+        [
+            PaymentHistory(
+                user_id=test_user.id,
+                stripe_invoice_id="in_stats_success",
+                amount=100,
+                refunded_amount=30,
+                currency="usd",
+                status=PaymentStatus.SUCCEEDED,
+            ),
+            PaymentHistory(
+                user_id=test_user.id,
+                stripe_invoice_id="in_stats_failed",
+                amount=500,
+                currency="eur",
+                status=PaymentStatus.FAILED,
+            ),
+        ]
+    )
+    await async_session.commit()
+
+    stats = await payment_service.get_payment_history_stats(async_session, test_user.id)
+
+    assert stats["total_spent"] == 70.0
+    assert stats["currency"] == "usd"
+
+
+@pytest.mark.asyncio
+async def test_payment_succeeded_promotes_existing_invoice_failure(
+    payment_service, async_session, test_user
+):
+    test_user.stripe_customer_id = "cus_promote"
+    async_session.add(test_user)
+    existing = PaymentHistory(
+        user_id=test_user.id,
+        stripe_invoice_id="in_promote",
+        amount=20,
+        currency="usd",
+        status=PaymentStatus.FAILED,
+        failure_code="card_declined",
+    )
+    async_session.add(existing)
+    await async_session.commit()
+
+    await payment_service._handle_payment_succeeded(
+        async_session,
+        {
+            "customer": "cus_promote",
+            "amount_paid": 2000,
+            "id": "in_promote",
+            "currency": "usd",
+        },
+    )
+    await async_session.commit()
+
+    await async_session.refresh(existing)
+    assert existing.status == PaymentStatus.SUCCEEDED
+    assert existing.amount == 20
+    assert existing.failure_code is None
+
+
+@pytest.mark.asyncio
 async def test_handle_payment_method_detached(payment_service, async_session, test_user):
     pm = PaymentMethod(
         user_id=test_user.id,
@@ -215,6 +305,7 @@ async def test_handle_payment_method_detached(payment_service, async_session, te
 
     data = {"id": "pm_detach"}
     await payment_service._handle_payment_method_detached(async_session, data)
+    await async_session.commit()
 
     await async_session.refresh(pm)
     assert pm.is_active is False

@@ -2,13 +2,29 @@
  * E2E Tests for Authentication Flow
  * Tests login, logout, and protected route access
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { getPostLoginRedirect } from '../src/lib/auth-redirect';
 
 const E2E_EMAIL = process.env.E2E_USER_EMAIL;
 const E2E_PASSWORD = process.env.E2E_USER_PASSWORD;
 const E2E_USER_ROLE = process.env.E2E_USER_ROLE ?? 'manager';
 const expectedRedirectPath = getPostLoginRedirect(E2E_USER_ROLE);
+const baseURL = process.env.BASE_URL ?? 'http://localhost:3000';
+const hasE2EAuth = Boolean(E2E_EMAIL && E2E_PASSWORD);
+
+async function loginWithE2ECredentials(page: Page) {
+  await page.goto('/auth/login');
+  await page.getByRole('textbox', { name: /email/i }).fill(E2E_EMAIL ?? '');
+  await page.locator('input[type="password"]').fill(E2E_PASSWORD ?? '');
+  await page.getByRole('button', { name: /sign in|login/i }).click();
+
+  const expectedUrl = new URL(expectedRedirectPath, baseURL);
+  await page.waitForURL((url) =>
+    url.pathname === expectedUrl.pathname &&
+    (!expectedUrl.search || url.search === expectedUrl.search),
+    { timeout: 15000 },
+  );
+}
 
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -97,42 +113,27 @@ test.describe('Authentication Flow', () => {
   test('should successfully login with valid credentials', async ({ page }) => {
     test.skip(!E2E_EMAIL || !E2E_PASSWORD, 'E2E credentials are not configured');
 
-    await page.goto('/auth/login');
-    
-    // Fill in credentials
-    await page.getByRole('textbox', { name: /email/i }).fill(E2E_EMAIL ?? '');
-    await page.locator('input[type="password"]').fill(E2E_PASSWORD ?? '');
-    
-    // Submit form
-    await page.getByRole('button', { name: /sign in|login/i }).click();
-    
-    // In CI/local E2E with seeded user this must reach the role-based landing page.
-    await page.waitForURL(new RegExp(`${expectedRedirectPath}`), { timeout: 15000 });
+    await loginWithE2ECredentials(page);
   });
 
   test('should logout successfully when authenticated', async ({ page }) => {
-    await page.goto('/dashboard');
+    test.skip(!hasE2EAuth, 'E2E credentials are not configured');
+
+    // beforeEach clears storageState cookies, so establish a fresh session first.
+    await loginWithE2ECredentials(page);
     
     // Wait for page to load
     await page.waitForLoadState('networkidle');
-    
-    // If redirected to login, skip logout test
-    if (page.url().includes('login')) {
-      test.info().annotations.push({ type: 'skip', description: 'Not authenticated - cannot test logout' });
-      return;
-    }
     
     // Look for logout button
     const logoutButton = page.getByRole('button', { name: /logout|sign out/i }).or(
       page.locator('[data-testid="logout-button"]')
     );
     
-    if (await logoutButton.isVisible()) {
-      await logoutButton.click();
-      
-      // Should redirect to login page
-      await expect(page).toHaveURL(/login/);
-    }
+    await expect(logoutButton).toBeVisible();
+    await logoutButton.click();
+
+    await expect(page).toHaveURL(/login/);
   });
 });
 

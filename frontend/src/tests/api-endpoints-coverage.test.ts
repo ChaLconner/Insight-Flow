@@ -205,6 +205,9 @@ describe("api endpoints coverage", () => {
       params: { q: "jane", skip: 5, limit: 10, role: "admin", status: "active" },
     });
     expect(apiClientMock.patch).toHaveBeenCalledWith("/users/me/settings", { theme: "light" });
+    expect(apiClientMock.get).toHaveBeenCalledWith("/notifications", {
+      params: { skip: 5, limit: 25 },
+    });
     expect(apiClientMock.get).toHaveBeenCalledTimes(17);
   });
 });

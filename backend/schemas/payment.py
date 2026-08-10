@@ -22,6 +22,7 @@ class SubscriptionStatusEnum(StrEnum):
     TRIALING = "trialing"
     UNPAID = "unpaid"
     INCOMPLETE = "incomplete"
+    INCOMPLETE_EXPIRED = "incomplete_expired"
 
 
 class SubscriptionPlanEnum(StrEnum):

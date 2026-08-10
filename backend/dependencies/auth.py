@@ -4,17 +4,21 @@ Moved from routers/auth.py to resolve circular dependencies.
 """
 
 from typing import Any
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_async_db
 from dependencies.services import get_user_service
 from models.user import User
 from services.async_user_service import AsyncUserService
+from services.auth_cache import cache_auth_user, get_cached_auth_user
 from utils.auth import async_verify_token_with_blacklist
 from utils.logger import setup_logger
+from utils.request_security import is_trusted_proxy
 from utils.token_utils import ACCESS_TOKEN_KEY
 
 logger = setup_logger("auth_dependencies")
@@ -22,6 +26,7 @@ logger = setup_logger("auth_dependencies")
 # OAuth2 scheme for token authentication
 # Set auto_error=False so we can fallback to cookie-based tokens when Authorization header is absent
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+SSR_REQUEST_HEADER = "x-next-server-request"
 
 
 def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
@@ -32,6 +37,60 @@ def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
     except (TypeError, ValueError):
         return False
     return token_version == current_version
+
+
+async def _get_authoritative_auth_state(
+    db: AsyncSession,
+    user_id: str,
+    token_session_version: int,
+) -> Any:
+    """Read security-sensitive user state directly from the database."""
+    try:
+        normalized_user_id = UUID(user_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    result = await db.execute(
+        select(User.session_version, User.is_active, User.is_verified, User.role).where(
+            User.id == normalized_user_id
+        )
+    )
+    state = result.one_or_none()
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    try:
+        current_session_version = int(state.session_version or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    if current_session_version != token_session_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session invalid - please login again",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return state
+
+
+def _apply_authoritative_auth_state(user: User, state: Any) -> None:
+    """Overlay security-sensitive fields on a cached user snapshot."""
+    user.session_version = int(state.session_version or 0)
+    user.is_active = state.is_active
+    user.is_verified = state.is_verified
+    user.role = state.role
 
 
 def get_token_from_cookie_or_header(
@@ -62,6 +121,19 @@ async def verify_token_fingerprint(request: Request, payload: dict, user_id: str
         )
 
         if not FINGERPRINT_ENABLED:
+            return
+
+        # Next.js cannot preserve the browser socket across a server-side
+        # render fetch. Accept the signed token through this explicitly marked
+        # internal hop, but only when the immediate peer is a configured
+        # trusted proxy. proxy.ts strips client-supplied copies of the marker.
+        direct_ip = request.client.host if request.client else None
+        if (
+            request.headers.get(SSR_REQUEST_HEADER) == "1"
+            and direct_ip
+            and is_trusted_proxy(direct_ip)
+        ):
+            logger.debug("Skipping browser IP comparison for trusted Next.js SSR request")
             return
 
         is_valid, reason = verify_fingerprint_claim(request, stored_fingerprint)
@@ -134,7 +206,39 @@ async def get_current_user(
             detail="Could not validate credentials",
         )
 
-    # Database lookup
+    try:
+        token_session_version = int(payload.get("sv", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # The cache contains no password hash or OAuth secrets. Session-version
+    # matching plus DB-authoritative security fields preserves revocation
+    # semantics even if cache invalidation fails.  On a cache miss, the full
+    # user query below is already authoritative, so avoid a duplicate state
+    # query and save one database round trip.
+    cached_user = await get_cached_auth_user(user_id, token_session_version)
+    if cached_user is not None:
+        try:
+            authoritative_state = await _get_authoritative_auth_state(
+                db, user_id, token_session_version
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error(f"Authoritative user state lookup failed: {exc}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+        _apply_authoritative_auth_state(cached_user, authoritative_state)
+        return cached_user
+
+    # Database lookup on a cache miss
     try:
         user = await user_service.get_user_by_id(user_id)
         if user is None:
@@ -148,6 +252,7 @@ async def get_current_user(
                 detail="Session invalid - please login again",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        await cache_auth_user(user)
         return user
     except HTTPException:
         raise
@@ -159,7 +264,7 @@ async def get_current_user(
         )
 
 
-async def get_current_user_optional(
+async def get_current_user_optional(  # noqa: PLR0911
     request: Request,
     db: AsyncSession = Depends(get_async_db),
     user_service: AsyncUserService = Depends(get_user_service),
@@ -178,11 +283,29 @@ async def get_current_user_optional(
     except Exception:
         return None
 
-    # Database lookup
+    try:
+        token_session_version = int(payload.get("sv", 0))
+    except (TypeError, ValueError):
+        return None
+
+    cached_user = await get_cached_auth_user(user_id, token_session_version)
+    if cached_user is not None:
+        try:
+            authoritative_state = await _get_authoritative_auth_state(
+                db, user_id, token_session_version
+            )
+        except Exception:
+            return None
+        _apply_authoritative_auth_state(cached_user, authoritative_state)
+        return cached_user
+
+    # Database lookup on a cache miss
     try:
         user = await user_service.get_user_by_id(user_id)
         if user is not None and not _session_version_matches(payload, user):
             return None
+        if user is not None:
+            await cache_auth_user(user)
         return user
     except Exception:
         return None

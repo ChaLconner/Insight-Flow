@@ -23,7 +23,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:perf": "playwright test e2e/performance.spec.ts",
     "test:all": "npm run test && npm run test:e2e",
-    "test:ci": "vitest run --coverage && playwright test --project=chromium",
+    "test:ci": "vitest run --coverage && playwright test",
     "quality:check": "npm run type-check && npm run lint:strict && npm run test:coverage",
     "security:audit": "npm audit --audit-level=moderate",
     "perf:lighthouse": "npx lighthouse http://localhost:3000 --output html --output-path ./lighthouse-report.html"

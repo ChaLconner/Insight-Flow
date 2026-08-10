@@ -235,25 +235,24 @@ async def async_verify_token_with_blacklist(
         cache_key = f"blacklist:jti:{token_jti}"
         cached_status = await cache_service.get(cache_key)
 
-        if cached_status is not None:
-            if cached_status.get("revoked"):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token has been revoked",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-        else:
-            is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
-            await cache_service.set(
-                cache_key, {"revoked": is_revoked}, timeout=3600 if is_revoked else 300
+        # Only a cached positive result is authoritative. A cached negative
+        # result can outlive logout or refresh-token rotation and must be
+        # rechecked against the database before accepting the token.
+        if cached_status is not None and cached_status.get("revoked"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
-            if is_revoked:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Token has been revoked",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+        is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
+        if is_revoked:
+            await cache_service.set(cache_key, {"revoked": True}, timeout=3600)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     return payload
 

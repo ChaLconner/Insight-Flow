@@ -23,7 +23,14 @@ def setup_cors_middleware(app: FastAPI) -> None:
         allow_credentials=settings.cors.allow_credentials,
         allow_methods=settings.cors.allow_methods,
         allow_headers=settings.cors.allow_headers,
-        expose_headers=["*"],
+        expose_headers=[
+            "Retry-After",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+            "X-Request-ID",
+            "X-Response-Time",
+        ],
     )
 
 
@@ -88,6 +95,19 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
         logger.info("Using in-memory rate limiting (Redis not connected)")
     else:
         logger.info("Using in-memory rate limiting (Redis not configured)")
+
+
+def setup_request_body_limit_middleware(app: FastAPI) -> None:
+    """Cap untrusted report/webhook bodies before JSON parsing."""
+    from middleware.request_body_limit import RequestBodyLimitMiddleware
+
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        limits={
+            "/api/v1/security/csp-report": 64 * 1024,
+            "/api/v1/payment/webhook": 256 * 1024,
+        },
+    )
 
 
 def setup_csrf_middleware(app: FastAPI) -> None:
@@ -160,6 +180,9 @@ def setup_all_middleware(app: FastAPI) -> None:
 
     # Rate limiting
     setup_rate_limit_middleware(app)
+
+    # Request body limits must wrap parsing and run before route handlers.
+    setup_request_body_limit_middleware(app)
 
     # CSRF protection
     setup_csrf_middleware(app)

@@ -84,6 +84,8 @@ async def test_authenticate_user_success(user_service, mock_db_session, mock_aut
     assert authenticated_user is user
     user_service.verify_password.assert_awaited_once_with("password", "hashed_secret")
     mock_db_session.add.assert_called_once()  # Log auth attempt
+    mock_db_session.commit.assert_awaited_once()
+    assert user.last_login_at is not None
 
 
 @pytest.mark.asyncio
@@ -123,7 +125,7 @@ async def test_authenticate_user_wrong_password(user_service, mock_db_session, m
     assert auth_result is None
     user_service.verify_password.assert_awaited_once_with("wrong", "hashed_secret")
     assert user.failed_login_attempts == 1
-    assert mock_db_session.commit.call_count >= 1  # Update attempts
+    mock_db_session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

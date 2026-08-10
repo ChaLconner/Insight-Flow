@@ -680,7 +680,7 @@ export const notificationsApi = {
   getNotifications: async (skip = 0, limit = 50): Promise<Notification[]> => {
     const cacheKey = `notifications-getNotifications-${skip}-${limit}`;
     return createDeduplicatedRequest(async () => {
-      const { data } = await apiClient.get("/notifications/", {
+      const { data } = await apiClient.get("/notifications", {
         params: { skip, limit },
       });
       return data;
@@ -705,7 +705,7 @@ export const notificationsApi = {
   },
 
   // Mark all as read
-  markAllAsRead: async (): Promise<Notification[]> => {
+  markAllAsRead: async (): Promise<{ message: string; count: number }> => {
     const { data } = await apiClient.put("/notifications/read-all");
     return data;
   },

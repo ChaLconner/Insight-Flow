@@ -22,6 +22,8 @@ vi.mock("@/components/ui/animated-background", () => ({
 }));
 
 vi.mock("@/lib/api-client", () => ({
+  isAxiosError: (error: unknown) =>
+    Boolean(error && typeof error === "object" && "status" in error),
   apiClient: {
     post: vi.fn(),
   },
@@ -43,7 +45,7 @@ describe("LoginPage query prefills", () => {
     process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID = "github-client-id";
   });
 
-  it("prefills credentials from local login query params and removes password from the URL", () => {
+  it("never prefills a password from the URL and removes it from the URL", () => {
     currentSearchParams = new URLSearchParams({
       email: "admin@example.com",
       password: "password123",
@@ -53,9 +55,7 @@ describe("LoginPage query prefills", () => {
     render(<LoginPage />);
 
     expect(screen.getByLabelText(/email/i)).toHaveValue("admin@example.com");
-    expect(screen.getByPlaceholderText("Enter your password")).toHaveValue(
-      "password123",
-    );
+    expect(screen.getByPlaceholderText("Enter your password")).toHaveValue("");
     expect(replace).toHaveBeenCalledWith(
       "/auth/login?email=admin%40example.com&callbackUrl=%2Fdashboard",
     );
@@ -134,5 +134,31 @@ describe("LoginPage query prefills", () => {
       expect.any(Object),
       { rememberMe: true },
     );
+  });
+
+  it("handles rejected credentials without reporting an unexpected console error", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(apiClient.post).mockRejectedValue({
+      status: 401,
+      message: "Incorrect email or password",
+    });
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "admin@example.com" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Enter your password"), {
+      target: { value: "wrong-password" },
+    });
+    const submitButton = screen.getByRole("button", { name: /sign in/i });
+    await waitFor(() => expect(submitButton).toBeEnabled());
+    fireEvent.click(submitButton);
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledOnce());
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText("Enter your password")).toHaveValue("");
+
+    consoleErrorSpy.mockRestore();
   });
 });

@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from config import AppSettings, AuthSettings, CORSSettings, LoggingSettings
+from schemas.user import UserUpdate
 
 
 class TestConfigValidators:
@@ -106,3 +107,22 @@ class TestConfigValidators:
 
         assert settings.docs_enabled is True
         assert settings.metrics_enabled is True
+
+    def test_scheduler_and_slow_request_defaults(self, monkeypatch):
+        """The API owns no scheduler and logs requests slower than 500 ms by default."""
+        monkeypatch.delenv("SCHEDULER_ENABLED", raising=False)
+        monkeypatch.delenv("SLOW_REQUEST_THRESHOLD_SECONDS", raising=False)
+
+        settings = AppSettings(ENVIRONMENT="development")
+
+        assert settings.scheduler_enabled is False
+        assert settings.slow_request_threshold_seconds == 0.5
+
+    def test_user_update_accepts_owned_local_avatar_path(self):
+        """Profile updates accept only the local avatar path the upload route emits."""
+        assert UserUpdate(avatar="/static/uploads/550e8400-e29b-41d4-a716-446655440000.png")
+
+        with pytest.raises(ValidationError):
+            UserUpdate(avatar="/static/uploads/../private.txt")
+        with pytest.raises(ValidationError):
+            UserUpdate(website="/static/uploads/avatar.png")

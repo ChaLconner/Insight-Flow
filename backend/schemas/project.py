@@ -2,6 +2,7 @@
 Project schemas for Insight-Flow application.
 """
 
+import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -20,7 +21,14 @@ class ProjectBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = Field(None, max_length=500)
     color: str = Field(default="#6366f1", min_length=7, max_length=7, pattern=r"^#[0-9A-Fa-f]{6}$")
-    settings: dict[str, Any] = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict, max_length=100)
+
+    @field_validator("settings")
+    @classmethod
+    def validate_settings_size(cls, value: dict[str, Any]) -> dict[str, Any]:
+        if len(json.dumps(value, ensure_ascii=False)) > 32_768:
+            raise ValueError("Project settings are too large")
+        return value
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -28,7 +36,7 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     """Schema for creating a new project."""
 
-    members: list["ProjectMemberCreate"] | None = None
+    members: list["ProjectMemberCreate"] | None = Field(None, max_length=50)
 
     def __init__(self, **data: Any) -> None:
         # Handle None or empty members
@@ -42,14 +50,21 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     """Schema for updating project information."""
 
-    name: str | None = None
-    description: str | None = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
     color: str | None = Field(
         default=None, min_length=7, max_length=7, pattern=r"^#[0-9A-Fa-f]{6}$"
     )
-    settings: dict[str, Any] | None = None
+    settings: dict[str, Any] | None = Field(None, max_length=100)
     is_active: bool | None = None
-    member_ids: list[uuid.UUID] | None = None
+    member_ids: list[uuid.UUID] | None = Field(None, max_length=50)
+
+    @field_validator("settings")
+    @classmethod
+    def validate_update_settings_size(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is not None and len(json.dumps(value, ensure_ascii=False)) > 32_768:
+            raise ValueError("Project settings are too large")
+        return value
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -103,9 +118,9 @@ class ProjectMemberCreate(ProjectMemberBase):
         super().__init__(**data)
         # Validate role only if role is provided
         if self.role:
-            valid_roles = [MemberRole.OWNER.value, MemberRole.ADMIN.value, MemberRole.MEMBER.value]
+            valid_roles = [MemberRole.ADMIN.value, MemberRole.MEMBER.value]
             if self.role not in valid_roles:
-                raise ValueError(f"Invalid role. Must be one of: {valid_roles}")
+                raise ValueError(f"Invalid member role. Must be one of: {valid_roles}")
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

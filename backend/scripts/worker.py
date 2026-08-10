@@ -20,6 +20,7 @@ from services.job_queue import (
     renew_job_lease,
 )
 from services.scheduler import shutdown_scheduler, start_scheduler
+from services.security_log_service import SecurityLogService
 from utils.logger import setup_logger
 
 logger = setup_logger("worker")
@@ -59,6 +60,20 @@ async def _cleanup_finished_jobs_if_due(last_cleanup_at: float, interval: float)
         removed = await cleanup_finished_jobs(cleanup_db)
     if removed:
         logger.info("Removed %s expired background jobs", removed)
+    return time.monotonic()
+
+
+async def _cleanup_security_logs_if_due(last_cleanup_at: float, interval: float) -> float:
+    """Apply the same bounded retention policy to security telemetry."""
+    if time.monotonic() - last_cleanup_at < interval:
+        return last_cleanup_at
+    settings = get_settings()
+    async with AsyncSessionLocal() as cleanup_db:
+        removed = await SecurityLogService.cleanup_old_logs(
+            cleanup_db, settings.security_log_retention_days
+        )
+    if removed:
+        logger.info("Removed %s expired security logs", removed)
     return time.monotonic()
 
 
@@ -130,12 +145,16 @@ async def run_worker(stop_event: asyncio.Event) -> None:
     worker_id = f"{socket.gethostname()}:{uuid.uuid4().hex[:12]}"
     logger.info("Durable worker started: %s", worker_id)
     last_cleanup_at = 0.0
+    last_security_log_cleanup_at = 0.0
     cleanup_interval = 3600.0
 
     while not stop_event.is_set():
         job = None
         try:
             last_cleanup_at = await _cleanup_finished_jobs_if_due(last_cleanup_at, cleanup_interval)
+            last_security_log_cleanup_at = await _cleanup_security_logs_if_due(
+                last_security_log_cleanup_at, cleanup_interval
+            )
             job = await _claim_next_job(worker_id)
         except Exception as exc:
             logger.error("Failed during worker poll: %s", exc)

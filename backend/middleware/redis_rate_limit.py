@@ -15,6 +15,7 @@ from starlette.responses import JSONResponse
 
 from middleware.rate_limit import RATE_LIMIT_CONFIG, get_rate_limit_for_path
 from utils.logger import setup_logger
+from utils.request_security import get_client_ip
 
 logger = setup_logger("redis_rate_limit")
 
@@ -61,6 +62,21 @@ class RedisRateLimitMiddleware:
         self.fail_closed = fail_closed
         logger.info(f"Redis rate limiting initialized: {calls} requests per {period}s")
 
+    def _is_skipped_path(self, path: str) -> bool:
+        """Return whether *path* is an explicitly configured exempt route.
+
+        Exemptions are path-segment aware.  In particular, ``/`` is only the
+        root route; treating it as a prefix would exempt every HTTP request.
+        """
+        for exempt_path in self.skip_paths:
+            normalized = exempt_path.rstrip("/") or "/"
+            if normalized == "/":
+                if path == "/":
+                    return True
+            elif path == normalized or path.startswith(f"{normalized}/"):
+                return True
+        return False
+
     def _get_rate_limit_key(self, request: Request) -> tuple[str, int, int]:
         """
         Generate a unique rate limit key for the request and get rate limits.
@@ -68,7 +84,7 @@ class RedisRateLimitMiddleware:
         Returns:
             Tuple of (key, calls, period)
         """
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         path = request.url.path
 
         # Normalize path (remove query parameters)
@@ -145,7 +161,7 @@ class RedisRateLimitMiddleware:
         path = scope["path"]
 
         # Skip rate limiting for certain paths
-        if any(path.startswith(p) for p in self.skip_paths):
+        if self._is_skipped_path(path):
             await self.app(scope, receive, send)
             return
 

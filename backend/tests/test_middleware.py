@@ -219,3 +219,38 @@ class TestCSRFMiddleware:
             response = client.post("/api/v1/auth/login-extra")
 
         assert response.status_code == 403
+
+    def test_cookie_refresh_requires_csrf_token(self):
+        """Ambient refresh cookies must not authorize a cross-site POST."""
+        from middleware.csrf import CSRFMiddleware
+
+        app = FastAPI()
+        app.add_middleware(CSRFMiddleware, cookie_secure=False)
+
+        @app.post("/api/v1/auth/refresh")
+        async def refresh_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            client.cookies.set("refresh_token", "refresh-cookie")
+            response = client.post("/api/v1/auth/refresh")
+
+        assert response.status_code == 403
+
+    def test_bearer_refresh_without_cookie_keeps_api_compatibility(self):
+        """Non-browser bearer refresh callers do not need a browser CSRF token."""
+        from middleware.csrf import CSRFMiddleware
+
+        app = FastAPI()
+        app.add_middleware(CSRFMiddleware, cookie_secure=False)
+
+        @app.post("/api/v1/auth/refresh")
+        async def refresh_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/auth/refresh", headers={"Authorization": "Bearer refresh-token"}
+            )
+
+        assert response.status_code == 200

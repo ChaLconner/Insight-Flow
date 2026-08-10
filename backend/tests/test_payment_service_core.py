@@ -59,6 +59,18 @@ async def test_get_or_create_stripe_customer_cached_on_user_obj(payment_service,
 
 
 @pytest.mark.asyncio
+async def test_get_payment_method_only_returns_active_methods(payment_service, mock_db_session):
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    mock_db_session.execute.return_value = result
+
+    await payment_service.get_payment_method(mock_db_session, uuid4(), uuid4())
+
+    statement = str(mock_db_session.execute.call_args.args[0])
+    assert "payment_methods.is_active" in statement
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_stripe_customer_create_new(payment_service, mock_db_session):
     user_id = uuid4()
     user = MagicMock()
@@ -191,6 +203,8 @@ async def test_get_payment_history_stats(payment_service, mock_db_session):
     row.failed_payments = 1
     row.pending_payments = 0
     row.refunded_payments = 0
+    row.currency_count = 1
+    row.currency = "usd"
 
     res = MagicMock()
     res.fetchone.return_value = row

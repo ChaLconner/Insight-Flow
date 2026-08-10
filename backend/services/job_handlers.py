@@ -3,10 +3,11 @@
 import uuid
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from models.project import Project, ProjectMember
 from models.task import Task
 from models.user import User
 from services.async_deadline_reminder import run_async_deadline_check
@@ -84,7 +85,7 @@ async def _load_users(db: AsyncSession, user_ids: list[uuid.UUID]) -> dict[uuid.
     return {user.id: user for user in result.scalars().all()}
 
 
-async def _dispatch_notification(  # noqa: PLR0911
+async def _dispatch_notification(  # noqa: PLR0911, PLR0912
     db: AsyncSession, payload: dict[str, Any]
 ) -> None:
     """Dispatch notification intent after reloading fresh ORM state."""
@@ -167,17 +168,38 @@ async def _dispatch_notification(  # noqa: PLR0911
         return
 
     if event == "mention":
-        users = await _load_users(
-            db, [_uuid(payload["mentioned_user_id"]), _uuid(payload["actor_id"])]
-        )
-        mentioned_user = users.get(_uuid(payload["mentioned_user_id"]))
+        mentioned_user_id = _uuid(payload["mentioned_user_id"])
+        project_id = _uuid(payload["project_id"]) if payload.get("project_id") else None
+        if project_id:
+            membership = await db.execute(
+                select(Project.id)
+                .outerjoin(
+                    ProjectMember,
+                    and_(
+                        ProjectMember.project_id == Project.id,
+                        ProjectMember.user_id == mentioned_user_id,
+                    ),
+                )
+                .where(
+                    Project.id == project_id,
+                    or_(
+                        Project.owner_id == mentioned_user_id,
+                        ProjectMember.user_id.is_not(None),
+                    ),
+                )
+            )
+            if membership.scalar_one_or_none() is None:
+                logger.info("Skipping mention for a non-member recipient")
+                return
+        users = await _load_users(db, [mentioned_user_id, _uuid(payload["actor_id"])])
+        mentioned_user = users.get(mentioned_user_id)
         actor = users.get(_uuid(payload["actor_id"]))
-        if mentioned_user and actor:
+        if mentioned_user and mentioned_user.is_active and actor and actor.is_active:
             await service.notify_mention(
                 mentioned_user=mentioned_user,
                 actor=actor,
                 message=payload["message"],
-                project_id=_uuid(payload["project_id"]) if payload.get("project_id") else None,
+                project_id=project_id,
                 task_id=_uuid(payload["task_id"]) if payload.get("task_id") else None,
             )
         return

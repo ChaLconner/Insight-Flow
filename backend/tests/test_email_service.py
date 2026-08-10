@@ -201,6 +201,21 @@ class TestEmailTemplates:
         assert "font-family" in template
         assert "button" in template.lower()
 
+    def test_base_template_escapes_header_and_action_values(self):
+        from services.email_service import EmailService
+
+        template = EmailService._get_base_template(
+            subject='<img src=x onerror="alert(1)">',
+            content="<p>Trusted content</p>",
+            action_url='https://example.com/?next=" onmouseover="alert(1)',
+            action_text="<Click>",
+        )
+
+        assert "&lt;img" in template
+        assert 'onerror="alert(1)"' not in template
+        assert "&quot; onmouseover=&quot;" in template
+        assert "&lt;Click&gt;" in template
+
 
 class TestVerificationEmail:
     """Tests for verification email functionality."""

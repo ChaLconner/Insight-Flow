@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from models.payment import (
     Subscription,
@@ -63,17 +64,37 @@ async def test_record_invoice_payment_duplicate_integrity_error(
     invoice_mock.hosted_invoice_url = "http://url"
     invoice_mock.receipt_url = "http://receipt"
 
-    # Mock db.add to raise IntegrityError
-    # We simulate IntegrityError by raising an Exception with matching str or type name
-    # Since we can't easily import sqlalchemy IntegrityError without dependency, we use generic exception with message
-    mock_db_session.add.side_effect = Exception("unique constraint violation")
+    # Only a real integrity error is treated as an idempotent duplicate.
+    mock_db_session.add.side_effect = IntegrityError("insert", {}, Exception("duplicate"))
 
     await mock_payment_service._record_invoice_payment(
         mock_db_session, user_id, sub_id, invoice_mock
     )
 
-    # Should rollback and log (no crash)
-    mock_db_session.rollback.assert_awaited_once()
+    # The savepoint isolates the duplicate; the outer transaction is intact.
+    mock_db_session.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_record_invoice_payment_propagates_unexpected_db_error(
+    mock_payment_service, mock_db_session
+):
+    """Connection/programming failures must not be mislabeled as duplicates."""
+    invoice_mock = MagicMock()
+    invoice_mock.id = "inv_unexpected"
+    invoice_mock.status = "paid"
+    invoice_mock.amount_paid = 1000
+    invoice_mock.currency = "usd"
+    invoice_mock.payment_intent = "pi_unexpected"
+    invoice_mock.charge = "ch_unexpected"
+    invoice_mock.description = "Test Invoice"
+    invoice_mock.hosted_invoice_url = "http://url"
+    mock_db_session.add.side_effect = RuntimeError("database unavailable")
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await mock_payment_service._record_invoice_payment(
+            mock_db_session, uuid4(), uuid4(), invoice_mock
+        )
 
 
 @pytest.mark.asyncio

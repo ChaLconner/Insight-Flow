@@ -6,8 +6,17 @@ import re
 import uuid
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from utils.schema_utils import to_camel
 
@@ -111,15 +120,15 @@ class UserInvite(BaseModel):
 class UserUpdate(BaseModel):
     """Schema for updating user information."""
 
-    name: str | None = None
-    first_name: str | None = None
-    last_name: str | None = None
-    username: str | None = None
-    avatar_url: str | None = Field(None, alias="avatar")
-    phone: str | None = None
-    bio: str | None = None
-    location: str | None = None
-    website: str | None = None
+    name: str | None = Field(None, min_length=2, max_length=50)
+    first_name: str | None = Field(None, min_length=1, max_length=50)
+    last_name: str | None = Field(None, min_length=1, max_length=50)
+    username: str | None = Field(None, min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
+    avatar_url: str | None = Field(None, alias="avatar", max_length=500)
+    phone: str | None = Field(None, max_length=50)
+    bio: str | None = Field(None, max_length=500)
+    location: str | None = Field(None, max_length=100)
+    website: str | None = Field(None, max_length=500)
 
     @field_validator("name")
     @classmethod
@@ -134,6 +143,20 @@ class UserUpdate(BaseModel):
             raise ValueError("ชื่อต้องไม่เกิน 50 ตัวอักษร")
         if not re.match(r"^[a-zA-Zก-๙\s]+$", v):
             raise ValueError("ชื่อสามารถใช้ได้เฉพาะตัวอักษรและเว้นวรรคเท่านั้น")
+        return v
+
+    @field_validator("website", "avatar_url")
+    @classmethod
+    def validate_http_url(cls, v: str | None, info: ValidationInfo) -> str | None:
+        if v is None or v == "":
+            return v
+        if info.field_name == "avatar_url" and re.fullmatch(
+            r"/static/uploads/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|gif|webp)", v
+        ):
+            return v
+        parsed = urlparse(v)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("URL must use http or https")
         return v
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
@@ -188,16 +211,16 @@ class UserLogin(BaseModel):
 class GoogleAuth(BaseModel):
     """Schema for Google authentication."""
 
-    id_token: str | None = None
-    access_token: str | None = None
+    id_token: str | None = Field(None, max_length=8192)
+    access_token: str | None = Field(None, max_length=8192)
 
 
 class GithubAuth(BaseModel):
     """Schema for GitHub authentication."""
 
-    code: str | None = None  # Authorization code from GitHub OAuth redirect
-    access_token: str | None = None  # Direct access token (if available)
-    redirect_uri: str | None = None
+    code: str | None = Field(None, max_length=2048)  # Authorization code from GitHub OAuth redirect
+    access_token: str | None = Field(None, max_length=8192)  # Direct access token (if available)
+    redirect_uri: str | None = Field(None, max_length=2048)
 
 
 class Token(BaseModel):
@@ -210,12 +233,21 @@ class Token(BaseModel):
 
 
 class UserSettingsBase(BaseModel):
-    theme: str | None = "dark"
-    language: str | None = "en"
-    timezone: str | None = "UTC"
-    notification_preferences: dict[str, Any] | None = None
-    working_hours_start: str | None = "09:00"
-    working_hours_end: str | None = "17:00"
+    theme: str | None = Field("dark", max_length=20)
+    language: str | None = Field("en", max_length=10)
+    timezone: str | None = Field("UTC", max_length=64)
+    notification_preferences: dict[str, Any] | None = Field(None, max_length=50)
+    working_hours_start: str | None = Field("09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    working_hours_end: str | None = Field("17:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+    @field_validator("notification_preferences")
+    @classmethod
+    def validate_notification_preferences(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if value is not None and len(str(value)) > 16_384:
+            raise ValueError("Notification preferences are too large")
+        return value
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

@@ -110,7 +110,16 @@ class CORSSettings(BaseSettings):
     )
     allow_credentials: bool = Field(default=True)
     allow_methods: list[str] = Field(default=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"])
-    allow_headers: list[str] = Field(default=["*"])
+    allow_headers: list[str] = Field(
+        default=[
+            "Accept",
+            "Authorization",
+            "Content-Type",
+            "X-CSRF-Token",
+            "X-Request-ID",
+            "X-Next-Server-Request",
+        ]
+    )
 
     @field_validator("origins")
     @classmethod
@@ -275,11 +284,17 @@ class AppSettings(BaseSettings):
     health_check_cache_ttl_seconds: float = Field(
         default=1.0, alias="HEALTH_CHECK_CACHE_TTL_SECONDS", ge=0
     )
-    scheduler_enabled: bool = Field(default=True, alias="SCHEDULER_ENABLED")
+    # The API must not create an in-process scheduler. Run one dedicated
+    # scheduler owner through scripts/worker.py instead.
+    scheduler_enabled: bool = Field(default=False, alias="SCHEDULER_ENABLED")
+    slow_request_threshold_seconds: float = Field(
+        default=0.5, alias="SLOW_REQUEST_THRESHOLD_SECONDS", gt=0
+    )
     job_poll_interval_seconds: float = Field(default=1.0, alias="JOB_POLL_INTERVAL_SECONDS", gt=0)
     job_max_attempts: int = Field(default=5, alias="JOB_MAX_ATTEMPTS", gt=0)
     job_lock_timeout_seconds: int = Field(default=300, alias="JOB_LOCK_TIMEOUT_SECONDS", gt=0)
     job_retention_days: int = Field(default=30, alias="JOB_RETENTION_DAYS", gt=0)
+    security_log_retention_days: int = Field(default=30, alias="SECURITY_LOG_RETENTION_DAYS", gt=0)
 
     # Nested settings
     database: DatabaseSettings = Field(default_factory=lambda: DatabaseSettings())

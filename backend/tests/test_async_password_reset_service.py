@@ -120,6 +120,19 @@ async def test_validate_token_expired(password_reset_service, mock_db_session):
 
 
 @pytest.mark.asyncio
+async def test_reset_validation_can_lock_token_row(password_reset_service, mock_db_session):
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = None
+    mock_db_session.execute.return_value = result
+
+    with patch("models.password_reset.PasswordReset.hash_token", return_value="hashed"):
+        await password_reset_service.validate_reset_token("token", for_update=True)
+
+    statement = mock_db_session.execute.await_args.args[0]
+    assert statement._for_update_arg is not None
+
+
+@pytest.mark.asyncio
 async def test_reset_password_success(password_reset_service, mock_db_session):
     token = "valid_token"
     new_pass = "new_pass"
@@ -134,8 +147,14 @@ async def test_reset_password_success(password_reset_service, mock_db_session):
     # Mock user fetch
     mock_user = MagicMock(spec=User)
     password_reset_service.user_service.get_user_by_email = AsyncMock(return_value=mock_user)
+    password_reset_service.user_service.hash_password = AsyncMock(return_value="hashed_pass")
 
-    with patch("utils.auth.get_password_hash", return_value="hashed_pass"):
+    with (
+        patch(
+            "services.async_password_reset_service.invalidate_auth_user_cache",
+            new=AsyncMock(),
+        ) as invalidate_auth_cache,
+    ):
         result = await password_reset_service.reset_password(token, new_pass)
 
         assert result is True
@@ -143,6 +162,7 @@ async def test_reset_password_success(password_reset_service, mock_db_session):
         assert mock_user.session_version == 1
         assert mock_reset.used is True
         mock_db_session.commit.assert_called_once()
+        invalidate_auth_cache.assert_awaited_once_with(mock_user.id)
 
 
 @pytest.mark.asyncio

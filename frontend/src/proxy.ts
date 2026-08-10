@@ -34,6 +34,15 @@ const SKIP_ROUTES = [
   "/sw.js",
 ];
 
+export function sanitizeForwardedHeaders(headers: Headers): Headers {
+  const sanitized = new Headers(headers);
+  sanitized.delete("forwarded");
+  sanitized.delete("x-forwarded-for");
+  sanitized.delete("x-real-ip");
+  sanitized.delete("x-next-server-request");
+  return sanitized;
+}
+
 /**
  * Basic JWT validation for Edge runtime.
  * Checks if token has valid format and is not expired.
@@ -69,10 +78,11 @@ function isTokenValid(token: string): boolean {
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const sanitizedHeaders = sanitizeForwardedHeaders(request.headers);
 
   // Skip proxy for static assets and API routes
   if (SKIP_ROUTES.some((route) => pathname.startsWith(route))) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
 
   // Get auth token from cookies and validate
@@ -115,7 +125,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: sanitizedHeaders } });
 }
 
 export const config = {

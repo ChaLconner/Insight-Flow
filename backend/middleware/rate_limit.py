@@ -17,6 +17,7 @@ from starlette.responses import JSONResponse
 
 from database import AsyncSessionLocal
 from services.security_log_service import SecurityLogService
+from utils.request_security import get_client_ip
 
 logger = logging.getLogger("rate_limit")
 
@@ -35,6 +36,10 @@ RATE_LIMIT_CONFIG = {
     "/api/v1/auth/register": (5, 60),
     "/api/v1/auth/forgot-password": (3, 60),
     "/api/v1/auth/reset-password": (5, 60),
+    # CSP telemetry is intentionally public for browser reports; keep its
+    # ingestion budget below the generic API fallback in every rate-limit
+    # backend, including the Redis path.
+    "/api/v1/security/csp-report": (30, 60),
     # Payment endpoints - moderate limits
     "/payment": (20, 60),  # 20 requests per minute
     "/api/v1/payment": (20, 60),
@@ -88,7 +93,7 @@ class RateLimitMiddleware:
 
     def _get_rate_key(self, request: Request) -> str:
         """Get rate limiting key for the request."""
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         path = request.url.path
 
         # Check if this path has a specific rate limit
@@ -208,9 +213,8 @@ class RateLimitMiddleware:
             await self.app(scope, receive, send)
             return
 
-        client_info = scope.get("client")
-        client_ip = client_info[0] if client_info else "unknown"
         request = Request(scope, receive)
+        client_ip = get_client_ip(request)
 
         # A+ Security: Check if IP is blocked first
         blocked_response = await self._check_ip_block(request, client_ip)

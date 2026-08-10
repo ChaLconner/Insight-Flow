@@ -11,6 +11,7 @@ Features:
 
 import asyncio
 import contextlib
+import inspect
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -18,7 +19,8 @@ from typing import Any, cast
 from uuid import UUID
 
 import stripe
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from stripe import InvalidRequestError, StripeError
 
@@ -48,6 +50,25 @@ from security.payment_security import security_logger
 logger = logging.getLogger(__name__)
 
 
+@contextlib.asynccontextmanager
+async def _payment_savepoint(db: AsyncSession):
+    """Use a savepoint when the session supports it, including test doubles."""
+    begin_nested = getattr(db, "begin_nested", None)
+    if begin_nested is None:
+        yield
+        return
+
+    transaction = begin_nested()
+    if inspect.isawaitable(transaction):
+        transaction = await transaction
+    if not hasattr(transaction, "__aenter__"):
+        yield
+        return
+
+    async with transaction:
+        yield
+
+
 class PaymentService:
     """
     Service for handling Stripe payment operations.
@@ -61,6 +82,22 @@ class PaymentService:
         else:
             self._configured = False
             logger.warning("Stripe is not configured. Payment features will be disabled.")
+
+    @staticmethod
+    def _subscription_status_from_stripe(
+        stripe_subscription: Any,
+        *,
+        default: SubscriptionStatus,
+    ) -> SubscriptionStatus:
+        """Map Stripe status without failing open to an active subscription."""
+        raw_status = getattr(stripe_subscription, "status", None)
+        if raw_status is None and isinstance(stripe_subscription, dict):
+            raw_status = stripe_subscription.get("status")
+        try:
+            return SubscriptionStatus(str(raw_status))
+        except (TypeError, ValueError):
+            logger.warning("Unknown Stripe subscription status %r; using %s", raw_status, default)
+            return default
 
     @property
     def is_configured(self) -> bool:
@@ -492,6 +529,7 @@ class PaymentService:
             select(PaymentMethod)
             .where(PaymentMethod.id == payment_method_id)
             .where(PaymentMethod.user_id == user_id)
+            .where(PaymentMethod.is_active.is_(True))
         )
         return result.scalar_one_or_none()
 
@@ -628,17 +666,30 @@ class PaymentService:
 
         from models.payment import PaymentStatus
 
-        # Aggregate query for stats
-        # Use explicit casting and .value comparisons for robust Enum handling
+        status_expr = cast(PaymentHistory.status, String)
+        refunded_amount_expr = func.coalesce(PaymentHistory.refunded_amount, Decimal(0))
+        net_amount_expr = case(
+            (
+                PaymentHistory.amount > refunded_amount_expr,
+                PaymentHistory.amount - refunded_amount_expr,
+            ),
+            else_=Decimal(0),
+        )
+        successful_currency_expr = case(
+            (status_expr == PaymentStatus.SUCCEEDED.value, PaymentHistory.currency),
+            else_=None,
+        )
+
+        # Aggregate query for stats. Total spent is net of partial refunds and
+        # currency is based only on successful payments.
         result = await db.execute(
             select(
                 func.coalesce(
                     func.sum(
                         case(
                             (
-                                cast(PaymentHistory.status, String)
-                                == PaymentStatus.SUCCEEDED.value,
-                                PaymentHistory.amount,
+                                status_expr == PaymentStatus.SUCCEEDED.value,
+                                net_amount_expr,
                             ),
                             else_=Decimal(0),
                         )
@@ -648,28 +699,30 @@ class PaymentService:
                 func.count(PaymentHistory.id).label("total_payments"),
                 func.sum(
                     case(
-                        (cast(PaymentHistory.status, String) == PaymentStatus.SUCCEEDED.value, 1),
+                        (status_expr == PaymentStatus.SUCCEEDED.value, 1),
                         else_=0,
                     )
                 ).label("successful_payments"),
                 func.sum(
                     case(
-                        (cast(PaymentHistory.status, String) == PaymentStatus.FAILED.value, 1),
+                        (status_expr == PaymentStatus.FAILED.value, 1),
                         else_=0,
                     )
                 ).label("failed_payments"),
                 func.sum(
                     case(
-                        (cast(PaymentHistory.status, String) == PaymentStatus.PENDING.value, 1),
+                        (status_expr == PaymentStatus.PENDING.value, 1),
                         else_=0,
                     )
                 ).label("pending_payments"),
                 func.sum(
                     case(
-                        (cast(PaymentHistory.status, String) == PaymentStatus.REFUNDED.value, 1),
+                        (status_expr == PaymentStatus.REFUNDED.value, 1),
                         else_=0,
                     )
                 ).label("refunded_payments"),
+                func.count(func.distinct(successful_currency_expr)).label("currency_count"),
+                func.min(successful_currency_expr).label("currency"),
             ).where(PaymentHistory.user_id == user_id)
         )
 
@@ -686,6 +739,9 @@ class PaymentService:
                 "currency": "usd",
             }
 
+        currency_count = int(row.currency_count) if isinstance(row.currency_count, int) else 0
+        currency = row.currency if isinstance(row.currency, str) else None
+
         return {
             "total_spent": float(row.total_spent or 0),
             "total_payments": int(row.total_payments or 0),
@@ -693,7 +749,9 @@ class PaymentService:
             "failed_payments": int(row.failed_payments or 0),
             "pending_payments": int(row.pending_payments or 0),
             "refunded_payments": int(row.refunded_payments or 0),
-            "currency": "usd",
+            "currency": currency
+            if currency_count <= 1 and currency
+            else ("mixed" if currency_count > 1 else "usd"),
         }
 
     async def delete_payment_method(
@@ -746,7 +804,9 @@ class PaymentService:
         """
         Get the user's current subscription.
         """
-        result = await db.execute(select(Subscription).where(Subscription.user_id == user_id))
+        result = await db.execute(
+            select(Subscription).where(Subscription.user_id == user_id).with_for_update()
+        )
         return result.scalar_one_or_none()
 
     async def create_or_update_subscription(
@@ -921,6 +981,9 @@ class PaymentService:
                         ],
                         "proration_behavior": "always_invoice",
                         "expand": ["latest_invoice"],
+                        # Do not persist a paid plan when the invoice needs
+                        # payment or customer action.
+                        "payment_behavior": "error_if_incomplete",
                     }
                     modify_kwargs_typed: dict[str, Any] = modify_kwargs
                     if stripe_payment_method_id:
@@ -948,6 +1011,7 @@ class PaymentService:
                             default_payment_method=stripe_payment_method_id,
                             metadata={"user_id": str(user_id)},
                             expand=["latest_invoice"],
+                            payment_behavior="default_incomplete",
                         )
                         existing.stripe_subscription_id = stripe_sub.id
 
@@ -966,6 +1030,7 @@ class PaymentService:
                     items=[{"price": stripe_price_id}],
                     default_payment_method=stripe_payment_method_id,
                     metadata={"user_id": str(user_id)},
+                    payment_behavior="default_incomplete",
                 )
                 existing.stripe_subscription_id = stripe_sub.id
 
@@ -982,7 +1047,9 @@ class PaymentService:
 
             # Update local DB fields
             existing.plan = SubscriptionPlan(data.plan.value)
-            existing.status = SubscriptionStatus.ACTIVE
+            existing.status = self._subscription_status_from_stripe(
+                stripe_sub, default=SubscriptionStatus.INCOMPLETE
+            )
             existing.stripe_customer_id = customer_id
             existing.price_amount = plan_info.price_monthly
             existing.price_currency = plan_info.currency
@@ -1003,6 +1070,7 @@ class PaymentService:
                 default_payment_method=stripe_payment_method_id,
                 metadata={"user_id": str(user_id)},
                 expand=["latest_invoice"],
+                payment_behavior="default_incomplete",
                 idempotency_key=idem_key,
             )
 
@@ -1019,7 +1087,9 @@ class PaymentService:
                 stripe_customer_id=customer_id,
                 stripe_subscription_id=stripe_sub.id,
                 plan=SubscriptionPlan(data.plan.value),
-                status=SubscriptionStatus.ACTIVE,
+                status=self._subscription_status_from_stripe(
+                    stripe_sub, default=SubscriptionStatus.INCOMPLETE
+                ),
                 price_amount=plan_info.price_monthly,
                 price_currency=plan_info.currency,
                 default_payment_method_id=data.payment_method_id,
@@ -1047,8 +1117,8 @@ class PaymentService:
         """
         self._check_configured()
 
-        # Use payment lock to prevent concurrent cancellation
-        async with payment_lock(user_id, "cancel_subscription"):
+        # Use the same lock namespace as create/update/resume.
+        async with payment_lock(user_id, "subscription"):
             subscription = await self.get_subscription(db, user_id)
             if not subscription:
                 return None
@@ -1096,7 +1166,7 @@ class PaymentService:
         self._check_configured()
 
         # Use payment lock to prevent concurrent resume
-        async with payment_lock(user_id, "resume_subscription"):
+        async with payment_lock(user_id, "subscription"):
             subscription = await self.get_subscription(db, user_id)
             if not subscription:
                 raise ValueError("No subscription found")
@@ -1177,15 +1247,19 @@ class PaymentService:
         )
 
         try:
-            db.add(history)
-            await db.commit()
+            async with _payment_savepoint(db):
+                db.add(history)
+                await db.flush()
             logger.info(f"Recorded immediate payment for invoice {invoice.id}")
-        except Exception as e:
-            # Likely duplicate
-            await db.rollback()
-            logger.debug(f"Skipped duplicate invoice recording: {e}")
+        except IntegrityError:
+            # A concurrent webhook may have inserted the same invoice. Only
+            # suppress the database integrity error; connection/programming
+            # failures must reach the caller and trigger a retry.
+            logger.debug(f"Skipped duplicate invoice recording: {invoice.id}")
 
-    async def process_webhook(self, db: AsyncSession, event: stripe.Event):  # noqa: PLR0912
+    async def process_webhook(  # noqa: PLR0912, PLR0915
+        self, db: AsyncSession, event: stripe.Event
+    ):
         """
         Process Stripe webhook events to keep local DB in sync.
         Implements idempotency using WebhookEventLog to prevent duplicate processing.
@@ -1194,21 +1268,30 @@ class PaymentService:
 
         from models.webhook_log import WebhookEventLog
 
-        event_id = event.get("id")
-        event_type = event.get("type")
-        data = event.get("data", {}).get("object", {})
+        event_data = cast("dict[str, Any]", event)
+        event_id = event_data.get("id")
+        event_type = event_data.get("type")
+        data = event_data.get("data", {}).get("object", {})
 
         logger.info(f"Received webhook event: {event_type} (ID: {event_id})")
 
         # Check for duplicate event (idempotency)
+        if not event_id:
+            raise ValueError("Stripe webhook event is missing its id")
+
         existing_log = await db.execute(
-            select(WebhookEventLog).where(WebhookEventLog.stripe_event_id == event_id)
+            select(WebhookEventLog)
+            .where(WebhookEventLog.stripe_event_id == event_id)
+            .with_for_update()
         )
         existing = existing_log.scalar_one_or_none()
 
         if existing and existing.processed:
             logger.info(f"Skipping already processed webhook event: {event_id}")
             return
+
+        # Preserve the retry number when a failed handler is rolled back below.
+        retry_count = (existing.retry_count or 0) + 1 if existing else 1
 
         # Create or update log entry
         if not existing:
@@ -1222,10 +1305,29 @@ class PaymentService:
                 processed=False,
             )
             db.add(webhook_log)
-            await db.flush()
+            try:
+                # Keep the unique event claim in the same transaction as the
+                # handler. Concurrent deliveries block here, then re-read the
+                # committed claim instead of processing the event twice.
+                await db.flush()
+            except IntegrityError:
+                await db.rollback()
+                existing_log = await db.execute(
+                    select(WebhookEventLog)
+                    .where(WebhookEventLog.stripe_event_id == event_id)
+                    .with_for_update()
+                )
+                existing = existing_log.scalar_one_or_none()
+                if existing is None:
+                    raise
+                if existing.processed:
+                    logger.info(f"Skipping already processed webhook event: {event_id}")
+                    return
+                webhook_log = existing
+                webhook_log.retry_count = retry_count
         else:
             webhook_log = existing
-            webhook_log.retry_count += 1
+            webhook_log.retry_count = retry_count
 
         try:
             # Process based on event type
@@ -1265,9 +1367,26 @@ class PaymentService:
             logger.info(f"Successfully processed webhook event: {event_id}")
 
         except Exception as e:
-            # Log error but don't fail - allow retry
-            webhook_log.error_message = str(e)
-            await db.commit()
+            # Roll back handler changes before recording the retryable error.
+            await db.rollback()
+            try:
+                error_result = await db.execute(
+                    select(WebhookEventLog).where(WebhookEventLog.stripe_event_id == event_id)
+                )
+                error_log = error_result.scalar_one_or_none()
+                if error_log is None:
+                    error_log = WebhookEventLog(
+                        stripe_event_id=event_id,
+                        event_type=event_type,
+                        raw_payload=None,
+                        processed=False,
+                    )
+                    db.add(error_log)
+                error_log.error_message = str(e)
+                error_log.retry_count = retry_count
+                await db.commit()
+            except Exception:
+                await db.rollback()
             logger.error(f"Error processing webhook {event_id}: {e}")
             raise
 
@@ -1291,9 +1410,17 @@ class PaymentService:
 
         # Update fields
         new_status = stripe_sub.get("status")
-        subscription.status = SubscriptionStatus(
-            cast("str", new_status or subscription.status.value)
-        )
+        try:
+            subscription.status = SubscriptionStatus(
+                cast("str", new_status or subscription.status.value)
+            )
+        except ValueError:
+            logger.error(
+                "Ignoring unknown Stripe subscription status %r for %s",
+                new_status,
+                subscription.id,
+            )
+            return
         subscription.cancel_at_period_end = stripe_sub.get("cancel_at_period_end", False)
 
         # If subscription is no longer valid for access, downgrade to FREE
@@ -1315,7 +1442,6 @@ class PaymentService:
                 ts = int(stripe_sub["current_period_end"])
                 subscription.current_period_end = datetime.fromtimestamp(ts).isoformat()
 
-        await db.commit()
         logger.info(f"Updated subscription {subscription.id} from webhook")
 
     async def _handle_subscription_deleted(self, db: AsyncSession, stripe_sub: dict):
@@ -1339,10 +1465,11 @@ class PaymentService:
         subscription.current_period_start = None
         subscription.current_period_end = None
 
-        await db.commit()
         logger.info(f"Downgraded subscription {subscription.id} to FREE due to deletion webhook")
 
-    async def _handle_payment_succeeded(self, db: AsyncSession, invoice: dict):
+    async def _handle_payment_succeeded(  # noqa: PLR0912, PLR0915
+        self, db: AsyncSession, invoice: dict
+    ):
         """
         Record a successful payment.
         """
@@ -1362,8 +1489,10 @@ class PaymentService:
             logger.warning(f"Payment succeeded for unknown customer {customer_id}")
             return
 
-        # Get subscription ID if present
-        subscription_id = None
+        invoice_id = invoice.get("id")
+        # Resolve all local links before both fresh inserts and promotion of a
+        # previously failed row. Promoted rows must remain refund-reconcilable.
+        subscription_id: UUID | None = None
         if invoice.get("subscription"):
             result = await db.execute(
                 select(Subscription).where(
@@ -1374,21 +1503,16 @@ class PaymentService:
             if sub:
                 subscription_id = sub.id
 
-        # Get payment method - look up from invoice or charge
-        payment_method_id = None
+        payment_method_id: UUID | None = None
         stripe_pm_id = invoice.get("default_payment_method")
-
-        # If no default_payment_method on invoice, try to get from charge
         if not stripe_pm_id:
             charge_id = invoice.get("charge")
             if charge_id and isinstance(charge_id, str):
                 try:
                     charge = await self._run_stripe_cmd(stripe.Charge.retrieve, charge_id)
                     stripe_pm_id = charge.payment_method
-                except Exception as e:
-                    logger.debug(f"Could not retrieve charge {charge_id}: {e}")
-
-        # Link to our local payment method record
+                except StripeError as e:
+                    logger.debug("Could not retrieve charge %s: %s", charge_id, e)
         if stripe_pm_id:
             result = await db.execute(
                 select(PaymentMethod).where(
@@ -1399,6 +1523,36 @@ class PaymentService:
             pm = result.scalar_one_or_none()
             if pm:
                 payment_method_id = pm.id
+
+        existing_history = None
+        if invoice_id:
+            existing_payment = await db.execute(
+                select(PaymentHistory)
+                .where(PaymentHistory.stripe_invoice_id == invoice_id)
+                .with_for_update()
+            )
+            existing_history = existing_payment.scalar_one_or_none()
+            if existing_history is not None:
+                if existing_history.status == PaymentStatus.SUCCEEDED:
+                    logger.info(f"Payment already recorded for invoice {invoice_id}")
+                    return
+                existing_history.status = PaymentStatus.SUCCEEDED
+                existing_history.amount = amount_paid / 100.0
+                existing_history.currency = invoice.get("currency", "usd")
+                existing_history.subscription_id = subscription_id  # type: ignore[assignment]
+                existing_history.payment_method_id = payment_method_id  # type: ignore[assignment]
+                existing_history.stripe_payment_intent_id = invoice.get("payment_intent")
+                existing_history.stripe_charge_id = invoice.get("charge")
+                existing_history.invoice_url = invoice.get("hosted_invoice_url")
+                existing_history.receipt_url = invoice.get("receipt_url")
+                existing_history.failure_code = None
+                existing_history.failure_message = None
+                existing_history.description = (
+                    invoice.get("description") or f"Invoice {invoice.get('number')}"
+                )
+                await db.flush()
+                logger.info(f"Promoted payment {invoice_id} to succeeded")
+                return
 
         # Create history record
         history = PaymentHistory(
@@ -1417,20 +1571,31 @@ class PaymentService:
         )
 
         try:
-            db.add(history)
-            await db.commit()
-            logger.info(
-                f"Recorded payment of {history.amount} {history.currency} for user {user.id}"
-            )
-        except Exception as e:
-            # Check for integrity error (duplicate payment)
-            if "IntegrityError" in type(e).__name__ or "unique constraint" in str(e).lower():
-                await db.rollback()
-                logger.warning(
-                    f"Duplicate payment event received for invoice {invoice.get('id')}. Skipping."
+            async with _payment_savepoint(db):
+                db.add(history)
+                await db.flush()
+        except IntegrityError:
+            # A concurrent delivery may have inserted the same invoice or
+            # payment intent after the pre-check. The unique constraint is
+            # the final idempotency boundary; re-read the committed row and
+            # treat the webhook as already handled when it exists.
+            identity_filters = []
+            if invoice.get("id"):
+                identity_filters.append(PaymentHistory.stripe_invoice_id == invoice.get("id"))
+            if invoice.get("payment_intent"):
+                identity_filters.append(
+                    PaymentHistory.stripe_payment_intent_id == invoice.get("payment_intent")
                 )
-            else:
-                raise e
+            if not identity_filters:
+                raise
+            duplicate_result = await db.execute(
+                select(PaymentHistory).where(or_(*identity_filters))
+            )
+            if duplicate_result.scalar_one_or_none() is None:
+                raise
+            logger.info("Payment already recorded concurrently")
+            return
+        logger.info(f"Recorded payment of {history.amount} {history.currency} for user {user.id}")
 
     async def _handle_payment_failed(self, db: AsyncSession, invoice: dict):
         """
@@ -1446,6 +1611,32 @@ class PaymentService:
         if not user:
             return
 
+        invoice_id = invoice.get("id")
+        if invoice_id:
+            existing_failure = await db.execute(
+                select(PaymentHistory)
+                .where(
+                    PaymentHistory.user_id == user.id,
+                    PaymentHistory.stripe_invoice_id == invoice_id,
+                )
+                .with_for_update()
+            )
+            existing_history = existing_failure.scalar_one_or_none()
+            if existing_history is not None:
+                if existing_history.status == PaymentStatus.SUCCEEDED:
+                    logger.info(f"Ignoring late failed event for succeeded invoice {invoice_id}")
+                    return
+                if existing_history.status == PaymentStatus.FAILED:
+                    logger.info(f"Failed payment already recorded for invoice {invoice_id}")
+                    return
+                existing_history.status = PaymentStatus.FAILED
+                existing_history.failure_code = invoice.get("last_payment_error", {}).get("code")
+                existing_history.failure_message = invoice.get("last_payment_error", {}).get(
+                    "message"
+                )
+                await db.flush()
+                return
+
         history = PaymentHistory(
             user_id=user.id,
             stripe_payment_intent_id=invoice.get("payment_intent"),
@@ -1458,8 +1649,27 @@ class PaymentService:
             failure_code=invoice.get("last_payment_error", {}).get("code"),
             failure_message=invoice.get("last_payment_error", {}).get("message"),
         )
-        db.add(history)
-        await db.commit()
+        try:
+            async with _payment_savepoint(db):
+                db.add(history)
+                await db.flush()
+        except IntegrityError:
+            identity_filters = []
+            if invoice_id:
+                identity_filters.append(PaymentHistory.stripe_invoice_id == invoice_id)
+            if invoice.get("payment_intent"):
+                identity_filters.append(
+                    PaymentHistory.stripe_payment_intent_id == invoice.get("payment_intent")
+                )
+            if not identity_filters:
+                raise
+            duplicate_result = await db.execute(
+                select(PaymentHistory).where(or_(*identity_filters))
+            )
+            if duplicate_result.scalar_one_or_none() is None:
+                raise
+            logger.info("Failed payment already recorded concurrently")
+            return
         logger.warning(f"Recorded FAILED payment for user {user.id}")
 
     async def _handle_payment_method_attached(self, _db: AsyncSession, pm_data: dict):
@@ -1485,7 +1695,6 @@ class PaymentService:
 
         if payment_method:
             payment_method.is_active = False
-            await db.commit()
             logger.info(f"Deactivated payment method {payment_method.id} via webhook")
 
     async def _handle_charge_refunded(self, db: AsyncSession, charge_data: dict):
@@ -1519,7 +1728,6 @@ class PaymentService:
                     f"{history.description} (Partial Refund: ${amount_refunded:.2f})"
                 )
 
-            await db.commit()
             logger.info(
                 f"Updated payment {history.id} with refund: ${amount_refunded:.2f} (full={refunded})"
             )

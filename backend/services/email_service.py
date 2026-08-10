@@ -4,6 +4,7 @@ Async Email service for sending system emails using Resend.
 
 import os
 from datetime import datetime
+from html import escape
 
 import httpx
 
@@ -87,13 +88,16 @@ class EmailService:
 
     @staticmethod
     def _get_base_template(subject: str, content: str, action_url: str, action_text: str) -> str:
+        safe_subject = escape(str(subject))
+        safe_action_url = escape(str(action_url), quote=True)
+        safe_action_text = escape(str(action_text))
         return f"""
         <!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>{subject}</title>
+            <title>{safe_subject}</title>
             <!--[if mso]>
             <noscript>
             <xml>
@@ -266,14 +270,14 @@ class EmailService:
                     <div class="content">
                         <!-- Hero Icon (Optional, can be added if we have a hosted image) -->
 
-                        <h1>{subject}</h1>
+                        <h1>{safe_subject}</h1>
 
                         <div class="text-body">
                             {content}
                         </div>
 
                         <div class="button-container">
-                            <a href="{action_url}" class="button">{action_text}</a>
+                            <a href="{safe_action_url}" class="button">{safe_action_text}</a>
                         </div>
 
                         <div class="divider"></div>
@@ -281,7 +285,7 @@ class EmailService:
                         <p style="font-size: 14px; color: #6b7280;">
                             Having trouble clicking the button? Copy and paste this link into your browser:
                             <br>
-                            <a href="{action_url}" class="link-text">{action_url}</a>
+                            <a href="{safe_action_url}" class="link-text">{safe_action_url}</a>
                         </p>
                     </div>
 

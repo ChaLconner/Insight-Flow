@@ -5,10 +5,11 @@ Uses centralized CacheService for caching.
 """
 
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import String, and_, case, cast, distinct, func, or_, select
+from sqlalchemy import String, and_, case, cast, distinct, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.project import Project, ProjectMember
@@ -123,16 +124,15 @@ class AsyncAnalyticsService:
         Get overview metrics for the given projects.
         B2: Optimized from 3 queries to 2 by merging active_projects + member_count.
         """
-        # Query 1: Task stats in a single pass
-        task_stats_result = await self.db.execute(
+        task_stats = (
             select(
-                func.count(Task.id).label("total"),
+                func.count(Task.id).label("total_tasks"),
                 func.sum(
                     case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
-                ).label("completed"),
+                ).label("completed_tasks"),
                 func.sum(
                     case((cast(Task.status, String) == TaskStatus.IN_PROGRESS.value, 1), else_=0)
-                ).label("in_progress"),
+                ).label("in_progress_tasks"),
                 func.sum(
                     case(
                         (
@@ -144,18 +144,12 @@ class AsyncAnalyticsService:
                         ),
                         else_=0,
                     )
-                ).label("overdue"),
-            ).filter(Task.project_id.in_(project_ids))
+                ).label("overdue_tasks"),
+            )
+            .filter(Task.project_id.in_(project_ids))
+            .cte("analytics_task_stats")
         )
-        task_stats = task_stats_result.first()
-
-        total_tasks = task_stats[0] or 0
-        completed_tasks = task_stats[1] or 0
-        in_progress_tasks = task_stats[2] or 0
-        overdue_tasks = task_stats[3] or 0
-
-        # Query 2: Active projects + team member count combined
-        counts_result = await self.db.execute(
+        counts = (
             select(
                 func.count(
                     distinct(case((Project.is_active == True, Project.id), else_=None))
@@ -165,10 +159,19 @@ class AsyncAnalyticsService:
             .select_from(Project)
             .outerjoin(ProjectMember, Project.id == ProjectMember.project_id)
             .filter(Project.id.in_(project_ids))
+            .cte("analytics_project_counts")
         )
-        counts = counts_result.first()
-        active_projects = counts[0] or 0 if counts else 0
-        member_count = counts[1] or 0 if counts else 0
+        combined_stmt = select(task_stats, counts).select_from(task_stats).join(counts, true())
+        combined_result = await self.db.execute(combined_stmt)
+        combined_row = combined_result.first()
+        values = combined_row._mapping if combined_row is not None else {}
+
+        total_tasks = values["total_tasks"] or 0
+        completed_tasks = values["completed_tasks"] or 0
+        in_progress_tasks = values["in_progress_tasks"] or 0
+        overdue_tasks = values["overdue_tasks"] or 0
+        active_projects = values["active_projects"] or 0
+        member_count = values["member_count"] or 0
 
         completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
 
@@ -277,26 +280,40 @@ class AsyncAnalyticsService:
         current_start = datetime.now(UTC) - timedelta(days=days)
         previous_start = current_start - timedelta(days=days)
 
-        # Current period completed count
-        current_result = await self.db.execute(
-            select(func.count(distinct(TaskHistory.task_id))).filter(
-                TaskHistory.project_id.in_(project_ids),
-                cast(TaskHistory.activity_type, String) == ActivityType.TASK_COMPLETED.value,
-                TaskHistory.timestamp >= current_start,
-            )
-        )
-        current_completed = current_result.scalar() or 0
-
-        # Previous period
-        previous_result = await self.db.execute(
-            select(func.count(distinct(TaskHistory.task_id))).filter(
+        trend_result = await self.db.execute(
+            select(
+                func.count(
+                    distinct(
+                        case(
+                            (
+                                TaskHistory.timestamp >= current_start,
+                                TaskHistory.task_id,
+                            )
+                        )
+                    )
+                ).label("current_completed"),
+                func.count(
+                    distinct(
+                        case(
+                            (
+                                and_(
+                                    TaskHistory.timestamp >= previous_start,
+                                    TaskHistory.timestamp < current_start,
+                                ),
+                                TaskHistory.task_id,
+                            )
+                        )
+                    )
+                ).label("previous_completed"),
+            ).filter(
                 TaskHistory.project_id.in_(project_ids),
                 cast(TaskHistory.activity_type, String) == ActivityType.TASK_COMPLETED.value,
                 TaskHistory.timestamp >= previous_start,
-                TaskHistory.timestamp < current_start,
             )
         )
-        previous_completed = previous_result.scalar() or 0
+        trend_values = trend_result.first()
+        current_completed = trend_values.current_completed if trend_values is not None else 0
+        previous_completed = trend_values.previous_completed if trend_values is not None else 0
 
         # Calculate changes
         completed_change = self._calculate_percentage_change(current_completed, previous_completed)
@@ -327,24 +344,37 @@ class AsyncAnalyticsService:
         # Calculate start date
         start_date = datetime.now(UTC) - timedelta(days=days)
 
-        # Helper to get counts by date for a specific activity type
-        async def get_counts(activity_type):
-            result = await self.db.execute(
-                select(
-                    func.date(TaskHistory.timestamp).label("date"),
-                    func.count(TaskHistory.id).label("count"),
-                )
-                .filter(
-                    TaskHistory.project_id.in_(project_ids),
-                    cast(TaskHistory.activity_type, String) == activity_type.value,
-                    TaskHistory.timestamp >= start_date,
-                )
-                .group_by(func.date(TaskHistory.timestamp))
+        result = await self.db.execute(
+            select(
+                func.date(TaskHistory.timestamp).label("date"),
+                cast(TaskHistory.activity_type, String).label("activity_type"),
+                func.count(TaskHistory.id).label("count"),
             )
-            return {str(row[0]): row[1] for row in result.all()}
-
-        created_counts = await get_counts(ActivityType.TASK_CREATED)
-        completed_counts = await get_counts(ActivityType.TASK_COMPLETED)
+            .filter(
+                TaskHistory.project_id.in_(project_ids),
+                cast(TaskHistory.activity_type, String).in_(
+                    [ActivityType.TASK_CREATED.value, ActivityType.TASK_COMPLETED.value]
+                ),
+                TaskHistory.timestamp >= start_date,
+            )
+            .group_by(
+                func.date(TaskHistory.timestamp),
+                cast(TaskHistory.activity_type, String),
+            )
+        )
+        created_counts: dict[str, int] = {}
+        completed_counts: dict[str, int] = {}
+        for row in result.all():
+            row_mapping = getattr(row, "_mapping", None)
+            raw_count: Any = (
+                row_mapping.get("count")
+                if isinstance(row_mapping, Mapping)
+                else getattr(row, "count", 0)
+            )
+            if row.activity_type == ActivityType.TASK_CREATED.value:
+                created_counts[str(row.date)] = int(raw_count)
+            else:
+                completed_counts[str(row.date)] = int(raw_count)
 
         # Generate complete date range (analytics charts expect continuous dates)
         trends = []

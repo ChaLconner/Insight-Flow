@@ -19,6 +19,8 @@ router = APIRouter(tags=["health"])
 
 _db_probe_lock = asyncio.Lock()
 _db_probe_cache: tuple[float, dict[str, Any]] | None = None
+_readiness_lock = asyncio.Lock()
+_readiness_cache: tuple[float, dict[str, Any]] | None = None
 
 
 def _settings():
@@ -79,20 +81,42 @@ async def health_check():
 @router.get("/health/ready")
 async def readiness_check():
     """Return 200 only when required runtime dependencies are reachable."""
-    settings = _settings()
-    from sqlalchemy import text
+    global _readiness_cache
 
-    from database import AsyncSessionLocal
+    settings = _settings()
     from services.cache_service import cache_service
 
     try:
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
+        now = time.monotonic()
+        ttl = float(getattr(settings, "health_check_cache_ttl_seconds", 1.0))
+        if _readiness_cache and ttl > 0 and now - _readiness_cache[0] < ttl:
+            payload = _readiness_cache[1]
+            return JSONResponse(status_code=payload["status_code"], content=payload["body"])
 
-        if settings.cache.redis_url and not await cache_service.ensure_connected():
-            raise RuntimeError("Redis is unavailable")
+        async with _readiness_lock:
+            now = time.monotonic()
+            if _readiness_cache and ttl > 0 and now - _readiness_cache[0] < ttl:
+                payload = _readiness_cache[1]
+                return JSONResponse(status_code=payload["status_code"], content=payload["body"])
 
-        return {"status": "ready"}
+            probe = await _probe_database(settings)
+            cache_enabled = getattr(settings.cache, "enabled", True)
+            redis_unavailable = (
+                cache_enabled
+                and settings.cache.redis_url
+                and not await cache_service.ensure_connected()
+            )
+            if not probe["healthy"] or redis_unavailable:
+                payload = {
+                    "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "body": {"status": "not_ready"},
+                }
+            else:
+                payload = {"status_code": status.HTTP_200_OK, "body": {"status": "ready"}}
+
+            if ttl > 0:
+                _readiness_cache = (time.monotonic(), payload)
+            return JSONResponse(status_code=payload["status_code"], content=payload["body"])
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
         return JSONResponse(

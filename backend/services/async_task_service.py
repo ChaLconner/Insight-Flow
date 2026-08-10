@@ -360,9 +360,11 @@ class AsyncTaskService:
             cache_user_ids = await get_project_cache_user_ids(
                 self.db,
                 task.project_id,
-                (user_id, old_assignee_id, task.assignee_id)
-                if old_assignee_id
-                else (user_id, task.assignee_id),
+                tuple(
+                    value
+                    for value in (user_id, old_assignee_id, task.assignee_id)
+                    if value is not None
+                ),
             )
 
             from services.async_task_history_service import AsyncTaskHistoryService

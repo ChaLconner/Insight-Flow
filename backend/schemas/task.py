@@ -60,8 +60,8 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     """Schema for updating task information."""
 
-    title: str | None = None
-    description: str | None = None
+    title: str | None = Field(None, min_length=1, max_length=150)
+    description: str | None = Field(None, max_length=2000)
     status: str | None = None
     assignee_id: uuid.UUID | None = None
     due_date: datetime | None = None

@@ -113,15 +113,18 @@ async def test_get_analytics_overview_success(analytics_service, user_id, projec
 
 @pytest.mark.asyncio
 async def test_get_overview_metrics(analytics_service, user_id, project_ids):
-    # Mock task stats (total, completed, in_progress, overdue)
-    res_tasks = MagicMock()
-    res_tasks.first.return_value = (10, 5, 3, 2)
-
-    # Mock combined active project and member counts
-    res_counts = MagicMock()
-    res_counts.first.return_value = (1, 4)
-
-    analytics_service.db.execute.side_effect = [res_tasks, res_counts]
+    res = MagicMock()
+    res.first.return_value = MagicMock(
+        _mapping={
+            "total_tasks": 10,
+            "completed_tasks": 5,
+            "in_progress_tasks": 3,
+            "overdue_tasks": 2,
+            "active_projects": 1,
+            "member_count": 4,
+        }
+    )
+    analytics_service.db.execute.return_value = res
 
     metrics = await analytics_service._get_overview_metrics(project_ids, user_id, total_projects=2)
 
@@ -171,14 +174,9 @@ async def test_get_team_stats(analytics_service, project_ids):
 
 @pytest.mark.asyncio
 async def test_get_trends(analytics_service, project_ids):
-    # Mock DB counts: current_completed, previous_completed
-    res_curr = MagicMock()
-    res_curr.scalar.return_value = 20
-
-    res_prev = MagicMock()
-    res_prev.scalar.return_value = 10
-
-    analytics_service.db.execute.side_effect = [res_curr, res_prev]
+    res = MagicMock()
+    res.first.return_value = MagicMock(current_completed=20, previous_completed=10)
+    analytics_service.db.execute.return_value = res
 
     trends = await analytics_service._get_trends(project_ids, days=30)
 
@@ -189,15 +187,13 @@ async def test_get_trends(analytics_service, project_ids):
 
 @pytest.mark.asyncio
 async def test_get_daily_trends(analytics_service, project_ids):
-    # Mock daily counts
     today_str = str(datetime.now(UTC).date())
-    res_created = MagicMock()
-    res_created.all.return_value = [(today_str, 5)]
-
-    res_completed = MagicMock()
-    res_completed.all.return_value = [(today_str, 3)]
-
-    analytics_service.db.execute.side_effect = [res_created, res_completed]
+    res = MagicMock()
+    res.all.return_value = [
+        MagicMock(date=today_str, activity_type="TASK_CREATED", count=5),
+        MagicMock(date=today_str, activity_type="TASK_COMPLETED", count=3),
+    ]
+    analytics_service.db.execute.return_value = res
 
     trends = await analytics_service._get_daily_trends(project_ids, days=7)
 

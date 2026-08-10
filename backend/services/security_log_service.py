@@ -1,7 +1,9 @@
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Request
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.security_log import SecurityLog
@@ -64,3 +66,13 @@ class SecurityLogService:
         except Exception as e:
             logger.error(f"Failed to write security log: {e}")
             # Don't raise, we don't want to break the app flow just for logging
+
+    @staticmethod
+    async def cleanup_old_logs(db: AsyncSession, retention_days: int) -> int:
+        """Bound persistent telemetry storage and return rows removed."""
+        if retention_days <= 0:
+            raise ValueError("retention_days must be greater than zero")
+        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+        result = await db.execute(delete(SecurityLog).where(SecurityLog.timestamp < cutoff))
+        await db.commit()
+        return int(getattr(result, "rowcount", 0) or 0)

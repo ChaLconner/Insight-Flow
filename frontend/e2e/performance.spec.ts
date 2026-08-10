@@ -4,6 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
+const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
+
 test.describe('Performance Tests', () => {
   test.describe('Page Load Performance', () => {
     test('login page should load within 3 seconds', async ({ page }) => {
@@ -164,58 +166,57 @@ test.describe('Performance Tests', () => {
 
   test.describe('Image Optimization', () => {
     test('should lazy load images below the fold', async ({ page }) => {
+      test.skip(!hasE2EAuth, 'E2E credentials are not configured');
       await page.goto('/dashboard');
       
       await page.waitForLoadState('networkidle');
+
+      await expect(page).toHaveURL(/dashboard/);
+      const images = await page.locator('img').all();
       
-      if (page.url().includes('dashboard')) {
-        const images = await page.locator('img').all();
+      let lazyLoadedCount = 0;
+      for (const img of images) {
+        const loading = await img.getAttribute('loading');
         
-        let lazyLoadedCount = 0;
-        for (const img of images) {
-          const loading = await img.getAttribute('loading');
-          
-          // Count images with lazy loading attribute
-          if (loading === 'lazy') {
-            lazyLoadedCount++;
-          }
+        // Count images with lazy loading attribute
+        if (loading === 'lazy') {
+          lazyLoadedCount++;
         }
-        
-        // If there are images, at least some should use lazy loading
-        // or the test passes if no images exist
-        if (images.length > 0) {
-          // At minimum, verify images are accessible
-          expect(images.length).toBeGreaterThan(0);
-        }
+      }
+
+      // If there are images, at least some should use lazy loading.
+      if (images.length > 0) {
+        expect(lazyLoadedCount).toBeGreaterThan(0);
       }
     });
 
     test('should use modern image formats', async ({ page }) => {
+      test.skip(!hasE2EAuth, 'E2E credentials are not configured');
       await page.goto('/dashboard');
       
       await page.waitForLoadState('networkidle');
+
+      await expect(page).toHaveURL(/dashboard/);
+      const images = await page.locator('img').all();
       
-      if (page.url().includes('dashboard')) {
-        const images = await page.locator('img').all();
+      let optimizedCount = 0;
+      for (const img of images) {
+        const src = await img.getAttribute('src');
         
-        let optimizedCount = 0;
-        for (const img of images) {
-          const src = await img.getAttribute('src');
-          
-          if (src) {
-            // Next.js Image optimization should use WebP or AVIF
-            const isOptimized = src.includes('_next/image') || 
-                               src.endsWith('.webp') || 
-                               src.endsWith('.avif') ||
-                               src.endsWith('.svg');
-            if (isOptimized) {
-              optimizedCount++;
-            }
+        if (src) {
+          // Next.js Image optimization should use WebP or AVIF
+          const isOptimized = src.includes('_next/image') ||
+                             src.endsWith('.webp') ||
+                             src.endsWith('.avif') ||
+                             src.endsWith('.svg');
+          if (isOptimized) {
+            optimizedCount++;
           }
         }
-        
-        // Assert that we've checked images (test ran successfully)
-        expect(images.length).toBeGreaterThanOrEqual(0);
+      }
+
+      if (images.length > 0) {
+        expect(optimizedCount).toBe(images.length);
       }
     });
   });
