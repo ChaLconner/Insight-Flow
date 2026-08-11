@@ -134,15 +134,11 @@ export function NotificationsSettings() {
         setIsLoading(true);
         const userSettings = await usersApi.getSettings().catch(() => null) as { notificationPreferences?: { email?: Partial<EmailNotificationSettings>; inApp?: Partial<InAppNotificationSettings> } } | null;
         if (userSettings?.notificationPreferences) {
+          const emailPreferences = userSettings.notificationPreferences.email;
+          const inAppPreferences = userSettings.notificationPreferences.inApp;
           setPreferences((prev) => ({
-            email: {
-              ...prev.email,
-              ...(userSettings.notificationPreferences?.email ?? {}),
-            },
-            inApp: {
-              ...prev.inApp,
-              ...(userSettings.notificationPreferences?.inApp ?? {}),
-            },
+            email: emailPreferences ? { ...prev.email, ...emailPreferences } : prev.email,
+            inApp: inAppPreferences ? { ...prev.inApp, ...inAppPreferences } : prev.inApp,
           }));
         }
       } catch {

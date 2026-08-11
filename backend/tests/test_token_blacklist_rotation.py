@@ -19,7 +19,7 @@ async def test_async_blacklist_token_claims_new_jti():
     db.execute.return_value = _result()
 
     with (
-        patch("random.random", return_value=0.9),
+        patch("models.token_blacklist.secrets.randbelow", return_value=9),
         patch.object(TokenBlacklist, "_invalidate_cache", new=AsyncMock()),
     ):
         claimed = await TokenBlacklist.async_blacklist_token(
@@ -37,7 +37,7 @@ async def test_async_blacklist_token_rejects_existing_jti():
     db.execute.return_value = _result(TokenBlacklist(token_jti="jti-used"))
 
     with (
-        patch("random.random", return_value=0.9),
+        patch("models.token_blacklist.secrets.randbelow", return_value=9),
         patch.object(TokenBlacklist, "_invalidate_cache", new=AsyncMock()),
     ):
         claimed = await TokenBlacklist.async_blacklist_token(
@@ -56,7 +56,7 @@ async def test_async_blacklist_token_rejects_concurrent_unique_conflict():
     db.commit.side_effect = IntegrityError("duplicate key", {}, Exception())
 
     with (
-        patch("random.random", return_value=0.9),
+        patch("models.token_blacklist.secrets.randbelow", return_value=9),
         patch.object(TokenBlacklist, "_invalidate_cache", new=AsyncMock()),
     ):
         claimed = await TokenBlacklist.async_blacklist_token(

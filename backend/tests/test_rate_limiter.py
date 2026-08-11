@@ -87,7 +87,7 @@ class TestRateLimits:
         # Assert - auth limits prevent rapid attempts
         assert "10/minute" in RateLimits.AUTH_LOGIN
         assert "5/minute" in RateLimits.AUTH_REGISTER
-        assert "3/minute" in RateLimits.AUTH_PASSWORD_RESET
+        assert "3/minute" in RateLimits.AUTH_CREDENTIAL_RESET
 
     def test_api_read_limits_are_higher(self):
         """Test read operations have higher limits than writes."""

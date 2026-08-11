@@ -13,6 +13,7 @@ import {
   truncate,
   getInitials,
   generateId,
+  secureRandomFloat,
   generateSlug,
   formatNumber,
   formatPercentage,
@@ -164,6 +165,19 @@ describe("Utils", () => {
       const val = random(1, 10);
       expect(val).toBeGreaterThanOrEqual(1);
       expect(val).toBeLessThanOrEqual(10);
+    });
+
+    it("rejects secure random generation when Web Crypto is unavailable", () => {
+      const originalCrypto = globalThis.crypto;
+      vi.stubGlobal("crypto", undefined);
+
+      try {
+        expect(() => secureRandomFloat()).toThrow(
+          "Secure random generator is unavailable",
+        );
+      } finally {
+        vi.stubGlobal("crypto", originalCrypto);
+      }
     });
   });
 

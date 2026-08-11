@@ -7,10 +7,10 @@ Usage: python scripts/seed_varied_tasks.py
 """
 
 import os
-import random
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
+from secrets import SystemRandom
 
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -23,6 +23,7 @@ from utils.logger import setup_logger
 
 # Use proper logging instead of print statements
 logger = setup_logger("seed_varied_tasks")
+secure_random = SystemRandom()
 
 
 def seed_varied_tasks():
@@ -56,7 +57,7 @@ def seed_varied_tasks():
             project_id = uuid.uuid4()
             project = Project(
                 id=project_id,
-                name=f"{config['name']} {random.randint(100, 999)}",
+                name=f"{config['name']} {secure_random.randint(100, 999)}",
                 description=f"Auto-generated project with {config['count']} tasks.",
                 owner_id=user.id,
                 is_active=True,
@@ -86,13 +87,13 @@ def seed_varied_tasks():
                     id=uuid.uuid4(),
                     title=f"Task {i + 1} - {project.name}",
                     description="Generated task for testing list virtualization and counts.",
-                    status=random.choice(statuses),
-                    priority=random.choice(priorities),
-                    type=random.choice(types),
+                    status=secure_random.choice(statuses),
+                    priority=secure_random.choice(priorities),
+                    type=secure_random.choice(types),
                     project_id=project.id,
                     created_by=user.id,
                     assignee_id=user.id,
-                    due_date=datetime.now(UTC) + timedelta(days=random.randint(-10, 30)),
+                    due_date=datetime.now(UTC) + timedelta(days=secure_random.randint(-10, 30)),
                 )
                 db.add(task)
 
@@ -100,7 +101,7 @@ def seed_varied_tasks():
         logger.info("Done! Validated task counts.")
 
     except Exception as e:
-        logger.error(f"Error seeding varied tasks: {e}", exc_info=True)
+        logger.exception(f"Error seeding varied tasks: {e}", exc_info=True)
         db.rollback()
     finally:
         db.close()

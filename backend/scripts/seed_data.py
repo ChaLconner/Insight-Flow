@@ -1,9 +1,9 @@
 import asyncio
 import os
-import random
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
+from secrets import SystemRandom
 
 from passlib.context import CryptContext
 from sqlalchemy import select
@@ -18,18 +18,212 @@ from models.task_history import ActivityType, TaskHistory
 from models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+secure_random = SystemRandom()
 
 
 def get_password_hash(password):
     return pwd_context.hash(password)
 
 
-async def seed_data():  # noqa: PLR0912, PLR0915
+async def _seed_users(session, users_data):
+    created_users = []
+    for user_data in users_data:
+        result = await session.execute(select(User).filter(User.email == user_data["email"]))
+        existing_user = result.scalars().first()
+        if existing_user:
+            existing_user.is_verified = True
+            existing_user.is_active = True
+            created_users.append(existing_user)
+            continue
+
+        user = User(
+            id=uuid.uuid4(),
+            email=user_data["email"],
+            name=user_data["name"],
+            username=user_data["email"].split("@")[0],
+            hashed_password=get_password_hash("password123"),
+            is_active=True,
+            is_verified=True,
+            role=user_data["role"],
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        session.add(user)
+        created_users.append(user)
+    await session.commit()
+    return created_users
+
+
+async def _seed_projects(session, users_map, created_users, projects_data):
+    created_projects = []
+    for project_data in projects_data:
+        owner = users_map.get(project_data["owner_email"])
+        if not owner:
+            print(f"Skipping project {project_data['name']} - owner not found")
+            continue
+
+        result = await session.execute(select(Project).filter(Project.name == project_data["name"]))
+        existing_project = result.scalars().first()
+        if existing_project:
+            created_projects.append(existing_project)
+            continue
+
+        project = Project(
+            id=uuid.uuid4(),
+            name=project_data["name"],
+            description=project_data["desc"],
+            owner_id=owner.id,
+            is_active=True,
+            created_at=datetime.now(UTC) - timedelta(days=90),
+            updated_at=datetime.now(UTC),
+        )
+        session.add(project)
+        created_projects.append(project)
+        session.add(
+            ProjectMember(
+                id=uuid.uuid4(),
+                project_id=project.id,
+                user_id=owner.id,
+                role=MemberRole.OWNER.value,
+                joined_at=datetime.now(UTC) - timedelta(days=90),
+            )
+        )
+        for user in created_users:
+            if user.id != owner.id and secure_random.random() > 0.4:
+                session.add(
+                    ProjectMember(
+                        id=uuid.uuid4(),
+                        project_id=project.id,
+                        user_id=user.id,
+                        role=MemberRole.MEMBER.value,
+                        joined_at=datetime.now(UTC) - timedelta(days=secure_random.randint(10, 80)),
+                    )
+                )
+    await session.commit()
+    return created_projects
+
+
+async def _add_all_users_to_projects(session, created_projects):
+    result = await session.execute(select(User))
+    all_users = result.scalars().all()
+    for project in created_projects:
+        members_result = await session.execute(
+            select(ProjectMember).filter(ProjectMember.project_id == project.id)
+        )
+        current_member_ids = {member.user_id for member in members_result.scalars().all()}
+        for user in all_users:
+            if user.id not in current_member_ids:
+                session.add(
+                    ProjectMember(
+                        id=uuid.uuid4(),
+                        project_id=project.id,
+                        user_id=user.id,
+                        role=MemberRole.MEMBER.value,
+                        joined_at=datetime.now(UTC) - timedelta(days=secure_random.randint(10, 80)),
+                    )
+                )
+    await session.commit()
+
+
+def _task_status():
+    status_roll = secure_random.random()
+    if status_roll < 0.3:
+        return TaskStatus.TODO
+    if status_roll < 0.7:
+        return TaskStatus.IN_PROGRESS
+    if status_roll < 0.8:
+        return TaskStatus.IN_REVIEW
+    return TaskStatus.DONE
+
+
+def _build_task(project, member_ids):
+    background_days = secure_random.randint(1, 90)
+    created_date = datetime.now(UTC) - timedelta(days=background_days)
+    status = _task_status()
+    creator_id = secure_random.choice(member_ids)
+    assignee_id = (
+        secure_random.choice(member_ids)
+        if status != TaskStatus.TODO or secure_random.random() < 0.8
+        else None
+    )
+    task = Task(
+        id=uuid.uuid4(),
+        title=f"Task {uuid.uuid4().hex[:6]}",
+        description="Automatically generated task description.",
+        status=status,
+        priority=secure_random.choice(list(TaskPriority)),
+        project_id=project.id,
+        created_by=creator_id,
+        assignee_id=assignee_id,
+        created_at=created_date,
+        due_date=created_date + timedelta(days=secure_random.randint(2, 14)),
+    )
+    return task, status, creator_id, assignee_id, created_date, background_days
+
+
+def _add_task_history(
+    session, task, status, creator_id, assignee_id, created_date, background_days
+):
+    session.add(
+        TaskHistory(
+            id=uuid.uuid4(),
+            project_id=task.project_id,
+            task_id=task.id,
+            user_id=creator_id,
+            activity_type=ActivityType.TASK_CREATED,
+            task_title=task.title,
+            description="Task created by user",
+            timestamp=created_date,
+        )
+    )
+    if status == TaskStatus.DONE:
+        completion_days = secure_random.randint(1, background_days) if background_days > 1 else 0
+        completed_date = min(created_date + timedelta(days=completion_days), datetime.now(UTC))
+        session.add(
+            TaskHistory(
+                id=uuid.uuid4(),
+                project_id=task.project_id,
+                task_id=task.id,
+                user_id=assignee_id or creator_id,
+                activity_type=ActivityType.TASK_COMPLETED,
+                task_title=task.title,
+                description="Task completed",
+                timestamp=completed_date,
+                new_values='{"status": "done"}',
+            )
+        )
+
+
+async def _seed_tasks(session, created_projects):
+    for project in created_projects:
+        members_result = await session.execute(
+            select(ProjectMember).filter(ProjectMember.project_id == project.id)
+        )
+        member_ids = [member.user_id for member in members_result.scalars().all()]
+        if not member_ids:
+            continue
+        for _ in range(50):
+            task, status, creator_id, assignee_id, created_date, background_days = _build_task(
+                project, member_ids
+            )
+            session.add(task)
+            _add_task_history(
+                session,
+                task,
+                status,
+                creator_id,
+                assignee_id,
+                created_date,
+                background_days,
+            )
+    await session.commit()
+
+
+async def seed_data():
     session = AsyncSessionLocal()
     try:
         print("Seeding data...")
 
-        # 1. Create Users
         users_data = [
             {"email": "admin@example.com", "name": "Admin User", "role": "admin"},
             {"email": "alice@example.com", "name": "Alice Johnson", "role": "user"},
@@ -37,40 +231,9 @@ async def seed_data():  # noqa: PLR0912, PLR0915
             {"email": "charlie@example.com", "name": "Charlie Brown", "role": "user"},
             {"email": "diana@example.com", "name": "Diana Prince", "role": "user"},
         ]
-
-        created_users = []
-        for u_data in users_data:
-            result = await session.execute(select(User).filter(User.email == u_data["email"]))
-            existing_user = result.scalars().first()
-
-            if not existing_user:
-                user = User(
-                    id=uuid.uuid4(),
-                    email=u_data["email"],
-                    name=u_data["name"],
-                    username=u_data["email"].split("@")[0],
-                    hashed_password=get_password_hash("password123"),
-                    is_active=True,
-                    is_verified=True,
-                    role=u_data["role"],
-                    created_at=datetime.now(UTC),
-                    updated_at=datetime.now(UTC),
-                )
-                session.add(user)
-                created_users.append(user)
-            else:
-                existing_user.is_verified = True
-                existing_user.is_active = True
-                created_users.append(existing_user)
-
-        await session.commit()
-
-        # Reload users to ensure we have IDs and attached state
-        # (Though we appended objects, some might be detached if we didn't refresh)
-        # Simple string-based lookup for the next steps
+        created_users = await _seed_users(session, users_data)
         users_map = {u.email: u for u in created_users}
 
-        # 2. Create Projects
         projects_data = [
             {
                 "name": "Frontend Redesign",
@@ -88,166 +251,11 @@ async def seed_data():  # noqa: PLR0912, PLR0915
                 "owner_email": "charlie@example.com",
             },
         ]
+        created_projects = await _seed_projects(session, users_map, created_users, projects_data)
 
-        # Ensure we have owners available
-        # Note: index mapping in original was fragile, using email map now
+        await _add_all_users_to_projects(session, created_projects)
 
-        created_projects = []
-        for p_data in projects_data:
-            owner = users_map.get(p_data["owner_email"])
-            if not owner:
-                print(f"Skipping project {p_data['name']} - owner not found")
-                continue
-
-            result = await session.execute(select(Project).filter(Project.name == p_data["name"]))
-            existing_project = result.scalars().first()
-
-            if not existing_project:
-                project = Project(
-                    id=uuid.uuid4(),
-                    name=p_data["name"],
-                    description=p_data["desc"],
-                    owner_id=owner.id,
-                    is_active=True,
-                    created_at=datetime.now(UTC) - timedelta(days=90),
-                    updated_at=datetime.now(UTC),
-                )
-                session.add(project)
-                created_projects.append(project)
-
-                # Add owner as member
-                pm_owner = ProjectMember(
-                    id=uuid.uuid4(),
-                    project_id=project.id,
-                    user_id=owner.id,
-                    role=MemberRole.OWNER.value,
-                    joined_at=datetime.now(UTC) - timedelta(days=90),
-                )
-                session.add(pm_owner)
-
-                # Add random members
-                for u in created_users:
-                    if u.id != owner.id and random.random() > 0.4:
-                        pm = ProjectMember(
-                            id=uuid.uuid4(),
-                            project_id=project.id,
-                            user_id=u.id,
-                            role=MemberRole.MEMBER.value,
-                            joined_at=datetime.now(UTC) - timedelta(days=random.randint(10, 80)),
-                        )
-                        session.add(pm)
-            else:
-                created_projects.append(existing_project)
-
-        await session.commit()
-
-        # 3. Add ALL existing users to the new projects (if configured to do so)
-        # Original script logic: add all users to created projects if not present
-
-        # Re-fetch all users to be safe
-        res_users = await session.execute(select(User))
-        all_users = res_users.scalars().all()
-
-        for project in created_projects:
-            res_members = await session.execute(
-                select(ProjectMember).filter(ProjectMember.project_id == project.id)
-            )
-            current_members = res_members.scalars().all()
-            current_member_ids = {m.user_id for m in current_members}
-
-            for user in all_users:
-                if user.id not in current_member_ids:
-                    pm = ProjectMember(
-                        id=uuid.uuid4(),
-                        project_id=project.id,
-                        user_id=user.id,
-                        role=MemberRole.MEMBER.value,
-                        joined_at=datetime.now(UTC) - timedelta(days=random.randint(10, 80)),
-                    )
-                    session.add(pm)
-
-        await session.commit()
-
-        # 4. Create Tasks and History
-        for project in created_projects:
-            # Get members
-            res_members = await session.execute(
-                select(ProjectMember).filter(ProjectMember.project_id == project.id)
-            )
-            members = res_members.scalars().all()
-            member_ids = [m.user_id for m in members]
-
-            if not members:
-                continue
-
-            for _ in range(50):
-                bg_days = random.randint(1, 90)
-                created_date = datetime.now(UTC) - timedelta(days=bg_days)
-
-                status_roll = random.random()
-                if status_roll < 0.3:
-                    status = TaskStatus.TODO
-                elif status_roll < 0.7:
-                    status = TaskStatus.IN_PROGRESS
-                elif status_roll < 0.8:
-                    status = TaskStatus.IN_REVIEW
-                else:
-                    status = TaskStatus.DONE
-
-                creator_id = random.choice(member_ids)
-
-                if status == TaskStatus.TODO:
-                    assignee_id = random.choice(member_ids) if random.random() < 0.8 else None
-                else:
-                    assignee_id = random.choice(member_ids)
-
-                task = Task(
-                    id=uuid.uuid4(),
-                    title=f"Task {uuid.uuid4().hex[:6]}",
-                    description="Automatically generated task description.",
-                    status=status,
-                    priority=random.choice(list(TaskPriority)),
-                    project_id=project.id,
-                    created_by=creator_id,
-                    assignee_id=assignee_id,
-                    created_at=created_date,
-                    due_date=created_date + timedelta(days=random.randint(2, 14)),
-                )
-                session.add(task)
-
-                # Create history for creation
-                h_create = TaskHistory(
-                    id=uuid.uuid4(),
-                    project_id=project.id,
-                    task_id=task.id,
-                    user_id=creator_id,
-                    activity_type=ActivityType.TASK_CREATED,
-                    task_title=task.title,
-                    description="Task created by user",
-                    timestamp=created_date,
-                )
-                session.add(h_create)
-
-                # If completed, add history
-                if status == TaskStatus.DONE:
-                    completion_days = random.randint(1, bg_days) if bg_days > 1 else 0
-                    completed_date = created_date + timedelta(days=completion_days)
-                    completed_date = min(completed_date, datetime.now(UTC))
-
-                    h_complete = TaskHistory(
-                        id=uuid.uuid4(),
-                        project_id=project.id,
-                        task_id=task.id,
-                        user_id=assignee_id or creator_id,
-                        activity_type=ActivityType.TASK_COMPLETED,
-                        task_title=task.title,
-                        description="Task completed",
-                        timestamp=completed_date,
-                        new_values='{"status": "done"}',
-                    )
-                    session.add(h_complete)
-
-        await session.commit()
+        await _seed_tasks(session, created_projects)
         print("Data seeded successfully!")
 
     except Exception as e:

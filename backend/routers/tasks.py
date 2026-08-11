@@ -36,8 +36,9 @@ from services.job_queue import enqueue_job
 from utils.logger import mask_user_id, setup_logger
 from utils.response_helpers import build_task_response
 
-MENTION_PATTERN = re.compile(r"(?<![\w])@([A-Za-z0-9_]{1,255})")
+MENTION_PATTERN = re.compile(r"(?<!\w)@(\w{1,255})")
 MAX_MENTION_RECIPIENTS = 20
+NOTIFICATION_JOB_TYPE = "notification.dispatch"
 
 
 def map_task_to_response(task: Task) -> dict[str, Any]:
@@ -122,7 +123,7 @@ async def create_task(
             if project:
                 await enqueue_job(
                     db,
-                    "notification.dispatch",
+                    NOTIFICATION_JOB_TYPE,
                     {
                         "event": "task_assigned",
                         "task_id": str(task.id),
@@ -162,7 +163,11 @@ async def get_all_tasks(
     return TaskListResponse(items=items, total=total, page=page, size=limit, has_more=has_more)
 
 
-@router.get("/{task_id}", response_model=TaskWithDetails)
+@router.get(
+    "/{task_id}",
+    response_model=TaskWithDetails,
+    responses={404: {"description": "Task not found"}},
+)
 async def read_task(
     task: Task = Depends(get_async_authorized_task),
     task_service: AsyncTaskService = Depends(get_task_service),
@@ -242,7 +247,7 @@ async def create_task_comment(
                 continue
             await enqueue_job(
                 db,
-                "notification.dispatch",
+                NOTIFICATION_JOB_TYPE,
                 {
                     "event": "mention",
                     "mentioned_user_id": str(mentioned_user.id),
@@ -319,7 +324,7 @@ async def update_task_status(
         if old_status != new_status:
             await enqueue_job(
                 db,
-                "notification.dispatch",
+                NOTIFICATION_JOB_TYPE,
                 {
                     "event": "task_status_changed",
                     "task_id": str(updated_task.id),
@@ -374,7 +379,7 @@ async def assign_task(
         if assignee:
             await enqueue_job(
                 db,
-                "notification.dispatch",
+                NOTIFICATION_JOB_TYPE,
                 {
                     "event": "task_assigned",
                     "task_id": str(updated_task.id),

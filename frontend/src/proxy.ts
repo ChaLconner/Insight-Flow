@@ -59,7 +59,7 @@ function isTokenValid(token: string): boolean {
     // Decode payload (base64url)
     const payload = parts[1];
     const decoded = JSON.parse(
-      atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+      atob(payload.replaceAll("-", "+").replaceAll("_", "/"))
     );
 
     // Check expiration

@@ -13,23 +13,31 @@ from utils.logger import setup_logger
 
 logger = setup_logger("file_security")
 
+JPEG_EXTENSION = ".jpeg"
+WEBP_EXTENSION = ".webp"
+DOCX_EXTENSION = ".docx"
+XLSX_EXTENSION = ".xlsx"
+PPTX_EXTENSION = ".pptx"
+LEGACY_OFFICE_MAGIC_BYTES = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+INVALID_OFFICE_CONTAINER_ERROR = "Invalid Office container"
+
 # =============================================================================
 # Avatar Upload Configuration (Images Only)
 # =============================================================================
 
 AVATAR_ALLOWED_EXTENSIONS: set[str] = {
     ".jpg",
-    ".jpeg",
+    JPEG_EXTENSION,
     ".png",
     ".gif",
-    ".webp",
+    WEBP_EXTENSION,
 }
 
 AVATAR_ALLOWED_MIME_TYPES: dict[str, set[str]] = {
-    "image/jpeg": {".jpg", ".jpeg"},
+    "image/jpeg": {".jpg", JPEG_EXTENSION},
     "image/png": {".png"},
     "image/gif": {".gif"},
-    "image/webp": {".webp"},
+    "image/webp": {WEBP_EXTENSION},
 }
 
 AVATAR_MAX_FILE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB for avatars
@@ -40,34 +48,34 @@ AVATAR_MAX_FILE_SIZE_BYTES: int = 5 * 1024 * 1024  # 5 MB for avatars
 
 ALLOWED_EXTENSIONS: set[str] = {
     ".jpg",
-    ".jpeg",
+    JPEG_EXTENSION,
     ".png",
     ".gif",
-    ".webp",  # Images
+    WEBP_EXTENSION,  # Images
     ".pdf",  # Documents
     ".doc",
-    ".docx",
+    DOCX_EXTENSION,
     ".xls",
-    ".xlsx",
+    XLSX_EXTENSION,
     ".ppt",
-    ".pptx",  # Office
+    PPTX_EXTENSION,  # Office
     ".txt",
     ".csv",
     ".md",  # Text
 }
 
 ALLOWED_MIME_TYPES: dict[str, set[str]] = {
-    "image/jpeg": {".jpg", ".jpeg"},
+    "image/jpeg": {".jpg", JPEG_EXTENSION},
     "image/png": {".png"},
     "image/gif": {".gif"},
-    "image/webp": {".webp"},
+    "image/webp": {WEBP_EXTENSION},
     "application/pdf": {".pdf"},
     "application/msword": {".doc"},
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {DOCX_EXTENSION},
     "application/vnd.ms-excel": {".xls"},
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {".xlsx"},
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {XLSX_EXTENSION},
     "application/vnd.ms-powerpoint": {".ppt"},
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": {".pptx"},
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": {PPTX_EXTENSION},
     "text/plain": {".txt", ".csv", ".md"},
     "text/csv": {".csv"},
     "text/markdown": {".md"},
@@ -285,18 +293,43 @@ def sanitize_filename(filename: str) -> str:
 
 MAGIC_BYTES_MAP: dict[str, tuple[bytes, ...]] = {
     ".jpg": (b"\xff\xd8\xff",),
-    ".jpeg": (b"\xff\xd8\xff",),
+    JPEG_EXTENSION: (b"\xff\xd8\xff",),
     ".png": (b"\x89PNG\r\n\x1a\n",),
     ".gif": (b"GIF87a", b"GIF89a"),
     ".pdf": (b"%PDF",),
-    ".webp": (b"RIFF",),
-    ".doc": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
-    ".xls": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
-    ".ppt": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),
-    ".docx": (b"PK\x03\x04",),
-    ".xlsx": (b"PK\x03\x04",),
-    ".pptx": (b"PK\x03\x04",),
+    WEBP_EXTENSION: (b"RIFF",),
+    ".doc": (LEGACY_OFFICE_MAGIC_BYTES,),
+    ".xls": (LEGACY_OFFICE_MAGIC_BYTES,),
+    ".ppt": (LEGACY_OFFICE_MAGIC_BYTES,),
+    DOCX_EXTENSION: (b"PK\x03\x04",),
+    XLSX_EXTENSION: (b"PK\x03\x04",),
+    PPTX_EXTENSION: (b"PK\x03\x04",),
 }
+
+
+def _validate_office_container(content: bytes, extension: str) -> None:
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            names = set(archive.namelist())
+            if "[Content_Types].xml" not in names:
+                raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER")
+            required_prefix = {
+                DOCX_EXTENSION: "word/",
+                XLSX_EXTENSION: "xl/",
+                PPTX_EXTENSION: "ppt/",
+            }[extension]
+            if not any(name.startswith(required_prefix) for name in names):
+                raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER")
+            if len(names) > 2_000:
+                raise FileSecurityError(
+                    "Office container has too many entries", "INVALID_CONTAINER"
+                )
+            if sum(info.file_size for info in archive.infolist()) > MAX_FILE_SIZE_BYTES * 20:
+                raise FileSecurityError(
+                    "Office container is too large when expanded", "INVALID_CONTAINER"
+                )
+    except zipfile.BadZipFile as exc:
+        raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER") from exc
 
 
 def validate_file_magic_bytes(content: bytes, extension: str) -> None:
@@ -312,32 +345,11 @@ def validate_file_magic_bytes(content: bytes, extension: str) -> None:
             "MAGIC_BYTES_MISMATCH",
         )
 
-    if extension == ".webp" and (len(content) < 12 or content[8:12] != b"WEBP"):
+    if extension == WEBP_EXTENSION and (len(content) < 12 or content[8:12] != b"WEBP"):
         raise FileSecurityError("Invalid WebP container", "INVALID_CONTAINER")
 
-    if extension in {".docx", ".xlsx", ".pptx"}:
-        try:
-            with zipfile.ZipFile(io.BytesIO(content)) as archive:
-                names = set(archive.namelist())
-                if "[Content_Types].xml" not in names:
-                    raise FileSecurityError("Invalid Office container", "INVALID_CONTAINER")
-                required_prefix = {
-                    ".docx": "word/",
-                    ".xlsx": "xl/",
-                    ".pptx": "ppt/",
-                }[extension]
-                if not any(name.startswith(required_prefix) for name in names):
-                    raise FileSecurityError("Invalid Office container", "INVALID_CONTAINER")
-                if len(names) > 2_000:
-                    raise FileSecurityError(
-                        "Office container has too many entries", "INVALID_CONTAINER"
-                    )
-                if sum(info.file_size for info in archive.infolist()) > MAX_FILE_SIZE_BYTES * 20:
-                    raise FileSecurityError(
-                        "Office container is too large when expanded", "INVALID_CONTAINER"
-                    )
-        except zipfile.BadZipFile as exc:
-            raise FileSecurityError("Invalid Office container", "INVALID_CONTAINER") from exc
+    if extension in {DOCX_EXTENSION, XLSX_EXTENSION, PPTX_EXTENSION}:
+        _validate_office_container(content, extension)
 
     if extension in {".txt", ".csv", ".md"} and b"\x00" in content:
         raise FileSecurityError("Text file contains binary data", "INVALID_CONTENT")

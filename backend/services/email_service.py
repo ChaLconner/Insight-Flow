@@ -11,6 +11,7 @@ import httpx
 from utils.logger import mask_email, setup_logger
 
 logger = setup_logger("email_service")
+DEFAULT_FRONTEND_URL = "http://localhost:3000"
 
 
 class EmailService:
@@ -83,7 +84,7 @@ class EmailService:
             logger.error(f"Timeout sending email to {mask_email(to_email)}")
             return False
         except Exception as e:
-            logger.error(f"Failed to send email to {mask_email(to_email)}: {e}")
+            logger.exception(f"Failed to send email to {mask_email(to_email)}: {e}")
             return False
 
     @staticmethod
@@ -306,7 +307,7 @@ class EmailService:
     @staticmethod
     async def send_verification_email(email: str, token: str) -> bool:
         """Send verification email."""
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        frontend_url = os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL)
         verification_link = f"{frontend_url}/auth/verify-email?token={token}"
 
         subject = "Please Verify Your Email Address"
@@ -326,7 +327,7 @@ class EmailService:
     @staticmethod
     async def send_password_reset_email(email: str, token: str) -> bool:
         """Send password reset email."""
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        frontend_url = os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL)
         reset_link = f"{frontend_url}/auth/reset-password?token={token}"
 
         subject = "Reset your password"
@@ -351,7 +352,7 @@ class EmailService:
         due to multiple failed login attempts, providing details about the
         suspicious activity.
         """
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        frontend_url = os.getenv("FRONTEND_URL", DEFAULT_FRONTEND_URL)
         support_link = f"{frontend_url}/support"
 
         # Format lockout time

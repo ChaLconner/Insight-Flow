@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { secureRandomFloat } from "@/lib/utils";
 
 interface Particle {
   x: number;
@@ -16,9 +17,19 @@ interface AnimatedBackgroundProps {
   className?: string;
 }
 
+function getParticleColor(): string {
+  if (secureRandomFloat() > 0.7) {
+    return "#6366f1";
+  }
+  if (secureRandomFloat() > 0.5) {
+    return "#8b5cf6";
+  }
+  return "#64748b";
+}
+
 export function AnimatedBackground({
   className = "",
-}: AnimatedBackgroundProps) {
+}: Readonly<AnimatedBackgroundProps>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const particlesRef = useRef<Particle[]>([]);
@@ -61,18 +72,13 @@ export function AnimatedBackground({
 
       for (let i = 0; i < particleCount; i++) {
         particlesRef.current.push({
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          vx: (Math.random() - 0.5) * 0.5,
-          vy: (Math.random() - 0.5) * 0.5,
-          size: Math.random() * 3 + 1,
-          opacity: Math.random() * 0.5 + 0.2,
-          color:
-            Math.random() > 0.7
-              ? "#6366f1"
-              : Math.random() > 0.5
-                ? "#8b5cf6"
-                : "#64748b",
+          x: secureRandomFloat() * canvas.width,
+          y: secureRandomFloat() * canvas.height,
+          vx: (secureRandomFloat() - 0.5) * 0.5,
+          vy: (secureRandomFloat() - 0.5) * 0.5,
+          size: secureRandomFloat() * 3 + 1,
+          opacity: secureRandomFloat() * 0.5 + 0.2,
+          color: getParticleColor(),
         });
       }
     };
@@ -124,7 +130,7 @@ export function AnimatedBackground({
         // Mouse interaction - repel particles
         const dx = mouseRef.current.x - particle.x;
         const dy = mouseRef.current.y - particle.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        const distance = Math.hypot(dx, dy);
 
         if (distance > 0 && distance < 100) {
           const force = (100 - distance) / 100;
@@ -180,7 +186,7 @@ export function AnimatedBackground({
               const otherParticle = particles[otherIndex];
               const dx = particle.x - otherParticle.x;
               const dy = particle.y - otherParticle.y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
+              const distance = Math.hypot(dx, dy);
 
               if (distance < connectionDistance) {
                 drawCtx.save();
@@ -219,9 +225,7 @@ export function AnimatedBackground({
         return;
       }
 
-      if (resizeCanvas()) {
-        createParticles();
-      } else if (particlesRef.current.length === 0) {
+      if (resizeCanvas() || particlesRef.current.length === 0) {
         createParticles();
       }
 
@@ -321,10 +325,10 @@ export function FloatingShapes() {
   useEffect(() => {
     setShapes(
       Array.from({ length: 20 }).map(() => ({
-        left: `${Math.random() * 100}%`,
-        top: `${Math.random() * 100}%`,
-        delay: `${Math.random() * 5}s`,
-        duration: `${2 + Math.random() * 10}s`,
+        left: `${secureRandomFloat() * 100}%`,
+        top: `${secureRandomFloat() * 100}%`,
+        delay: `${secureRandomFloat() * 5}s`,
+        duration: `${2 + secureRandomFloat() * 10}s`,
       })),
     );
   }, []);
@@ -337,9 +341,9 @@ export function FloatingShapes() {
     <div className="fixed inset-0 pointer-events-none z-10">
       {/* Dots pattern */}
       <div className="absolute inset-0 opacity-30">
-        {shapes.map((shape, i) => (
+        {shapes.map((shape) => (
           <div
-            key={i}
+            key={`${shape.left}-${shape.top}-${shape.delay}`}
             className="absolute w-1 h-1 bg-indigo-400/40 rounded-full animate-pulse"
             style={{
               left: shape.left,

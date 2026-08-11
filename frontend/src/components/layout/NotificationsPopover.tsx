@@ -187,7 +187,7 @@ export function NotificationsPopover() {
                 )}
               </h3>
               {unreadCount > 0 && (
-                <button
+                <button type="button"
                   className="text-xs text-primary hover:text-primary/80 transition-colors"
                   onClick={handleMarkAllAsRead}
                 >
@@ -199,7 +199,7 @@ export function NotificationsPopover() {
             {/* Tabs */}
             <div className="flex items-center px-4 pt-3 pb-2 gap-4 border-b border-border/50 shrink-0">
               {(["all", "unread", "mentions"] as const).map((tab) => (
-                <button
+                <button type="button"
                   key={tab}
                   onClick={() => setActiveTab(tab)}
                   className={cn(
@@ -222,16 +222,18 @@ export function NotificationsPopover() {
 
             {/* Content */}
             <div className="overflow-y-auto flex-1 custom-scrollbar">
-              {isLoading && notifications.length === 0 ? (
+              {isLoading && notifications.length === 0 && (
                 <div className="flex items-center justify-center py-8">
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted border-t-primary" />
                 </div>
-              ) : groupedNotifications.length === 0 ? (
+              )}
+              {!isLoading && groupedNotifications.length === 0 && (
                 <div className="py-12 text-center">
                   <Bell className="h-8 w-8 text-muted-foreground/50 mx-auto mb-3" />
                   <p className="text-sm text-muted-foreground">No notifications found</p>
                 </div>
-              ) : (
+              )}
+              {!isLoading && groupedNotifications.length > 0 && (
                 <div className="pb-2">
                   {groupedNotifications.map((group) => (
                     <div key={group.label}>
@@ -243,49 +245,54 @@ export function NotificationsPopover() {
                           <div
                             key={notification.id}
                             className={cn(
-                              "group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-accent border-b border-border/50 last:border-0",
+                              "group flex items-start gap-3 border-b border-border/50 last:border-0",
                               !notification.read && "bg-primary/5"
                             )}
-                            onClick={() => handleNotificationClick(notification)}
                           >
-                            {/* Unread indicator */}
-                            <div className="pt-1.5 shrink-0">
-                              <div
-                                className={cn(
-                                  "h-2 w-2 rounded-full",
-                                  !notification.read ? getNotificationDotColor(notification.type) : "bg-transparent"
-                                )}
-                              />
-                            </div>
+                            <button
+                              type="button"
+                              className="flex flex-1 items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent"
+                              onClick={() => void handleNotificationClick(notification)}
+                            >
+                              {/* Unread indicator */}
+                              <div className="pt-1.5 shrink-0">
+                                <div
+                                  className={cn(
+                                    "h-2 w-2 rounded-full",
+                                    !notification.read ? getNotificationDotColor(notification.type) : "bg-transparent"
+                                  )}
+                                />
+                              </div>
 
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className={cn(
-                                  "text-sm leading-snug",
-                                  !notification.read
-                                    ? "text-foreground font-medium"
-                                    : "text-muted-foreground"
-                                )}
-                              >
-                                {notification.title}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                                {notification.message}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground/70 mt-1.5 flex items-center gap-1.5">
-                                <span>
-                                  {formatDistanceToNow(new Date(notification.createdAt), {
-                                    addSuffix: true,
-                                  })}
-                                </span>
-                              </p>
-                            </div>
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className={cn(
+                                    "text-sm leading-snug",
+                                    !notification.read
+                                      ? "text-foreground font-medium"
+                                      : "text-muted-foreground"
+                                  )}
+                                >
+                                  {notification.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                                  {notification.message}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground/70 mt-1.5 flex items-center gap-1.5">
+                                  <span>
+                                    {formatDistanceToNow(new Date(notification.createdAt), {
+                                      addSuffix: true,
+                                    })}
+                                  </span>
+                                </p>
+                              </div>
+                            </button>
 
                             {/* Actions */}
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity self-center">
                               {!notification.read && (
-                                <button
+                                <button type="button"
                                   className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
                                   onClick={(e) => handleMarkAsRead(notification.id, e)}
                                   title="Mark as read"
@@ -293,7 +300,7 @@ export function NotificationsPopover() {
                                   <Check className="h-3.5 w-3.5" />
                                 </button>
                               )}
-                              <button
+                              <button type="button"
                                 className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
                                 onClick={(e) => handleDelete(notification, e)}
                                 title="Delete"
@@ -307,18 +314,6 @@ export function NotificationsPopover() {
                     </div>
                   ))}
 
-                  {/* Load More Trigger */}
-                  <div className="p-2 border-t border-border/50">
-                     <Button
-                        variant="ghost"
-                        className="w-full text-xs text-muted-foreground hover:text-foreground h-8"
-                        onClick={() => {
-                          /* TODO: Implement Load More logic */
-                        }}
-                     >
-                        Load Previous Notifications
-                     </Button>
-                  </div>
                 </div>
               )}
             </div>

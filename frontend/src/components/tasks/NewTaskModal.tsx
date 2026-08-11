@@ -48,7 +48,7 @@ export function NewTaskModal({
   onTaskCreated,
   defaultProjectId,
   task,
-}: NewTaskModalProps) {
+}: Readonly<NewTaskModalProps>) {
   const id = useId();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -270,6 +270,14 @@ export function NewTaskModal({
     [],
   );
 
+  let submitLabel = "Create Task";
+  if (task) {
+    submitLabel = "Save Changes";
+  }
+  if (loading) {
+    submitLabel = task ? "Saving..." : "Creating...";
+  }
+
   return (
     <AnimatedModalShell
       isOpen={isOpen}
@@ -440,13 +448,7 @@ export function NewTaskModal({
                     disabled={loading}
                     className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
                   >
-                    {loading
-                      ? task
-                        ? "Saving..."
-                        : "Creating..."
-                      : task
-                        ? "Save Changes"
-                        : "Create Task"}
+                    {submitLabel}
                   </Button>
                 </div>
               </form>

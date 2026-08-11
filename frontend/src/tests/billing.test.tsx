@@ -21,15 +21,15 @@ vi.mock("sonner", () => ({
 }));
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-const expectedBoundaryErrors = [
+const expectedBoundaryErrors = new Set([
   "Test payment error",
   "Network error",
   "Test error",
   "Stripe SetupIntent failed",
-];
+]);
 
 function suppressExpectedBoundaryError(event: ErrorEvent): void {
-  if (expectedBoundaryErrors.includes(event.message)) {
+  if (expectedBoundaryErrors.has(event.message)) {
     event.preventDefault();
   }
 }
@@ -323,7 +323,7 @@ describe("CurrentPlanCard", () => {
     };
 
     expect(planConfig.name).toBe("Pro");
-    expect(planConfig.price_monthly).toBe(9.99);
+    expect(planConfig.price_monthly).toBeCloseTo(9.99, 2);
   });
 
   it("shows correct status badge color", () => {
@@ -401,7 +401,7 @@ describe("PaymentMethodsCard", () => {
     ];
 
     const filtered = methods.filter(Boolean);
-    expect(filtered.length).toBe(2);
+    expect(filtered).toHaveLength(2);
   });
 });
 

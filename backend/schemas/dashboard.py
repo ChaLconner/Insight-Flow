@@ -6,6 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+TREND_DIRECTION_DESCRIPTION = "Trend direction"
+CHANGE_PERCENTAGE_DESCRIPTION = "Change percentage"
+
 
 class DashboardStatsResponse(BaseModel):
     """Dashboard statistics response model."""
@@ -14,24 +17,30 @@ class DashboardStatsResponse(BaseModel):
     totalProjectsChange: str = Field(
         default="+0%", description="Change percentage from last period"
     )
-    totalProjectsTrend: Literal["up", "down"] = Field(default="up", description="Trend direction")
+    totalProjectsTrend: Literal["up", "down"] = Field(
+        default="up", description=TREND_DIRECTION_DESCRIPTION
+    )
 
     totalTasks: int = Field(default=0, description="Total number of tasks")
     completedTasks: int = Field(default=0, description="Number of completed tasks")
 
     inProgressTasks: int = Field(default=0, description="Number of in-progress tasks")
-    inProgressTasksChange: str = Field(default="+0%", description="Change percentage")
-    inProgressTasksTrend: Literal["up", "down"] = Field(default="up", description="Trend direction")
+    inProgressTasksChange: str = Field(default="+0%", description=CHANGE_PERCENTAGE_DESCRIPTION)
+    inProgressTasksTrend: Literal["up", "down"] = Field(
+        default="up", description=TREND_DIRECTION_DESCRIPTION
+    )
 
     pendingReviewTasks: int = Field(default=0, description="Number of tasks pending review")
-    pendingReviewTasksChange: str = Field(default="+0%", description="Change percentage")
+    pendingReviewTasksChange: str = Field(default="+0%", description=CHANGE_PERCENTAGE_DESCRIPTION)
     pendingReviewTasksTrend: Literal["up", "down"] = Field(
-        default="up", description="Trend direction"
+        default="up", description=TREND_DIRECTION_DESCRIPTION
     )
 
     teamVelocity: int = Field(default=0, description="Team velocity metric")
-    teamVelocityChange: str = Field(default="+0%", description="Change percentage")
-    teamVelocityTrend: Literal["up", "down"] = Field(default="up", description="Trend direction")
+    teamVelocityChange: str = Field(default="+0%", description=CHANGE_PERCENTAGE_DESCRIPTION)
+    teamVelocityTrend: Literal["up", "down"] = Field(
+        default="up", description=TREND_DIRECTION_DESCRIPTION
+    )
 
     model_config = ConfigDict(
         json_schema_extra={

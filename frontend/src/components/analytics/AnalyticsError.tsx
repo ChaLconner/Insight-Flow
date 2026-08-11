@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, AlertCircle } from "lucide-react";
 
 interface AnalyticsErrorProps {
-  error: Error | unknown;
+  error: unknown;
   onRetry: () => void;
 }
 

@@ -32,7 +32,7 @@ interface HeaderProps {
   onMenuClick: () => void;
 }
 
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header({ onMenuClick }: Readonly<HeaderProps>) {
   const { user } = useAuth();
   const pathname = usePathname();
   const [isSearchOpen, setIsSearchOpen] = useState(false);

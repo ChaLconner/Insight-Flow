@@ -17,6 +17,8 @@ from utils.schema_utils import to_camel
 
 logger = setup_logger("favorites_router")
 
+INVALID_PROJECT_ID_DETAIL = "Invalid project ID format"
+
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 # Route-level rate limiting for favorites operations
@@ -85,7 +87,7 @@ async def get_favorite_project_ids(
 
         return FavoriteIdsResponse(project_ids=project_ids)
     except Exception as e:
-        logger.error(f"Error fetching favorites: {e}")
+        logger.exception(f"Error fetching favorites: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch favorites"
         )
@@ -147,12 +149,12 @@ async def toggle_favorite(
 
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid project ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=INVALID_PROJECT_ID_DETAIL
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error toggling favorite: {e}")
+        logger.exception(f"Error toggling favorite: {e}")
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to toggle favorite"
@@ -187,12 +189,12 @@ async def remove_favorite(
 
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid project ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=INVALID_PROJECT_ID_DETAIL
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error removing favorite: {e}")
+        logger.exception(f"Error removing favorite: {e}")
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to remove favorite"
@@ -250,12 +252,12 @@ async def add_favorite(
 
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid project ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=INVALID_PROJECT_ID_DETAIL
         )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error adding favorite: {e}")
+        logger.exception(f"Error adding favorite: {e}")
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to add favorite"

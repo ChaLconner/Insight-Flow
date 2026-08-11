@@ -34,7 +34,7 @@ function Dialog({
   open: controlledOpen,
   onOpenChange,
   defaultOpen = false,
-}: DialogProps) {
+}: Readonly<DialogProps>) {
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
   
   const isControlled = controlledOpen !== undefined;
@@ -50,8 +50,13 @@ function Dialog({
     [isControlled, onOpenChange]
   );
 
+  const contextValue = React.useMemo(
+    () => ({ open, onOpenChange: handleOpenChange }),
+    [open, handleOpenChange],
+  );
+
   return (
-    <DialogContext.Provider value={{ open, onOpenChange: handleOpenChange }}>
+    <DialogContext.Provider value={contextValue}>
       {children}
     </DialogContext.Provider>
   );
@@ -63,7 +68,7 @@ interface DialogTriggerProps {
   asChild?: boolean;
 }
 
-function DialogTrigger({ children, asChild }: DialogTriggerProps) {
+function DialogTrigger({ children, asChild }: Readonly<DialogTriggerProps>) {
   const { onOpenChange } = useDialogContext();
   
   const handleClick = () => onOpenChange(true);
@@ -101,19 +106,21 @@ function DialogPortal({ children }: DialogPortalProps) {
 }
 
 // Dialog Overlay
-type DialogOverlayProps = React.HTMLAttributes<HTMLDivElement>
+type DialogOverlayProps = React.HTMLAttributes<HTMLButtonElement>
 
-const DialogOverlay = React.forwardRef<HTMLDivElement, DialogOverlayProps>(
+const DialogOverlay = React.forwardRef<HTMLButtonElement, DialogOverlayProps>(
   ({ className, ...props }, ref) => {
     const { onOpenChange } = useDialogContext();
     
     return (
-      <div
+      <button
+        type="button"
         ref={ref}
         className={cn(
           "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
           className
         )}
+        aria-label="Close dialog"
         onClick={() => onOpenChange(false)}
         {...props}
       />
@@ -159,11 +166,10 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
             "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-border bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
             className
           )}
-          onClick={(e) => e.stopPropagation()}
           {...props}
         >
           {children}
-          <button
+          <button type="button"
             className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground"
             onClick={() => onOpenChange(false)}
           >
@@ -180,7 +186,7 @@ DialogContent.displayName = "DialogContent";
 // Dialog Header
 type DialogHeaderProps = React.HTMLAttributes<HTMLDivElement>
 
-function DialogHeader({ className, ...props }: DialogHeaderProps) {
+function DialogHeader({ className, ...props }: Readonly<DialogHeaderProps>) {
   return (
     <div
       className={cn(
@@ -195,7 +201,7 @@ function DialogHeader({ className, ...props }: DialogHeaderProps) {
 // Dialog Footer
 type DialogFooterProps = React.HTMLAttributes<HTMLDivElement>
 
-function DialogFooter({ className, ...props }: DialogFooterProps) {
+function DialogFooter({ className, ...props }: Readonly<DialogFooterProps>) {
   return (
     <div
       className={cn(
@@ -211,7 +217,7 @@ function DialogFooter({ className, ...props }: DialogFooterProps) {
 type DialogTitleProps = React.HTMLAttributes<HTMLHeadingElement>
 
 const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, children, ...props }, ref) => (
     <h2
       ref={ref}
       className={cn(
@@ -219,7 +225,9 @@ const DialogTitle = React.forwardRef<HTMLHeadingElement, DialogTitleProps>(
         className
       )}
       {...props}
-    />
+    >
+      {children}
+    </h2>
   )
 );
 DialogTitle.displayName = "DialogTitle";
@@ -243,7 +251,7 @@ interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
   asChild?: boolean;
 }
 
-function DialogClose({ children, asChild, ...props }: DialogCloseProps) {
+function DialogClose({ children, asChild, ...props }: Readonly<DialogCloseProps>) {
   const { onOpenChange } = useDialogContext();
   
   const handleClick = () => onOpenChange(false);

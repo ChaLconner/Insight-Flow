@@ -37,11 +37,22 @@ const TeamListComponent: React.FC<TeamListProps> = ({ team }) => {
       <CardContent className="flex-1 min-h-0">
         {team.length > 0 ? (
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {team.map((member: AnalyticsTeamMember, index: number) => (
-              <div
-                key={index}
+            {team.map((member: AnalyticsTeamMember) => {
+              let EfficiencyIcon = AlertTriangle;
+              let efficiencyColor = "text-red-400";
+              if (member.efficiency >= 85) {
+                EfficiencyIcon = CheckCircle2;
+                efficiencyColor = "text-emerald-400";
+              } else if (member.efficiency >= 70) {
+                EfficiencyIcon = Clock;
+                efficiencyColor = "text-amber-400";
+              }
+
+              return (
+                <div
+                key={`${member.name}-${member.avatar ?? ""}`}
                 className="flex items-center justify-between p-4 rounded-lg bg-muted hover:bg-accent/50 transition-colors"
-              >
+                >
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0 relative group">
                     {member.avatar ? (
@@ -76,17 +87,14 @@ const TeamListComponent: React.FC<TeamListProps> = ({ team }) => {
                     <div className="text-lg font-semibold text-foreground">
                       {member.efficiency}%
                     </div>
-                    {member.efficiency >= 85 ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    ) : member.efficiency >= 70 ? (
-                      <Clock className="h-4 w-4 text-amber-400" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-red-400" />
-                    )}
+                    <EfficiencyIcon
+                      className={`h-4 w-4 ${efficiencyColor}`}
+                    />
                   </div>
                 </div>
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-[200px] text-muted-foreground">

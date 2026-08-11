@@ -85,7 +85,7 @@ export const serverApi = {
   },
   getProject: async (id: string) => {
     const data = await fetchServer(`/projects/${id}`);
-    return transformProjectData(data, undefined);
+    return transformProjectData(data);
   },
   getProjectTasks: (projectId: string) =>
     fetchServer<Task[]>(`/projects/${projectId}/tasks?limit=50`),

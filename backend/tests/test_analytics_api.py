@@ -31,7 +31,7 @@ def test_analytics_endpoint_requires_auth():
 
 
 @pytest.mark.asyncio
-async def test_project_recent_activity_compat_endpoint():
+async def test_project_recent_activity_compat_endpoint(monkeypatch):
     project_id = uuid.uuid4()
     mock_project = MagicMock()
     mock_project.id = project_id
@@ -57,10 +57,16 @@ async def test_project_recent_activity_compat_endpoint():
     async def override_require_project_member():
         return mock_project
 
-    app.dependency_overrides[get_current_active_user] = mock_get_current_active_user
-    app.dependency_overrides[require_project_member] = override_require_project_member
-    app.dependency_overrides[get_async_db] = lambda: mock_session
-    app.dependency_overrides[get_task_history_service] = lambda: mock_history_service
+    monkeypatch.setitem(
+        app.dependency_overrides, get_current_active_user, mock_get_current_active_user
+    )
+    monkeypatch.setitem(
+        app.dependency_overrides, require_project_member, override_require_project_member
+    )
+    monkeypatch.setitem(app.dependency_overrides, get_async_db, lambda: mock_session)
+    monkeypatch.setitem(
+        app.dependency_overrides, get_task_history_service, lambda: mock_history_service
+    )
 
     try:
         async with AsyncClient(
@@ -73,11 +79,11 @@ async def test_project_recent_activity_compat_endpoint():
         assert data["total_count"] == 1
         assert data["activities"][0]["project_id"] == str(project_id)
     finally:
-        app.dependency_overrides = {}
+        monkeypatch.setattr(app, "dependency_overrides", {})
 
 
 @pytest.mark.asyncio
-async def test_batch_recent_activity_compat_endpoint():
+async def test_batch_recent_activity_compat_endpoint(monkeypatch):
     project_id = uuid.uuid4()
     mock_project = MagicMock()
     mock_project.id = project_id
@@ -104,10 +110,12 @@ async def test_batch_recent_activity_compat_endpoint():
     activity.new_values = None
     mock_history_service.get_recent_activities_for_projects.return_value = [activity]
 
-    app.dependency_overrides[get_current_active_user] = lambda: current_user
-    app.dependency_overrides[get_async_db] = lambda: mock_session
-    app.dependency_overrides[get_project_service] = lambda: mock_project_service
-    app.dependency_overrides[get_task_history_service] = lambda: mock_history_service
+    monkeypatch.setitem(app.dependency_overrides, get_current_active_user, lambda: current_user)
+    monkeypatch.setitem(app.dependency_overrides, get_async_db, lambda: mock_session)
+    monkeypatch.setitem(app.dependency_overrides, get_project_service, lambda: mock_project_service)
+    monkeypatch.setitem(
+        app.dependency_overrides, get_task_history_service, lambda: mock_history_service
+    )
 
     try:
         async with AsyncClient(
@@ -123,4 +131,4 @@ async def test_batch_recent_activity_compat_endpoint():
         assert data[0]["projectId"] == str(project_id)
         assert data[0]["activities"][0]["project_id"] == str(project_id)
     finally:
-        app.dependency_overrides = {}
+        monkeypatch.setattr(app, "dependency_overrides", {})

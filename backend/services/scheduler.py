@@ -116,7 +116,7 @@ def shutdown_scheduler():
         if "Event loop is closed" in str(e) or "no running event loop" in str(e):
             logger.debug(f"Scheduler shutdown skipped: {e}")
         else:
-            logger.error(f"Error shutting down scheduler: {e}")
+            logger.exception(f"Error shutting down scheduler: {e}")
 
 
 @asynccontextmanager

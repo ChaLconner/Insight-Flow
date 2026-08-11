@@ -131,7 +131,9 @@ class AsyncPasswordResetService:
             return True
 
         except Exception as e:
-            logger.error(f"Error resetting password for email {mask_email(reset_token.email)}: {e}")
+            logger.exception(
+                f"Error resetting password for email {mask_email(reset_token.email)}: {e}"
+            )
             await self.db.rollback()
             return False
 

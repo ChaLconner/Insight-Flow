@@ -286,7 +286,7 @@ describe("AppStore", () => {
         result.current.clearAlerts();
       });
 
-      expect(appSelectors.getAlerts(result.current).length).toBe(0);
+      expect(appSelectors.getAlerts(result.current)).toHaveLength(0);
     });
   });
 

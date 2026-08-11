@@ -9,16 +9,19 @@ This script tests the API under various load conditions:
 - Dashboard queries
 """
 
-import random
 import string
+from secrets import SystemRandom
 from typing import ClassVar
 
 from locust import HttpUser, between, events, task  # type: ignore
 
+secure_random = SystemRandom()
+HEALTH_ENDPOINT = "/health"
+
 
 def random_string(length: int = 8) -> str:
     """Generate a random string."""
-    return "".join(random.choices(string.ascii_lowercase, k=length))
+    return "".join(secure_random.choices(string.ascii_lowercase, k=length))
 
 
 def random_email() -> str:
@@ -84,7 +87,7 @@ class InsightFlowUser(HttpUser):
     @task(10)
     def view_health(self):
         """Check health endpoint - lightweight."""
-        self.client.get("/health")
+        self.client.get(HEALTH_ENDPOINT)
 
     @task(5)
     def view_dashboard(self):
@@ -119,14 +122,14 @@ class InsightFlowUser(HttpUser):
     def view_project(self):
         """View a single project."""
         if self.project_ids:
-            project_id = random.choice(self.project_ids)
+            project_id = secure_random.choice(self.project_ids)
             self.client.get(f"/projects/{project_id}")
 
     @task(3)
     def view_task(self):
         """View a single task."""
         if self.task_ids:
-            task_id = random.choice(self.task_ids)
+            task_id = secure_random.choice(self.task_ids)
             self.client.get(f"/tasks/{task_id}")
 
     @task(2)
@@ -169,7 +172,7 @@ class APIOnlyUser(HttpUser):
     @task(10)
     def health_check(self):
         """Rapid health checks."""
-        self.client.get("/health")
+        self.client.get(HEALTH_ENDPOINT)
 
     @task(5)
     def full_health_check(self):
@@ -198,7 +201,7 @@ class StressTestUser(HttpUser):
     @task
     def rapid_health(self):
         """Rapid health endpoint hits."""
-        self.client.get("/health")
+        self.client.get(HEALTH_ENDPOINT)
 
 
 # Event handlers for reporting

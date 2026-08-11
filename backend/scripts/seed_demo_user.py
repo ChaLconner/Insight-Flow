@@ -31,7 +31,9 @@ async def seed_demo_user():
     session = AsyncSessionLocal()
     try:
         email = "demo@insightflow.com"
-        password = "demo1234"
+        password = os.getenv("DEMO_USER_PASSWORD")
+        if not password:
+            raise RuntimeError("DEMO_USER_PASSWORD must be set before seeding the demo user")
 
         logger.info(f"Checking for demo user: {email}")
         result = await session.execute(select(User).filter(User.email == email))
@@ -65,7 +67,7 @@ async def seed_demo_user():
         logger.debug("Password set successfully (not logged for security)")
 
     except Exception as e:
-        logger.error(f"Error seeding demo user: {e}", exc_info=True)
+        logger.exception(f"Error seeding demo user: {e}", exc_info=True)
         await session.rollback()
     finally:
         await session.close()

@@ -9,7 +9,7 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children }: Readonly<DashboardLayoutProps>) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (

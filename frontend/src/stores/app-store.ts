@@ -10,6 +10,7 @@ import { browserJsonStorage } from "./browser-storage";
 import { createUISlice, UIState } from "./slices/ui-slice";
 import { createFormSlice, FormState } from "./slices/form-slice";
 import { createUserSlice, UserState } from "./slices/user-slice";
+import { generateId } from "@/lib/utils";
 
 // ===========================================
 // Re-export types for backward compatibility
@@ -75,7 +76,7 @@ export const useAppStore = create<AppState>()(
 export const appActions = {
   // Utility functions
   generateId: () =>
-    `id-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+    `id-${Date.now()}-${generateId(8)}`,
 
   // Show success message
   showSuccess: (title: string, message: string, duration?: number) => {

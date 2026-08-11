@@ -14,6 +14,8 @@ from sqlalchemy.sql import func
 
 from .base import BaseModel
 
+CASCADE_DELETE_ORPHAN = "all, delete-orphan"
+
 if TYPE_CHECKING:
     from .analytics import (
         ProjectAnalytics,
@@ -52,25 +54,25 @@ class Project(BaseModel):
     # Relationships
     owner: Mapped["User"] = relationship("User", back_populates="owned_projects")
     members: Mapped[list["ProjectMember"]] = relationship(
-        "ProjectMember", back_populates="project", cascade="all, delete-orphan"
+        "ProjectMember", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
     tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="project", cascade="all, delete-orphan"
+        "Task", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
     analytics: Mapped[list["ProjectAnalytics"]] = relationship(
-        "ProjectAnalytics", back_populates="project", cascade="all, delete-orphan"
+        "ProjectAnalytics", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
     user_productivity: Mapped[list["UserProductivity"]] = relationship(
-        "UserProductivity", back_populates="project", cascade="all, delete-orphan"
+        "UserProductivity", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
     milestones: Mapped[list["ProjectMilestone"]] = relationship(
-        "ProjectMilestone", back_populates="project", cascade="all, delete-orphan"
+        "ProjectMilestone", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
     tag_associations: Mapped[list["ProjectTagAssociation"]] = relationship(
-        "ProjectTagAssociation", back_populates="project", cascade="all, delete-orphan"
+        "ProjectTagAssociation", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
     favorited_by: Mapped[list["UserFavorite"]] = relationship(
-        "UserFavorite", back_populates="project", cascade="all, delete-orphan"
+        "UserFavorite", back_populates="project", cascade=CASCADE_DELETE_ORPHAN
     )
 
     __table_args__ = (

@@ -74,6 +74,73 @@ class AsyncDeadlineReminderService:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
+    async def _notify_overdue_task(
+        self,
+        task: Task,
+        project_name: str,
+        due_date_str: str,
+        days_overdue: int,
+        notification_type: str,
+        notified_keys: set[tuple[Any, Any, str]],
+        summary: dict[str, int],
+    ) -> None:
+        """Notify the assignee and, when applicable, the task creator."""
+        assignee = task.assignee
+        if assignee is None:
+            return
+        await self.notification_service.notify_task_overdue(
+            user=assignee,
+            task_id=task.id,
+            task_title=task.title,
+            project_id=task.project_id,
+            project_name=project_name,
+            due_date=due_date_str,
+            days_overdue=days_overdue,
+        )
+        summary["overdue"] += 1
+        summary["total_notifications"] += 1
+
+        if not task.creator or task.creator.id == assignee.id:
+            return
+        creator_key = (task.creator.id, task.id, notification_type)
+        if creator_key in notified_keys:
+            return
+        await self.notification_service.notify_task_overdue(
+            user=task.creator,
+            task_id=task.id,
+            task_title=task.title,
+            project_id=task.project_id,
+            project_name=project_name,
+            due_date=due_date_str,
+            days_overdue=days_overdue,
+        )
+        summary["total_notifications"] += 1
+
+    async def _notify_due_soon_task(
+        self,
+        task: Task,
+        project_name: str,
+        due_date_str: str,
+        days_until_due: int,
+        summary: dict[str, int],
+    ) -> None:
+        """Notify an assignee about a task due within three days."""
+        assignee = task.assignee
+        if assignee is None:
+            return
+        await self.notification_service.notify_task_due_soon(
+            assignee=assignee,
+            task_id=task.id,
+            task_title=task.title,
+            project_id=task.project_id,
+            project_name=project_name,
+            due_date=due_date_str,
+            days_left=days_until_due,
+        )
+        summary_key = {0: "due_today", 1: "due_tomorrow"}.get(days_until_due, "due_in_3_days")
+        summary[summary_key] += 1
+        summary["total_notifications"] += 1
+
     async def _process_task_batch(
         self,
         tasks: list[Task],
@@ -83,104 +150,41 @@ class AsyncDeadlineReminderService:
     ) -> None:
         """Evaluate one task page and queue its due-date notifications."""
         for task in tasks:
-            if not task.due_date:
-                continue
+            await self._process_task(task, today, notified_keys, summary)
 
-            # Handle both date and datetime
-            due_date = task.due_date.date() if hasattr(task.due_date, "date") else task.due_date
+    async def _process_task(
+        self,
+        task: Task,
+        today,
+        notified_keys: set[tuple[Any, Any, str]],
+        summary: dict[str, int],
+    ) -> None:
+        """Evaluate one task and queue the matching deadline notification."""
+        if not task.due_date or not task.assignee:
+            return
 
-            days_until_due = (due_date - today).days
+        due_date = task.due_date.date() if hasattr(task.due_date, "date") else task.due_date
+        days_until_due = (due_date - today).days
+        notification_type = "task_overdue" if days_until_due < 0 else "task_due_soon"
+        if (task.assignee.id, task.id, notification_type) in notified_keys:
+            return
 
-            # Skip if no assignee
-            if not task.assignee:
-                continue
-
-            # Check if we already sent a notification today for this task
-            notification_type = "task_overdue" if days_until_due < 0 else "task_due_soon"
-            if (task.assignee.id, task.id, notification_type) in notified_keys:
-                continue
-
-            project_name = task.project.name if task.project else "Unknown Project"
-            due_date_str = due_date.isoformat()
-
-            if days_until_due < 0:
-                # Task is overdue
-                days_overdue = abs(days_until_due)
-                await self.notification_service.notify_task_overdue(
-                    user=task.assignee,
-                    task_id=task.id,
-                    task_title=task.title,
-                    project_id=task.project_id,
-                    project_name=project_name,
-                    due_date=due_date_str,
-                    days_overdue=days_overdue,
-                )
-                summary["overdue"] += 1
-                summary["total_notifications"] += 1
-
-                # Also notify creator if different from assignee
-                if (
-                    task.creator
-                    and task.creator.id != task.assignee.id
-                    and (
-                        task.creator.id,
-                        task.id,
-                        notification_type,
-                    )
-                    not in notified_keys
-                ):
-                    await self.notification_service.notify_task_overdue(
-                        user=task.creator,
-                        task_id=task.id,
-                        task_title=task.title,
-                        project_id=task.project_id,
-                        project_name=project_name,
-                        due_date=due_date_str,
-                        days_overdue=days_overdue,
-                    )
-                    summary["total_notifications"] += 1
-
-            elif days_until_due == 0:
-                # Due today
-                await self.notification_service.notify_task_due_soon(
-                    assignee=task.assignee,
-                    task_id=task.id,
-                    task_title=task.title,
-                    project_id=task.project_id,
-                    project_name=project_name,
-                    due_date=due_date_str,
-                    days_left=0,
-                )
-                summary["due_today"] += 1
-                summary["total_notifications"] += 1
-
-            elif days_until_due == 1:
-                # Due tomorrow
-                await self.notification_service.notify_task_due_soon(
-                    assignee=task.assignee,
-                    task_id=task.id,
-                    task_title=task.title,
-                    project_id=task.project_id,
-                    project_name=project_name,
-                    due_date=due_date_str,
-                    days_left=1,
-                )
-                summary["due_tomorrow"] += 1
-                summary["total_notifications"] += 1
-
-            elif days_until_due <= 3:
-                # Due in 2-3 days
-                await self.notification_service.notify_task_due_soon(
-                    assignee=task.assignee,
-                    task_id=task.id,
-                    task_title=task.title,
-                    project_id=task.project_id,
-                    project_name=project_name,
-                    due_date=due_date_str,
-                    days_left=days_until_due,
-                )
-                summary["due_in_3_days"] += 1
-                summary["total_notifications"] += 1
+        project_name = task.project.name if task.project else "Unknown Project"
+        due_date_str = due_date.isoformat()
+        if days_until_due < 0:
+            await self._notify_overdue_task(
+                task,
+                project_name,
+                due_date_str,
+                abs(days_until_due),
+                notification_type,
+                notified_keys,
+                summary,
+            )
+        elif days_until_due <= 3:
+            await self._notify_due_soon_task(
+                task, project_name, due_date_str, days_until_due, summary
+            )
 
     async def _get_notified_keys(
         self, tasks: list[Task], now: datetime

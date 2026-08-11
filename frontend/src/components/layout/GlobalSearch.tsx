@@ -57,7 +57,7 @@ function evictExpiredSearchCache() {
   }
 }
 
-export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
+export function GlobalSearch({ className, onSelect }: Readonly<GlobalSearchProps>) {
   const router = useRouter();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const userId = useAuthStore((state) => state.user?.id ?? null);
@@ -233,7 +233,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
         className="h-10 rounded-full border-border bg-background pl-10 pr-10 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:bg-background focus:ring-0 transition-all duration-200 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden [&::-ms-clear]:hidden"
       />
       {query && (
-        <button
+        <button type="button"
           onClick={clearSearch}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           aria-label="Clear search"
@@ -258,7 +258,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
                     Projects
                   </div>
                   {results.projects.map((project) => (
-                    <button
+                    <button type="button"
                       key={project.id}
                       onClick={() => handleSelectProject(project)}
                       className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors group cursor-pointer"
@@ -283,7 +283,7 @@ export function GlobalSearch({ className, onSelect }: GlobalSearchProps) {
                     Tasks
                   </div>
                   {results.tasks.map((task) => (
-                    <button
+                    <button type="button"
                       key={task.id}
                       onClick={() => handleSelectTask(task)}
                       className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors group cursor-pointer"

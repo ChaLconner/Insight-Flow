@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useId } from "react";
 import Image from "next/image";
 import { Search, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getAvatarUrl } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { usersApi } from "@/lib/api-endpoints";
 import type { User as UserType } from "@/types";
-import { getAvatarUrl } from "@/lib/utils";
 import { useClickOutside } from "@/hooks/use-click-outside";
 
 interface UserSearchSelectProps {
@@ -28,7 +27,7 @@ export function UserSearchSelect({
   id,
   name,
   autoComplete,
-}: UserSearchSelectProps) {
+}: Readonly<UserSearchSelectProps>) {
   const [query, setQuery] = useState(value);
   const [users, setUsers] = useState<UserType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +35,8 @@ export function UserSearchSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
   // Generate a unique ID if none provided to ensure accessibility compliance
-  const inputId = useRef(id ?? `user-search-${Math.random().toString(36).substr(2, 9)}`).current;
+  const generatedInputId = useId();
+  const inputId = id ?? `user-search-${generatedInputId}`;
 
   useEffect(() => {
     setQuery(value);
@@ -109,7 +109,7 @@ export function UserSearchSelect({
       {isOpen && users.length > 0 && (
         <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover/95 backdrop-blur-xl shadow-xl max-h-60 overflow-auto custom-scrollbar">
           {users.map((user) => (
-            <button
+            <button type="button"
               key={user.id}
               onClick={() => handleSelect(user)}
               className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent transition-colors cursor-pointer"

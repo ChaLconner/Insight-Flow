@@ -5,13 +5,16 @@ import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { ProjectStatus } from "@/types";
 
+type ProjectStatusFilter = ProjectStatus | "all";
+type ProjectSort = "newest" | "oldest" | "name";
+
 interface ProjectFiltersProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
-  statusFilter: ProjectStatus | "all";
-  onStatusFilterChange: (value: ProjectStatus | "all") => void;
-  sortBy: "newest" | "oldest" | "name";
-  onSortChange: (value: "newest" | "oldest" | "name") => void;
+  statusFilter: ProjectStatusFilter;
+  onStatusFilterChange: (value: ProjectStatusFilter) => void;
+  sortBy: ProjectSort;
+  onSortChange: (value: ProjectSort) => void;
   onClear: () => void;
 }
 

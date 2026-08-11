@@ -32,7 +32,7 @@ export function InviteUserModal({
   isOpen,
   onClose,
   onSuccess,
-}: InviteUserModalProps) {
+}: Readonly<InviteUserModalProps>) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {

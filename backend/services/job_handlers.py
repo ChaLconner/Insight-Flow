@@ -85,123 +85,155 @@ async def _load_users(db: AsyncSession, user_ids: list[uuid.UUID]) -> dict[uuid.
     return {user.id: user for user in result.scalars().all()}
 
 
-async def _dispatch_notification(  # noqa: PLR0911, PLR0912
-    db: AsyncSession, payload: dict[str, Any]
+async def _dispatch_task_assigned(
+    db: AsyncSession, payload: dict[str, Any], service: AsyncNotificationTriggerService
 ) -> None:
+    task = await _load_task(db, _uuid(payload["task_id"]))
+    users = await _load_users(db, [_uuid(payload["assignee_id"]), _uuid(payload["assigner_id"])])
+    if not task or not task.assignee or not task.project:
+        logger.info("Skipping task assignment notification for missing task relations")
+        return
+    assigner = users.get(_uuid(payload["assigner_id"]))
+    if assigner:
+        await service.notify_task_assigned(
+            assignee=task.assignee,
+            task_id=task.id,
+            task_title=task.title,
+            project_id=task.project_id,
+            project_name=task.project.name,
+            assigner=assigner,
+        )
+
+
+async def _dispatch_task_status_changed(
+    db: AsyncSession, payload: dict[str, Any], service: AsyncNotificationTriggerService
+) -> None:
+    task = await _load_task(db, _uuid(payload["task_id"]))
+    changer = (await _load_users(db, [_uuid(payload["changer_id"])])).get(
+        _uuid(payload["changer_id"])
+    )
+    if not task or not changer:
+        return
+    await service.notify_task_status_changed(
+        task_id=task.id,
+        task_title=task.title,
+        project_id=task.project_id,
+        old_status=payload["old_status"],
+        new_status=payload["new_status"],
+        changer=changer,
+        assignee=task.assignee,
+        creator=task.creator,
+    )
+    if payload.get("completed"):
+        await service.notify_task_completed(
+            task_id=task.id,
+            task_title=task.title,
+            project_id=task.project_id,
+            project_name=task.project.name if task.project else "Unknown Project",
+            completer=changer,
+            creator=task.creator,
+        )
+
+
+async def _dispatch_project_member_added(
+    db: AsyncSession, payload: dict[str, Any], service: AsyncNotificationTriggerService
+) -> None:
+    member_id = _uuid(payload["member_id"])
+    inviter_id = _uuid(payload["inviter_id"])
+    users = await _load_users(db, [member_id, inviter_id])
+    member = users.get(member_id)
+    inviter = users.get(inviter_id)
+    if member and inviter:
+        await service.notify_project_member_added(
+            new_member=member,
+            project_id=_uuid(payload["project_id"]),
+            project_name=payload["project_name"],
+            role=payload["role"],
+            inviter=inviter,
+        )
+
+
+async def _dispatch_project_member_removed(
+    db: AsyncSession, payload: dict[str, Any], service: AsyncNotificationTriggerService
+) -> None:
+    member_id = _uuid(payload["member_id"])
+    remover_id = _uuid(payload["remover_id"])
+    users = await _load_users(db, [member_id, remover_id])
+    member = users.get(member_id)
+    remover = users.get(remover_id)
+    if member and remover:
+        await service.notify_project_member_removed(
+            removed_member=member,
+            project_id=_uuid(payload["project_id"]),
+            project_name=payload["project_name"],
+            remover=remover,
+        )
+
+
+async def _dispatch_mention(
+    db: AsyncSession, payload: dict[str, Any], service: AsyncNotificationTriggerService
+) -> None:
+    mentioned_user_id = _uuid(payload["mentioned_user_id"])
+    project_id = _uuid(payload["project_id"]) if payload.get("project_id") else None
+    if project_id:
+        membership = await db.execute(
+            select(Project.id)
+            .outerjoin(
+                ProjectMember,
+                and_(
+                    ProjectMember.project_id == Project.id,
+                    ProjectMember.user_id == mentioned_user_id,
+                ),
+            )
+            .where(
+                Project.id == project_id,
+                or_(
+                    Project.owner_id == mentioned_user_id,
+                    ProjectMember.user_id.is_not(None),
+                ),
+            )
+        )
+        if membership.scalar_one_or_none() is None:
+            logger.info("Skipping mention for a non-member recipient")
+            return
+
+    actor_id = _uuid(payload["actor_id"])
+    users = await _load_users(db, [mentioned_user_id, actor_id])
+    mentioned_user = users.get(mentioned_user_id)
+    actor = users.get(actor_id)
+    if mentioned_user and mentioned_user.is_active and actor and actor.is_active:
+        await service.notify_mention(
+            mentioned_user=mentioned_user,
+            actor=actor,
+            message=payload["message"],
+            project_id=project_id,
+            task_id=_uuid(payload["task_id"]) if payload.get("task_id") else None,
+        )
+
+
+async def _dispatch_notification(db: AsyncSession, payload: dict[str, Any]) -> None:
     """Dispatch notification intent after reloading fresh ORM state."""
     event = payload["event"]
     service = AsyncNotificationTriggerService(db)
 
     if event == "task_assigned":
-        task = await _load_task(db, _uuid(payload["task_id"]))
-        users = await _load_users(
-            db, [_uuid(payload["assignee_id"]), _uuid(payload["assigner_id"])]
-        )
-        if not task or not task.assignee or not task.project:
-            logger.info("Skipping task assignment notification for missing task relations")
-            return
-        assigner = users.get(_uuid(payload["assigner_id"]))
-        if assigner:
-            await service.notify_task_assigned(
-                assignee=task.assignee,
-                task_id=task.id,
-                task_title=task.title,
-                project_id=task.project_id,
-                project_name=task.project.name,
-                assigner=assigner,
-            )
+        await _dispatch_task_assigned(db, payload, service)
         return
 
     if event == "task_status_changed":
-        task = await _load_task(db, _uuid(payload["task_id"]))
-        changer = (await _load_users(db, [_uuid(payload["changer_id"])])).get(
-            _uuid(payload["changer_id"])
-        )
-        if not task or not changer:
-            return
-        await service.notify_task_status_changed(
-            task_id=task.id,
-            task_title=task.title,
-            project_id=task.project_id,
-            old_status=payload["old_status"],
-            new_status=payload["new_status"],
-            changer=changer,
-            assignee=task.assignee,
-            creator=task.creator,
-        )
-        if payload.get("completed"):
-            await service.notify_task_completed(
-                task_id=task.id,
-                task_title=task.title,
-                project_id=task.project_id,
-                project_name=task.project.name if task.project else "Unknown Project",
-                completer=changer,
-                creator=task.creator,
-            )
+        await _dispatch_task_status_changed(db, payload, service)
         return
 
     if event == "project_member_added":
-        users = await _load_users(db, [_uuid(payload["member_id"]), _uuid(payload["inviter_id"])])
-        member = users.get(_uuid(payload["member_id"]))
-        inviter = users.get(_uuid(payload["inviter_id"]))
-        if member and inviter:
-            await service.notify_project_member_added(
-                new_member=member,
-                project_id=_uuid(payload["project_id"]),
-                project_name=payload["project_name"],
-                role=payload["role"],
-                inviter=inviter,
-            )
+        await _dispatch_project_member_added(db, payload, service)
         return
 
     if event == "project_member_removed":
-        users = await _load_users(db, [_uuid(payload["member_id"]), _uuid(payload["remover_id"])])
-        member = users.get(_uuid(payload["member_id"]))
-        remover = users.get(_uuid(payload["remover_id"]))
-        if member and remover:
-            await service.notify_project_member_removed(
-                removed_member=member,
-                project_id=_uuid(payload["project_id"]),
-                project_name=payload["project_name"],
-                remover=remover,
-            )
+        await _dispatch_project_member_removed(db, payload, service)
         return
 
     if event == "mention":
-        mentioned_user_id = _uuid(payload["mentioned_user_id"])
-        project_id = _uuid(payload["project_id"]) if payload.get("project_id") else None
-        if project_id:
-            membership = await db.execute(
-                select(Project.id)
-                .outerjoin(
-                    ProjectMember,
-                    and_(
-                        ProjectMember.project_id == Project.id,
-                        ProjectMember.user_id == mentioned_user_id,
-                    ),
-                )
-                .where(
-                    Project.id == project_id,
-                    or_(
-                        Project.owner_id == mentioned_user_id,
-                        ProjectMember.user_id.is_not(None),
-                    ),
-                )
-            )
-            if membership.scalar_one_or_none() is None:
-                logger.info("Skipping mention for a non-member recipient")
-                return
-        users = await _load_users(db, [mentioned_user_id, _uuid(payload["actor_id"])])
-        mentioned_user = users.get(mentioned_user_id)
-        actor = users.get(_uuid(payload["actor_id"]))
-        if mentioned_user and mentioned_user.is_active and actor and actor.is_active:
-            await service.notify_mention(
-                mentioned_user=mentioned_user,
-                actor=actor,
-                message=payload["message"],
-                project_id=project_id,
-                task_id=_uuid(payload["task_id"]) if payload.get("task_id") else None,
-            )
+        await _dispatch_mention(db, payload, service)
         return
 
     raise ValueError(f"Unknown notification event: {event}")

@@ -151,7 +151,10 @@ describe("useNotifications", () => {
   });
 
   it("creates convenience notifications with expected defaults", () => {
-    vi.stubGlobal("Notification", class {});
+    class MockNotification {
+      static readonly permission = "denied";
+    }
+    vi.stubGlobal("Notification", MockNotification);
     Object.defineProperty(Notification, "permission", {
       configurable: true,
       value: "denied",
@@ -230,7 +233,9 @@ describe("useNotifications", () => {
       false,
     );
 
-    class PermissionNotification {}
+    class PermissionNotification {
+      static readonly permission = "granted";
+    }
     vi.stubGlobal("Notification", PermissionNotification);
     Object.defineProperty(Notification, "permission", {
       configurable: true,
@@ -270,7 +275,7 @@ describe("useNotifications", () => {
     const closeMock = vi.fn();
     const notificationMock = vi.fn();
     class BrowserNotification {
-      static permission = "denied";
+      static readonly permission = "denied";
       close = closeMock;
 
       constructor(title: string, options?: NotificationOptions) {

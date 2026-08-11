@@ -54,7 +54,7 @@ def verify_google_id_token(token: str) -> dict | None:
         }
 
     except Exception as e:
-        logger.error(f"Error verifying Google ID token: {e}")
+        logger.exception(f"Error verifying Google ID token: {e}")
         return None
 
 
@@ -88,7 +88,7 @@ def verify_google_access_token(access_token: str) -> dict | None:
             "email_verified": user_info.get("email_verified", False),
         }
     except Exception as e:
-        logger.error(f"Error verifying Google access token: {e}")
+        logger.exception(f"Error verifying Google access token: {e}")
         return None
 
 
@@ -133,7 +133,7 @@ async def async_verify_google_access_token(access_token: str) -> dict | None:
                 "email_verified": user_info.get("email_verified", False),
             }
     except Exception as e:
-        logger.error(f"Error verifying Google access token: {e}")
+        logger.exception(f"Error verifying Google access token: {e}")
         return None
 
 

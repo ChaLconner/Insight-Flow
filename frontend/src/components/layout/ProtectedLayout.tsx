@@ -53,7 +53,7 @@ function RoleRedirectLayout() {
 export function ProtectedLayout({
   children,
   requiredRole,
-}: ProtectedLayoutProps) {
+}: Readonly<ProtectedLayoutProps>) {
   // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL - BEFORE ANY CONDITIONAL RETURNS
   const { isAuthenticated, isLoading, isInitialized, user } = useRequireAuth();
   const router = useRouter();

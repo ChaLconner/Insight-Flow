@@ -46,7 +46,7 @@ export const ProjectHeader = memo(function ProjectHeader({
 
       {/* Tabs */}
       <div className="flex space-x-1 rounded-xl bg-secondary p-1 w-fit">
-        <button
+        <button type="button"
           onClick={() => onTabChange("projects")}
           className={`
             flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer
@@ -60,7 +60,7 @@ export const ProjectHeader = memo(function ProjectHeader({
           <LayoutGrid className="h-4 w-4" />
           Projects
         </button>
-        <button
+        <button type="button"
           onClick={() => onTabChange("tasks")}
           className={`
             flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer

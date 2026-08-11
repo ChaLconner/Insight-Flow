@@ -48,7 +48,7 @@ const checkA11y = (element: HTMLElement): { violations: string[]; passes: string
   const headings = element.querySelectorAll("h1, h2, h3, h4, h5, h6");
   let previousLevel = 0;
   headings.forEach((heading) => {
-    const level = parseInt(heading.tagName.charAt(1));
+    const level = Number.parseInt(heading.tagName.charAt(1), 10);
     if (previousLevel > 0 && level > previousLevel + 1) {
       violations.push(`Heading hierarchy skipped from h${previousLevel} to h${level}`);
     } else {
@@ -261,7 +261,7 @@ describe("Accessibility - Keyboard Navigation", () => {
     `;
 
     const buttons = div.querySelectorAll("button");
-    expect(buttons.length).toBe(3);
+    expect(buttons).toHaveLength(3);
 
     // All buttons should be focusable
     buttons.forEach((button) => {
@@ -373,7 +373,7 @@ describe("Accessibility - Screen Reader Support", () => {
     `;
 
     const hiddenElements = div.querySelectorAll('[aria-hidden="true"]');
-    expect(hiddenElements.length).toBe(2);
+    expect(hiddenElements).toHaveLength(2);
   });
 });
 

@@ -118,7 +118,7 @@ async def cache_auth_user(user: User) -> None:
     payload = _serialize_user(user)
     if payload is not None:
         try:
-            await cache_service.set(_cache_key(user.id), payload, timeout=AUTH_USER_CACHE_TTL)
+            await cache_service.set(_cache_key(user.id), payload, ttl=AUTH_USER_CACHE_TTL)
         except Exception as exc:
             logger.warning(f"Auth cache write failed: {exc}")
 

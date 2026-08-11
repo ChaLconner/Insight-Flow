@@ -2,6 +2,7 @@ import { StateCreator } from "zustand";
 
 import type { BreadcrumbItem, Notification } from "@/types";
 import { FormState } from "./form-slice";
+import { generateId } from "@/lib/utils";
 
 // Toast data type
 export interface ToastData {
@@ -258,7 +259,7 @@ export const createUISlice: StateCreator<UIState & FormState, [], [], UIState> =
 
   // Alert Actions
   addAlert: (alert) => {
-    const id = `alert-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    const id = `alert-${Date.now()}-${generateId(8)}`;
 
     set((state) => ({
       alerts: [...state.alerts, { ...alert, id }],

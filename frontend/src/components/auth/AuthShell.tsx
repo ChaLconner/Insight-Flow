@@ -7,7 +7,7 @@ import {
   FloatingShapes,
 } from "@/components/ui/animated-background";
 
-export function AuthShell({ children }: { children: React.ReactNode }) {
+export function AuthShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const originalThemeRef = useRef<{
     className: string;
     colorScheme: string;
@@ -21,8 +21,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     root.classList.remove("light", "system");
     root.classList.add("dark");
     root.style.colorScheme = "dark";
-    root.setAttribute("data-theme", "dark");
-    root.setAttribute("data-color-scheme", "dark");
+    root.dataset.theme = "dark";
+    root.dataset.colorScheme = "dark";
   };
 
   useEffect(() => {
@@ -61,8 +61,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
     originalThemeRef.current ??= {
       className: root.className,
       colorScheme: root.style.colorScheme,
-      dataTheme: root.getAttribute("data-theme"),
-      dataColorScheme: root.getAttribute("data-color-scheme"),
+      dataTheme: root.dataset.theme ?? null,
+      dataColorScheme: root.dataset.colorScheme ?? null,
     };
 
     applyAuthTheme();
@@ -91,8 +91,8 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
             !root.classList.contains("dark") ||
             root.classList.contains("light") ||
             root.style.colorScheme !== "dark" ||
-            root.getAttribute("data-theme") !== "dark" ||
-            root.getAttribute("data-color-scheme") !== "dark"
+            root.dataset.theme !== "dark" ||
+            root.dataset.colorScheme !== "dark"
           ) {
             applyAuthTheme();
           }
@@ -118,15 +118,15 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       root.style.colorScheme = original.colorScheme;
 
       if (original.dataTheme == null) {
-        root.removeAttribute("data-theme");
+        delete root.dataset.theme;
       } else {
-        root.setAttribute("data-theme", original.dataTheme);
+        root.dataset.theme = original.dataTheme;
       }
 
       if (original.dataColorScheme == null) {
-        root.removeAttribute("data-color-scheme");
+        delete root.dataset.colorScheme;
       } else {
-        root.setAttribute("data-color-scheme", original.dataColorScheme);
+        root.dataset.colorScheme = original.dataColorScheme;
       }
     };
    

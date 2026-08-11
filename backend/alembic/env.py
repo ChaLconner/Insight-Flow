@@ -27,6 +27,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
+ASYNC_DATABASE_SCHEME = "postgresql+asyncpg://"
+
 # Add the project root directory to the python path
 sys.path.append(os.getcwd())
 
@@ -98,11 +100,11 @@ def get_url() -> str:
 
     # Ensure usage of asyncpg driver
     if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgresql://", ASYNC_DATABASE_SCHEME, 1)
     elif url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgres://", ASYNC_DATABASE_SCHEME, 1)
     elif url.startswith("postgresql+pg8000://"):
-        url = url.replace("postgresql+pg8000://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgresql+pg8000://", ASYNC_DATABASE_SCHEME, 1)
 
     # Remove query parameters that may cause issues with asyncpg
     # (sslmode, etc. are handled differently by asyncpg)
@@ -203,7 +205,7 @@ async def run_async_migrations() -> None:
             await connection.run_sync(do_run_migrations)
         logger.info("Migrations completed successfully")
     except Exception as e:
-        logger.error(f"Migration failed: {e}")
+        logger.exception(f"Migration failed: {e}")
         raise
     finally:
         await connectable.dispose()

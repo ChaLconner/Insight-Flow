@@ -33,7 +33,7 @@ export function CustomSelect({
   placeholder,
   id,
   name,
-}: CustomSelectProps) {
+}: Readonly<CustomSelectProps>) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const reactId = useId();
@@ -45,8 +45,13 @@ export function CustomSelect({
   useClickOutside(containerRef, closeOptions);
 
   const selectedOption = options.find((opt) => opt.value === value);
-  const selectedLabel =
-    selectedOption?.label ?? (value ? value : placeholder) ?? "Select...";
+  let selectedLabel = placeholder ?? "Select...";
+  if (value) {
+    selectedLabel = value;
+  }
+  if (selectedOption) {
+    selectedLabel = selectedOption.label;
+  }
 
   const sizeClasses = {
     default: "h-9 px-3 py-2",
@@ -88,14 +93,13 @@ export function CustomSelect({
         <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover/95 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100">
           <div
             className="py-1 max-h-60 overflow-auto custom-scrollbar"
-            role="listbox"
+            aria-label="Select an option"
           >
             {options.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                role="option"
-                aria-selected={value === option.value}
+                aria-pressed={value === option.value}
                 onClick={() => {
                   onChange(option.value);
                   setIsOpen(false);

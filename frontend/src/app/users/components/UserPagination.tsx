@@ -21,7 +21,7 @@ export function UserPagination({
   hasMore,
   isLoading,
   onPageChange,
-}: UserPaginationProps) {
+}: Readonly<UserPaginationProps>) {
   const startIndex = (page - 1) * pageSize + 1;
   const endIndex = startIndex + currentCount - 1;
 
@@ -41,9 +41,8 @@ export function UserPagination({
           `Page ${page}`
         )}
       </div>
-      <div
+      <nav
         className="flex items-center gap-2"
-        role="navigation"
         aria-label="Pagination"
       >
         <Button
@@ -67,7 +66,7 @@ export function UserPagination({
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Button>
-      </div>
+      </nav>
     </div>
   );
 }

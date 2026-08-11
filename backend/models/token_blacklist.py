@@ -2,6 +2,7 @@
 Token blacklist model for managing revoked tokens.
 """
 
+import secrets
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -153,9 +154,7 @@ class TokenBlacklist(BaseModel):
         rotate tokens can reject it instead of issuing another token pair.
         """
         # Clean up expired tokens probabilistically (10% chance) to reduce DB load
-        import random
-
-        if random.random() < 0.1:
+        if secrets.randbelow(10) == 0:
             await cls.async_cleanup_expired_tokens(db_session)
 
         # Check if already blacklisted

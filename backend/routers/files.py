@@ -9,6 +9,7 @@ import asyncio
 import os
 import uuid
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -34,12 +35,54 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 UPLOAD_DIR = str(Path(__file__).resolve().parent.parent / "storage" / "private_uploads")
 DOWNLOAD_URL_PREFIX = "/api/v1/files/download"
+INVALID_FILE_PATH_DETAIL = "Invalid file path"
+FILE_NOT_FOUND_DETAIL = "File not found"
+FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"description": "Invalid file request"},
+    403: {"description": "The authenticated user does not own the file"},
+    404: {"description": "File not found"},
+    500: {"description": "File operation failed"},
+}
 
 # Ensure upload directory exists
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-@router.post("/upload")
+async def _read_and_validate_upload(file: UploadFile, current_user: User) -> tuple[bytes, str, int]:
+    """Read an upload within limits and validate its declared and detected type."""
+    try:
+        content = await read_upload_with_limit(file, MAX_FILE_SIZE_BYTES)
+    except FileSecurityError as e:
+        logger.warning(
+            f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
+        )
+        raise HTTPException(status_code=400, detail=e.message) from e
+
+    try:
+        file_extension, file_size = validate_general_upload(
+            filename=file.filename,
+            content_type=file.content_type,
+            content=content,
+        )
+    except FileSecurityError as e:
+        logger.warning(
+            f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
+        )
+        raise HTTPException(status_code=400, detail=e.message) from e
+    return content, file_extension, file_size
+
+
+def _cleanup_upload(path: str | None, file_committed: bool, error_type: str) -> None:
+    """Remove a partially written upload after a failed request."""
+    if file_committed or not path or not os.path.exists(path):
+        return
+    try:
+        os.remove(path)
+    except OSError as cleanup_error:
+        logger.warning(f"Failed to remove {error_type} upload: {cleanup_error}")
+
+
+@router.post("/upload", responses=FILE_ERROR_RESPONSES)
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
@@ -59,26 +102,7 @@ async def upload_file(
     file_committed = False
     try:
         # Read in bounded chunks so the request body cannot exhaust process memory.
-        try:
-            content = await read_upload_with_limit(file, MAX_FILE_SIZE_BYTES)
-        except FileSecurityError as e:
-            logger.warning(
-                f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
-            )
-            raise HTTPException(status_code=400, detail=e.message)
-
-        # Security: Validate file upload (extension, MIME type, size)
-        try:
-            file_extension, file_size = validate_general_upload(
-                filename=file.filename,
-                content_type=file.content_type,
-                content=content,
-            )
-        except FileSecurityError as e:
-            logger.warning(
-                f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
-            )
-            raise HTTPException(status_code=400, detail=e.message)
+        content, file_extension, file_size = await _read_and_validate_upload(file, current_user)
 
         # Generate unique filename with validated extension
         unique_name = f"{uuid.uuid4()}{file_extension}"
@@ -89,7 +113,7 @@ async def upload_file(
             validated_path = validate_file_path(UPLOAD_DIR, file_path)
         except FileSecurityError:
             logger.warning(f"Path traversal attempt by user {mask_user_id(str(current_user.id))}")
-            raise HTTPException(status_code=400, detail="Invalid file path")
+            raise HTTPException(status_code=400, detail=INVALID_FILE_PATH_DETAIL)
 
         # Save file
         await asyncio.to_thread(_write_binary_file, validated_path, content)
@@ -113,20 +137,12 @@ async def upload_file(
         return {"url": url, "filename": unique_name, "id": str(db_file.id)}
 
     except HTTPException:
-        if not file_committed and validated_path and os.path.exists(validated_path):
-            try:
-                os.remove(validated_path)
-            except OSError as cleanup_error:
-                logger.warning(f"Failed to remove rejected upload: {cleanup_error}")
+        _cleanup_upload(validated_path, file_committed, "rejected")
         raise
     except Exception as e:
         await db.rollback()
-        if not file_committed and validated_path and os.path.exists(validated_path):
-            try:
-                os.remove(validated_path)
-            except OSError as cleanup_error:
-                logger.warning(f"Failed to remove incomplete upload: {cleanup_error}")
-        logger.error(f"File upload error: {e}")
+        _cleanup_upload(validated_path, file_committed, "incomplete")
+        logger.exception(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail="File upload failed")
 
 
@@ -141,25 +157,25 @@ def _resolve_upload_path(url: str, current_user: User) -> tuple[str, str]:
         logger.warning(
             f"Path traversal attempt by user {mask_user_id(str(current_user.id))}: {url[:50]}"
         )
-        raise HTTPException(status_code=400, detail="Invalid file path")
+        raise HTTPException(status_code=400, detail=INVALID_FILE_PATH_DETAIL)
 
     filename = os.path.basename(url)
     if not filename or ".." in filename or "/" in filename or "\\" in filename:
         logger.warning(
             f"Suspicious file path by user {mask_user_id(str(current_user.id))}: {url[:50]}"
         )
-        raise HTTPException(status_code=400, detail="Invalid file path")
+        raise HTTPException(status_code=400, detail=INVALID_FILE_PATH_DETAIL)
 
     file_path = os.path.join(UPLOAD_DIR, filename)
     try:
         validated_path = validate_file_path(UPLOAD_DIR, file_path)
     except FileSecurityError:
-        raise HTTPException(status_code=400, detail="Invalid file path")
+        raise HTTPException(status_code=400, detail=INVALID_FILE_PATH_DETAIL)
 
     return filename, validated_path
 
 
-@router.get("/info")
+@router.get("/info", responses=FILE_ERROR_RESPONSES)
 async def get_file_info(
     url: str,
     current_user: User = Depends(get_current_active_user),
@@ -188,7 +204,7 @@ async def get_file_info(
         if not db_file:
             # Do not expose or delete orphaned files by filename. A separate
             # operator reconciliation job can remove rows/files safely.
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=FILE_NOT_FOUND_DETAIL)
 
         return {
             "url": db_file.url if db_file else f"{DOWNLOAD_URL_PREFIX}/{filename}",
@@ -202,11 +218,11 @@ async def get_file_info(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"File info error: {e}")
+        logger.exception(f"File info error: {e}")
         raise HTTPException(status_code=500, detail="File info lookup failed")
 
 
-@router.get("/download/{filename}")
+@router.get("/download/{filename}", responses=FILE_ERROR_RESPONSES)
 async def download_file(
     filename: str,
     current_user: User = Depends(get_current_active_user),
@@ -221,7 +237,7 @@ async def download_file(
         db_file = result.scalar_one_or_none()
 
         if not db_file:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=FILE_NOT_FOUND_DETAIL)
         if db_file.user_id != current_user.id:
             logger.warning(
                 f"Unauthorized file download attempt by user {mask_user_id(str(current_user.id))} "
@@ -229,7 +245,7 @@ async def download_file(
             )
             raise HTTPException(status_code=403, detail="Not authorized to access this file")
         if not os.path.exists(validated_path):
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=FILE_NOT_FOUND_DETAIL)
 
         return FileResponse(
             validated_path,
@@ -240,11 +256,11 @@ async def download_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"File download error: {e}")
+        logger.exception(f"File download error: {e}")
         raise HTTPException(status_code=500, detail="File download failed")
 
 
-@router.delete("/delete")
+@router.delete("/delete", responses=FILE_ERROR_RESPONSES)
 async def delete_file(
     url: str,
     current_user: User = Depends(get_current_active_user),
@@ -266,7 +282,7 @@ async def delete_file(
         db_file = result.scalar_one_or_none()
 
         if not db_file:
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=FILE_NOT_FOUND_DETAIL)
 
         # Security: Check ownership before deletion.
         if db_file.user_id != current_user.id:
@@ -281,7 +297,7 @@ async def delete_file(
             # unknown orphan. The ownership row is still checked above.
             await db.delete(db_file)
             await db.commit()
-            raise HTTPException(status_code=404, detail="File not found")
+            raise HTTPException(status_code=404, detail=FILE_NOT_FOUND_DETAIL)
 
         quarantine_path = os.path.join(UPLOAD_DIR, f".deleting-{uuid.uuid4()}-{filename}")
         os.replace(validated_path, quarantine_path)
@@ -293,7 +309,9 @@ async def delete_file(
             try:
                 os.replace(quarantine_path, validated_path)
             except OSError as restore_error:
-                logger.error("Failed to restore file after DB delete failure: %s", restore_error)
+                logger.exception(
+                    "Failed to restore file after DB delete failure: %s", restore_error
+                )
             raise
 
         try:
@@ -310,5 +328,5 @@ async def delete_file(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"File delete error: {e}")
+        logger.exception(f"File delete error: {e}")
         raise HTTPException(status_code=500, detail="File deletion failed")

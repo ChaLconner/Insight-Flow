@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart as RechartsPieChart,
   Pie,
-  Cell,
   Tooltip,
   ResponsiveContainer,
   Legend,
@@ -57,6 +56,10 @@ const renderStatusLabel = ({ payload, percent, name }: PieLabelRenderProps) => {
   return `${displayName} ${(valuePercent * 100).toFixed(0)}%`;
 };
 
+const renderStatusLegend = (value: string | number) => (
+  <span className="text-muted-foreground">{value}</span>
+);
+
 const StatusDistributionChartComponent: React.FC<
   StatusDistributionChartProps
 > = ({ data = [] }) => {
@@ -66,6 +69,9 @@ const StatusDistributionChartComponent: React.FC<
       data.map((item) => ({
         ...item,
         displayName: formatStatusName(item.name),
+        fill:
+          STATUS_COLORS[item.name.toLowerCase().replace(" ", "_")] ||
+          "#6b7280",
       })),
     [data],
   );
@@ -112,19 +118,8 @@ const StatusDistributionChartComponent: React.FC<
                 nameKey="displayName"
                 label={renderStatusLabel}
                 labelLine={false}
-              >
-                {formattedData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={
-                      STATUS_COLORS[
-                        entry.name.toLowerCase().replace(" ", "_")
-                      ] || "#6b7280"
-                    }
-                    strokeWidth={0}
-                  />
-                ))}
-              </Pie>
+                strokeWidth={0}
+              />
               <Tooltip
                 contentStyle={analyticsTooltipStyle}
                 itemStyle={analyticsTooltipTextStyle}
@@ -133,9 +128,7 @@ const StatusDistributionChartComponent: React.FC<
               />
               <Legend
                 wrapperStyle={{ paddingTop: "20px" }}
-                formatter={(value) => (
-                  <span className="text-muted-foreground">{value}</span>
-                )}
+                formatter={renderStatusLegend}
               />
             </RechartsPieChart>
           </ResponsiveContainer>

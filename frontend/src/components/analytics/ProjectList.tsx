@@ -30,9 +30,9 @@ const ProjectListComponent: React.FC<ProjectListProps> = ({ projects }) => {
       <CardContent className="flex-1 min-h-0">
         {projects.length > 0 ? (
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {projects.map((project: AnalyticsProject, index: number) => (
+            {projects.map((project: AnalyticsProject) => (
               <Link
-                key={index}
+                key={project.id}
                 href={`/projects/${project.id}`}
                 className="block w-full"
               >

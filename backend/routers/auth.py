@@ -59,6 +59,9 @@ from utils.token_utils import (
 
 logger = setup_logger("auth_router")
 
+PASSWORD_SECURITY_DETAIL = "Password does not meet security requirements"
+INACTIVE_USER_DETAIL = "Inactive user"
+
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
@@ -66,6 +69,18 @@ def _get_session_version(user: User) -> int:
     """Return a normalized session version for token issuance."""
     version = getattr(user, "session_version", 0)
     return version if isinstance(version, int) else 0
+
+
+def _get_refresh_token(request: Request) -> str | None:
+    refresh_token = request.cookies.get(REFRESH_TOKEN_KEY)
+    if refresh_token:
+        return refresh_token
+
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header.split(" ", 1)[1]
+
+    return None
 
 
 def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
@@ -147,7 +162,7 @@ async def register(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "message": "Password does not meet security requirements",
+                    "message": PASSWORD_SECURITY_DETAIL,
                     "violations": error_messages,
                 },
             )
@@ -176,7 +191,7 @@ async def verify_email(
     )
 
 
-@router.post("/login", response_model=Any)
+@router.post("/login")
 async def login(
     login_data: UserLogin,
     response: Response,
@@ -211,7 +226,9 @@ async def login(
             )
 
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=INACTIVE_USER_DETAIL
+            )
 
         if not user.is_verified:
             raise HTTPException(
@@ -244,7 +261,7 @@ async def login(
         logger.warning(f"Login rejected: {http_err.detail}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during login: {e!s}", exc_info=True)
+        logger.exception(f"Unexpected error during login: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during login. Please try again.",
@@ -309,7 +326,9 @@ async def google_login(
         )
 
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=INACTIVE_USER_DETAIL
+            )
 
         # Update last login time
         await user_service.update_last_login(user.id)
@@ -327,10 +346,10 @@ async def google_login(
         return _login_success_response(user)
 
     except HTTPException as http_err:
-        logger.error(f"HTTP error during Google login: {http_err.detail}")
+        logger.exception(f"HTTP error during Google login: {http_err.detail}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during Google login: {e!s}")
+        logger.exception(f"Unexpected error during Google login: {e!s}")
         raise
 
 
@@ -392,7 +411,9 @@ async def github_login(
         )
 
         if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=INACTIVE_USER_DETAIL
+            )
 
         # Update last login time
         await user_service.update_last_login(user.id)
@@ -410,10 +431,10 @@ async def github_login(
         return _login_success_response(user)
 
     except HTTPException as http_err:
-        logger.error(f"HTTP error during GitHub login: {http_err.detail}")
+        logger.exception(f"HTTP error during GitHub login: {http_err.detail}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during GitHub login: {e!s}")
+        logger.exception(f"Unexpected error during GitHub login: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during GitHub authentication",
@@ -465,12 +486,12 @@ async def logout(
         return {"message": "Successfully logged out"}
 
     except Exception as e:
-        logger.error(f"Error during logout for user {mask_email(user_email)}: {e}")
+        logger.exception(f"Error during logout for user {mask_email(user_email)}: {e}")
         # Still return success even if blacklisting fails
         return {"message": "Successfully logged out"}
 
 
-@router.post("/refresh", response_model=Any)
+@router.post("/refresh")
 async def refresh_token(
     request: Request,
     response: Response,
@@ -481,14 +502,7 @@ async def refresh_token(
     """
     Refresh access token using a refresh token from HttpOnly cookie.
     """
-    # Get refresh token from cookie
-    refresh_token = request.cookies.get(REFRESH_TOKEN_KEY)
-
-    # Fallback/Debug: check header
-    if not refresh_token:
-        auth_header = request.headers.get("authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            refresh_token = auth_header.split(" ")[1]
+    refresh_token = _get_refresh_token(request)
 
     if not refresh_token:
         logger.error("Refresh token is null or empty")
@@ -518,7 +532,7 @@ async def refresh_token(
         # Re-raise HTTP exceptions (like Token has been revoked) without logging as error
         raise
     except Exception as e:
-        logger.error(f"Token verification error: {e}")
+        logger.exception(f"Token verification error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
@@ -544,7 +558,7 @@ async def refresh_token(
 
     if not user.is_active:
         logger.warning(f"User {user_id} is not active")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=INACTIVE_USER_DETAIL)
 
     # Capture scalar auth state before token-rotation writes.  A concurrent
     # duplicate JTI claim rolls the SQLAlchemy session back; rollback expires
@@ -613,7 +627,9 @@ async def forgot_password(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in forgot password for email {mask_email(request_data.email)}: {e}")
+        logger.exception(
+            f"Error in forgot password for email {mask_email(request_data.email)}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
         )
@@ -638,7 +654,7 @@ async def reset_password(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "message": "Password does not meet security requirements",
+                    "message": PASSWORD_SECURITY_DETAIL,
                     "violations": error_messages,
                 },
             )
@@ -663,7 +679,7 @@ async def reset_password(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in reset password for token {mask_token(request_data.token)}: {e}")
+        logger.exception(f"Error in reset password for token {mask_token(request_data.token)}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error"
         )
@@ -708,7 +724,7 @@ async def validate_reset_token(
             return ValidateResetTokenResponse(valid=False, message="Invalid or expired reset token")
 
     except Exception as e:
-        logger.error(f"Error validating reset token: {e}")
+        logger.exception(f"Error validating reset token: {e}")
         return ValidateResetTokenResponse(valid=False, message="Failed to validate reset token")
 
 
@@ -759,7 +775,7 @@ async def change_password(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
-                    "message": "Password does not meet security requirements",
+                    "message": PASSWORD_SECURITY_DETAIL,
                     "violations": error_messages,
                 },
             )
@@ -774,7 +790,7 @@ async def change_password(
         logger.info(f"Password changed successfully for user: {mask_email(current_user.email)}")
         return {"message": "Password changed successfully"}
     except ValueError as e:
-        logger.error(
+        logger.exception(
             f"Validation error changing password for user {mask_email(current_user.email)}: {e}"
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -782,7 +798,7 @@ async def change_password(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.error(f"Error changing password for user {mask_email(current_user.email)}: {e}")
+        logger.exception(f"Error changing password for user {mask_email(current_user.email)}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to change password"
         )

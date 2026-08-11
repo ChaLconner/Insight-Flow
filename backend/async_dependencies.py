@@ -38,24 +38,19 @@ def _create_project_permission(allowed_roles: list[str]):
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        if current_user.role == "admin":
-            return project
-
-        if project.owner_id == current_user.id:
-            return project
-
-        result = await db.execute(
-            select(ProjectMember).filter(
-                ProjectMember.project_id == p_uuid, ProjectMember.user_id == current_user.id
+        if current_user.role != "admin" and project.owner_id != current_user.id:
+            result = await db.execute(
+                select(ProjectMember).filter(
+                    ProjectMember.project_id == p_uuid, ProjectMember.user_id == current_user.id
+                )
             )
-        )
-        member = result.scalars().first()
+            member = result.scalars().first()
 
-        if not member:
-            raise HTTPException(status_code=403, detail="Not a member of this project")
+            if not member:
+                raise HTTPException(status_code=403, detail="Not a member of this project")
 
-        if MemberRole(member.role).value not in allowed_roles:
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+            if MemberRole(member.role).value not in allowed_roles:
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
 
         return project
 

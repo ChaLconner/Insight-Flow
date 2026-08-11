@@ -31,6 +31,34 @@ interface TaskItemProps {
   onClick: (task: Task) => void;
 }
 
+const getTaskStatusDotColor = (status: string) => {
+  switch (status.toLowerCase()) {
+    case "done":
+      return "bg-emerald-500";
+    case "in_progress":
+      return "bg-blue-500";
+    case "in_review":
+      return "bg-purple-500";
+    case "cancelled":
+      return "bg-red-500";
+    default:
+      return "bg-zinc-500";
+  }
+};
+
+const getTaskPriorityColor = (priority: string) => {
+  switch (priority) {
+    case "urgent":
+      return "text-fuchsia-400";
+    case "high":
+      return "text-red-400";
+    case "medium":
+      return "text-yellow-400";
+    default:
+      return "text-blue-400";
+  }
+};
+
 export const TaskItem = memo(
   ({
     task,
@@ -51,17 +79,7 @@ export const TaskItem = memo(
           <CardContent className="p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div
-                className={`h-2 w-2 rounded-full ${
-                  task.status.toLowerCase() === "done"
-                    ? "bg-emerald-500"
-                    : task.status.toLowerCase() === "in_progress"
-                      ? "bg-blue-500"
-                      : task.status.toLowerCase() === "in_review"
-                        ? "bg-purple-500"
-                        : task.status.toLowerCase() === "cancelled"
-                          ? "bg-red-500"
-                          : "bg-zinc-500"
-                }`}
+                className={`h-2 w-2 rounded-full ${getTaskStatusDotColor(task.status)}`}
               />
               <div className="min-w-0 flex-1">
                 <h4 className="text-foreground font-medium truncate">
@@ -76,15 +94,7 @@ export const TaskItem = memo(
                   )}
                   {task.priority && (
                     <span
-                      className={`flex items-center gap-1 ${
-                        task.priority === "urgent"
-                          ? "text-fuchsia-400"
-                          : task.priority === "high"
-                            ? "text-red-400"
-                            : task.priority === "medium"
-                              ? "text-yellow-400"
-                              : "text-blue-400"
-                      }`}
+                      className={`flex items-center gap-1 ${getTaskPriorityColor(task.priority)}`}
                     >
                       <Flag className="h-3 w-3" />
                       <span className="capitalize">{task.priority}</span>
@@ -140,7 +150,7 @@ export const TaskItem = memo(
 
                 {isOpen && (
                   <div className="absolute right-0 top-full mt-2 w-48 rounded-md bg-popover shadow-xl z-50 py-1 focus:outline-none task-menu-dropdown">
-                    <button
+                    <button type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -151,7 +161,7 @@ export const TaskItem = memo(
                       <Edit className="mr-2 h-4 w-4" />
                       Edit Task
                     </button>
-                    <button
+                    <button type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();

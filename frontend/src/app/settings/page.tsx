@@ -123,7 +123,7 @@ function SettingsContent() {
             <CardContent className="p-2">
               <nav className="flex flex-row lg:flex-col gap-2 lg:gap-0 lg:space-y-1 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
                 {SETTINGS_TABS.map((tab) => (
-                  <button
+                  <button type="button"
                     key={tab.id}
                     onClick={() => handleTabChange(tab.id)}
                     className={`flex-shrink-0 lg:flex-shrink lg:w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${

@@ -31,6 +31,7 @@ from utils.validators import validate_password_strength
 
 # Thread pool for CPU-bound operations (password hashing)
 _password_executor = ThreadPoolExecutor(max_workers=4)
+EMAIL_JOB_TYPE = "email.send"
 
 
 def escape_like_pattern(pattern: str) -> str:
@@ -50,6 +51,77 @@ class AsyncUserService:
         """Create SHA256 hash of the token."""
         return hashlib.sha256(token.encode()).hexdigest()
 
+    @staticmethod
+    def _user_name(user_data: UserCreate) -> str | None:
+        """Resolve the display name used when creating a user."""
+        if user_data.name:
+            return user_data.name
+        if user_data.first_name or user_data.last_name:
+            return f"{user_data.first_name or ''} {user_data.last_name or ''}".strip()
+        return None
+
+    async def _prepare_new_user(self, user_data: UserCreate) -> tuple[User, str]:
+        """Build a user and stage its secure verification fields."""
+        db_user = User(
+            email=user_data.email,
+            name=self._user_name(user_data),
+            first_name=user_data.first_name,
+            last_name=user_data.last_name,
+            avatar_url=user_data.avatar_url,
+            google_id=user_data.google_id,
+            github_id=getattr(user_data, "github_id", None),
+            role="member",
+            username=user_data.username,
+            phone=user_data.phone,
+            bio=user_data.bio,
+            location=user_data.location,
+            website=user_data.website,
+        )
+
+        if user_data.password:
+            validate_password_strength(user_data.password)
+            db_user.hashed_password = await self.hash_password(user_data.password)
+
+        raw_token = str(uuid.uuid4())
+        db_user.verification_token = self._hash_token(raw_token)
+        db_user.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=24)
+        db_user.is_verified = False
+        db_user.is_active = True
+        return db_user, raw_token
+
+    async def _stage_trial_subscription(self, user_data: UserCreate, user_id: uuid.UUID) -> None:
+        """Stage a trial subscription when the requested plan supports one."""
+        if not user_data.plan or user_data.plan.lower() not in ["starter", "pro", "enterprise"]:
+            return
+        try:
+            trial_end = datetime.now(UTC) + timedelta(days=14)
+            new_sub = Subscription(
+                user_id=user_id,
+                plan=SubscriptionPlan(user_data.plan.lower()),
+                status=SubscriptionStatus.TRIALING,
+                current_period_start=datetime.now(UTC).isoformat(),
+                current_period_end=trial_end.isoformat(),
+                cancel_at_period_end=False,
+            )
+            self.db.add(new_sub)
+            await self.db.flush()
+            logger.info(f"Staged trial subscription ({user_data.plan}) for user {user_data.email}")
+        except Exception as e:
+            logger.error(f"Failed to create trial subscription for user {user_data.email}: {e}")
+            raise ValueError("User creation failed while staging subscription") from e
+
+    @staticmethod
+    def _user_creation_integrity_error(error: IntegrityError) -> ValueError:
+        """Map unique-constraint failures to the public user-facing error."""
+        message = str(error)
+        if "email" in message:
+            return ValueError("Email already registered")
+        if "google_id" in message:
+            return ValueError("Google account already linked")
+        if "username" in message:
+            return ValueError("Username already taken")
+        return ValueError("User creation failed")
+
     async def get_user_by_google_id(self, google_id: str) -> User | None:
         """Get user by Google ID."""
         result = await self.db.execute(select(User).filter(User.google_id == google_id))
@@ -68,39 +140,7 @@ class AsyncUserService:
     async def create_user(self, user_data: UserCreate) -> User:
         """Create a new user with secure verification token."""
         try:
-            name = user_data.name
-            if not name and (user_data.first_name or user_data.last_name):
-                name = f"{user_data.first_name or ''} {user_data.last_name or ''}".strip()
-
-            db_user = User(
-                email=user_data.email,
-                name=name,
-                first_name=user_data.first_name,
-                last_name=user_data.last_name,
-                avatar_url=user_data.avatar_url,
-                google_id=user_data.google_id,
-                github_id=getattr(user_data, "github_id", None),
-                role="member",
-                username=user_data.username,
-                phone=user_data.phone,
-                bio=user_data.bio,
-                location=user_data.location,
-                website=user_data.website,
-            )
-
-            if user_data.password:
-                validate_password_strength(user_data.password)
-                db_user.hashed_password = await self.hash_password(user_data.password)
-
-            # Verification Logic (A+ Security)
-            # Create raw token (sent via email)
-            raw_token = str(uuid.uuid4())
-            # Store hashed token in DB
-            db_user.verification_token = self._hash_token(raw_token)
-            # Set expiration (24 hours)
-            db_user.verification_token_expires_at = datetime.now(UTC) + timedelta(hours=24)
-            db_user.is_verified = False
-            db_user.is_active = True
+            db_user, raw_token = await self._prepare_new_user(user_data)
 
             self.db.add(db_user)
             # Flush assigns the user id without committing, allowing the
@@ -108,33 +148,12 @@ class AsyncUserService:
             await self.db.flush()
             await self.db.refresh(db_user)
 
-            # Handle Trial Subscription
-            if user_data.plan and user_data.plan.lower() in ["starter", "pro", "enterprise"]:
-                try:
-                    trial_end = datetime.now(UTC) + timedelta(days=14)
-                    new_sub = Subscription(
-                        user_id=db_user.id,
-                        plan=SubscriptionPlan(user_data.plan.lower()),
-                        status=SubscriptionStatus.TRIALING,
-                        current_period_start=datetime.now(UTC).isoformat(),
-                        current_period_end=trial_end.isoformat(),
-                        cancel_at_period_end=False,
-                    )
-                    self.db.add(new_sub)
-                    await self.db.flush()
-                    logger.info(
-                        f"Staged trial subscription ({user_data.plan}) for user {db_user.email}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to create trial subscription for user {db_user.email}: {e}"
-                    )
-                    raise ValueError("User creation failed while staging subscription") from e
+            await self._stage_trial_subscription(user_data, db_user.id)
 
             # Queue verification delivery in the same database-backed workflow.
             await enqueue_job(
                 self.db,
-                "email.send",
+                EMAIL_JOB_TYPE,
                 {
                     "method": "verification",
                     "email": db_user.email,
@@ -148,14 +167,7 @@ class AsyncUserService:
 
         except IntegrityError as e:
             await self.db.rollback()
-            if "email" in str(e):
-                raise ValueError("Email already registered")
-            elif "google_id" in str(e):
-                raise ValueError("Google account already linked")
-            elif "username" in str(e):
-                raise ValueError("Username already taken")
-            else:
-                raise ValueError("User creation failed")
+            raise self._user_creation_integrity_error(e) from e
         except Exception:
             await self.db.rollback()
             raise
@@ -216,9 +228,9 @@ class AsyncUserService:
 
         await self.db.flush()
 
-        await enqueue_job(
+        verification_job = await enqueue_job(
             self.db,
-            "email.send",
+            EMAIL_JOB_TYPE,
             {
                 "method": "verification",
                 "email": email,
@@ -228,7 +240,7 @@ class AsyncUserService:
         )
         await self.db.commit()
         logger.info(f"Verification email resent to {mask_email(email)}")
-        return True
+        return bool(verification_job.id)
 
     async def log_auth_attempt(
         self,
@@ -266,6 +278,55 @@ class AsyncUserService:
             )
         )
 
+    async def _queue_account_lockout_notification(
+        self,
+        user: User,
+        locked_until: datetime,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Queue the durable notification emitted when login attempts lock an account."""
+        try:
+            await enqueue_job(
+                self.db,
+                EMAIL_JOB_TYPE,
+                {
+                    "method": "account_lockout",
+                    "email": user.email,
+                    "locked_until": locked_until.isoformat(),
+                    "ip_address": ip_address,
+                    "user_agent": user_agent,
+                },
+                idempotency_key=f"account-lockout:{user.id}:{locked_until}",
+            )
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to queue account lockout notification: {e}")
+            raise RuntimeError("Authentication temporarily unavailable") from e
+
+    async def _record_failed_login(
+        self,
+        user: User,
+        login_data: UserLogin,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Update lockout state, audit the failure, and invalidate user auth cache."""
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 5:
+            locked_until = datetime.now(UTC) + timedelta(minutes=15)
+            user.locked_until = locked_until
+            logger.warning(f"Locking account for user: {mask_email(user.email)}")
+            await self._queue_account_lockout_notification(
+                user, locked_until, ip_address, user_agent
+            )
+
+        self._add_auth_attempt(
+            login_data.email, AuthStatus.FAILURE, ip_address, user_agent, user.id
+        )
+        await self.db.commit()
+        await invalidate_auth_user_cache(user.id)
+
     async def authenticate_user(
         self,
         login_data: UserLogin,
@@ -300,41 +361,7 @@ class AsyncUserService:
             logger.warning(
                 f"Password authentication failed for email: {mask_email(login_data.email)}"
             )
-
-            # Increment failed attempts
-            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
-
-            # Lock if >= 5 attempts
-            if user.failed_login_attempts >= 5:
-                user.locked_until = datetime.now(UTC) + timedelta(minutes=15)
-                logger.warning(f"Locking account for user: {mask_email(user.email)}")
-
-                # A+ Security: queue account lockout notification durably.
-                try:
-                    await enqueue_job(
-                        self.db,
-                        "email.send",
-                        {
-                            "method": "account_lockout",
-                            "email": user.email,
-                            "locked_until": user.locked_until.isoformat()
-                            if user.locked_until
-                            else None,
-                            "ip_address": ip_address,
-                            "user_agent": user_agent,
-                        },
-                        idempotency_key=f"account-lockout:{user.id}:{user.locked_until}",
-                    )
-                except Exception as e:
-                    await self.db.rollback()
-                    logger.error(f"Failed to queue account lockout notification: {e}")
-                    raise RuntimeError("Authentication temporarily unavailable") from e
-
-            self._add_auth_attempt(
-                login_data.email, AuthStatus.FAILURE, ip_address, user_agent, user.id
-            )
-            await self.db.commit()
-            await invalidate_auth_user_cache(user.id)
+            await self._record_failed_login(user, login_data, ip_address, user_agent)
             return None
 
         # 4. Success
@@ -525,14 +552,8 @@ class AsyncUserService:
         result = await self.db.execute(select(User).offset(skip).limit(limit))
         return list(result.scalars().all())
 
-    async def update_user(self, user_id: uuid.UUID, user_update: UserUpdate) -> User:
-        """Update user profile."""
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            raise ValueError("User not found")
-
-        update_data = user_update.model_dump(exclude_unset=True)
-
+    def _apply_user_update(self, user: User, update_data: dict) -> None:
+        """Apply profile fields and any additional user fields to the model."""
         if "first_name" in update_data:
             user.first_name = update_data["first_name"]
         if "last_name" in update_data:
@@ -545,19 +566,30 @@ class AsyncUserService:
             last = update_data.get("last_name", user.last_name or "")
             user.name = f"{first} {last}".strip()
 
+        profile_fields = {"first_name", "last_name", "name"}
         for key, value in update_data.items():
-            if key not in ["first_name", "last_name", "name"]:
+            if key not in profile_fields:
                 setattr(user, key, value)
+
+    async def _invalidate_user_update_caches(self, user_id: uuid.UUID, update_data: dict) -> None:
+        """Invalidate caches affected by a user profile update."""
+        await invalidate_auth_user_cache(user_id)
+        if "role" in update_data or "is_active" in update_data:
+            await invalidate_dashboard_and_analytics_cache()
+
+    async def update_user(self, user_id: uuid.UUID, user_update: UserUpdate) -> User:
+        """Update user profile."""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        update_data = user_update.model_dump(exclude_unset=True)
+        self._apply_user_update(user, update_data)
 
         try:
             await self.db.commit()
             await self.db.refresh(user)
-            await invalidate_auth_user_cache(user.id)
-
-            # Invalidate dashboard/analytics cache if user role or status changed
-            # (affects team statistics displayed on dashboard)
-            if "role" in update_data or "is_active" in update_data:
-                await invalidate_dashboard_and_analytics_cache()
+            await self._invalidate_user_update_caches(user.id, update_data)
 
             return user
         except IntegrityError as e:

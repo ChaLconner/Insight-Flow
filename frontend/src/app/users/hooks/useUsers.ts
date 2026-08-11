@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { User } from "@/types";
-import type { UserRole } from "@/types";
+import type { User, UserRole } from "@/types";
 import { useAuthStore } from "@/stores/auth-store";
 import { usersApi } from "@/lib/api-endpoints";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/error-utils";
 import type { UserStatsData } from "../types";
 import { DEFAULT_USER_STATS } from "../types";
+
+type RoleFilter = UserRole | "all";
+type UserStatusFilter = "all" | "active" | "inactive";
 
 interface UseUsersOptions {
   pageSize?: number;
@@ -30,10 +32,10 @@ interface UseUsersReturn {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   debouncedSearchQuery: string;
-  roleFilter: UserRole | "all";
-  setRoleFilter: (role: UserRole | "all") => void;
-  statusFilter: "all" | "active" | "inactive";
-  setStatusFilter: (status: "all" | "active" | "inactive") => void;
+  roleFilter: RoleFilter;
+  setRoleFilter: (role: RoleFilter) => void;
+  statusFilter: UserStatusFilter;
+  setStatusFilter: (status: UserStatusFilter) => void;
 
   // Pagination
   page: number;

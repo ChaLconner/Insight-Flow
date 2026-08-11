@@ -6,16 +6,20 @@ Supports Stripe integration for payment method management and subscriptions.
 import enum
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
+from uuid import UUID as PythonUUID
 
 from sqlalchemy import Boolean, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import BaseModel
 
 if TYPE_CHECKING:
     from .user import User
+
+USERS_ID = "users.id"
+SET_NULL = "SET NULL"
 
 
 class SubscriptionStatus(enum.StrEnum):
@@ -57,8 +61,11 @@ class PaymentMethod(BaseModel):
 
     __tablename__ = "payment_methods"
 
-    user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    user_id: Mapped[PythonUUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey(USERS_ID, ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     stripe_payment_method_id: Mapped[str] = mapped_column(
         String(255), unique=True, nullable=False, index=True
@@ -105,9 +112,9 @@ class Subscription(BaseModel):
 
     __tablename__ = "subscriptions"
 
-    user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[PythonUUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey(USERS_ID, ondelete="CASCADE"),
         nullable=False,
         unique=True,
         index=True,
@@ -135,8 +142,10 @@ class Subscription(BaseModel):
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Payment method reference
-    default_payment_method_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("payment_methods.id", ondelete="SET NULL"), nullable=True
+    default_payment_method_id: Mapped[PythonUUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("payment_methods.id", ondelete=SET_NULL),
+        nullable=True,
     )
 
     # Pricing
@@ -162,14 +171,21 @@ class PaymentHistory(BaseModel):
 
     __tablename__ = "payment_history"
 
-    user_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    user_id: Mapped[PythonUUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey(USERS_ID, ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    subscription_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subscriptions.id", ondelete="SET NULL"), nullable=True
+    subscription_id: Mapped[PythonUUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("subscriptions.id", ondelete=SET_NULL),
+        nullable=True,
     )
-    payment_method_id: Mapped[UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("payment_methods.id", ondelete="SET NULL"), nullable=True
+    payment_method_id: Mapped[PythonUUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("payment_methods.id", ondelete=SET_NULL),
+        nullable=True,
     )
 
     # Stripe references

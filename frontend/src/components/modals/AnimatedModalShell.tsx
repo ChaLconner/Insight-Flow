@@ -18,7 +18,7 @@ export function AnimatedModalShell({
   children,
   className,
   containerClassName,
-}: AnimatedModalShellProps) {
+}: Readonly<AnimatedModalShellProps>) {
   return (
     <AnimatePresence>
       {isOpen && (

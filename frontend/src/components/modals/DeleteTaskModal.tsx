@@ -19,7 +19,7 @@ export function DeleteTaskModal({
   onConfirm,
   task,
   isDeleting,
-}: DeleteTaskModalProps) {
+}: Readonly<DeleteTaskModalProps>) {
   return (
     <AnimatedModalShell
       isOpen={isOpen}
@@ -39,7 +39,7 @@ export function DeleteTaskModal({
                     Are you sure you want to delete{" "}
                     <span className="text-foreground font-medium">
                       "{task?.title}"
-                    </span>
+                    </span>{" "}
                     ? This action cannot be undone.
                   </p>
                 </div>

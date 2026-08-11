@@ -107,7 +107,7 @@ class TestAuthRouterEdgeCases:
     """Detailed tests for edge cases in Auth Router."""
 
     @pytest.mark.asyncio
-    async def test_login_account_locked(self, mock_db):
+    async def test_login_account_locked(self, mock_db, monkeypatch):
         """Test login with locked account."""
         mock_user_service = AsyncMock()
         mock_user_service.authenticate_user.side_effect = ValueError(
@@ -117,7 +117,7 @@ class TestAuthRouterEdgeCases:
         async def mock_get_user_service():
             return mock_user_service
 
-        app.dependency_overrides[get_user_service] = mock_get_user_service
+        monkeypatch.setitem(app.dependency_overrides, get_user_service, mock_get_user_service)
 
         with TestClient(app) as client:
             response = client.post(
@@ -129,10 +129,10 @@ class TestAuthRouterEdgeCases:
             except Exception:
                 raise
 
-        app.dependency_overrides = {}
+        monkeypatch.setattr(app, "dependency_overrides", {})
 
     @pytest.mark.asyncio
-    async def test_login_inactive_user(self, mock_db):
+    async def test_login_inactive_user(self, mock_db, monkeypatch):
         """Test login with inactive user."""
         mock_user_service = AsyncMock()
         mock_user = MagicMock()
@@ -142,7 +142,7 @@ class TestAuthRouterEdgeCases:
         async def mock_get_user_service():
             return mock_user_service
 
-        app.dependency_overrides[get_user_service] = mock_get_user_service
+        monkeypatch.setitem(app.dependency_overrides, get_user_service, mock_get_user_service)
 
         with TestClient(app) as client:
             response = client.post(
@@ -154,10 +154,10 @@ class TestAuthRouterEdgeCases:
             except Exception:
                 raise
 
-        app.dependency_overrides = {}
+        monkeypatch.setattr(app, "dependency_overrides", {})
 
     @pytest.mark.asyncio
-    async def test_login_unverified_email(self, mock_db):
+    async def test_login_unverified_email(self, mock_db, monkeypatch):
         """Test login with unverified email."""
         mock_user_service = AsyncMock()
         mock_user = MagicMock()
@@ -168,7 +168,7 @@ class TestAuthRouterEdgeCases:
         async def mock_get_user_service():
             return mock_user_service
 
-        app.dependency_overrides[get_user_service] = mock_get_user_service
+        monkeypatch.setitem(app.dependency_overrides, get_user_service, mock_get_user_service)
 
         with TestClient(app) as client:
             response = client.post(
@@ -181,7 +181,7 @@ class TestAuthRouterEdgeCases:
             except Exception:
                 raise
 
-        app.dependency_overrides = {}
+        monkeypatch.setattr(app, "dependency_overrides", {})
 
     @pytest.mark.asyncio
     async def test_google_login_not_configured(self):
@@ -230,7 +230,7 @@ class TestAuthRouterEdgeCases:
                     raise
 
     @pytest.mark.asyncio
-    async def test_change_password_incorrect_current(self, mock_db):
+    async def test_change_password_incorrect_current(self, mock_db, monkeypatch):
         """Test change password with incorrect current password."""
         mock_user = MagicMock()
         mock_user.hashed_password = "hashed_secret"
@@ -245,8 +245,10 @@ class TestAuthRouterEdgeCases:
         async def mock_get_user_service():
             return mock_user_service
 
-        app.dependency_overrides[get_current_active_user] = mock_get_current_active_user
-        app.dependency_overrides[get_user_service] = mock_get_user_service
+        monkeypatch.setitem(
+            app.dependency_overrides, get_current_active_user, mock_get_current_active_user
+        )
+        monkeypatch.setitem(app.dependency_overrides, get_user_service, mock_get_user_service)
 
         with TestClient(app) as client:
             response = client.post(
@@ -256,7 +258,7 @@ class TestAuthRouterEdgeCases:
             assert response.status_code == 400
             assert "Current password is incorrect" in response.json()["message"]
 
-        app.dependency_overrides = {}
+        monkeypatch.setattr(app, "dependency_overrides", {})
 
     @pytest.mark.asyncio
     async def test_refresh_token_revoked(self, mock_db):

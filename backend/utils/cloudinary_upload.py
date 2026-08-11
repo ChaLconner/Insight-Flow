@@ -108,7 +108,7 @@ def upload_avatar(file_content: bytes, filename: str, user_id: str) -> dict[str,
 
     except Exception as e:
         # Use exc_info=True to properly log the stack trace
-        logger.error(f"Failed to upload avatar to Cloudinary: {e!s}", exc_info=True)
+        logger.exception(f"Failed to upload avatar to Cloudinary: {e!s}", exc_info=True)
         return None
 
 
@@ -134,7 +134,7 @@ def delete_avatar(public_id: str) -> bool:
         return bool(success)
 
     except Exception as e:
-        logger.error(f"Failed to delete avatar from Cloudinary: {e!s}")
+        logger.exception(f"Failed to delete avatar from Cloudinary: {e!s}")
         return False
 
 
@@ -162,5 +162,5 @@ def get_avatar_url(public_id: str, width: int = 200, height: int = 200) -> str:
         )
         return str(url)
     except Exception as e:
-        logger.error(f"Failed to generate Cloudinary URL: {e!s}")
+        logger.exception(f"Failed to generate Cloudinary URL: {e!s}")
         return ""

@@ -30,36 +30,6 @@ DEFAULT_TRUSTED_PROXIES: set[str] = {
     "::1",
 }
 
-# Cloud provider proxy ranges (these IPs are typically set by load balancers)
-CLOUD_TRUSTED_PROXIES: dict[str, list[str]] = {
-    "render": [
-        # Render's internal proxy network
-        "10.0.0.0/8",
-    ],
-    "vercel": [
-        # Vercel's public edge ranges are not a stable application-owned
-        # trust boundary. Configure TRUSTED_PROXIES with the actual proxy
-        # addresses for a deployment that terminates requests behind Vercel.
-    ],
-    "cloudflare": [
-        "173.245.48.0/20",
-        "103.21.244.0/22",
-        "103.22.200.0/22",
-        "103.31.4.0/22",
-        "141.101.64.0/18",
-        "108.162.192.0/18",
-        "190.93.240.0/20",
-        "188.114.96.0/20",
-        "197.234.240.0/22",
-        "198.41.128.0/17",
-        "162.158.0.0/15",
-        "104.16.0.0/13",
-        "104.24.0.0/14",
-        "172.64.0.0/13",
-        "131.0.72.0/22",
-    ],
-}
-
 
 def get_trusted_proxies() -> set[str]:
     """
@@ -67,7 +37,8 @@ def get_trusted_proxies() -> set[str]:
 
     Environment Variables:
         TRUSTED_PROXIES: Comma-separated list of IP addresses or CIDRs
-        CLOUD_PROVIDER: Name of cloud provider (render, vercel, cloudflare)
+        CLOUD_PROVIDER: Optional deployment provider label for logging
+        CLOUD_TRUSTED_PROXIES: Comma-separated provider proxy IPs or CIDRs
 
     Returns:
         Set of trusted proxy IPs/CIDRs
@@ -82,10 +53,11 @@ def get_trusted_proxies() -> set[str]:
             if proxy:
                 trusted.add(proxy)
 
-    # Add cloud provider proxies
+    # Add provider proxies only when explicitly configured by the operator.
     cloud_provider = os.getenv("CLOUD_PROVIDER", "").lower()
-    if cloud_provider in CLOUD_TRUSTED_PROXIES:
-        trusted.update(CLOUD_TRUSTED_PROXIES[cloud_provider])
+    cloud_proxies = os.getenv("CLOUD_TRUSTED_PROXIES", "")
+    if cloud_provider and cloud_proxies:
+        trusted.update(proxy.strip() for proxy in cloud_proxies.split(",") if proxy.strip())
         logger.debug(f"Added {cloud_provider} trusted proxies")
 
     return trusted
@@ -157,7 +129,41 @@ def validate_ip_address(ip: str) -> str | None:
         return None
 
 
-def get_client_ip(request: Request, trust_proxy: bool = True) -> str:  # noqa: PLR0911
+def _get_direct_client_ip(request: Request) -> str | None:
+    """Extract and validate the address of the direct peer."""
+    direct_ip = request.client.host if request.client else None
+    if not direct_ip:
+        return None
+    return validate_ip_address(direct_ip)
+
+
+def _get_forwarded_client_ip(request: Request) -> str | None:
+    """Extract the first untrusted address from a trusted proxy chain."""
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if not forwarded_for:
+        return None
+
+    ips = [ip.strip() for ip in forwarded_for.split(",")]
+    trusted_proxies = get_trusted_proxies()
+    for ip in reversed(ips):
+        validated_ip = validate_ip_address(ip)
+        if validated_ip and not is_trusted_proxy(validated_ip, trusted_proxies):
+            return validated_ip
+
+    if ips:
+        return validate_ip_address(ips[0])
+    return None
+
+
+def _get_real_client_ip(request: Request) -> str | None:
+    """Extract and validate the simpler X-Real-IP fallback header."""
+    real_ip = request.headers.get("x-real-ip")
+    if not real_ip:
+        return None
+    return validate_ip_address(real_ip)
+
+
+def get_client_ip(request: Request, trust_proxy: bool = True) -> str:
     """
     Extract the real client IP address from a request, handling proxies securely.
 
@@ -173,14 +179,7 @@ def get_client_ip(request: Request, trust_proxy: bool = True) -> str:  # noqa: P
     Returns:
         Client IP address (or "unknown" if cannot be determined)
     """
-    # Get direct connection IP
-    direct_ip = request.client.host if request.client else None
-
-    if not direct_ip:
-        return "unknown"
-
-    # Validate direct IP
-    direct_ip = validate_ip_address(direct_ip)
+    direct_ip = _get_direct_client_ip(request)
     if not direct_ip:
         return "unknown"
 
@@ -195,36 +194,7 @@ def get_client_ip(request: Request, trust_proxy: bool = True) -> str:  # noqa: P
         logger.debug(f"Request not from trusted proxy, using direct IP: {direct_ip}")
         return direct_ip
 
-    # Check X-Forwarded-For header
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        # Parse the header (format: "client, proxy1, proxy2, ...")
-        ips = [ip.strip() for ip in forwarded_for.split(",")]
-
-        # Find the rightmost non-trusted IP (working backwards)
-        # This is more secure than taking the leftmost
-        trusted_proxies = get_trusted_proxies()
-
-        for ip in reversed(ips):
-            validated_ip = validate_ip_address(ip)
-            if validated_ip and not is_trusted_proxy(validated_ip, trusted_proxies):
-                return validated_ip
-
-        # All IPs in the chain are trusted - take the leftmost (original client)
-        if ips:
-            first_ip = validate_ip_address(ips[0])
-            if first_ip:
-                return first_ip
-
-    # Check X-Real-IP header (simpler, often set by nginx)
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        validated_real_ip = validate_ip_address(real_ip)
-        if validated_real_ip:
-            return validated_real_ip
-
-    # Fallback to direct IP
-    return direct_ip
+    return _get_forwarded_client_ip(request) or _get_real_client_ip(request) or direct_ip
 
 
 def get_request_metadata(request: Request) -> dict[str, Any]:

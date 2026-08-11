@@ -21,7 +21,7 @@ from services.async_usage_service import AsyncUsageService
 from services.async_user_service import AsyncUserService
 
 
-async def get_project_service(db: AsyncSession = Depends(get_async_db)) -> AsyncProjectService:
+def get_project_service(db: AsyncSession = Depends(get_async_db)) -> AsyncProjectService:
     """
     Dependency to get AsyncProjectService instance.
 
@@ -35,7 +35,7 @@ async def get_project_service(db: AsyncSession = Depends(get_async_db)) -> Async
     return AsyncProjectService(db)
 
 
-async def get_user_service(db: AsyncSession = Depends(get_async_db)) -> AsyncUserService:
+def get_user_service(db: AsyncSession = Depends(get_async_db)) -> AsyncUserService:
     """
     Dependency to get AsyncUserService instance.
 
@@ -49,7 +49,7 @@ async def get_user_service(db: AsyncSession = Depends(get_async_db)) -> AsyncUse
     return AsyncUserService(db)
 
 
-async def get_notification_service(
+def get_notification_service(
     db: AsyncSession = Depends(get_async_db),
 ) -> AsyncNotificationTriggerService:
     """
@@ -64,7 +64,7 @@ async def get_notification_service(
     return AsyncNotificationTriggerService(db)
 
 
-async def get_password_reset_service(
+def get_password_reset_service(
     db: AsyncSession = Depends(get_async_db),
 ) -> AsyncPasswordResetService:
     """
@@ -73,7 +73,7 @@ async def get_password_reset_service(
     return AsyncPasswordResetService(db)
 
 
-async def get_dashboard_service(db: AsyncSession = Depends(get_async_db)) -> AsyncDashboardService:
+def get_dashboard_service(db: AsyncSession = Depends(get_async_db)) -> AsyncDashboardService:
     """
     Dependency to get AsyncDashboardService instance.
 
@@ -87,7 +87,7 @@ async def get_dashboard_service(db: AsyncSession = Depends(get_async_db)) -> Asy
     return AsyncDashboardService(db)
 
 
-async def get_task_service(db: AsyncSession = Depends(get_async_db)) -> AsyncTaskService:
+def get_task_service(db: AsyncSession = Depends(get_async_db)) -> AsyncTaskService:
     """
     Dependency to get AsyncTaskService instance.
 
@@ -101,14 +101,14 @@ async def get_task_service(db: AsyncSession = Depends(get_async_db)) -> AsyncTas
     return AsyncTaskService(db)
 
 
-async def get_analytics_service(db: AsyncSession = Depends(get_async_db)) -> AsyncAnalyticsService:
+def get_analytics_service(db: AsyncSession = Depends(get_async_db)) -> AsyncAnalyticsService:
     """
     Dependency to get AsyncAnalyticsService instance.
     """
     return AsyncAnalyticsService(db)
 
 
-async def get_task_history_service(
+def get_task_history_service(
     db: AsyncSession = Depends(get_async_db),
 ) -> AsyncTaskHistoryService:
     """
@@ -117,7 +117,7 @@ async def get_task_history_service(
     return AsyncTaskHistoryService(db)
 
 
-async def get_async_notification_service(
+def get_async_notification_service(
     db: AsyncSession = Depends(get_async_db),
 ) -> AsyncNotificationService:
     """
@@ -126,7 +126,7 @@ async def get_async_notification_service(
     return AsyncNotificationService(db)
 
 
-async def get_usage_service(db: AsyncSession = Depends(get_async_db)) -> AsyncUsageService:
+def get_usage_service(db: AsyncSession = Depends(get_async_db)) -> AsyncUsageService:
     """
     Dependency to get AsyncUsageService instance.
     """

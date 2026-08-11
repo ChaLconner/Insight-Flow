@@ -354,7 +354,95 @@ def generate_recommendations(
     return recommendations
 
 
-async def run_audit():  # noqa: PLR0912, PLR0915
+async def _audit_existing_indexes(session: AsyncSession) -> list[ExistingIndex]:
+    print("\n📊 EXISTING INDEXES")
+    print("-" * 40)
+    existing_indexes = await get_existing_indexes(session)
+    for idx in existing_indexes:
+        if idx.is_primary:
+            prefix = "🔑"
+        elif idx.is_unique:
+            prefix = "🔒"
+        else:
+            prefix = "📌"
+        print(f"{prefix} {idx.table_name}.{idx.index_name}: ({', '.join(idx.column_names)})")
+    return existing_indexes
+
+
+async def _audit_table_statistics(session: AsyncSession) -> dict[str, Any]:
+    print("\n📈 TABLE STATISTICS")
+    print("-" * 40)
+    table_stats = await get_table_statistics(session)
+    print(f"{'Table':<25} {'Rows':<10} {'Size':<12} {'Seq Scans':<12} {'Idx Scans'}")
+    print("-" * 80)
+    for table, stats in table_stats.items():
+        print(
+            f"{table:<25} {stats['row_count']:<10} {stats['total_size']:<12} "
+            f"{stats['seq_scans']:<12} {stats['idx_scans']}"
+        )
+    return table_stats
+
+
+async def _audit_missing_foreign_keys(session: AsyncSession) -> list[dict[str, Any]]:
+    print("\n⚠️  MISSING FOREIGN KEY INDEXES")
+    print("-" * 40)
+    missing_fk_indexes = await get_missing_fk_indexes(session)
+    if missing_fk_indexes:
+        for fk in missing_fk_indexes:
+            print(f"  • {fk['table_name']}.{fk['column_name']} → {fk['referenced_table']}")
+    else:
+        print("  ✅ All foreign keys have indexes")
+    return missing_fk_indexes
+
+
+async def _audit_unused_indexes(session: AsyncSession) -> list[dict[str, Any]]:
+    print("\n🗑️  UNUSED INDEXES (candidates for removal)")
+    print("-" * 40)
+    unused_indexes = await get_unused_indexes(session)
+    if unused_indexes:
+        for idx in unused_indexes:
+            print(
+                f"  • {idx['table_name']}.{idx['index_name']} "
+                f"(Size: {idx['size']}, Scans: {idx['scan_count']})"
+            )
+    else:
+        print("  ✅ All indexes are being used")
+    return unused_indexes
+
+
+async def _audit_slow_queries(session: AsyncSession) -> None:
+    print("\n🐢 SLOW QUERIES (from pg_stat_statements)")
+    print("-" * 40)
+    slow_queries = await get_slow_queries(session)
+    if slow_queries:
+        for i, query in enumerate(slow_queries[:5], 1):
+            print(f"\n  {i}. Avg Time: {query['avg_time_ms']}ms, Calls: {query['calls']}")
+            print(f"     {query['query'][:100]}...")
+    else:
+        print("  [i] pg_stat_statements not available or no slow queries")
+
+
+def _print_recommendations(recommendations: list[IndexRecommendation]) -> None:
+    if not recommendations:
+        print("  ✅ No additional indexes recommended")
+        return
+
+    priorities = (
+        ("high", "🔴 HIGH PRIORITY"),
+        ("medium", "🟡 MEDIUM PRIORITY"),
+    )
+    for priority, label in priorities:
+        matching = [rec for rec in recommendations if rec.priority == priority]
+        if matching:
+            print(f"\n  {label}:")
+            for rec in matching:
+                print(f"\n    Table: {rec.table_name}")
+                print(f"    Columns: {', '.join(rec.column_names)}")
+                print(f"    Reason: {rec.reason}")
+                print(f"    SQL: {rec.create_statement}")
+
+
+async def run_audit():
     """Run the complete index audit."""
     print("=" * 60)
     print("DATABASE INDEX AUDIT")
@@ -362,91 +450,18 @@ async def run_audit():  # noqa: PLR0912, PLR0915
     print("=" * 60)
 
     async with AsyncSessionLocal() as session:
-        # Get existing indexes
-        print("\n📊 EXISTING INDEXES")
-        print("-" * 40)
-        existing_indexes = await get_existing_indexes(session)
+        existing_indexes = await _audit_existing_indexes(session)
+        table_stats = await _audit_table_statistics(session)
+        missing_fk_indexes = await _audit_missing_foreign_keys(session)
+        await _audit_unused_indexes(session)
+        await _audit_slow_queries(session)
 
-        for idx in existing_indexes:
-            prefix = "🔑" if idx.is_primary else ("🔒" if idx.is_unique else "📌")
-            print(f"{prefix} {idx.table_name}.{idx.index_name}: ({', '.join(idx.column_names)})")
-
-        # Get table statistics
-        print("\n📈 TABLE STATISTICS")
-        print("-" * 40)
-        table_stats = await get_table_statistics(session)
-
-        print(f"{'Table':<25} {'Rows':<10} {'Size':<12} {'Seq Scans':<12} {'Idx Scans'}")
-        print("-" * 80)
-        for table, stats in table_stats.items():
-            print(
-                f"{table:<25} {stats['row_count']:<10} {stats['total_size']:<12} {stats['seq_scans']:<12} {stats['idx_scans']}"
-            )
-
-        # Get missing FK indexes
-        print("\n⚠️  MISSING FOREIGN KEY INDEXES")
-        print("-" * 40)
-        missing_fk_indexes = await get_missing_fk_indexes(session)
-
-        if missing_fk_indexes:
-            for fk in missing_fk_indexes:
-                print(f"  • {fk['table_name']}.{fk['column_name']} → {fk['referenced_table']}")
-        else:
-            print("  ✅ All foreign keys have indexes")
-
-        # Get unused indexes
-        print("\n🗑️  UNUSED INDEXES (candidates for removal)")
-        print("-" * 40)
-        unused_indexes = await get_unused_indexes(session)
-
-        if unused_indexes:
-            for idx in unused_indexes:
-                print(
-                    f"  • {idx['table_name']}.{idx['index_name']} (Size: {idx['size']}, Scans: {idx['scan_count']})"
-                )
-        else:
-            print("  ✅ All indexes are being used")
-
-        # Get slow queries
-        print("\n🐢 SLOW QUERIES (from pg_stat_statements)")
-        print("-" * 40)
-        slow_queries = await get_slow_queries(session)
-
-        if slow_queries:
-            for i, q in enumerate(slow_queries[:5], 1):
-                print(f"\n  {i}. Avg Time: {q['avg_time_ms']}ms, Calls: {q['calls']}")
-                print(f"     {q['query'][:100]}...")
-        else:
-            print("  [i] pg_stat_statements not available or no slow queries")
-
-        # Generate recommendations
         print("\n💡 INDEX RECOMMENDATIONS")
         print("-" * 40)
         recommendations = generate_recommendations(
             existing_indexes, table_stats, missing_fk_indexes
         )
-
-        if recommendations:
-            high_priority = [r for r in recommendations if r.priority == "high"]
-            medium_priority = [r for r in recommendations if r.priority == "medium"]
-
-            if high_priority:
-                print("\n  🔴 HIGH PRIORITY:")
-                for rec in high_priority:
-                    print(f"\n    Table: {rec.table_name}")
-                    print(f"    Columns: {', '.join(rec.column_names)}")
-                    print(f"    Reason: {rec.reason}")
-                    print(f"    SQL: {rec.create_statement}")
-
-            if medium_priority:
-                print("\n  🟡 MEDIUM PRIORITY:")
-                for rec in medium_priority:
-                    print(f"\n    Table: {rec.table_name}")
-                    print(f"    Columns: {', '.join(rec.column_names)}")
-                    print(f"    Reason: {rec.reason}")
-                    print(f"    SQL: {rec.create_statement}")
-        else:
-            print("  ✅ No additional indexes recommended")
+        _print_recommendations(recommendations)
 
         # Generate migration file
         print("\n📝 MIGRATION FILE")

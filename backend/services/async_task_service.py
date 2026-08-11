@@ -24,6 +24,8 @@ from services.cache_invalidation import (
 )
 from utils.logger import logger
 
+ASSIGNEE_NOT_FOUND_ERROR = "Assignee not found"
+
 
 def escape_like_pattern(pattern: str) -> str:
     """
@@ -150,7 +152,7 @@ class AsyncTaskService:
             )
             assignee = assignee_result.scalars().first()
             if not assignee:
-                raise ValueError("Assignee not found")
+                raise ValueError(ASSIGNEE_NOT_FOUND_ERROR)
 
         try:
             # Handle status
@@ -267,7 +269,150 @@ class AsyncTaskService:
 
         return query, filters
 
-    async def update_task(  # noqa: PLR0912, PLR0915
+    async def _validate_task_update_permission(
+        self, task: Task, task_data: TaskUpdate, user_id: uuid.UUID
+    ) -> None:
+        if task.created_by == user_id or task.assignee_id != user_id:
+            return
+
+        if await self._is_project_admin(task.project_id, user_id):
+            return
+
+        protected_fields = (
+            "title",
+            "description",
+            "priority",
+            "type",
+            "assignee_id",
+            "due_date",
+        )
+        if any(getattr(task_data, field) is not None for field in protected_fields):
+            raise ValueError(
+                "Assignees may update task status only; task metadata requires project authority"
+            )
+
+    async def _validate_task_assignee(self, task: Task, task_data: TaskUpdate) -> None:
+        if not task_data.assignee_id:
+            return
+
+        await self._ensure_project_member(task.project_id, task_data.assignee_id)
+        assignee_result = await self.db.execute(
+            select(User).filter(User.id == task_data.assignee_id)
+        )
+        if not assignee_result.scalars().first():
+            raise ValueError(ASSIGNEE_NOT_FOUND_ERROR)
+
+    @staticmethod
+    def _apply_text_task_field(
+        task: Task,
+        task_data: TaskUpdate,
+        old_values: dict[str, Any],
+        new_values: dict[str, Any],
+        field_name: str,
+    ) -> None:
+        new_value = getattr(task_data, field_name)
+        old_value = getattr(task, field_name)
+        if new_value is not None and new_value != old_value:
+            old_values[field_name] = old_value
+            new_values[field_name] = new_value
+            setattr(task, field_name, new_value)
+
+    @staticmethod
+    def _apply_enum_task_field(
+        task: Task,
+        task_data: TaskUpdate,
+        old_values: dict[str, Any],
+        new_values: dict[str, Any],
+        field_name: str,
+        converter: Any,
+    ) -> None:
+        raw_value = getattr(task_data, field_name)
+        if raw_value is None:
+            return
+        new_value = converter(raw_value)
+        old_value = getattr(task, field_name)
+        if new_value and new_value != old_value:
+            old_values[field_name] = old_value.value
+            new_values[field_name] = new_value.value
+            setattr(task, field_name, new_value)
+
+    @staticmethod
+    def _apply_assignee_task_field(
+        task: Task,
+        task_data: TaskUpdate,
+        old_values: dict[str, Any],
+        new_values: dict[str, Any],
+        old_assignee_id: uuid.UUID | None,
+    ) -> None:
+        if task_data.assignee_id is None or task_data.assignee_id == task.assignee_id:
+            return
+        task.assignee_id = task_data.assignee_id
+        if old_assignee_id:
+            old_values["assignee_id"] = str(old_assignee_id)
+        new_values["assignee_id"] = str(task_data.assignee_id)
+
+    @staticmethod
+    def _apply_due_date_task_field(
+        task: Task,
+        task_data: TaskUpdate,
+        old_values: dict[str, Any],
+        new_values: dict[str, Any],
+    ) -> None:
+        if task_data.due_date is None or task_data.due_date == task.due_date:
+            return
+        old_values["due_date"] = task.due_date.isoformat() if task.due_date else None
+        new_values["due_date"] = task_data.due_date.isoformat() if task_data.due_date else None
+        task.due_date = task_data.due_date
+
+    def _apply_task_update_fields(
+        self, task: Task, task_data: TaskUpdate
+    ) -> tuple[dict[str, Any], dict[str, Any], uuid.UUID | None, TaskStatus]:
+        old_values: dict[str, Any] = {}
+        new_values: dict[str, Any] = {}
+        old_assignee_id = task.assignee_id
+        old_status = task.status
+
+        self._apply_text_task_field(task, task_data, old_values, new_values, "title")
+        self._apply_text_task_field(task, task_data, old_values, new_values, "description")
+        self._apply_enum_task_field(
+            task, task_data, old_values, new_values, "status", TaskStatus.from_value
+        )
+        self._apply_enum_task_field(
+            task, task_data, old_values, new_values, "priority", TaskPriority.from_value
+        )
+        self._apply_enum_task_field(
+            task, task_data, old_values, new_values, "type", TaskType.from_value
+        )
+        self._apply_assignee_task_field(task, task_data, old_values, new_values, old_assignee_id)
+        self._apply_due_date_task_field(task, task_data, old_values, new_values)
+
+        return old_values, new_values, old_assignee_id, old_status
+
+    async def _record_task_update_history(
+        self,
+        task: Task,
+        task_data: TaskUpdate,
+        user_id: uuid.UUID,
+        old_values: dict[str, Any],
+        new_values: dict[str, Any],
+        old_assignee_id: uuid.UUID | None,
+        old_status: TaskStatus,
+    ) -> None:
+        from services.async_task_history_service import AsyncTaskHistoryService
+
+        history_service = AsyncTaskHistoryService(self.db)
+        if old_values or new_values:
+            await history_service.log_task_updated(
+                task, user_id, old_values, new_values, commit=False
+            )
+        if task_data.assignee_id and task_data.assignee_id != old_assignee_id:
+            await history_service.log_task_assigned(
+                task, task_data.assignee_id, user_id, commit=False
+            )
+        if task.status == TaskStatus.DONE and old_status != TaskStatus.DONE:
+            await history_service.log_task_completed(task, user_id, commit=False)
+
+    async def update_task(
         self,
         task_id: uuid.UUID,
         task_data: TaskUpdate,
@@ -277,84 +422,11 @@ class AsyncTaskService:
     ) -> Task:
         """Update task information."""
         task = await self._get_authorized_task(task_id, user_id, allow_assignee=True)
-
-        # Assignees may advance their own task's status, but task metadata and
-        # assignment remain controlled by the creator/project administrator.
-        # This keeps the broad read/update permission from becoming a
-        # field-level privilege escalation.
-        is_creator = task.created_by == user_id
-        if not is_creator and task.assignee_id == user_id:
-            is_project_admin = await self._is_project_admin(task.project_id, user_id)
-            if not is_project_admin:
-                protected_fields = (
-                    "title",
-                    "description",
-                    "priority",
-                    "type",
-                    "assignee_id",
-                    "due_date",
-                )
-                if any(getattr(task_data, field) is not None for field in protected_fields):
-                    raise ValueError(
-                        "Assignees may update task status only; task metadata requires project authority"
-                    )
-
-        # Check if assignee exists (if provided)
-        if task_data.assignee_id:
-            await self._ensure_project_member(task.project_id, task_data.assignee_id)
-            assignee_result = await self.db.execute(
-                select(User).filter(User.id == task_data.assignee_id)
-            )
-            if not assignee_result.scalars().first():
-                raise ValueError("Assignee not found")
-
-        old_values: dict[str, Any] = {}
-        new_values: dict[str, Any] = {}
-        old_assignee_id = task.assignee_id
-        old_status = task.status
-
-        # Update fields
-        if task_data.title is not None and task_data.title != task.title:
-            old_values["title"] = task.title
-            new_values["title"] = task_data.title
-            task.title = task_data.title
-
-        if task_data.description is not None and task_data.description != task.description:
-            old_values["description"] = task.description
-            new_values["description"] = task_data.description
-            task.description = task_data.description
-
-        if task_data.status is not None:
-            new_status = TaskStatus.from_value(task_data.status)
-            if new_status and new_status != task.status:
-                old_values["status"] = task.status.value
-                new_values["status"] = new_status.value
-                task.status = new_status
-
-        if task_data.priority is not None:
-            new_priority = TaskPriority.from_value(task_data.priority)
-            if new_priority and new_priority != task.priority:
-                old_values["priority"] = task.priority.value
-                new_values["priority"] = new_priority.value
-                task.priority = new_priority
-
-        if task_data.type is not None:
-            new_type = TaskType.from_value(task_data.type)
-            if new_type and new_type != task.type:
-                old_values["type"] = task.type.value
-                new_values["type"] = new_type.value
-                task.type = new_type
-
-        if task_data.assignee_id is not None and task_data.assignee_id != task.assignee_id:
-            task.assignee_id = task_data.assignee_id
-            if old_assignee_id:
-                old_values["assignee_id"] = str(old_assignee_id)
-            new_values["assignee_id"] = str(task_data.assignee_id)
-
-        if task_data.due_date is not None and task_data.due_date != task.due_date:
-            old_values["due_date"] = task.due_date.isoformat() if task.due_date else None
-            new_values["due_date"] = task_data.due_date.isoformat() if task_data.due_date else None
-            task.due_date = task_data.due_date
+        await self._validate_task_update_permission(task, task_data, user_id)
+        await self._validate_task_assignee(task, task_data)
+        old_values, new_values, old_assignee_id, old_status = self._apply_task_update_fields(
+            task, task_data
+        )
 
         try:
             cache_user_ids = await get_project_cache_user_ids(
@@ -366,20 +438,15 @@ class AsyncTaskService:
                     if value is not None
                 ),
             )
-
-            from services.async_task_history_service import AsyncTaskHistoryService
-
-            history_service = AsyncTaskHistoryService(self.db)
-            if old_values or new_values:
-                await history_service.log_task_updated(
-                    task, user_id, old_values, new_values, commit=False
-                )
-            if task_data.assignee_id and task_data.assignee_id != old_assignee_id:
-                await history_service.log_task_assigned(
-                    task, task_data.assignee_id, user_id, commit=False
-                )
-            if task.status == TaskStatus.DONE and old_status != TaskStatus.DONE:
-                await history_service.log_task_completed(task, user_id, commit=False)
+            await self._record_task_update_history(
+                task,
+                task_data,
+                user_id,
+                old_values,
+                new_values,
+                old_assignee_id,
+                old_status,
+            )
 
             if commit:
                 await self.db.commit()
@@ -508,7 +575,7 @@ class AsyncTaskService:
         )
         assignee = assignee_result.scalars().first()
         if not assignee:
-            raise ValueError("Assignee not found")
+            raise ValueError(ASSIGNEE_NOT_FOUND_ERROR)
         await self._ensure_project_member(task.project_id, assign_data.assignee_id)
 
         try:

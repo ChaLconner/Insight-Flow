@@ -22,28 +22,14 @@ export const useNotificationSound = () => {
         gainNode.connect(audioContext.destination);
 
         // Configure sound based on type and priority
-        let frequency = 800;
-        let duration = 0.2;
+        const soundSettings: Record<string, { frequency: number; duration: number }> = {
+          system: { frequency: 900, duration: 0.15 },
+          task_assigned: { frequency: 1000, duration: 0.15 },
+          comment: { frequency: 800, duration: 0.2 },
+          default: { frequency: 800, duration: 0.15 },
+        };
+        const { frequency, duration } = soundSettings[type] ?? soundSettings.default;
         let volume = 0.1;
-
-        switch (type) {
-          case "system":
-            frequency = 900;
-            duration = 0.15;
-            break;
-          case "task_assigned":
-            frequency = 1000;
-            duration = 0.15;
-            break;
-          case "comment":
-            frequency = 800;
-            duration = 0.2;
-            break;
-          default:
-            frequency = 800;
-            duration = 0.15;
-            break;
-        }
 
         // Adjust volume based on priority
         if (priority === "urgent") {

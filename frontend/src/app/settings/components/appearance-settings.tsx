@@ -114,7 +114,7 @@ export function AppearanceSettings() {
               {themes.map((theme) => {
                 const isActive = currentTheme === theme.id;
                 return (
-                  <button
+                  <button type="button"
                     key={theme.id}
                     onClick={() => void handleThemeChange(theme.id)}
                     className={`

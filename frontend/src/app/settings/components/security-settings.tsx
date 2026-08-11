@@ -42,7 +42,7 @@ const passwordRequirements: PasswordRequirement[] = [
   // Optional recommendations for better security
   { label: "Example: Uppercase letter (Optional)", test: (p: string) => /[A-Z]/.test(p) || p.length > 0 }, 
   { label: "Example: Lowercase letter (Optional)", test: (p: string) => /[a-z]/.test(p) || p.length > 0 },
-  { label: "Example: Number (Optional)", test: (p: string) => /[0-9]/.test(p) || p.length > 0 },
+  { label: "Example: Number (Optional)", test: (p: string) => /\d/.test(p) || p.length > 0 },
 ];
 
 // ===================================
@@ -71,17 +71,17 @@ export function SecuritySettings() {
       strength += 40;
     }
     // Recommendations (Optional)
-    if (password.match(/[A-Z]/)) {
+    if (/[A-Z]/.exec(password)) {
       strength += 20;
     }
-    if (password.match(/[a-z]/)) {
+    if (/[a-z]/.exec(password)) {
       strength += 10;
     }
-    if (password.match(/[0-9]/)) {
+    if (/\d/.exec(password)) {
       strength += 20;
     }
     // Special chars (extra)
-    if (password.match(/[^A-Za-z0-9]/)) {
+    if (/[^A-Za-z0-9]/.exec(password)) {
       strength += 10;
     }
     return Math.min(strength, 100);
@@ -254,11 +254,11 @@ export function SecuritySettings() {
 
                 {/* Requirements Checklist */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {passwordRequirements.map((req, index) => {
+                  {passwordRequirements.map((req) => {
                     const passed = req.test(newPassword);
                     return (
                       <div
-                        key={index}
+                        key={req.label}
                         className={`flex items-center gap-2 text-xs ${
                           passed ? "text-green-500" : "text-muted-foreground"
                         }`}
@@ -368,7 +368,7 @@ export function SecuritySettings() {
                 </div>
                 <div>
                   <p className="text-foreground font-medium flex items-center gap-2">
-                    Current Session
+                     Current Session{" "}
                     <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-500 text-xs rounded-full">
                       Active
                     </span>
@@ -402,7 +402,7 @@ export function SecuritySettings() {
               </div>
               <div>
                 <CardTitle className="text-foreground flex items-center gap-2">
-                  Two-Factor Authentication
+                   Two-Factor Authentication{" "}
                   <span className="px-2 py-0.5 bg-amber-500/20 text-amber-500 text-xs rounded-full">
                     Coming Soon
                   </span>

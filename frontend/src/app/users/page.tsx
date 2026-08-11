@@ -159,7 +159,7 @@ export default function UsersPage() {
         >
           <div className="text-red-400 text-center">
             <p className="text-lg font-medium">{error}</p>
-            <button
+            <button type="button"
               onClick={() => loadUsers()}
               className="mt-4 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
               aria-label="Retry loading users"
@@ -230,7 +230,7 @@ export default function UsersPage() {
           {users.length > 0 ? (
             <Card className="border-border bg-card backdrop-blur-sm">
               <CardContent className="p-0">
-                <ul className="divide-y divide-border" role="list">
+                <ul className="divide-y divide-border">
                   {users.map((user) => (
                     <li key={user.id}>
                       <UserCard user={user} formatLastLogin={formatLastLogin} />

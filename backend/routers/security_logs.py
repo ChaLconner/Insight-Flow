@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,44 +35,52 @@ ALLOWED_CSP_FIELDS = {
 }
 
 
-def _normalise_reports(payload: Any) -> list[dict[str, Any]]:  # noqa: PLR0912
-    """Accept legacy and Reporting API shapes, then retain scalar fields only."""
+def _get_report_candidates(payload: Any) -> list[Any] | None:
+    """Extract report objects from legacy and Reporting API payload shapes."""
     if isinstance(payload, list):
-        candidates = payload
-    elif isinstance(payload, dict):
-        if isinstance(payload.get("csp-report"), dict):
-            candidates = [payload["csp-report"]]
-        elif isinstance(payload.get("csp_report"), dict):
-            candidates = [payload["csp_report"]]
-        elif isinstance(payload.get("body"), dict):
-            candidates = [payload["body"]]
-        else:
-            candidates = [payload]
-    else:
+        return payload
+    if not isinstance(payload, dict):
+        return None
+    for field in ("csp-report", "csp_report", "body"):
+        value = payload.get(field)
+        if isinstance(value, dict):
+            return [value]
+    return [payload]
+
+
+def _normalise_report(candidate: Any) -> dict[str, Any]:
+    """Keep allowed scalar CSP fields and cap string lengths."""
+    if not isinstance(candidate, dict):
+        return {}
+    normalized: dict[str, Any] = {}
+    for key, value in candidate.items():
+        if key not in ALLOWED_CSP_FIELDS:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            normalized[key] = value[:MAX_CSP_FIELD_LENGTH] if isinstance(value, str) else value
+    return normalized
+
+
+def _normalise_reports(payload: Any) -> list[dict[str, Any]]:
+    """Accept legacy and Reporting API shapes, then retain scalar fields only."""
+    candidates = _get_report_candidates(payload)
+    if candidates is None:
         return []
 
-    reports: list[dict[str, Any]] = []
-    for candidate in candidates[:MAX_CSP_REPORTS]:
-        if not isinstance(candidate, dict):
-            continue
-        normalized: dict[str, Any] = {}
-        for key, value in candidate.items():
-            if key not in ALLOWED_CSP_FIELDS:
-                continue
-            if isinstance(value, (str, int, float, bool)):
-                normalized[key] = (
-                    value if not isinstance(value, str) else value[:MAX_CSP_FIELD_LENGTH]
-                )
-        if normalized:
-            reports.append(normalized)
-    return reports
+    return [
+        normalized
+        for normalized in (
+            _normalise_report(candidate) for candidate in candidates[:MAX_CSP_REPORTS]
+        )
+        if normalized
+    ]
 
 
 @router.post("/csp-report", status_code=204)
 @limiter.limit(RateLimits.CSP_REPORT)
 async def report_csp_violation(
     request: Request,
-    db: AsyncSession = Depends(get_async_db),
+    db: Annotated[AsyncSession, Depends(get_async_db)],
 ):
     """
     Endpoint for browsers to report content security policy violations.
@@ -99,6 +107,6 @@ async def report_csp_violation(
         logger.warning("CSP violation reported: %s", reports[0].get("blocked-uri", "unknown"))
 
     except Exception as e:
-        logger.error(f"Error processing CSP report: {e}")
+        logger.exception(f"Error processing CSP report: {e}")
         # Return 204 anyway to not upset the browser
         return None

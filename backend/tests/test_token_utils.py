@@ -115,10 +115,9 @@ class TestTokenExpiration:
 
     def test_access_token_expiration_default(self):
         """Test default access token expiration."""
-        # Common default is 30 minutes = 1800 seconds
-        DEFAULT_ACCESS_EXPIRE = 1800
+        from utils.token_utils import ACCESS_TOKEN_EXPIRE_MINUTES
 
-        assert DEFAULT_ACCESS_EXPIRE == 30 * 60
+        assert ACCESS_TOKEN_EXPIRE_MINUTES == 30
 
     def test_refresh_token_expiration_default(self):
         """Test default refresh token expiration."""

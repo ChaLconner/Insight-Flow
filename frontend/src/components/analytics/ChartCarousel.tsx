@@ -238,30 +238,30 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
       {/* Carousel Viewport */}
       <div className="relative h-[450px] overflow-hidden rounded-xl">
         {/* Left Navigation Zone */}
-        <div
+        <button
+          type="button"
           className="absolute top-24 bottom-12 left-0 w-12 z-10 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 text-muted-foreground/70 hover:text-foreground hover:bg-accent/30 rounded-r-lg transition-all duration-200"
           onClick={(e) => {
             e.stopPropagation();
             prevSlide();
           }}
-          role="button"
           aria-label="Previous slide"
         >
           <ChevronLeft className="h-6 w-6" />
-        </div>
+        </button>
 
         {/* Right Navigation Zone */}
-        <div
+        <button
+          type="button"
           className="absolute top-24 bottom-12 right-0 w-12 z-10 cursor-pointer flex items-center justify-center opacity-0 group-hover:opacity-100 text-muted-foreground/70 hover:text-foreground hover:bg-accent/30 rounded-l-lg transition-all duration-200"
           onClick={(e) => {
             e.stopPropagation();
             nextSlide();
           }}
-          role="button"
           aria-label="Next slide"
         >
           <ChevronRight className="h-6 w-6" />
-        </div>
+        </button>
 
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
           <motion.div
@@ -296,9 +296,9 @@ const ChartCarouselComponent: React.FC<ChartCarouselProps> = ({
 
       {/* Pagination Indicators */}
       <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-2">
-        {charts.map((_, index) => (
-          <button
-            key={index}
+        {charts.map((chart, index) => (
+          <button type="button"
+            key={chart.key}
             onClick={() => handlePaginationClick(index)}
             className={`h-2 w-2 rounded-full transition-all ${
               index === currentIndex

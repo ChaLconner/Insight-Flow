@@ -27,6 +27,9 @@ logger = setup_logger("auth_dependencies")
 # Set auto_error=False so we can fallback to cookie-based tokens when Authorization header is absent
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 SSR_REQUEST_HEADER = "x-next-server-request"
+INVALID_CREDENTIALS_DETAIL = "Could not validate credentials"
+USER_NOT_FOUND_DETAIL = "User not found"
+SESSION_INVALID_DETAIL = "Session invalid - please login again"
 
 
 def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
@@ -50,7 +53,7 @@ async def _get_authoritative_auth_state(
     except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
@@ -63,7 +66,7 @@ async def _get_authoritative_auth_state(
     if state is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail=USER_NOT_FOUND_DETAIL,
         )
 
     try:
@@ -71,14 +74,14 @@ async def _get_authoritative_auth_state(
     except (TypeError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
     if current_session_version != token_session_version:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session invalid - please login again",
+            detail=SESSION_INVALID_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -159,7 +162,7 @@ async def verify_token_fingerprint(request: Request, payload: dict, user_id: str
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session invalid - please login again",
+            detail=SESSION_INVALID_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
     except ImportError:
@@ -190,7 +193,7 @@ async def get_current_user(
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
+                detail=INVALID_CREDENTIALS_DETAIL,
             )
 
         # A+ Security: Verify token fingerprint (device binding)
@@ -200,10 +203,10 @@ async def get_current_user(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.error(f"Token verification failed: {e}")
+        logger.exception(f"Token verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
         )
 
     try:
@@ -211,7 +214,7 @@ async def get_current_user(
     except (TypeError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -229,10 +232,10 @@ async def get_current_user(
         except HTTPException:
             raise
         except Exception as exc:
-            logger.error(f"Authoritative user state lookup failed: {exc}")
+            logger.exception(f"Authoritative user state lookup failed: {exc}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
+                detail=INVALID_CREDENTIALS_DETAIL,
                 headers={"WWW-Authenticate": "Bearer"},
             ) from exc
         _apply_authoritative_auth_state(cached_user, authoritative_state)
@@ -244,12 +247,12 @@ async def get_current_user(
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
+                detail=USER_NOT_FOUND_DETAIL,
             )
         if not _session_version_matches(payload, user):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session invalid - please login again",
+                detail=SESSION_INVALID_DETAIL,
                 headers={"WWW-Authenticate": "Bearer"},
             )
         await cache_auth_user(user)
@@ -257,10 +260,10 @@ async def get_current_user(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Database user lookup failed: {e}")
+        logger.exception(f"Database user lookup failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail=USER_NOT_FOUND_DETAIL,
         )
 
 
@@ -311,7 +314,7 @@ async def get_current_user_optional(  # noqa: PLR0911
         return None
 
 
-async def get_current_active_user_optional(
+def get_current_active_user_optional(
     current_user: User | None = Depends(get_current_user_optional),
 ) -> User | None:
     """Get current active user if authenticated."""
@@ -325,7 +328,7 @@ async def get_current_active_user_optional(
     return current_user
 
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """Get current active user."""
     # Handle both dict (mock user) and object (database user)
     if isinstance(current_user, dict):

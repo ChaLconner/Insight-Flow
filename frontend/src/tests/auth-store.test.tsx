@@ -104,7 +104,7 @@ describe("auth-store", () => {
       const state = useAuthStore.getState();
 
       expect(state.isAuthenticated).toBe(false);
-      expect(state.user).toBe(null);
+      expect(state.user).toBeNull();
       expect(state.isLoading).toBe(true); // Initially loading
       expect(state.isInitialized).toBe(false);
     });
@@ -132,7 +132,7 @@ describe("auth-store", () => {
       });
 
       const state = useAuthStore.getState();
-      expect(state.user).toBe(null);
+      expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
     });
 
@@ -198,7 +198,7 @@ describe("auth-store", () => {
       });
 
       const state = useAuthStore.getState();
-      expect(state.user).toBe(null);
+      expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
       expect(state.isLoading).toBe(false);
       expect(state.isInitialized).toBe(false);
@@ -213,7 +213,7 @@ describe("auth-store", () => {
         await Promise.resolve();
       });
 
-      expect(localStorageMock.getItem("insight-flow-auth")).toBe(null);
+      expect(localStorageMock.getItem("insight-flow-auth")).toBeNull();
     });
 
     it("setLoading should update loading state", async () => {
@@ -293,7 +293,7 @@ describe("auth-store", () => {
       });
 
       const state = useAuthStore.getState();
-      expect(state.user).toBe(null);
+      expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
       expect(state.isInitialized).toBe(true);
     });
@@ -331,7 +331,7 @@ describe("auth-store", () => {
 
       expect(apiClient.get).not.toHaveBeenCalled();
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
-      expect(useAuthStore.getState().user).toBe(null);
+      expect(useAuthStore.getState().user).toBeNull();
       expect(useAuthStore.getState().isInitialized).toBe(true);
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("insight-flow-auth");
 
@@ -339,7 +339,7 @@ describe("auth-store", () => {
         await Promise.resolve();
       });
 
-      expect(localStorageMock.getItem("insight-flow-auth")).toBe(null);
+      expect(localStorageMock.getItem("insight-flow-auth")).toBeNull();
     });
 
     it("should logout when fresh cached session is rejected by background verification", async () => {
@@ -374,7 +374,7 @@ describe("auth-store", () => {
       });
 
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
-      expect(useAuthStore.getState().user).toBe(null);
+      expect(useAuthStore.getState().user).toBeNull();
       expect(consoleLog).toHaveBeenCalledWith(
         "✅ Using cached auth (verified",
         0,
@@ -383,6 +383,127 @@ describe("auth-store", () => {
       expect(consoleWarn).toHaveBeenCalledWith("⚠️ Cached session invalid, logging out");
       consoleLog.mockRestore();
       consoleWarn.mockRestore();
+    });
+
+    it("should refresh a fresh cached session when the server returns a profile", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+      const cachedUser = { id: "cached", email: "cached@example.com" } as User;
+      const refreshedUser = { id: "refreshed", email: "refreshed@example.com" } as User;
+
+      (apiClient.get as Mock).mockResolvedValue({ data: refreshedUser });
+      act(() => {
+        useAuthStore.setState({
+          user: cachedUser,
+          isAuthenticated: true,
+          isInitialized: false,
+          isLoading: true,
+          lastVerified: Date.now(),
+        });
+      });
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(useAuthStore.getState().user).toEqual(refreshedUser);
+      expect(useAuthStore.getState().hasVerifiedSession).toBe(true);
+    });
+
+    it("should update a stale cached session when verification succeeds", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+      const cachedUser = { id: "cached", email: "cached@example.com" } as User;
+      const verifiedUser = { id: "verified", email: "verified@example.com" } as User;
+
+      (apiClient.get as Mock).mockResolvedValue({ data: verifiedUser });
+      act(() => {
+        useAuthStore.setState({
+          user: cachedUser,
+          isAuthenticated: true,
+          isInitialized: false,
+          isLoading: true,
+          lastVerified: Date.now() - 10 * 60 * 1000,
+        });
+      });
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+      });
+
+      expect(useAuthStore.getState().user).toEqual(verifiedUser);
+      expect(useAuthStore.getState().hasVerifiedSession).toBe(true);
+    });
+
+    it("should keep a stale cached session when verification is unavailable", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+      const cachedUser = { id: "cached", email: "cached@example.com" } as User;
+      const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      (apiClient.get as Mock).mockRejectedValue(new Error("network unavailable"));
+      act(() => {
+        useAuthStore.setState({
+          user: cachedUser,
+          isAuthenticated: true,
+          isInitialized: false,
+          isLoading: true,
+          lastVerified: Date.now() - 10 * 60 * 1000,
+        });
+      });
+
+      await act(async () => {
+        await useAuthStore.getState().initializeAuth();
+      });
+
+      expect(useAuthStore.getState().user).toEqual(cachedUser);
+      expect(useAuthStore.getState().isAuthenticated).toBe(true);
+      expect(consoleWarn).toHaveBeenCalledWith(
+        "⚠️ Auth verification unavailable, keeping cached session",
+        expect.any(Error),
+      );
+      consoleWarn.mockRestore();
+    });
+
+    it("should finish immediately when authentication is already initialized", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const { apiClient } = await import("@/lib/api-client");
+
+      act(() => {
+        useAuthStore.setState({
+          isInitialized: true,
+          isLoading: true,
+        });
+      });
+
+      await useAuthStore.getState().initializeAuth();
+
+      expect(useAuthStore.getState().isLoading).toBe(false);
+      expect(apiClient.get).not.toHaveBeenCalled();
+    });
+
+    it("should mark authentication initialized during server-side rendering", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const originalWindow = globalThis.window;
+      vi.stubGlobal("window", undefined);
+
+      act(() => {
+        useAuthStore.setState({
+          isInitialized: false,
+          isLoading: true,
+        });
+      });
+
+      try {
+        await useAuthStore.getState().initializeAuth();
+      } finally {
+        vi.stubGlobal("window", originalWindow);
+      }
+
+      expect(useAuthStore.getState().isInitialized).toBe(true);
+      expect(useAuthStore.getState().isLoading).toBe(false);
     });
   });
 

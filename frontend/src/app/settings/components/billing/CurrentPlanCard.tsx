@@ -32,7 +32,7 @@ export function CurrentPlanCard({
   onChangePlan,
   onCancelSubscription,
   onResumeSubscription,
-}: CurrentPlanCardProps) {
+}: Readonly<CurrentPlanCardProps>) {
   const statusConfig = subscription?.status 
     ? STATUS_BADGE[subscription.status] 
     : STATUS_BADGE["active"];

@@ -54,6 +54,16 @@ const paymentHistoryCache = new Map<string, PaymentHistoryCacheEntry>();
 let paymentStatsPromise: Promise<PaymentStats> | null = null;
 const paymentHistoryPromises = new Map<string, Promise<{ payments: PaymentHistoryItem[]; total: number }>>();
 
+function getPaymentStatusClass(status: string): string {
+  if (status === "succeeded") {
+    return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+  }
+  if (status === "failed") {
+    return "bg-red-500/10 text-red-500 border-red-500/20";
+  }
+  return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+}
+
 function hasFreshCache(timestamp: number): boolean {
   return timestamp > 0 && Date.now() - timestamp < PAYMENT_HISTORY_CACHE_TTL_MS;
 }
@@ -362,7 +372,7 @@ export function PaymentHistorySettings() {
           </div>
         </CardHeader>
         <CardContent>
-          {historyLoading ? (
+          {historyLoading && (
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map(i => (
                 <div key={i} className="flex justify-between items-center p-4 border rounded-lg">
@@ -377,7 +387,8 @@ export function PaymentHistorySettings() {
                 </div>
               ))}
             </div>
-          ) : paymentHistory.length === 0 ? (
+          )}
+          {!historyLoading && paymentHistory.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <FileText className="h-16 w-16 mx-auto opacity-20 mb-4" />
               <p className="text-lg font-medium">No payment history</p>
@@ -388,7 +399,8 @@ export function PaymentHistorySettings() {
                 }
               </p>
             </div>
-          ) : (
+          )}
+          {!historyLoading && paymentHistory.length > 0 && (
             <div className="rounded-lg border border-border overflow-hidden">
               <Table>
                 <TableHeader>
@@ -420,14 +432,7 @@ export function PaymentHistorySettings() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`
-                          ${item.status === 'succeeded' 
-                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
-                            : item.status === 'failed' 
-                              ? 'bg-red-500/10 text-red-500 border-red-500/20' 
-                              : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-                          } border
-                        `}>
+                        <Badge className={`${getPaymentStatusClass(item.status)} border`}>
                           {item.status}
                         </Badge>
                       </TableCell>

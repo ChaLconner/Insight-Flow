@@ -58,12 +58,12 @@ const ANALYTICS_ENDPOINT = process.env.NEXT_PUBLIC_ANALYTICS_ENDPOINT;
 async function sendToAnalytics(metric: WebVitalMetric) {
   // Log to console in development
   if (process.env.NODE_ENV === "development") {
-    const color =
-      metric.rating === "good"
-        ? "\x1b[32m" // green
-        : metric.rating === "needs-improvement"
-          ? "\x1b[33m" // yellow
-          : "\x1b[31m"; // red
+    let color = "\x1b[31m"; // red
+    if (metric.rating === "good") {
+      color = "\x1b[32m"; // green
+    } else if (metric.rating === "needs-improvement") {
+      color = "\x1b[33m"; // yellow
+    }
     const reset = "\x1b[0m";
 
     console.log(

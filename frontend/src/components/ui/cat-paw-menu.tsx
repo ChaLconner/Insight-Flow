@@ -22,7 +22,7 @@ interface CatPawMenuProps {
  * CatPawMenu - A radial menu that expands with circular buttons
  * The trigger button opens up menu items that expand outward in an arc
  */
-export function CatPawMenu({ trigger, items, className }: CatPawMenuProps) {
+export function CatPawMenu({ trigger, items, className }: Readonly<CatPawMenuProps>) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +86,7 @@ export function CatPawMenu({ trigger, items, className }: CatPawMenuProps) {
               
               return (
                 <motion.button
-                  key={index}
+                  key={`${item.label}-${item.className ?? ""}`}
                   initial={{ 
                     opacity: 0, 
                     scale: 0.8,

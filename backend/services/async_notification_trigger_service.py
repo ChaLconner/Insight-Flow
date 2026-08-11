@@ -23,6 +23,7 @@ from utils.logger import setup_logger
 
 logger = setup_logger("async_notification_trigger")
 EMAIL_JOB_TYPE = "email.send"
+TASK_STATUS_CHANGED_TITLE = "Task Status Changed"
 
 
 class AsyncNotificationTriggerService:
@@ -188,7 +189,7 @@ class AsyncNotificationTriggerService:
 
             logger.info(f"Updated grouped notification for user {notification.user_id}")
         except Exception as e:
-            logger.error(f"Failed to update grouped notification: {e}")
+            logger.exception(f"Failed to update grouped notification: {e}")
             await self.db.rollback()
             raise
 
@@ -250,7 +251,7 @@ class AsyncNotificationTriggerService:
             logger.info(f"Created notification: {title}")
             return notification
         except Exception as e:
-            logger.error(f"Failed to create notification: {e}")
+            logger.exception(f"Failed to create notification: {e}")
             await self.db.rollback()
             raise
 
@@ -369,7 +370,7 @@ class AsyncNotificationTriggerService:
                 await self._create_notification(
                     user_id=assignee.id,
                     notification_type="task_updated",
-                    title="Task Status Changed",
+                    title=TASK_STATUS_CHANGED_TITLE,
                     message=message,
                     data={
                         "task_id": str(task_id),
@@ -384,7 +385,7 @@ class AsyncNotificationTriggerService:
             await self._send_email_notification(
                 assignee,
                 "tasks",
-                "Task Status Changed",
+                TASK_STATUS_CHANGED_TITLE,
                 message,
                 f"/projects/{project_id}?task={task_id}",
             )
@@ -397,7 +398,7 @@ class AsyncNotificationTriggerService:
                 await self._create_notification(
                     user_id=creator.id,
                     notification_type="task_updated",
-                    title="Task Status Changed",
+                    title=TASK_STATUS_CHANGED_TITLE,
                     message=message,
                     data={
                         "task_id": str(task_id),
@@ -412,7 +413,7 @@ class AsyncNotificationTriggerService:
             await self._send_email_notification(
                 creator,
                 "tasks",
-                "Task Status Changed",
+                TASK_STATUS_CHANGED_TITLE,
                 message,
                 f"/projects/{project_id}?task={task_id}",
             )
@@ -538,13 +539,11 @@ class AsyncNotificationTriggerService:
         prefs = await self._get_user_preferences(mentioned_user.id)
         actor_name = actor.name or actor.email.split("@")[0]
         notification_message = f"{actor_name} mentioned you: {message}"
-        action_path = (
-            f"/projects/{project_id}?task={task_id}"
-            if project_id and task_id
-            else f"/projects/{project_id}"
-            if project_id
-            else None
-        )
+        action_path = None
+        if project_id:
+            action_path = f"/projects/{project_id}"
+            if task_id:
+                action_path = f"{action_path}?task={task_id}"
         if self._should_notify_in_app(prefs, "mentions"):
             await self._create_notification(
                 user_id=mentioned_user.id,

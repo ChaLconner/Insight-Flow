@@ -17,7 +17,7 @@ export function RouteErrorState({
   reset,
   title,
   fallbackMessage,
-}: RouteErrorStateProps) {
+}: Readonly<RouteErrorStateProps>) {
   useEffect(() => {
     console.error(error);
   }, [error]);

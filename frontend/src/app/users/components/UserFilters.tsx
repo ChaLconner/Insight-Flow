@@ -7,14 +7,17 @@ import { CustomSelect } from "@/components/ui/custom-select";
 import { Search, RefreshCw, X } from "lucide-react";
 import { UserRole } from "@/types";
 
+type RoleFilter = UserRole | "all";
+type UserStatusFilter = "all" | "active" | "inactive";
+
 interface UserFiltersProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   debouncedSearchQuery: string;
-  roleFilter: UserRole | "all";
-  onRoleFilterChange: (value: UserRole | "all") => void;
-  statusFilter: "all" | "active" | "inactive";
-  onStatusFilterChange: (value: "all" | "active" | "inactive") => void;
+  roleFilter: RoleFilter;
+  onRoleFilterChange: (value: RoleFilter) => void;
+  statusFilter: UserStatusFilter;
+  onStatusFilterChange: (value: UserStatusFilter) => void;
   isLoading?: boolean;
 }
 
@@ -54,6 +57,39 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
       onSearchChange("");
     };
 
+    const renderSearchIndicator = () => {
+      if (isSearching) {
+        return (
+          <RefreshCw
+            className="h-4 w-4 text-muted-foreground animate-spin"
+            aria-hidden="true"
+          />
+        );
+      }
+
+      if (searchQuery) {
+        return (
+          <button
+            onClick={handleClearSearch}
+            className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary rounded"
+            aria-label="Clear search"
+            type="button"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        );
+      }
+
+      return (
+        <kbd
+          className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-xs text-muted-foreground bg-muted rounded border border-border"
+          aria-hidden="true"
+        >
+          /
+        </kbd>
+      );
+    };
+
     return (
       <div
         className="flex flex-col lg:flex-row gap-4"
@@ -82,35 +118,13 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
           </span>
           {/* Loading/Clear indicator */}
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            {isSearching ? (
-              <RefreshCw
-                className="h-4 w-4 text-muted-foreground animate-spin"
-                aria-hidden="true"
-              />
-            ) : searchQuery ? (
-              <button
-                onClick={handleClearSearch}
-                className="text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary rounded"
-                aria-label="Clear search"
-                type="button"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            ) : (
-              <kbd
-                className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-xs text-muted-foreground bg-muted rounded border border-border"
-                aria-hidden="true"
-              >
-                /
-              </kbd>
-            )}
+            {renderSearchIndicator()}
           </div>
         </div>
-        <div
+        <fieldset
           className="flex flex-col sm:flex-row gap-2"
-          role="group"
-          aria-label="Filter options"
         >
+          <legend className="sr-only">Filter options</legend>
           <CustomSelect
             value={roleFilter}
             onChange={(value) => onRoleFilterChange(value as UserRole | "all")}
@@ -127,7 +141,7 @@ export const UserFilters = forwardRef<HTMLInputElement, UserFiltersProps>(
             className="w-full sm:w-[140px]"
             aria-label="Filter by status"
           />
-        </div>
+        </fieldset>
       </div>
     );
   },

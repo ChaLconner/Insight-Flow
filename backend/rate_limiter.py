@@ -114,6 +114,13 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 
 
 # Rate limit configurations for different endpoint types
+FIVE_PER_MINUTE = "5/minute"
+TEN_PER_MINUTE = "10/minute"
+SIXTY_PER_MINUTE = "60/minute"
+THIRTY_PER_MINUTE = "30/minute"
+TWENTY_PER_MINUTE = "20/minute"
+
+
 class RateLimits:
     """
     Centralized rate limit configurations.
@@ -128,58 +135,58 @@ class RateLimits:
     """
 
     # Payment & Financial endpoints (most restrictive)
-    PAYMENT_SETUP_INTENT = "5/minute"  # Creating setup intents
-    PAYMENT_ADD_METHOD = "10/minute"  # Adding payment methods
-    PAYMENT_SUBSCRIPTION = "5/minute"  # Subscription operations
-    PAYMENT_DELETE = "10/minute"  # Deleting payment methods
+    PAYMENT_SETUP_INTENT = FIVE_PER_MINUTE  # Creating setup intents
+    PAYMENT_ADD_METHOD = TEN_PER_MINUTE  # Adding payment methods
+    PAYMENT_SUBSCRIPTION = FIVE_PER_MINUTE  # Subscription operations
+    PAYMENT_DELETE = TEN_PER_MINUTE  # Deleting payment methods
 
     # General payment reads (more lenient)
-    PAYMENT_READ = "60/minute"  # Reading payment data
+    PAYMENT_READ = SIXTY_PER_MINUTE  # Reading payment data
 
     # Authentication (prevent brute force)
-    AUTH_LOGIN = "10/minute"  # Login attempts
-    AUTH_REGISTER = "5/minute"  # Registration
-    AUTH_PASSWORD_RESET = "3/minute"  # Password reset requests
+    AUTH_LOGIN = TEN_PER_MINUTE  # Login attempts
+    AUTH_REGISTER = FIVE_PER_MINUTE  # Registration
+    AUTH_CREDENTIAL_RESET = "3/minute"  # Password reset requests
 
     # General API endpoints
     API_READ = "200/minute"  # General read operations
-    API_WRITE = "60/minute"  # General write operations
+    API_WRITE = SIXTY_PER_MINUTE  # General write operations
 
     # Webhooks (from Stripe) - high limit
     WEBHOOK = "300/minute"  # Webhook processing
-    CSP_REPORT = "30/minute"  # Public CSP telemetry, bounded by body size
+    CSP_REPORT = THIRTY_PER_MINUTE  # Public CSP telemetry, bounded by body size
 
     # Stricter limits for known abuse vectors
-    SENSITIVE_READ = "30/minute"  # Sensitive data access
-    BULK_OPERATIONS = "20/minute"  # Bulk create/update/delete
+    SENSITIVE_READ = THIRTY_PER_MINUTE  # Sensitive data access
+    BULK_OPERATIONS = TWENTY_PER_MINUTE  # Bulk create/update/delete
 
     # Analytics & Dashboard (expensive DB aggregation queries)
-    ANALYTICS_READ = "30/minute"  # Analytics overview, contributions
-    ANALYTICS_BATCH = "10/minute"  # Batch activity queries (amplification risk)
-    DASHBOARD_READ = "30/minute"  # Dashboard overview (parallel queries)
+    ANALYTICS_READ = THIRTY_PER_MINUTE  # Analytics overview, contributions
+    ANALYTICS_BATCH = TEN_PER_MINUTE  # Batch activity queries (amplification risk)
+    DASHBOARD_READ = THIRTY_PER_MINUTE  # Dashboard overview (parallel queries)
 
     # Task management
-    TASK_CREATE = "30/minute"  # Task creation (triggers notifications)
-    TASK_UPDATE = "60/minute"  # Task updates
-    TASK_DELETE = "20/minute"  # Task deletion
+    TASK_CREATE = THIRTY_PER_MINUTE  # Task creation (triggers notifications)
+    TASK_UPDATE = SIXTY_PER_MINUTE  # Task updates
+    TASK_DELETE = TWENTY_PER_MINUTE  # Task deletion
 
     # Notifications (prevent rapid polling abuse)
-    NOTIFICATION_POLL = "60/minute"  # List/count notifications
-    NOTIFICATION_BULK = "10/minute"  # Bulk read operations
+    NOTIFICATION_POLL = SIXTY_PER_MINUTE  # List/count notifications
+    NOTIFICATION_BULK = TEN_PER_MINUTE  # Bulk read operations
 
     # Favorites (write operations)
-    FAVORITES_WRITE = "30/minute"  # Toggle/add/remove favorites
+    FAVORITES_WRITE = THIRTY_PER_MINUTE  # Toggle/add/remove favorites
 
     # Project management
-    PROJECT_CREATE = "10/minute"  # Project creation
-    PROJECT_UPDATE = "30/minute"  # Project updates
-    PROJECT_DELETE = "10/minute"  # Project deletion
-    PROJECT_MEMBERS = "20/minute"  # Member management (add/remove)
+    PROJECT_CREATE = TEN_PER_MINUTE  # Project creation
+    PROJECT_UPDATE = THIRTY_PER_MINUTE  # Project updates
+    PROJECT_DELETE = TEN_PER_MINUTE  # Project deletion
+    PROJECT_MEMBERS = TWENTY_PER_MINUTE  # Member management (add/remove)
 
     # User management
-    USER_SEARCH = "30/minute"  # User search
-    USER_PROFILE_UPDATE = "20/minute"  # Profile updates
-    USER_AVATAR = "5/minute"  # Avatar upload (file processing)
+    USER_SEARCH = THIRTY_PER_MINUTE  # User search
+    USER_PROFILE_UPDATE = TWENTY_PER_MINUTE  # Profile updates
+    USER_AVATAR = FIVE_PER_MINUTE  # Avatar upload (file processing)
 
 
 # =============================================================================
@@ -235,7 +242,7 @@ class AuthRateLimiter:
                 fail_closed=settings.is_production,
             )
         except Exception as exc:
-            logger.error("Rate-limit counter unavailable: %s", exc)
+            logger.exception("Rate-limit counter unavailable: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Rate limiting service unavailable. Please retry shortly.",

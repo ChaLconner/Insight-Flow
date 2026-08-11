@@ -323,7 +323,7 @@ describe("useTasks mutations", () => {
     const updateData = { id: "1", title: "Updated Task" };
     (tasksApi.updateTask as ReturnType<typeof vi.fn>).mockResolvedValue(updateData);
 
-    await result.current.updateTask(updateData);
+    result.current.updateTask(updateData);
 
     await waitFor(() => {
         expect(tasksApi.updateTask).toHaveBeenCalledWith("1", { title: "Updated Task" });
@@ -346,7 +346,7 @@ describe("useTasks mutations", () => {
       const updateData = { id: "1", title: "Updated Project Task", projectId: "p1" };
       (tasksApi.updateProjectTask as ReturnType<typeof vi.fn>).mockResolvedValue(updateData);
   
-      await result.current.updateTask(updateData);
+      result.current.updateTask(updateData);
   
       await waitFor(() => {
           expect(tasksApi.updateProjectTask).toHaveBeenCalledWith("p1", "1", expect.objectContaining({ title: "Updated Project Task" }));
@@ -367,7 +367,7 @@ describe("useTasks mutations", () => {
     const taskToDelete = { id: "1", title: "To Delete", projectId: null } as any;
     (tasksApi.deleteTask as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-    await result.current.deleteTask(taskToDelete);
+    result.current.deleteTask(taskToDelete);
 
     await waitFor(() => {
         expect(tasksApi.deleteTask).toHaveBeenCalledWith("1");
@@ -389,7 +389,7 @@ describe("useTasks mutations", () => {
       const taskToDelete = { id: "2", title: "To Delete", projectId: "p1" } as any;
       (tasksApi.deleteProjectTask as ReturnType<typeof vi.fn>).mockResolvedValue(true);
   
-      await result.current.deleteTask(taskToDelete);
+      result.current.deleteTask(taskToDelete);
   
       await waitFor(() => {
           expect(tasksApi.deleteProjectTask).toHaveBeenCalledWith("p1", "2");

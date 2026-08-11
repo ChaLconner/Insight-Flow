@@ -35,12 +35,12 @@ class CacheBackend(ABC):
         pass
 
     @abstractmethod
-    async def set(self, key: str, value: dict[str, Any], timeout: int | None = None) -> None:
+    async def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> None:
         """Set a value in cache."""
         pass
 
     @abstractmethod
-    async def increment_with_window(self, key: str, timeout: int) -> int:
+    async def increment_with_window(self, key: str, window_seconds: int) -> int:
         """Atomically increment a counter and apply its first-write expiry."""
         pass
 
@@ -71,10 +71,10 @@ class DisabledCache(CacheBackend):
     async def get(self, _key: str) -> dict[str, Any] | None:
         return None
 
-    async def set(self, _key: str, _value: dict[str, Any], _timeout: int | None = None) -> None:
+    async def set(self, _key: str, _value: dict[str, Any], _ttl: int | None = None) -> None:
         return None
 
-    async def increment_with_window(self, _key: str, _timeout: int) -> int:
+    async def increment_with_window(self, _key: str, _window_seconds: int) -> int:
         # CacheService.increment_with_window falls back to its local counter
         # backend for rate limiting when the shared cache is disabled.
         raise RuntimeError("Cache is disabled")
@@ -131,7 +131,7 @@ class InMemoryCache(CacheBackend):
             self.stats["misses"] += 1
             return None
 
-    async def set(self, key: str, value: dict[str, Any], timeout: int | None = None) -> None:
+    async def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> None:
         with self._lock:
             # LRU eviction if full
             while len(self.cache) >= self.MAX_SIZE and key not in self.cache:
@@ -145,13 +145,13 @@ class InMemoryCache(CacheBackend):
             self.cache[key] = {
                 **value,
                 "timestamp": time.time(),
-                "timeout": timeout if timeout is not None else self.default_timeout,
+                "timeout": ttl if ttl is not None else self.default_timeout,
             }
             self.stats["sets"] += 1
 
-    async def increment_with_window(self, key: str, timeout: int) -> int:
+    async def increment_with_window(self, key: str, window_seconds: int) -> int:
         """Atomically increment a fixed-window counter in the process."""
-        if timeout <= 0:
+        if window_seconds <= 0:
             raise ValueError("Cache counter timeout must be greater than zero")
         with self._lock:
             current_time = time.time()
@@ -166,7 +166,7 @@ class InMemoryCache(CacheBackend):
             self.cache[key] = {
                 "content": {"count": count},
                 "timestamp": current_time,
-                "timeout": timeout,
+                "timeout": window_seconds,
             }
             self.stats["sets"] += 1
             return count
@@ -239,7 +239,7 @@ class RedisCache(CacheBackend):
             logger.error("Redis package not installed. Run: pip install redis")
             raise
         except Exception as e:
-            logger.error(f"Failed to initialize Redis: {e}")
+            logger.exception(f"Failed to initialize Redis: {e}")
             raise
 
     async def ensure_connected(self) -> bool:
@@ -300,23 +300,23 @@ class RedisCache(CacheBackend):
             self.stats["misses"] += 1
             return None
         except Exception as e:
-            logger.error(f"Redis get error: {e}")
+            logger.exception(f"Redis get error: {e}")
             self.stats["errors"] += 1
             return None
 
-    async def set(self, key: str, value: dict[str, Any], timeout: int | None = None) -> None:
+    async def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> None:
         try:
-            ttl = timeout if timeout is not None else self.default_timeout
+            cache_ttl = ttl if ttl is not None else self.default_timeout
             serialized = json.dumps(value, default=str)
-            await self._execute_with_retry(self.client.setex, key, ttl, serialized)
+            await self._execute_with_retry(self.client.setex, key, cache_ttl, serialized)
             self.stats["sets"] += 1
         except Exception as e:
-            logger.error(f"Redis set error: {e}")
+            logger.exception(f"Redis set error: {e}")
             self.stats["errors"] += 1
 
-    async def increment_with_window(self, key: str, timeout: int) -> int:
+    async def increment_with_window(self, key: str, window_seconds: int) -> int:
         """Atomically increment a Redis counter using a Lua fixed-window script."""
-        if timeout <= 0:
+        if window_seconds <= 0:
             raise ValueError("Cache counter timeout must be greater than zero")
 
         script = """
@@ -326,7 +326,7 @@ class RedisCache(CacheBackend):
         end
         return current
         """
-        result = await self._execute_with_retry(self.client.eval, script, 1, key, timeout)
+        result = await self._execute_with_retry(self.client.eval, script, 1, key, window_seconds)
         if result is None:
             raise ConnectionError("Redis counter operation failed")
         return int(result)
@@ -336,7 +336,7 @@ class RedisCache(CacheBackend):
             result = await self._execute_with_retry(self.client.delete, key)
             return result > 0 if result else False
         except Exception as e:
-            logger.error(f"Redis delete error: {e}")
+            logger.exception(f"Redis delete error: {e}")
             return False
 
     async def clear(self) -> None:
@@ -346,7 +346,7 @@ class RedisCache(CacheBackend):
                 deleted += await self._delete_matching_keys(f"{prefix}*")
             logger.info(f"Redis app cache cleared ({deleted} entries)")
         except Exception as e:
-            logger.error(f"Redis clear error: {e}")
+            logger.exception(f"Redis clear error: {e}")
 
     async def invalidate_pattern(self, pattern: str) -> int:
         try:
@@ -354,32 +354,41 @@ class RedisCache(CacheBackend):
             logger.debug(f"Invalidated {count} Redis keys matching '{pattern}'")
             return count
         except Exception as e:
-            logger.error(f"Redis invalidate_pattern error: {e}")
+            logger.exception(f"Redis invalidate_pattern error: {e}")
             return 0
 
-    async def _iter_keys(self, match: str) -> AsyncIterable[str]:
-        scan_iter = getattr(self.client, "scan_iter", None)
-        if callable(scan_iter):
-            res = scan_iter(match=match, count=500)
-            if hasattr(res, "__aiter__"):
-                async for key in res:
-                    yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
-                return
-            for key in res:
+    async def _iter_scan_iter_keys(self, scan_iter, match: str) -> AsyncIterable[str]:
+        """Yield keys from clients exposing scan_iter in either async or sync form."""
+        result = scan_iter(match=match, count=500)
+        if hasattr(result, "__aiter__"):
+            async for key in result:
                 yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
             return
+        for key in result:
+            yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
 
+    async def _iter_scan_cursor_keys(self, match: str) -> AsyncIterable[str]:
+        """Yield keys from clients exposing the cursor-based scan API."""
         cursor = 0
         while True:
-            res = self.client.scan(cursor=cursor, match=match, count=500)
-            if asyncio.iscoroutine(res):
-                cursor, keys = await res
+            result: Any = self.client.scan(cursor=cursor, match=match, count=500)
+            if asyncio.iscoroutine(result):
+                cursor, keys = await result
             else:
-                cursor, keys = cast("tuple[Any, Any]", res)
+                cursor, keys = cast("tuple[Any, Any]", result)
             for key in keys:
                 yield key.decode("utf-8") if isinstance(key, bytes) else str(key)
             if int(cursor) == 0:
                 break
+
+    async def _iter_keys(self, match: str) -> AsyncIterable[str]:
+        scan_iter = getattr(self.client, "scan_iter", None)
+        if callable(scan_iter):
+            async for key in self._iter_scan_iter_keys(scan_iter, match):
+                yield key
+            return
+        async for key in self._iter_scan_cursor_keys(match):
+            yield key
 
     async def _delete_matching_keys(self, match: str) -> int:
         deleted = 0
@@ -409,7 +418,7 @@ class RedisCache(CacheBackend):
                 await res
             latency_ms = round((time.time() - start) * 1000, 2)
 
-            info_res = self.client.info(section="memory")
+            info_res: Any = self.client.info(section="memory")
             if asyncio.iscoroutine(info_res):
                 info = await info_res
             else:
@@ -529,28 +538,28 @@ class CacheService:
         backend = await self._get_backend()
         return await backend.get(key)
 
-    async def set(self, key: str, value: dict[str, Any], timeout: int | None = None) -> None:
+    async def set(self, key: str, value: dict[str, Any], ttl: int | None = None) -> None:
         backend = await self._get_backend()
-        await backend.set(key, value, timeout)
+        await backend.set(key, value, ttl)
 
     async def increment_with_window(
         self,
         key: str,
-        timeout: int,
+        window_seconds: int,
         *,
         fail_closed: bool = False,
     ) -> int:
         """Increment a counter atomically, optionally refusing memory fallback."""
         backend = await self._get_backend()
         try:
-            return await backend.increment_with_window(key, timeout)
+            return await backend.increment_with_window(key, window_seconds)
         except Exception:
             if fail_closed:
                 raise
             if not isinstance(self.backend, DisabledCache):
                 self.backend = self.memory_backend
                 logger.warning("Cache counter unavailable; using in-memory rate-limit counter")
-            return await self.memory_backend.increment_with_window(key, timeout)
+            return await self.memory_backend.increment_with_window(key, window_seconds)
 
     async def delete(self, key: str) -> bool:
         backend = await self._get_backend()

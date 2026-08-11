@@ -169,6 +169,20 @@ export function FeaturesSection() {
     },
   ], []);
 
+  const carouselFeatures = useMemo(
+    () => [
+      ...features.map((feature) => ({
+        feature,
+        key: `primary-${feature.title}`,
+      })),
+      ...features.map((feature) => ({
+        feature,
+        key: `duplicate-${feature.title}`,
+      })),
+    ],
+    [features],
+  );
+
   return (
     <div
       id="features"
@@ -199,8 +213,8 @@ export function FeaturesSection() {
         
         <div className="flex w-max gap-6 animate-infinite-scroll hover:pause will-change-transform">
           {/* Double mapping for seamless infinite loop */}
-          {[...features, ...features].map((feature, i) => (
-            <FeatureCard key={i} feature={feature} index={i} />
+          {carouselFeatures.map(({ feature, key }, index) => (
+            <FeatureCard key={key} feature={feature} index={index} />
           ))}
         </div>
       </div>

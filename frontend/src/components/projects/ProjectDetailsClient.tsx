@@ -15,7 +15,7 @@ interface ProjectDetailsClientProps {
 
 export function ProjectDetailsClient({
   project: initialProject,
-}: ProjectDetailsClientProps) {
+}: Readonly<ProjectDetailsClientProps>) {
   const router = useRouter();
   const projectId = initialProject.id;
   const taskListRef = useRef<TaskListRef>(null);

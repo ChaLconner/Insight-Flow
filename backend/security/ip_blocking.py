@@ -122,8 +122,10 @@ class IPBlockingService:
 
     async def _is_blocked_redis(self, ip: str) -> tuple[bool, datetime | None]:
         """Check block status in Redis."""
+        if self._redis_client is None:
+            return self._is_blocked_memory(ip)
+
         try:
-            assert self._redis_client is not None
             block_key = f"ip_block:{ip}"
             blocked_until_str = await self._redis_client.get(block_key)
 
@@ -137,7 +139,7 @@ class IPBlockingService:
 
             return False, None
         except Exception as e:
-            logger.error(f"Error checking Redis block status: {e}")
+            logger.exception(f"Error checking Redis block status: {e}")
             return self._is_blocked_memory(ip)
 
     def _is_blocked_memory(self, ip: str) -> tuple[bool, datetime | None]:
@@ -171,8 +173,10 @@ class IPBlockingService:
 
     async def _record_violation_redis(self, ip: str, reason: str) -> bool:
         """Record violation in Redis."""
+        if self._redis_client is None:
+            return self._record_violation_memory(ip, reason)
+
         try:
-            assert self._redis_client is not None
             violation_key = f"ip_violations:{ip}"
             block_count_key = f"ip_block_count:{ip}"
 
@@ -228,7 +232,7 @@ class IPBlockingService:
             return False
 
         except Exception as e:
-            logger.error(f"Error recording violation in Redis: {e}")
+            logger.exception(f"Error recording violation in Redis: {e}")
             return self._record_violation_memory(ip, reason)
 
     def _record_violation_memory(self, ip: str, reason: str) -> bool:
@@ -309,14 +313,13 @@ class IPBlockingService:
         """
         if self._use_redis and self._redis_client:
             try:
-                assert self._redis_client is not None
                 block_key = f"ip_block:{ip}"
                 result = await self._redis_client.delete(block_key)
                 if result:
                     logger.info(f"Manually unblocked IP: {ip}")
                 return bool(result > 0)
             except Exception as e:
-                logger.error(f"Error unblocking IP in Redis: {e}")
+                logger.exception(f"Error unblocking IP in Redis: {e}")
 
         # Memory fallback
         if ip in self._blocked_ips:

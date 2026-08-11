@@ -29,7 +29,7 @@ export function PaymentMethodCard({
   onSetDefault,
   onDelete,
   isLoading = false,
-}: PaymentMethodCardProps) {
+}: Readonly<PaymentMethodCardProps>) {
   // Early return if method is undefined or null
   if (!method) {
     return null;

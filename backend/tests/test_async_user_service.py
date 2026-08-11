@@ -243,8 +243,9 @@ class TestAsyncUserService:
 
         service = AsyncUserService(mock_db)
 
+        update_data = UserUpdate(name="New")
         with pytest.raises(ValueError, match="User update failed"):
-            await service.update_user(uuid.uuid4(), UserUpdate(name="New"))
+            await service.update_user(uuid.uuid4(), update_data)
 
     @pytest.mark.asyncio
     async def test_invite_user(self, async_user_service):

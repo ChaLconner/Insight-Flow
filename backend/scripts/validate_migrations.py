@@ -49,11 +49,12 @@ def parse_migration_file(filepath: Path) -> dict | None:
         )
 
         # Extract down_revision (handle various type annotations)
-        down_revision_match = re.search(
-            r"^down_revision(?:\s*:\s*[^=]+)?\s*=\s*(.+?)\s*$",
-            content,
-            re.MULTILINE,
-        )
+        down_revision_raw = "None"
+        for line in content.splitlines():
+            stripped_line = line.strip()
+            if stripped_line.startswith("down_revision") and "=" in stripped_line:
+                down_revision_raw = stripped_line.split("=", 1)[1].strip()
+                break
 
         # Check for upgrade function
         has_upgrade = "def upgrade(" in content or "def upgrade()->" in content
@@ -67,8 +68,6 @@ def parse_migration_file(filepath: Path) -> dict | None:
         revision = revision_match.group(1)
 
         # Parse down_revision (can be None, string, or tuple)
-        down_revision_raw = down_revision_match.group(1).strip() if down_revision_match else "None"
-
         if down_revision_raw == "None":
             down_revision = None
         elif down_revision_raw.startswith("("):
@@ -193,6 +192,45 @@ def validate_migration_chain(migrations: list[dict]) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
+def _is_safe_table_creation(content: str, table: str) -> bool:
+    """Return whether a table creation is guarded by an existence check."""
+    markers = (
+        f"table_exists('{table}')",
+        f'table_exists("{table}")',
+        f"safe_create_table('{table}'",
+        f'safe_create_table("{table}"',
+    )
+    return any(marker in content for marker in markers)
+
+
+def _read_table_creations(migration: dict, migrations_dir: Path) -> list[tuple[str, bool]]:
+    """Read table creations from one migration, ignoring unreadable files."""
+    filepath = migrations_dir / migration["file"]
+    try:
+        content = filepath.read_text(encoding="utf-8")
+    except Exception:
+        return []
+
+    tables = re.findall(
+        r"(?:op\.create_table|safe_create_table)\s*\(\s*['\"]([^'\"]+)['\"]", content
+    )
+    return [(table, _is_safe_table_creation(content, table)) for table in tables]
+
+
+def _duplicate_table_warnings(table: str, file_info: list[tuple[str, bool]]) -> list[str]:
+    """Build warnings for repeated table creation across migrations."""
+    unsafe_files = [filename for filename, is_safe in file_info if not is_safe]
+    safe_files = [filename for filename, is_safe in file_info if is_safe]
+    if len(unsafe_files) > 1:
+        return [f"Table '{table}' has unguarded creation in multiple migrations: {unsafe_files}"]
+    if len(unsafe_files) == 1 and safe_files:
+        all_files = [filename for filename, _ in file_info]
+        return [
+            f"Table '{table}' is referenced in multiple migrations: {all_files} (guarded with table_exists check)"
+        ]
+    return []
+
+
 def check_duplicate_tables(migrations: list[dict], migrations_dir: Path) -> list[str]:
     """
     Check for potential duplicate table/column creation.
@@ -208,48 +246,12 @@ def check_duplicate_tables(migrations: list[dict], migrations_dir: Path) -> list
     table_creations: dict[str, list[tuple[str, bool]]] = {}  # table -> [(file, is_safe), ...]
 
     for migration in migrations:
-        filepath = migrations_dir / migration["file"]
-        try:
-            content = filepath.read_text(encoding="utf-8")
-
-            # Find create_table calls
-            tables = re.findall(
-                r"(?:op\.create_table|safe_create_table)\s*\(\s*['\"]([^'\"]+)['\"]", content
-            )
-
-            for table in tables:
-                # Check if this creation is guarded by table_exists check
-                is_safe = (
-                    f"table_exists('{table}')" in content
-                    or f'table_exists("{table}")' in content
-                    or f"safe_create_table('{table}'" in content
-                    or f'safe_create_table("{table}"' in content
-                )
-
-                if table not in table_creations:
-                    table_creations[table] = []
-                table_creations[table].append((migration["file"], is_safe))
-
-        except Exception:
-            pass
+        for table, is_safe in _read_table_creations(migration, migrations_dir):
+            table_creations.setdefault(table, []).append((migration["file"], is_safe))
 
     for table, file_info in table_creations.items():
         if len(file_info) > 1:
-            # Check if all but one are safe (guarded)
-            unsafe_files = [f for f, is_safe in file_info if not is_safe]
-            safe_files = [f for f, is_safe in file_info if is_safe]
-
-            if len(unsafe_files) > 1:
-                # Multiple unguarded creations - definitely a problem
-                warnings.append(
-                    f"Table '{table}' has unguarded creation in multiple migrations: {unsafe_files}"
-                )
-            elif len(unsafe_files) == 1 and safe_files:
-                # One unguarded, rest are safe - just informational
-                all_files = [f for f, _ in file_info]
-                warnings.append(
-                    f"Table '{table}' is referenced in multiple migrations: {all_files} (guarded with table_exists check)"
-                )
+            warnings.extend(_duplicate_table_warnings(table, file_info))
 
     return warnings
 

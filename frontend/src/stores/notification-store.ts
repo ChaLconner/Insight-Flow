@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { browserJsonStorage } from "./browser-storage";
 import type { Notification } from "@/types";
+import { generateId } from "@/lib/utils";
 
 // Re-export selectors from separate file
 export { notificationSelectors } from "./notification-selectors";
@@ -15,8 +16,8 @@ export { notificationSelectors } from "./notification-selectors";
 export type CustomNotification = Notification;
 
 export interface NotificationFilters {
-  type: string | "all";
-  priority: string | "all";
+  type: string;
+  priority: string;
   readStatus: "all" | "read" | "unread";
   search: string;
   dateRange?: { start?: Date; end?: Date };
@@ -98,7 +99,7 @@ export const useNotificationStore = create<NotificationState>()(
 
       // Core Actions
       addNotification: (notificationData) => {
-        const id = `notification-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+        const id = `notification-${Date.now()}-${generateId(8)}`;
         const now = new Date().toISOString();
 
         const notification: CustomNotification = {
@@ -265,12 +266,9 @@ export const useNotificationStore = create<NotificationState>()(
           try {
             const audio = new Audio("/sounds/notification.mp3");
             audio.volume = 0.5;
-            const playResult = audio.play();
-            if (playResult && typeof playResult.catch === "function") {
-              playResult.catch((error) => {
-                console.error("Could not play notification sound:", error);
-              });
-            }
+            void audio.play().catch((error) => {
+              console.error("Could not play notification sound:", error);
+            });
           } catch (error) {
             console.error("Notification sound not available:", error);
           }

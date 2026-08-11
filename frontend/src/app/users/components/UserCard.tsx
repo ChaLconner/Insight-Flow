@@ -13,7 +13,7 @@ interface UserCardProps {
   formatLastLogin: (dateString?: string) => string;
 }
 
-function UserCardComponent({ user, formatLastLogin }: UserCardProps) {
+function UserCardComponent({ user, formatLastLogin }: Readonly<UserCardProps>) {
   const fullName =
     `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Unknown User";
   const initials =

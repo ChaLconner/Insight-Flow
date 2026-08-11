@@ -28,7 +28,7 @@ import type {
 const USER_SETTINGS_CACHE_TTL_MS = 30_000;
 
 type UserSettingsCache = {
-  value: unknown | null;
+  value: unknown;
   timestamp: number;
 };
 

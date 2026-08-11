@@ -66,17 +66,19 @@ const sidebarItems = [
 export function Sidebar({
   isOpen,
   onClose,
-}: {
+}: Readonly<{
   isOpen: boolean;
   onClose: () => void;
-}) {
+}>) {
   const pathname = usePathname();
 
   return (
     <>
       {/* Mobile Backdrop */}
       {isOpen && (
-        <div
+        <button
+          type="button"
+          aria-label="Close navigation menu"
           className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm lg:hidden"
           onClick={onClose}
         />

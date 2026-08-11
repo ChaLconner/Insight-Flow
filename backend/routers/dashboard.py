@@ -58,7 +58,7 @@ def _build_activity_response(activity: dict) -> DashboardActivityResponse:
     )
 
 
-@router.get("/overview", response_model=DashboardOverviewResponse)
+@router.get("/overview")
 @limiter.limit(RateLimits.DASHBOARD_READ)
 async def get_dashboard_overview(
     request: Request,
@@ -86,7 +86,7 @@ async def get_dashboard_overview(
         )
 
     except Exception as e:
-        logger.error(f"Error getting dashboard overview: {e}", exc_info=True)
+        logger.exception(f"Error getting dashboard overview: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch dashboard overview",
@@ -105,7 +105,7 @@ async def get_today_tasks(
         return await dashboard_service.get_today_tasks(current_user.id)
 
     except Exception as e:
-        logger.error(f"Error getting today tasks: {e}")
+        logger.exception(f"Error getting today tasks: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch today tasks"
         )
@@ -122,7 +122,7 @@ async def get_recent_projects(
     try:
         return await dashboard_service.get_recent_projects(current_user.id, limit=5)
     except Exception as e:
-        logger.error(f"Error getting recent projects: {e}")
+        logger.exception(f"Error getting recent projects: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch recent projects",
@@ -140,7 +140,7 @@ async def get_team_activity(
     try:
         return await dashboard_service.get_recent_activities(current_user.id, limit=20)
     except Exception as e:
-        logger.error(f"Error getting team activity: {e}")
+        logger.exception(f"Error getting team activity: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch team activity",

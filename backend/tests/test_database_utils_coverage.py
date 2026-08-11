@@ -20,7 +20,7 @@ class TestDatabaseUtils:
         assert callable(execute_sql)
 
     @pytest.mark.asyncio
-    async def test_execute_sql_mocked(self):
+    async def test_execute_sql_mocked(self, monkeypatch):
         """Test execute_sql logic with mocked engine."""
         mock_engine = AsyncMock()
         mock_engine.begin = MagicMock()
@@ -36,18 +36,13 @@ class TestDatabaseUtils:
         mock_result.rowcount = 1
         mock_conn.execute.return_value = mock_result
 
-        # Direct assignment to bypass patch issues
-        original_engine = database.async_engine
-        database.async_engine = mock_engine
-        try:
-            from database import execute_sql
+        monkeypatch.setattr(database, "async_engine", mock_engine)
+        from database import execute_sql
 
-            result = await execute_sql("SELECT 1")
+        result = await execute_sql("SELECT 1")
 
-            assert result == mock_result
-            mock_conn.execute.assert_called_once()
-        finally:
-            database.async_engine = original_engine
+        assert result == mock_result
+        mock_conn.execute.assert_called_once()
 
     def test_drop_tables_export(self):
         """Test drop_tables is defined."""

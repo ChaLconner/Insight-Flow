@@ -175,7 +175,7 @@ class RedisLockManager(BaseLockManager):
         self._release_script: Any | None = None
         logger.info("Initialized RedisLockManager (multi-worker mode)")
 
-    async def _get_redis(self):
+    def _get_redis(self):
         """Lazy initialization of Redis connection."""
         if self._redis is None:
             try:
@@ -197,7 +197,7 @@ class RedisLockManager(BaseLockManager):
                     "Install with: pip install redis"
                 )
             except Exception as e:
-                logger.error(f"Failed to connect to Redis: {e}")
+                logger.exception(f"Failed to connect to Redis: {e}")
                 raise
         return self._redis
 
@@ -214,7 +214,7 @@ class RedisLockManager(BaseLockManager):
         Raises:
             TimeoutError: If lock cannot be acquired within timeout
         """
-        redis = await self._get_redis()
+        redis = self._get_redis()
         lock_id = str(uuid4())
         full_key = f"payment_lock:{lock_key}"
 
@@ -256,21 +256,21 @@ class RedisLockManager(BaseLockManager):
                         await self._release_script(keys=[full_key], args=[lock_id])
                         logger.debug(f"Released Redis lock: {lock_key}")
                 except Exception as e:
-                    logger.error(f"Error releasing Redis lock {lock_key}: {e}")
+                    logger.exception(f"Error releasing Redis lock {lock_key}: {e}")
 
     async def release(self, lock_key: str, lock_id: str):
         """Release a lock by key and ID."""
-        await self._get_redis()  # Ensure connection
+        self._get_redis()  # Ensure connection
         full_key = f"payment_lock:{lock_key}"
         try:
             if self._release_script:
                 await self._release_script(keys=[full_key], args=[lock_id])
         except Exception as e:
-            logger.error(f"Error releasing Redis lock {lock_key}: {e}")
+            logger.exception(f"Error releasing Redis lock {lock_key}: {e}")
 
     async def is_locked(self, lock_key: str) -> bool:
         """Check if a key is currently locked."""
-        redis = await self._get_redis()
+        redis = self._get_redis()
         full_key = f"payment_lock:{lock_key}"
         return bool(await redis.exists(full_key) > 0)
 
@@ -339,7 +339,7 @@ def reset_lock_manager():
 
 
 @asynccontextmanager
-async def payment_lock(user_id: UUID, operation: str = "payment", timeout: float = 30.0):
+async def payment_lock(user_id: UUID, operation: str = "payment"):
     """
     Convenience function to acquire a user-scoped payment lock.
 
@@ -348,7 +348,7 @@ async def payment_lock(user_id: UUID, operation: str = "payment", timeout: float
     Args:
         user_id: User ID to lock operations for
         operation: Operation type for debugging/namespacing
-        timeout: Maximum time to wait for lock
+        The lock manager enforces its acquisition deadline.
 
     Usage:
         async with payment_lock(user_id, "subscription"):
@@ -357,22 +357,24 @@ async def payment_lock(user_id: UUID, operation: str = "payment", timeout: float
     lock_key = f"{operation}:{user_id}"
     manager = get_lock_manager()
 
-    async with manager.acquire(lock_key, timeout=timeout):
-        yield
+    async with asyncio.timeout(30.0):
+        async with manager.acquire(lock_key):
+            yield
 
 
 @asynccontextmanager
-async def resource_lock(resource_type: str, resource_id: str, timeout: float = 30.0):
+async def resource_lock(resource_type: str, resource_id: str):
     """
     Generic resource lock for non-user-specific operations.
 
     Args:
         resource_type: Type of resource (e.g., "invoice", "subscription")
         resource_id: Unique resource identifier
-        timeout: Maximum time to wait for lock
+        The lock manager enforces its acquisition deadline.
     """
     lock_key = f"{resource_type}:{resource_id}"
     manager = get_lock_manager()
 
-    async with manager.acquire(lock_key, timeout=timeout):
-        yield
+    async with asyncio.timeout(30.0):
+        async with manager.acquire(lock_key):
+            yield

@@ -9,6 +9,7 @@ import logging
 import threading
 import time
 from collections import defaultdict, deque
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from fastapi import Request
@@ -104,6 +105,68 @@ class RateLimitMiddleware:
         # Default: use IP only for general rate limiting
         return f"{client_ip}:default"
 
+    @staticmethod
+    def _blocked_response(remaining: int) -> JSONResponse:
+        """Build the response returned for a temporarily blocked IP."""
+        return JSONResponse(
+            status_code=403,
+            content={
+                "success": False,
+                "message": "Access temporarily blocked due to suspicious activity.",
+                "code": "IP_BLOCKED",
+                "retry_after": remaining,
+            },
+            headers={"Retry-After": str(remaining)},
+        )
+
+    @staticmethod
+    def _remaining_block_time(blocked_until) -> int:
+        """Return the number of seconds remaining on an IP block."""
+        if not blocked_until:
+            return 0
+        return int((blocked_until - datetime.now(UTC)).total_seconds())
+
+    def _get_cached_ip_block(
+        self, client_ip: str, now_ts: float
+    ) -> tuple[bool, JSONResponse | None]:
+        """Return whether a valid cache entry exists and its blocked response."""
+        cached = self._ip_block_cache.get(client_ip)
+        if not cached:
+            return False, None
+
+        is_blocked, blocked_until, expire_at = cached
+        if now_ts >= expire_at:
+            del self._ip_block_cache[client_ip]
+            return False, None
+        if not is_blocked:
+            return True, None
+        remaining = self._remaining_block_time(blocked_until)
+        return True, self._blocked_response(remaining)
+
+    async def _log_blocked_access(self, request: Request, client_ip: str, remaining: int) -> None:
+        """Log a blocked request without masking the block response."""
+        try:
+            async with AsyncSessionLocal() as db:
+                await SecurityLogService.log_event(
+                    db=db,
+                    event_type="ip_bound_blocked_access",
+                    severity="warning",
+                    details={"retry_after": remaining, "reason": "IP Blocked"},
+                    request=request,
+                    ip_address=client_ip,
+                )
+        except Exception as e:
+            logger.exception(f"Failed to log blocked access: {e}")
+
+    async def _build_blocked_ip_response(
+        self, request: Request, client_ip: str, blocked_until
+    ) -> JSONResponse:
+        """Log and build a response for a block fetched from the blocker."""
+        remaining = self._remaining_block_time(blocked_until)
+        logger.warning(f"Blocked IP {client_ip} attempted access")
+        await self._log_blocked_access(request, client_ip, remaining)
+        return self._blocked_response(remaining)
+
     async def _check_ip_block(self, request: Request, client_ip: str):
         """Check if IP is blocked and return response if so. Uses in-memory cache."""
         try:
@@ -111,31 +174,9 @@ class RateLimitMiddleware:
 
             # B8: Check in-memory cache first
             now_ts = time.time()
-            cached = self._ip_block_cache.get(client_ip)
-            if cached:
-                is_blocked_cached, blocked_until_cached, expire_at = cached
-                if now_ts < expire_at:
-                    # Cache hit — use cached result
-                    if not is_blocked_cached:
-                        return None  # Not blocked, skip DB
-                    # Blocked — build response from cache
-                    remaining = 0
-                    if blocked_until_cached:
-                        now_dt = __import__("datetime").datetime.now(__import__("datetime").UTC)
-                        remaining = int((blocked_until_cached - now_dt).total_seconds())
-                    return JSONResponse(
-                        status_code=403,
-                        content={
-                            "success": False,
-                            "message": "Access temporarily blocked due to suspicious activity.",
-                            "code": "IP_BLOCKED",
-                            "retry_after": remaining,
-                        },
-                        headers={"Retry-After": str(remaining)},
-                    )
-                else:
-                    # Cache expired — remove stale entry
-                    del self._ip_block_cache[client_ip]
+            cache_checked, cached_response = self._get_cached_ip_block(client_ip, now_ts)
+            if cache_checked:
+                return cached_response
 
             blocker = get_ip_blocker()
             is_blocked, blocked_until = await blocker.is_blocked(client_ip)
@@ -148,37 +189,10 @@ class RateLimitMiddleware:
             )
 
             if is_blocked:
-                remaining = 0
-                if blocked_until:
-                    # Calculate remaining time securely
-                    now = __import__("datetime").datetime.now(__import__("datetime").UTC)
-                    remaining = int((blocked_until - now).total_seconds())
-
-                logger.warning(f"Blocked IP {client_ip} attempted access")
-
-                # Log blocked access attempt
-                try:
-                    async with AsyncSessionLocal() as db:
-                        await SecurityLogService.log_event(
-                            db=db,
-                            event_type="ip_bound_blocked_access",
-                            severity="warning",
-                            details={"retry_after": remaining, "reason": "IP Blocked"},
-                            request=request,
-                            ip_address=client_ip,
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to log blocked access: {e}")
-
-                return JSONResponse(
-                    status_code=403,
-                    content={
-                        "success": False,
-                        "message": ("Access temporarily blocked due to suspicious activity."),
-                        "code": "IP_BLOCKED",
-                        "retry_after": remaining,
-                    },
-                    headers={"Retry-After": str(remaining)},
+                return await self._build_blocked_ip_response(
+                    request,
+                    client_ip,
+                    blocked_until,
                 )
         except ImportError:
             pass  # IP blocking not available
@@ -301,7 +315,7 @@ class RateLimitMiddleware:
                     ip_address=client_ip,
                 )
         except Exception as e:
-            logger.error(f"Failed to log rate limit: {e}")
+            logger.exception(f"Failed to log rate limit: {e}")
 
         response = JSONResponse(
             status_code=429,
@@ -313,6 +327,37 @@ class RateLimitMiddleware:
             headers={"Retry-After": str(period)},
         )
         await response(scope, receive, send)
+
+    def _cleanup_request_history(self, now: float, cutoff_time: float) -> None:
+        ips_to_remove = []
+        for ip, history in self.request_history.items():
+            while history and history[0] < now - self.period:
+                history.popleft()
+            if not history or history[-1] < cutoff_time:
+                ips_to_remove.append(ip)
+
+        for ip in ips_to_remove:
+            del self.request_history[ip]
+
+        if len(self.request_history) > self.MAX_TRACKED_IPS:
+            sorted_ips = sorted(self.request_history.items(), key=lambda x: x[1][-1] if x[1] else 0)
+            for ip, _ in sorted_ips[: len(sorted_ips) // 2]:
+                del self.request_history[ip]
+            logger.warning(
+                f"Rate limiter forced cleanup: reduced from "
+                f"{len(sorted_ips)} to {len(self.request_history)} IPs"
+            )
+
+        if ips_to_remove:
+            msg = f"Rate limiter cleanup: removed {len(ips_to_remove)} inactive IPs"
+            logger.debug(msg)
+
+    def _cleanup_ip_block_cache(self, now: float) -> None:
+        expired_ips = [
+            ip for ip, (_, _, expire_at) in self._ip_block_cache.items() if now >= expire_at
+        ]
+        for ip in expired_ips:
+            del self._ip_block_cache[ip]
 
     def _maybe_cleanup(self, now: float) -> None:
         """Cleanup old entries periodically to prevent memory leak."""
@@ -328,39 +373,5 @@ class RateLimitMiddleware:
             self._last_cleanup = now
             cutoff_time = now - self.period * 2  # Keep entries for 2x period
 
-            # Remove IPs with no recent activity
-            ips_to_remove = []
-            for ip, history in self.request_history.items():
-                # Remove old timestamps
-                while history and history[0] < now - self.period:
-                    history.popleft()
-                # Mark empty histories for removal
-                if not history or history[-1] < cutoff_time:
-                    ips_to_remove.append(ip)
-
-            for ip in ips_to_remove:
-                del self.request_history[ip]
-
-            # Force cleanup if too many IPs tracked
-            if len(self.request_history) > self.MAX_TRACKED_IPS:
-                # Sort by last activity and remove oldest half
-                sorted_ips = sorted(
-                    self.request_history.items(), key=lambda x: x[1][-1] if x[1] else 0
-                )
-                for ip, _ in sorted_ips[: len(sorted_ips) // 2]:
-                    del self.request_history[ip]
-                logger.warning(
-                    f"Rate limiter forced cleanup: reduced from "
-                    f"{len(sorted_ips)} to {len(self.request_history)} IPs"
-                )
-
-            if ips_to_remove:
-                msg = f"Rate limiter cleanup: removed {len(ips_to_remove)} inactive IPs"
-                logger.debug(msg)
-
-            # B8: Clean up expired IP block cache entries
-            expired_ips = [
-                ip for ip, (_, _, expire_at) in self._ip_block_cache.items() if now >= expire_at
-            ]
-            for ip in expired_ips:
-                del self._ip_block_cache[ip]
+            self._cleanup_request_history(now, cutoff_time)
+            self._cleanup_ip_block_cache(now)

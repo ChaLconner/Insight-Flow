@@ -21,7 +21,7 @@ interface StripeProviderProps {
  * Stripe Provider Component
  * Wraps children with Stripe Elements context for payment forms
  */
-export function StripeProvider({ children, options }: StripeProviderProps) {
+export function StripeProvider({ children, options }: Readonly<StripeProviderProps>) {
   const { isDarkMode } = useTheme();
 
   if (!stripePromise) {

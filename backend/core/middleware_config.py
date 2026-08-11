@@ -39,6 +39,35 @@ def setup_trusted_host_middleware(app: FastAPI) -> None:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts_list)
 
 
+def _try_setup_redis_rate_limiting(app: FastAPI) -> bool:
+    if not settings.cache.redis_url:
+        return False
+
+    from middleware.redis_rate_limit import RedisRateLimitMiddleware
+
+    try:
+        from services.cache_service import cache_service
+
+        if hasattr(cache_service.backend, "client"):
+            app.add_middleware(
+                RedisRateLimitMiddleware,
+                redis_client=cache_service.backend.client,
+                calls=200,
+                period=60,
+                fail_closed=settings.is_production,
+            )
+            logger.info("Using Redis-based rate limiting")
+            return True
+        if settings.is_production:
+            raise RuntimeError("Configured Redis backend is unavailable for rate limiting.")
+    except Exception as e:
+        if settings.is_production:
+            raise RuntimeError("Redis-backed rate limiting is required in production.") from e
+        logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
+
+    return False
+
+
 def setup_rate_limit_middleware(app: FastAPI) -> None:
     """
     Configure rate limiting middleware.
@@ -49,7 +78,6 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
     counter, effectively multiplying the allowed rate by N workers.
     """
     from middleware.rate_limit import RateLimitMiddleware
-    from middleware.redis_rate_limit import RedisRateLimitMiddleware
 
     # Disable rate limiting in tests
     if settings.is_testing:
@@ -59,26 +87,8 @@ def setup_rate_limit_middleware(app: FastAPI) -> None:
     if settings.is_production and not settings.cache.redis_url:
         raise RuntimeError("REDIS_URL is required in production for distributed rate limiting.")
 
-    if settings.cache.redis_url:
-        try:
-            from services.cache_service import cache_service
-
-            if hasattr(cache_service.backend, "client"):
-                app.add_middleware(
-                    RedisRateLimitMiddleware,
-                    redis_client=cache_service.backend.client,
-                    calls=200,
-                    period=60,
-                    fail_closed=settings.is_production,
-                )
-                logger.info("Using Redis-based rate limiting")
-                return
-            if settings.is_production:
-                raise RuntimeError("Configured Redis backend is unavailable for rate limiting.")
-        except Exception as e:
-            if settings.is_production:
-                raise RuntimeError("Redis-backed rate limiting is required in production.") from e
-            logger.warning(f"Redis rate limiting failed, falling back to in-memory: {e}")
+    if _try_setup_redis_rate_limiting(app):
+        return
 
     # VULN-01: Development-only fallback. Production fails during app setup.
     if settings.is_production:

@@ -65,6 +65,92 @@ def _write_binary_file(path: str, content: bytes) -> None:
         buffer.write(content)
 
 
+def _avatar_security_exception(error: FileSecurityError, user_id: Any) -> HTTPException:
+    logger.warning(f"Avatar upload security violation for user {user_id}: {error.message}")
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message)
+
+
+async def _read_and_validate_avatar(file: UploadFile, user_id: Any) -> tuple[bytes, str]:
+    try:
+        file_content = await read_upload_with_limit(file, AVATAR_MAX_FILE_SIZE_BYTES)
+    except FileSecurityError as error:
+        raise _avatar_security_exception(error, user_id) from error
+
+    try:
+        file_extension, _file_size = validate_avatar_upload(
+            filename=file.filename,
+            content_type=file.content_type,
+            content=file_content,
+        )
+    except FileSecurityError as error:
+        raise _avatar_security_exception(error, user_id) from error
+
+    return file_content, file_extension
+
+
+async def _upload_avatar_to_cloudinary(
+    file_content: bytes, filename: str, user_id: Any
+) -> str | None:
+    if not is_cloudinary_configured():
+        return None
+
+    logger.info(f"Uploading avatar to Cloudinary for user {user_id}")
+    result = await asyncio.to_thread(
+        cloudinary_upload_avatar,
+        file_content=file_content,
+        filename=filename,
+        user_id=str(user_id),
+    )
+    if result and result.get("secure_url"):
+        avatar_url = result.get("secure_url")
+        if not isinstance(avatar_url, str):
+            return None
+        logger.info(f"Avatar uploaded to Cloudinary: {avatar_url}")
+        return avatar_url
+
+    logger.warning("Cloudinary upload failed, falling back to local storage")
+    return None
+
+
+def _cleanup_avatar_file(path: str | None, description: str) -> None:
+    if not path or not os.path.exists(path):
+        return
+    try:
+        os.remove(path)
+    except OSError as cleanup_error:
+        logger.warning(f"Failed to remove {description} avatar: {cleanup_error}")
+
+
+async def _save_local_avatar(file_content: bytes, file_extension: str) -> tuple[str, str]:
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    validated_path = validate_file_path(UPLOAD_DIR, file_path)
+    try:
+        await asyncio.to_thread(_write_binary_file, validated_path, file_content)
+    except Exception:
+        _cleanup_avatar_file(validated_path, "incomplete")
+        raise
+
+    return f"/static/uploads/{unique_filename}", validated_path
+
+
+async def _delete_old_local_avatar(
+    old_avatar_url: str | None, committed_local_path: str | None
+) -> None:
+    if not old_avatar_url or not old_avatar_url.startswith("/static/uploads/"):
+        return
+
+    old_filename = os.path.basename(old_avatar_url)
+    old_file_path = os.path.join(UPLOAD_DIR, old_filename)
+    try:
+        validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
+        if os.path.exists(validated_old_path) and validated_old_path != committed_local_path:
+            await asyncio.to_thread(os.remove, validated_old_path)
+            logger.info(f"Deleted old local avatar: {validated_old_path}")
+    except Exception as error:
+        logger.warning(f"Error deleting old local avatar: {error}")
+
+
 # Initialize Cloudinary on module load
 if is_cloudinary_configured():
     init_cloudinary()
@@ -172,7 +258,7 @@ async def update_current_user_profile(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        logger.error(f"Error updating user profile: {e}")
+        logger.exception(f"Error updating user profile: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update profile",
@@ -276,9 +362,9 @@ async def update_current_user_settings(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/me/avatar", response_model=UserResponse)
+@router.post("/me/avatar")
 @limiter.limit(RateLimits.USER_AVATAR)
-async def upload_user_avatar(  # noqa: PLR0912, PLR0915
+async def upload_user_avatar(
     request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
@@ -296,66 +382,17 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
     """
     new_local_path: str | None = None
     try:
-        # Read in bounded chunks so oversized avatar bodies do not fill process memory.
-        try:
-            file_content = await read_upload_with_limit(file, AVATAR_MAX_FILE_SIZE_BYTES)
-        except FileSecurityError as e:
-            logger.warning(
-                f"Avatar upload security violation for user {current_user.id}: {e.message}"
-            )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
-
-        # Security: Validate file upload (extension, MIME type, size)
-        try:
-            file_extension, _file_size = validate_avatar_upload(
-                filename=file.filename,
-                content_type=file.content_type,
-                content=file_content,
-            )
-        except FileSecurityError as e:
-            logger.warning(
-                f"Avatar upload security violation for user {current_user.id}: {e.message}"
-            )
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.message)
-
-        avatar_url = None
+        file_content, file_extension = await _read_and_validate_avatar(file, current_user.id)
         old_avatar_url = current_user.avatar_url
+        avatar_url = await _upload_avatar_to_cloudinary(
+            file_content,
+            file.filename or "avatar.png",
+            current_user.id,
+        )
 
-        # Try Cloudinary upload first
-        if is_cloudinary_configured():
-            logger.info(f"Uploading avatar to Cloudinary for user {current_user.id}")
-
-            filename = file.filename or "avatar.png"
-            result = await asyncio.to_thread(
-                cloudinary_upload_avatar,
-                file_content=file_content,
-                filename=filename,
-                user_id=str(current_user.id),
-            )
-
-            if result and result.get("secure_url"):
-                avatar_url = result["secure_url"]
-                logger.info(f"Avatar uploaded to Cloudinary: {avatar_url}")
-
-            else:
-                logger.warning("Cloudinary upload failed, falling back to local storage")
-
-        # Fallback to local storage if Cloudinary is not configured or failed
         if not avatar_url:
             logger.info("Using local storage for avatar upload")
-
-            # Generate unique filename with validated extension
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            file_path = os.path.join(UPLOAD_DIR, unique_filename)
-
-            # Security: Validate final path
-            validated_path = validate_file_path(UPLOAD_DIR, file_path)
-            new_local_path = validated_path
-
-            # Save file locally
-            await asyncio.to_thread(_write_binary_file, validated_path, file_content)
-
-            avatar_url = f"/static/uploads/{unique_filename}"
+            avatar_url, new_local_path = await _save_local_avatar(file_content, file_extension)
 
         # Update user in database - use model_construct to set avatar_url directly
         user_update = UserUpdate.model_construct(avatar_url=avatar_url)
@@ -366,37 +403,17 @@ async def upload_user_avatar(  # noqa: PLR0912, PLR0915
         new_local_path = None
 
         # Delete old local avatar only after the new database reference succeeds.
-        if old_avatar_url and old_avatar_url.startswith("/static/uploads/"):
-            old_filename = os.path.basename(old_avatar_url)
-            old_file_path = os.path.join(UPLOAD_DIR, old_filename)
-            try:
-                validated_old_path = validate_file_path(UPLOAD_DIR, old_file_path)
-                if (
-                    os.path.exists(validated_old_path)
-                    and validated_old_path != committed_local_path
-                ):
-                    await asyncio.to_thread(os.remove, validated_old_path)
-                    logger.info(f"Deleted old local avatar: {validated_old_path}")
-            except Exception as e:
-                logger.warning(f"Error deleting old local avatar: {e}")
+        await _delete_old_local_avatar(old_avatar_url, committed_local_path)
 
         logger.info(f"Avatar updated for user {current_user.id}: {avatar_url}")
         return updated_user  # type: ignore[return-value]
 
     except HTTPException:
-        if new_local_path and os.path.exists(new_local_path):
-            try:
-                os.remove(new_local_path)
-            except OSError as cleanup_error:
-                logger.warning(f"Failed to remove rejected avatar: {cleanup_error}")
+        _cleanup_avatar_file(new_local_path, "rejected")
         raise
     except Exception as e:
-        if new_local_path and os.path.exists(new_local_path):
-            try:
-                os.remove(new_local_path)
-            except OSError as cleanup_error:
-                logger.warning(f"Failed to remove incomplete avatar: {cleanup_error}")
-        logger.error(f"Failed to upload avatar: {e!s}")
+        _cleanup_avatar_file(new_local_path, "incomplete")
+        logger.exception(f"Failed to upload avatar: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to upload avatar",

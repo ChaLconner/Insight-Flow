@@ -27,8 +27,8 @@ router = APIRouter(
 from rate_limiter import RateLimits, limiter
 
 
-@router.get("", response_model=list[NotificationResponse])
-@router.get("/", response_model=list[NotificationResponse], include_in_schema=False)
+@router.get("")
+@router.get("/", include_in_schema=False)
 @limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def get_notifications(
     request: Request,
@@ -47,7 +47,7 @@ async def get_notifications(
     ]
 
 
-@router.get("/unread-count", response_model=int)
+@router.get("/unread-count")
 @limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def get_unread_count(
     request: Request,
@@ -58,7 +58,7 @@ async def get_unread_count(
     return await notification_service.get_unread_count(current_user.id)
 
 
-@router.put("/{notification_id}/read", response_model=NotificationResponse)
+@router.put("/{notification_id}/read")
 @limiter.limit(RateLimits.NOTIFICATION_POLL)
 async def mark_notification_read(
     request: Request,
@@ -86,7 +86,7 @@ async def mark_notification_read(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.put("/read-all", response_model=dict)
+@router.put("/read-all")
 @limiter.limit(RateLimits.NOTIFICATION_BULK)
 async def mark_all_read(
     request: Request,

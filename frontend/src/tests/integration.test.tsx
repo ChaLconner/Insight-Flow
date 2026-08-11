@@ -26,8 +26,11 @@ interface Project {
 }
 
 // Helper functions for testing
+let mockTaskId = 0;
+let mockProjectId = 0;
+
 const createMockTask = (overrides: Partial<Task> = {}): Task => ({
-  id: `task-${Math.random().toString(36).substr(2, 9)}`,
+  id: `task-${++mockTaskId}`,
   title: "Test Task",
   description: "Test Description",
   status: "todo",
@@ -37,7 +40,7 @@ const createMockTask = (overrides: Partial<Task> = {}): Task => ({
 });
 
 const createMockProject = (overrides: Partial<Project> = {}): Project => ({
-  id: `project-${Math.random().toString(36).substr(2, 9)}`,
+  id: `project-${++mockProjectId}`,
   name: "Test Project",
   description: "Test Project Description",
   isActive: true,
@@ -91,9 +94,9 @@ describe("Task State Management", () => {
       const inProgressTasks = tasks.filter((t) => t.status === "in_progress");
       const doneTasks = tasks.filter((t) => t.status === "done");
 
-      expect(todoTasks.length).toBe(2);
-      expect(inProgressTasks.length).toBe(1);
-      expect(doneTasks.length).toBe(1);
+      expect(todoTasks).toHaveLength(2);
+      expect(inProgressTasks).toHaveLength(1);
+      expect(doneTasks).toHaveLength(1);
     });
 
     it("should filter tasks by priority", () => {
@@ -105,7 +108,7 @@ describe("Task State Management", () => {
       ];
 
       const highPriorityTasks = tasks.filter((t) => t.priority === "high");
-      expect(highPriorityTasks.length).toBe(2);
+      expect(highPriorityTasks).toHaveLength(2);
     });
 
     it("should filter tasks by project", () => {
@@ -116,7 +119,7 @@ describe("Task State Management", () => {
       ];
 
       const projectTasks = tasks.filter((t) => t.projectId === "project-1");
-      expect(projectTasks.length).toBe(2);
+      expect(projectTasks).toHaveLength(2);
     });
   });
 
@@ -242,7 +245,7 @@ describe("Form Validation Integration", () => {
 
       if (data.dueDate) {
         const dueDate = new Date(data.dueDate);
-        if (isNaN(dueDate.getTime())) {
+        if (Number.isNaN(dueDate.getTime())) {
           errors.dueDate = "Invalid date format";
         }
       }
@@ -296,7 +299,7 @@ describe("Form Validation Integration", () => {
       });
 
       expect(result.valid).toBe(true);
-      expect(Object.keys(result.errors).length).toBe(0);
+      expect(Object.keys(result.errors)).toHaveLength(0);
     });
   });
 });
@@ -361,7 +364,7 @@ describe("Data Transformation", () => {
   describe("Date Formatting", () => {
     const formatDate = (dateString: string): string => {
       const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
+      if (Number.isNaN(date.getTime())) {
         return "Invalid date";
       }
       return date.toLocaleDateString("en-US", {
@@ -452,28 +455,29 @@ describe("Optimistic Updates", () => {
   });
 });
 
-describe("Pagination Logic", () => {
-  function paginate<T>(items: T[], page: number, pageSize: number) {
-    const totalPages = Math.ceil(items.length / pageSize);
-    const start = (page - 1) * pageSize;
-    const end = start + pageSize;
+function paginate<T>(items: T[], page: number, pageSize: number) {
+  const totalPages = Math.ceil(items.length / pageSize);
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
 
-    return {
-      items: items.slice(start, end),
-      page,
-      pageSize,
-      totalItems: items.length,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    };
-  }
+  return {
+    items: items.slice(start, end),
+    page,
+    pageSize,
+    totalItems: items.length,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPrevPage: page > 1,
+  };
+}
+
+describe("Pagination Logic", () => {
 
   it("should paginate items correctly", () => {
     const items = Array.from({ length: 25 }, (_, i) => ({ id: i + 1 }));
     const result = paginate(items, 1, 10);
 
-    expect(result.items.length).toBe(10);
+    expect(result.items).toHaveLength(10);
     expect(result.totalItems).toBe(25);
     expect(result.totalPages).toBe(3);
     expect(result.hasNextPage).toBe(true);
@@ -484,7 +488,7 @@ describe("Pagination Logic", () => {
     const items = Array.from({ length: 25 }, (_, i) => ({ id: i + 1 }));
     const result = paginate(items, 3, 10);
 
-    expect(result.items.length).toBe(5);
+    expect(result.items).toHaveLength(5);
     expect(result.hasNextPage).toBe(false);
     expect(result.hasPrevPage).toBe(true);
   });
@@ -492,7 +496,7 @@ describe("Pagination Logic", () => {
   it("should handle empty items", () => {
     const result = paginate([], 1, 10);
 
-    expect(result.items.length).toBe(0);
+    expect(result.items).toHaveLength(0);
     expect(result.totalPages).toBe(0);
     expect(result.hasNextPage).toBe(false);
     expect(result.hasPrevPage).toBe(false);

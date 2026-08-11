@@ -37,6 +37,11 @@ from utils.validators import validate_uuid
 logger = setup_logger("project_tasks_router")
 
 router = APIRouter(prefix="/projects", tags=["project tasks"])
+INVALID_PROJECT_ID_DETAIL = "Invalid project ID format"
+INVALID_TASK_ID_DETAIL = "Invalid task ID format"
+TASK_NOT_FOUND_DETAIL = "Task not found"
+TASK_NOT_IN_PROJECT_DETAIL = "Task not found in this project"
+NOTIFICATION_JOB_TYPE = "notification.dispatch"
 
 # Route-level rate limiting for project task operations
 from rate_limiter import RateLimits, limiter
@@ -98,7 +103,7 @@ async def get_project_tasks(
 
         return TaskListResponse(items=items, total=total, page=page, size=limit, has_more=has_more)
     except Exception as e:
-        logger.error(f"Exception in get_project_tasks: {e!s}", exc_info=True)
+        logger.exception(f"Exception in get_project_tasks: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch project tasks: {e!s}",
@@ -127,7 +132,7 @@ async def create_task_for_project(
         if task.assignee_id and task.assignee_id != current_user.id:
             await enqueue_job(
                 db,
-                "notification.dispatch",
+                NOTIFICATION_JOB_TYPE,
                 {
                     "event": "task_assigned",
                     "task_id": str(task.id),
@@ -156,8 +161,8 @@ async def read_project_task(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Get task by project ID and task ID with full details."""
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    task_uuid = validate_uuid(task_id, "Invalid task ID format")
+    project_uuid = validate_uuid(project_id, INVALID_PROJECT_ID_DETAIL)
+    task_uuid = validate_uuid(task_id, INVALID_TASK_ID_DETAIL)
 
     if not await project_service.is_project_member(project_uuid, current_user.id):
         raise HTTPException(
@@ -168,15 +173,15 @@ async def read_project_task(
         task = await task_service.get_task_by_id(task_uuid)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task ID format"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=INVALID_TASK_ID_DETAIL
         )
 
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_FOUND_DETAIL)
 
     if task.project_id != project_uuid:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_IN_PROJECT_DETAIL
         )
 
     return TaskWithDetails(**_build_task_with_details_response(task))
@@ -193,21 +198,21 @@ async def update_project_task(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Update task information by project ID and task ID."""
-    task_uuid = validate_uuid(task_id, "Invalid task ID format")
+    task_uuid = validate_uuid(task_id, INVALID_TASK_ID_DETAIL)
 
     try:
         task = await task_service.get_task_by_id(task_uuid)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task ID format"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=INVALID_TASK_ID_DETAIL
         )
 
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_FOUND_DETAIL)
 
     if task.project_id != project.id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_IN_PROJECT_DETAIL
         )
 
     try:
@@ -227,21 +232,21 @@ async def delete_project_task(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Delete a task by project ID and task ID."""
-    task_uuid = validate_uuid(task_id, "Invalid task ID format")
+    task_uuid = validate_uuid(task_id, INVALID_TASK_ID_DETAIL)
 
     try:
         task = await task_service.get_task_by_id(task_uuid)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task ID format"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=INVALID_TASK_ID_DETAIL
         )
 
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_FOUND_DETAIL)
 
     if task.project_id != project.id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_IN_PROJECT_DETAIL
         )
 
     try:
@@ -263,7 +268,7 @@ async def update_project_task_status(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Update task status by project ID and task ID."""
-    task_uuid = validate_uuid(task_id, "Invalid task ID format")
+    task_uuid = validate_uuid(task_id, INVALID_TASK_ID_DETAIL)
 
     new_status = status_data.get("status")
     if not new_status:
@@ -275,15 +280,15 @@ async def update_project_task_status(
         task = await task_service.get_task_by_id(task_uuid)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task ID format"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=INVALID_TASK_ID_DETAIL
         )
 
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_FOUND_DETAIL)
 
     if task.project_id != project.id:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_IN_PROJECT_DETAIL
         )
 
     old_status = _get_status_value(task.status)
@@ -296,7 +301,7 @@ async def update_project_task_status(
         if old_status != new_status:
             await enqueue_job(
                 db,
-                "notification.dispatch",
+                NOTIFICATION_JOB_TYPE,
                 {
                     "event": "task_status_changed",
                     "task_id": str(updated_task.id),
@@ -327,8 +332,8 @@ async def assign_project_task(
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Assign task to a user by project ID and task ID."""
-    project_uuid = validate_uuid(project_id, "Invalid project ID format")
-    task_uuid = validate_uuid(task_id, "Invalid task ID format")
+    project_uuid = validate_uuid(project_id, INVALID_PROJECT_ID_DETAIL)
+    task_uuid = validate_uuid(task_id, INVALID_TASK_ID_DETAIL)
 
     assignee_id = assign_data.get("assignee_id")
     if not assignee_id:
@@ -348,15 +353,15 @@ async def assign_project_task(
         task = await task_service.get_task_by_id(task_uuid)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid task ID format"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=INVALID_TASK_ID_DETAIL
         )
 
     if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_FOUND_DETAIL)
 
     if task.project_id != project_uuid:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this project"
+            status_code=status.HTTP_404_NOT_FOUND, detail=TASK_NOT_IN_PROJECT_DETAIL
         )
 
     try:
@@ -370,7 +375,7 @@ async def assign_project_task(
         if assignee:
             await enqueue_job(
                 db,
-                "notification.dispatch",
+                NOTIFICATION_JOB_TYPE,
                 {
                     "event": "task_assigned",
                     "task_id": str(updated_task.id),

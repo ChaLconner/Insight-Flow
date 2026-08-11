@@ -23,7 +23,7 @@ export function ThemeProvider({
   children,
   // defaultTheme = "system",
   // storageKey = "insight-flow-theme",
-}: ThemeProviderProps) {
+}: Readonly<ThemeProviderProps>) {
   const { initializeTheme, currentTheme } = useTheme();
   const isHydrated = useIsHydrated();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);

@@ -79,9 +79,11 @@ async def test_process_webhook_duplicate_processing(payment_service, async_sessi
 @pytest.mark.asyncio
 async def test_handle_subscription_updated_not_found(payment_service, async_session):
     # Act
-    await payment_service._handle_subscription_updated(async_session, {"id": "sub_unknown"})
+    result = await payment_service._handle_subscription_updated(
+        async_session, {"id": "sub_unknown"}
+    )
     # Should just return logging warning, no crash
-    assert True
+    assert result is None
 
 
 @pytest.mark.asyncio

@@ -22,7 +22,7 @@ interface PaymentMethodFormProps {
 export function PaymentMethodForm({
   onSuccess,
   onCancel,
-}: PaymentMethodFormProps) {
+}: Readonly<PaymentMethodFormProps>) {
   const stripe = useStripe();
   const elements = useElements();
   

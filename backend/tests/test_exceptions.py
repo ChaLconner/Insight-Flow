@@ -53,7 +53,7 @@ class TestAppError:
     def test_app_error_inherits_from_exception(self):
         """Test AppError can be raised and caught as Exception."""
         # Arrange & Act & Assert
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(AppError) as exc_info:
             raise AppError("Test error")
 
         assert str(exc_info.value) == "Test error"

@@ -9,6 +9,7 @@ import {
 } from "@/stores/notification-store";
 import { NotificationType, NotificationPriority, type Notification } from "@/types";
 import { notificationsApi } from "@/lib/api-endpoints";
+import { generateId } from "@/lib/utils";
 
 /**
  * Primary notifications hook for managing in-app notifications.
@@ -151,7 +152,7 @@ export const useNotifications = () => {
       } = {},
     ) => {
       const notification: Notification = {
-        id: Date.now().toString() + Math.random().toString(36).substring(2, 11),
+        id: `${Date.now()}-${generateId(8)}`,
         userId: "current-user",
         title,
         message,

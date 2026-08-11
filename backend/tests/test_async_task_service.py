@@ -203,12 +203,9 @@ async def test_assignee_cannot_update_task_metadata(task_service, user_id):
     task_service._check_task_permission = AsyncMock(return_value=None)
     task_service._is_project_admin = AsyncMock(return_value=False)
 
+    update_data = TaskUpdate(title="Unauthorized title")
     with pytest.raises(ValueError, match="status only"):
-        await task_service.update_task(
-            task.id,
-            TaskUpdate(title="Unauthorized title"),
-            user_id,
-        )
+        await task_service.update_task(task.id, update_data, user_id)
 
 
 @pytest.mark.asyncio

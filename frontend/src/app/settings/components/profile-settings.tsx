@@ -1,6 +1,13 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import {
+  useRef,
+  useState,
+  useEffect,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -34,17 +41,323 @@ interface ProfileSettingsProps {
 }
 
 // Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[^@\s]{1,254}@[^@\s]{1,254}\.[^@\s]{1,254}$/;
 
 // Phone validation regex (international format)
-const PHONE_REGEX = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/;
+const PHONE_REGEX = /^(?=.*\d)\+?[\d()\s./-]{7,25}$/;
 
 // Bio max length
 const BIO_MAX_LENGTH = 100;
 
+type SetProfileData = Dispatch<SetStateAction<ProfileData>>;
+
+interface ProfileAvatarSectionProps {
+  readonly isLoading: boolean;
+  readonly isUploading: boolean;
+  readonly avatar: string;
+  readonly fileInputRef: { current: HTMLInputElement | null };
+  readonly onAvatarClick: () => void;
+  readonly onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+}
+
+function renderAvatarPreview(isLoading: boolean, avatar: string) {
+  if (isLoading) {
+    return <Skeleton className="h-full w-full" />;
+  }
+  if (avatar) {
+    return (
+      <Image
+        src={getAvatarUrl(avatar)}
+        alt="Profile"
+        fill
+        priority
+        className="object-cover group-hover:scale-110 transition-transform duration-500"
+        sizes="96px"
+      />
+    );
+  }
+  return <User className="h-10 w-10 text-muted-foreground" />;
+}
+
+function ProfileAvatarSection({
+  isLoading,
+  isUploading,
+  avatar,
+  fileInputRef,
+  onAvatarClick,
+  onFileChange,
+}: ProfileAvatarSectionProps) {
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl bg-accent/20 border border-border">
+      <button
+        type="button"
+        className="relative group cursor-pointer border-0 bg-transparent p-0"
+        onClick={onAvatarClick}
+        disabled={isLoading}
+        aria-label="Change profile picture"
+      >
+        <div className="relative h-24 w-24 rounded-full overflow-hidden ring-2 ring-border group-hover:ring-primary/50 transition-all duration-300 bg-secondary flex items-center justify-center">
+          {renderAvatarPreview(isLoading, avatar)}
+        </div>
+        {!isLoading && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full">
+            <Camera className="h-8 w-8 text-white" />
+          </div>
+        )}
+      </button>
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept="image/*"
+        onChange={onFileChange}
+        disabled={isLoading}
+      />
+      <div className="space-y-2 text-center sm:text-left">
+        <h3 className="text-lg font-medium text-foreground">Profile Picture</h3>
+        <p className="text-sm text-muted-foreground">PNG, JPG or GIF no bigger than 2MB</p>
+        {isLoading ? (
+          <Skeleton className="h-9 w-32" />
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="border border-border text-foreground hover:bg-accent hover:text-accent-foreground transition-all hover:scale-105 active:scale-95"
+            onClick={onAvatarClick}
+            disabled={isUploading}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Uploading...
+              </>
+            ) : (
+              "Change Avatar"
+            )}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface ProfileFormFieldsProps {
+  readonly profileData: ProfileData;
+  readonly isLoading: boolean;
+  readonly isEmailValid: boolean;
+  readonly isPhoneValid: boolean;
+  readonly setProfileData: SetProfileData;
+}
+
+function ProfileFormFields({
+  profileData,
+  isLoading,
+  isEmailValid,
+  isPhoneValid,
+  setProfileData,
+}: ProfileFormFieldsProps) {
+  return (
+    <div className="grid gap-5 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor="firstName" className="text-muted-foreground flex items-center gap-2">
+          <User className="h-3.5 w-3.5 text-muted-foreground" />
+          First Name
+        </Label>
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <Input
+            id="firstName"
+            name="firstName"
+            autoComplete="given-name"
+            value={profileData.firstName}
+            onChange={(event) => setProfileData((prev) => ({ ...prev, firstName: event.target.value }))}
+            placeholder="Enter your first name"
+            className="bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground"
+          />
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="lastName" className="text-muted-foreground flex items-center gap-2">
+          <User className="h-3.5 w-3.5 text-muted-foreground" />
+          Last Name
+        </Label>
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <Input
+            id="lastName"
+            name="lastName"
+            autoComplete="family-name"
+            value={profileData.lastName}
+            onChange={(event) => setProfileData((prev) => ({ ...prev, lastName: event.target.value }))}
+            placeholder="Enter your last name"
+            className="bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground"
+          />
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="email" className="text-muted-foreground flex items-center gap-2">
+          <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+          Email
+        </Label>
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={profileData.email}
+              onChange={(event) => setProfileData((prev) => ({ ...prev, email: event.target.value }))}
+              placeholder="you@example.com"
+              className={`bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground ${
+                !isEmailValid ? "!border-destructive focus:!border-destructive" : ""
+              }`}
+            />
+            {!isEmailValid && <p className="text-xs text-red-400">Please enter a valid email address</p>}
+          </>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="username" className="text-muted-foreground flex items-center gap-2">
+          <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
+          Username
+        </Label>
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <Input
+            id="username"
+            name="username"
+            autoComplete="username"
+            value={profileData.username}
+            onChange={(event) => setProfileData((prev) => ({ ...prev, username: event.target.value }))}
+            placeholder="your_username"
+            className="bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground"
+          />
+        )}
+      </div>
+
+      <div className="space-y-2 md:col-span-2">
+        <Label htmlFor="phone" className="text-muted-foreground flex items-center gap-2">
+          <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+          Phone Number
+        </Label>
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <>
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              value={profileData.phone}
+              onChange={(event) => setProfileData((prev) => ({ ...prev, phone: event.target.value }))}
+              placeholder="+1 (555) 123-4567"
+              className={`bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground md:max-w-md ${
+                !isPhoneValid ? "!border-destructive focus:!border-destructive" : ""
+              }`}
+            />
+            {!isPhoneValid && <p className="text-xs text-red-400">Please enter a valid phone number</p>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface ProfileBioProps {
+  readonly profileData: ProfileData;
+  readonly isLoading: boolean;
+  readonly bioLength: number;
+  readonly isBioOverLimit: boolean;
+  readonly setProfileData: SetProfileData;
+}
+
+function ProfileBio({
+  profileData,
+  isLoading,
+  bioLength,
+  isBioOverLimit,
+  setProfileData,
+}: ProfileBioProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="bio" className="text-muted-foreground flex items-center gap-2">
+          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+          Bio
+        </Label>
+        {!isLoading && (
+          <span className={`text-xs ${isBioOverLimit ? "text-destructive" : "text-muted-foreground"}`}>
+            {bioLength}/{BIO_MAX_LENGTH}
+          </span>
+        )}
+      </div>
+      {isLoading ? (
+        <Skeleton className="h-[120px] w-full" />
+      ) : (
+        <>
+          <Textarea
+            id="bio"
+            value={profileData.bio}
+            onChange={(event) => setProfileData((prev) => ({ ...prev, bio: event.target.value }))}
+            className={`min-h-[120px] bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground resize-none ${
+              isBioOverLimit ? "!border-destructive focus:!border-destructive" : ""
+            }`}
+            placeholder="Write a short bio about yourself. This will be visible on your public profile."
+          />
+          {isBioOverLimit && (
+            <p className="text-xs text-red-400">
+              Bio exceeds maximum length of {BIO_MAX_LENGTH} characters
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+interface ProfileSaveFooterProps {
+  readonly canSaveProfile: boolean;
+  readonly isSaving: boolean;
+  readonly onSave: () => void;
+}
+
+function ProfileSaveFooter({ canSaveProfile, isSaving, onSave }: ProfileSaveFooterProps) {
+  return (
+    <CardFooter className="border-t border-border pt-6 flex justify-end bg-accent/5">
+      <Button
+        onClick={onSave}
+        disabled={!canSaveProfile}
+        className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 px-8 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isSaving ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Saving...
+          </>
+        ) : (
+          <>
+            <Save className="h-4 w-4 mr-2" />
+            Save Changes
+          </>
+        )}
+      </Button>
+    </CardFooter>
+  );
+}
+
 export function ProfileSettings({
   isLoading: initialLoading = false,
-}: ProfileSettingsProps) {
+}: Readonly<ProfileSettingsProps>) {
   const user = useAuthStore((state) => state.user);
   const updateUserProfile = useAuthStore((state) => state.updateUserProfile);
   const updateUserAvatar = useAuthStore((state) => state.updateUserAvatar);
@@ -99,7 +412,7 @@ export function ProfileSettings({
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
       return;
@@ -224,264 +537,37 @@ export function ProfileSettings({
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Avatar Section */}
-          <div className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-xl bg-accent/20 border border-border">
-            <div
-              className="relative group cursor-pointer"
-              onClick={isLoading ? undefined : handleAvatarClick}
-            >
-              <div className="relative h-24 w-24 rounded-full overflow-hidden ring-2 ring-border group-hover:ring-primary/50 transition-all duration-300 bg-secondary flex items-center justify-center">
-                {isLoading ? (
-                  <Skeleton className="h-full w-full" />
-                ) : profileData.avatar ? (
-                  <Image
-                    src={getAvatarUrl(profileData.avatar)}
-                    alt="Profile"
-                    fill
-                    priority
-                    className="object-cover group-hover:scale-110 transition-transform duration-500"
-                    sizes="96px"
-                  />
-                ) : (
-                  <User className="h-10 w-10 text-muted-foreground" />
-                )}
-              </div>
-              {!isLoading && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-full">
-                  <Camera className="h-8 w-8 text-white" />
-                </div>
-              )}
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept="image/*"
-                onChange={handleFileChange}
-                disabled={isLoading}
-              />
-            </div>
-            <div className="space-y-2 text-center sm:text-left">
-              <h3 className="text-lg font-medium text-foreground">
-                Profile Picture
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                PNG, JPG or GIF no bigger than 2MB
-              </p>
-              {isLoading ? (
-                <Skeleton className="h-9 w-32" />
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="border border-border text-foreground hover:bg-accent hover:text-accent-foreground transition-all hover:scale-105 active:scale-95"
-                  onClick={handleAvatarClick}
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : "Change Avatar"}
-                </Button>
-              )}
-            </div>
-          </div>
+          <ProfileAvatarSection
+            isLoading={isLoading}
+            isUploading={isUploading}
+            avatar={profileData.avatar}
+            fileInputRef={fileInputRef}
+            onAvatarClick={handleAvatarClick}
+            onFileChange={handleFileChange}
+          />
 
-          {/* Form Fields */}
-          <div className="grid gap-5 md:grid-cols-2">
-            {/* First Name */}
-            <div className="space-y-2">
-              <Label htmlFor="firstName" className="text-muted-foreground flex items-center gap-2">
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-                First Name
-              </Label>
-              {isLoading ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <Input
-                  id="firstName"
-                  name="firstName"
-                  autoComplete="given-name"
-                  value={profileData.firstName}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({
-                      ...prev,
-                      firstName: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter your first name"
-                  className="bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground"
-                />
-              )}
-            </div>
+          <ProfileFormFields
+            profileData={profileData}
+            isLoading={isLoading}
+            isEmailValid={isEmailValid}
+            isPhoneValid={isPhoneValid}
+            setProfileData={setProfileData}
+          />
 
-            {/* Last Name */}
-            <div className="space-y-2">
-              <Label htmlFor="lastName" className="text-muted-foreground flex items-center gap-2">
-                <User className="h-3.5 w-3.5 text-muted-foreground" />
-                Last Name
-              </Label>
-              {isLoading ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <Input
-                  id="lastName"
-                  name="lastName"
-                  autoComplete="family-name"
-                  value={profileData.lastName}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({ ...prev, lastName: e.target.value }))
-                  }
-                  placeholder="Enter your last name"
-                  className="bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground"
-                />
-              )}
-            </div>
-
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-muted-foreground flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                Email
-              </Label>
-              {isLoading ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    value={profileData.email}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, email: e.target.value }))
-                    }
-                    placeholder="you@example.com"
-                    className={`bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground ${
-                      !isEmailValid ? "!border-destructive focus:!border-destructive" : ""
-                    }`}
-                  />
-                  {!isEmailValid && (
-                    <p className="text-xs text-red-400">Please enter a valid email address</p>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Username */}
-            <div className="space-y-2">
-              <Label htmlFor="username" className="text-muted-foreground flex items-center gap-2">
-                <AtSign className="h-3.5 w-3.5 text-muted-foreground" />
-                Username
-              </Label>
-              {isLoading ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <Input
-                  id="username"
-                  name="username"
-                  autoComplete="username"
-                  value={profileData.username}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({ ...prev, username: e.target.value }))
-                  }
-                  placeholder="your_username"
-                  className="bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground"
-                />
-              )}
-            </div>
-
-            {/* Phone */}
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="phone" className="text-muted-foreground flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                Phone Number
-              </Label>
-              {isLoading ? (
-                <Skeleton className="h-10 w-full" />
-              ) : (
-                <>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    autoComplete="tel"
-                    value={profileData.phone}
-                    onChange={(e) =>
-                      setProfileData((prev) => ({ ...prev, phone: e.target.value }))
-                    }
-                    placeholder="+1 (555) 123-4567"
-                    className={`bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground md:max-w-md ${
-                      !isPhoneValid ? "!border-destructive focus:!border-destructive" : ""
-                    }`}
-                  />
-                  {!isPhoneValid && (
-                    <p className="text-xs text-red-400">Please enter a valid phone number</p>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Bio Section */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="bio" className="text-muted-foreground flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                Bio
-              </Label>
-              {!isLoading && (
-                <span className={`text-xs ${isBioOverLimit ? "text-destructive" : "text-muted-foreground"}`}>
-                  {bioLength}/{BIO_MAX_LENGTH}
-                </span>
-              )}
-            </div>
-            {isLoading ? (
-              <Skeleton className="h-[120px] w-full" />
-            ) : (
-              <>
-                <Textarea
-                  id="bio"
-                  value={profileData.bio}
-                  onChange={(e) =>
-                    setProfileData((prev) => ({ ...prev, bio: e.target.value }))
-                  }
-                  className={`min-h-[120px] bg-background border-input text-foreground focus:border-primary focus:ring-primary placeholder:text-muted-foreground resize-none ${
-                    isBioOverLimit ? "!border-destructive focus:!border-destructive" : ""
-                  }`}
-                  placeholder="Write a short bio about yourself. This will be visible on your public profile."
-                />
-                {isBioOverLimit && (
-                  <p className="text-xs text-red-400">
-                    Bio exceeds maximum length of {BIO_MAX_LENGTH} characters
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+          <ProfileBio
+            profileData={profileData}
+            isLoading={isLoading}
+            bioLength={bioLength}
+            isBioOverLimit={isBioOverLimit}
+            setProfileData={setProfileData}
+          />
         </CardContent>
         {!isLoading && (
-          <CardFooter className="border-t border-border pt-6 flex justify-end bg-accent/5">
-            <Button
-              onClick={handleSave}
-              disabled={!canSaveProfile}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 px-8 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Changes
-                </>
-              )}
-            </Button>
-          </CardFooter>
+          <ProfileSaveFooter
+            canSaveProfile={canSaveProfile}
+            isSaving={isSaving}
+            onSave={handleSave}
+          />
         )}
       </Card>
     </div>

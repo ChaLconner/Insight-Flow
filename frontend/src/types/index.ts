@@ -2,6 +2,10 @@
 // API Response Types
 // ===========================================
 
+type Theme = "light" | "dark" | "auto";
+type CustomFieldValue = string | number | boolean | null;
+type TaskHistoryValue = string | number | boolean | null;
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -42,7 +46,7 @@ export interface User {
   website?: string;
   timezone?: string;
   language?: string;
-  theme?: "light" | "dark" | "auto";
+  theme?: Theme;
   notifications?: {
     email: boolean;
     push: boolean;
@@ -290,7 +294,7 @@ export interface Task {
   parentId?: string;
   subtasks: Task[];
   dependencies: string[];
-  customFields: Record<string, string | number | boolean | null>;
+  customFields: Record<string, CustomFieldValue>;
   createdAt: string;
   updatedAt: string;
 }
@@ -358,8 +362,8 @@ export interface TaskHistoryEntry {
   id: string;
   taskId: string;
   field: string;
-  oldValue: string | number | boolean | null;
-  newValue: string | number | boolean | null;
+  oldValue: TaskHistoryValue;
+  newValue: TaskHistoryValue;
   userId: string;
   createdAt: string;
   user: User;
@@ -542,7 +546,7 @@ export interface FormState<T = unknown> {
 export interface BreadcrumbItem {
   label: string;
   href?: string;
-  icon?: string | React.ElementType;
+  icon?: string | React.ElementType<unknown>;
 }
 
 export interface TableColumn<T = unknown> {

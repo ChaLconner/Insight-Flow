@@ -47,7 +47,7 @@ def fire_and_forget[T](coro: Coroutine[Any, Any, T]) -> None:
         try:
             await coro
         except Exception as e:
-            logger.error(f"Background task failed: {e}", exc_info=True)
+            logger.exception(f"Background task failed: {e}", exc_info=True)
 
     try:
         loop = asyncio.get_running_loop()
@@ -80,7 +80,7 @@ def run_in_background[T](func: Callable[..., T], *args: Any, **kwargs: Any) -> N
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, lambda: func(*args, **kwargs))
         except Exception as e:
-            logger.error(f"Background task failed: {e}", exc_info=True)
+            logger.exception(f"Background task failed: {e}", exc_info=True)
 
     fire_and_forget(wrapper())
 

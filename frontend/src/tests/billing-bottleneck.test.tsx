@@ -1,5 +1,5 @@
 import React from "react";
-import { act, render, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubscriptionPlan, type PlanInfo } from "@/types";
 
@@ -365,5 +365,68 @@ describe("billing bottleneck regression", () => {
     });
 
     await waitFor(() => expect(apiClientMock.get).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders payment history status variants and document actions", async () => {
+    apiClientMock.get
+      .mockResolvedValueOnce({
+        data: {
+          total_spent: 300,
+          total_payments: 3,
+          successful_payments: 1,
+          failed_payments: 1,
+          pending_payments: 1,
+          refunded_payments: 0,
+          currency: "usd",
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          payments: [
+            {
+              id: "payment-succeeded",
+              amount: 100,
+              currency: "usd",
+              status: "succeeded",
+              created_at: "2026-01-01T00:00:00Z",
+              description: "Successful payment",
+              invoice_url: "https://example.com/invoice",
+              receipt_url: null,
+            },
+            {
+              id: "payment-failed",
+              amount: 100,
+              currency: "usd",
+              status: "failed",
+              created_at: "2026-01-02T00:00:00Z",
+              description: null,
+              invoice_url: null,
+              receipt_url: "https://example.com/receipt",
+            },
+            {
+              id: "payment-pending",
+              amount: 100,
+              currency: "usd",
+              status: "pending",
+              created_at: "2026-01-03T00:00:00Z",
+              description: null,
+              invoice_url: null,
+              receipt_url: null,
+            },
+          ],
+          total: 3,
+        },
+      });
+
+    const { PaymentHistorySettings } = await import(
+      "@/app/settings/components/payment-history-settings"
+    );
+    render(<PaymentHistorySettings />);
+
+    await waitFor(() => expect(screen.getByText("succeeded")).toBeInTheDocument());
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(screen.getByText("pending")).toBeInTheDocument();
+    expect(screen.getByText("Invoice")).toBeInTheDocument();
+    expect(screen.getByText("Receipt")).toBeInTheDocument();
   });
 });

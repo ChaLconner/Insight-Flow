@@ -172,10 +172,9 @@ class TestCreateAccessToken:
         assert access_payload["iss"] == "insight-flow"
         assert access_payload["aud"] == "insight-flow"
 
+        refresh_token = create_access_token({"sub": "user"}, token_type="refresh")
         with pytest.raises(HTTPException, match="Invalid token type"):
-            verify_token(
-                create_access_token({"sub": "user"}, token_type="refresh"), expected_type="access"
-            )
+            verify_token(refresh_token, expected_type="access")
 
 
 class TestVerifyToken:

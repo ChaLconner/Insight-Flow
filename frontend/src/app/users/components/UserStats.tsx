@@ -15,7 +15,7 @@ interface UserStatsProps {
   };
 }
 
-export function UserStats({ stats }: UserStatsProps) {
+export function UserStats({ stats }: Readonly<UserStatsProps>) {
   const activePercentage =
     stats.total > 0 ? Math.round((stats.active / stats.total) * 100) : 0;
   const verifiedPercentage =

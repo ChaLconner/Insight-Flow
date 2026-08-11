@@ -12,7 +12,7 @@ const TONE_CLASSES = {
   error: "text-red-500",
 } as const;
 
-export function AuthStatusIcon({ tone }: AuthStatusIconProps) {
+export function AuthStatusIcon({ tone }: Readonly<AuthStatusIconProps>) {
   return (
     <svg
       className={`mx-auto h-12 w-12 ${TONE_CLASSES[tone]}`}

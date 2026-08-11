@@ -29,8 +29,8 @@ describe("theme store actions", () => {
     vi.useRealTimers();
     window.localStorage.clear();
     document.documentElement.className = "";
-    document.documentElement.removeAttribute("data-theme");
-    document.documentElement.removeAttribute("data-color-scheme");
+    delete document.documentElement.dataset.theme;
+    delete document.documentElement.dataset.colorScheme;
     document.documentElement.style.colorScheme = "";
     document.head.innerHTML = '<meta name="theme-color" content="#ffffff">';
     installMatchMedia(false);
@@ -44,9 +44,23 @@ describe("theme store actions", () => {
 
     expect(state.theme).toBe("light");
     expect(document.documentElement.classList.contains("light")).toBe(true);
-    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
     expect(themeSelectors.isLight(state)).toBe(true);
     expect(themeActions.getThemeLabel("dark")).toBe("Dark");
+  });
+
+  it("falls back to the default theme when persisted state is invalid", async () => {
+    window.localStorage.setItem("insight-flow-theme", "not-json");
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { useThemeStore } = await import("@/stores/theme-store");
+
+    expect(useThemeStore.getState().theme).toBe("dark");
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "Failed to parse persisted theme; using the default.",
+      expect.any(Error),
+    );
+    consoleWarn.mockRestore();
   });
 
   it("initializes system theme, updates system preference, and cleans listener", async () => {

@@ -19,6 +19,7 @@ const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PA
 
 test.describe("Visual Regression Tests", () => {
   test.describe("Dashboard", () => {
+    // These authenticated E2E cases run when the CI environment supplies credentials.
     test.skip(!hasE2EAuth, "E2E credentials are not configured");
 
     test("dashboard visual regression - light mode", async ({ page }) => {
@@ -201,10 +202,11 @@ test.describe("Accessibility Tests", () => {
       // Tab to show password button (may or may not exist)
       await page.keyboard.press("Tab");
       const focusedElement = page.locator(':focus');
-      expect(await focusedElement.count()).toBe(1);
+      await expect(focusedElement).toHaveCount(1);
     });
 
     test("dropdown menus should be keyboard accessible", async ({ page }) => {
+      // This authenticated E2E case runs when the CI environment supplies credentials.
       test.skip(!hasE2EAuth, "E2E credentials are not configured");
       await page.goto("/dashboard");
       await page.waitForLoadState("networkidle");
@@ -293,6 +295,7 @@ test.describe("Accessibility Tests", () => {
     });
 
     test("images should have alt text", async ({ page }) => {
+      // This authenticated E2E case runs when the CI environment supplies credentials.
       test.skip(!hasE2EAuth, "E2E credentials are not configured");
       await page.goto("/dashboard");
       await page.waitForLoadState("networkidle");

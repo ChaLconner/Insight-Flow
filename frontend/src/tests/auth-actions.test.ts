@@ -10,6 +10,7 @@ const clearDeduplicatedRequestsMock = vi.fn();
 const clearQueryCacheMock = vi.fn();
 const clearTokensMock = vi.fn();
 const clearServiceWorkerCacheMock = vi.fn();
+const clearAuthenticatedCachesMock = vi.fn();
 
 const toastMock = {
   success: vi.fn(),
@@ -41,6 +42,10 @@ vi.mock("@/lib/api-client", () => ({
   clearDeduplicatedRequests: clearDeduplicatedRequestsMock,
 }));
 
+vi.mock("@/lib/auth-cache", () => ({
+  clearAuthenticatedCaches: clearAuthenticatedCachesMock,
+}));
+
 vi.mock("@/providers/query-provider", () => ({
   clearQueryCache: clearQueryCacheMock,
 }));
@@ -58,6 +63,7 @@ vi.mock("@/components/providers/service-worker-registration", () => ({
 describe("auth actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearAuthenticatedCachesMock.mockResolvedValue(undefined);
   });
 
   it("logs in successfully and emits the auth event", async () => {
@@ -134,6 +140,28 @@ describe("auth actions", () => {
 
     expect(setLoggingOutMock).toHaveBeenCalledWith(true);
     expect(logoutMock).toHaveBeenCalled();
+  });
+
+  it("continues logout when individual client cache clearers fail", async () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    clearAuthenticatedCachesMock.mockRejectedValueOnce(new Error("auth cache"));
+    clearDeduplicatedRequestsMock.mockImplementationOnce(() => {
+      throw new Error("request cache");
+    });
+    clearQueryCacheMock.mockImplementationOnce(() => {
+      throw new Error("query cache");
+    });
+    clearTokensMock.mockImplementationOnce(() => {
+      throw new Error("token cache");
+    });
+    clearServiceWorkerCacheMock.mockRejectedValueOnce(new Error("service worker"));
+
+    const { authActions } = await import("@/stores/auth-actions");
+    await authActions.logout();
+
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(5);
+    expect(logoutMock).toHaveBeenCalled();
+    consoleWarnSpy.mockRestore();
   });
 
   it("initializes auth and reports initialization failures", async () => {

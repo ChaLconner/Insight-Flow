@@ -12,10 +12,10 @@ Usage: python scripts/seed_analytics.py
 
 import asyncio
 import os
-import random
 import sys
 import uuid
 from datetime import datetime, timedelta
+from secrets import SystemRandom
 
 from sqlalchemy import select
 
@@ -32,9 +32,133 @@ from utils.logger import setup_logger
 
 # Use proper logging instead of print statements
 logger = setup_logger("seed_analytics")
+secure_random = SystemRandom()
 
 
-async def seed_analytics_data():  # noqa: PLR0912, PLR0915
+async def _get_or_create_team_member(db, name: str) -> User:
+    """Return the demo team member for a stable email address."""
+    email = f"{name.lower().replace(' ', '.')}@example.com"
+    result = await db.execute(select(User).filter(User.email == email))
+    user = result.scalars().first()
+    if user:
+        return user
+
+    user = User(
+        id=uuid.uuid4(),
+        email=email,
+        name=name,
+        hashed_password=get_password_hash("password123"),
+        role="member",
+        is_active=True,
+        avatar_url=f"https://api.dicebear.com/7.x/avataaars/svg?seed={name.replace(' ', '')}",
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    logger.info(f"Created user: {name}")
+    return user
+
+
+async def _get_or_create_analytics_project(
+    db, name: str, admin_user: User, team_members: list[User]
+):
+    """Return a demo project and create its random member links when new."""
+    result = await db.execute(select(Project).filter(Project.name == name))
+    project = result.scalars().first()
+    if project:
+        return project
+
+    project = Project(
+        id=uuid.uuid4(),
+        name=name,
+        description=f"Analytics demo project: {name}",
+        owner_id=admin_user.id,
+        is_active=True,
+    )
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    logger.info(f"Created project: {name}")
+
+    members_to_add = secure_random.sample(
+        team_members, k=secure_random.randint(2, len(team_members))
+    )
+    for member in members_to_add:
+        if member.id != project.owner_id:
+            db.add(
+                ProjectMember(
+                    id=uuid.uuid4(),
+                    project_id=project.id,
+                    user_id=member.id,
+                    role=MemberRole.MEMBER.value,
+                )
+            )
+    await db.commit()
+    return project
+
+
+def _seed_project_tasks(
+    db,
+    project: Project,
+    team_members: list[User],
+    start_date: datetime,
+    end_date: datetime,
+) -> None:
+    """Generate analytics tasks and their creation/status history for one project."""
+    for _ in range(secure_random.randint(20, 40)):
+        created_at = start_date + timedelta(days=secure_random.randint(0, 50))
+        assignee = secure_random.choice(team_members)
+        creator = secure_random.choice(team_members)
+        status = secure_random.choice(list(TaskStatus))
+        priority = secure_random.choice(list(TaskPriority))
+        task = Task(
+            id=uuid.uuid4(),
+            title=f"Task {uuid.uuid4().hex[:8]}",
+            description="Generated task for analytics testing",
+            status=status,
+            priority=priority,
+            project_id=project.id,
+            created_by=creator.id,
+            assignee_id=assignee.id,
+            due_date=created_at + timedelta(days=secure_random.randint(2, 14)),
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        db.add(task)
+        db.add(
+            TaskHistory(
+                id=uuid.uuid4(),
+                activity_type=ActivityType.TASK_CREATED,
+                project_id=project.id,
+                task_id=task.id,
+                user_id=creator.id,
+                task_title=task.title,
+                description=f"Created task: {task.title}",
+                timestamp=created_at,
+            )
+        )
+
+        if status == TaskStatus.DONE:
+            completed_at = min(created_at + timedelta(days=secure_random.randint(1, 10)), end_date)
+            task.updated_at = completed_at
+            db.add(
+                TaskHistory(
+                    id=uuid.uuid4(),
+                    activity_type=ActivityType.TASK_COMPLETED,
+                    project_id=project.id,
+                    task_id=task.id,
+                    user_id=assignee.id,
+                    task_title=task.title,
+                    description=f"Completed task: {task.title}",
+                    timestamp=completed_at,
+                    new_values='{"status": "done"}',
+                )
+            )
+        elif status == TaskStatus.IN_PROGRESS:
+            task.updated_at = created_at + timedelta(days=secure_random.randint(1, 5))
+
+
+async def seed_analytics_data():
     """Seed the database with analytics test data."""
     logger.info("Starting analytics data seeding...")
 
@@ -57,26 +181,7 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
         ]
 
         for name in member_names:
-            email = f"{name.lower().replace(' ', '.')}@example.com"
-            result = await db.execute(select(User).filter(User.email == email))
-            user = result.scalars().first()
-
-            if not user:
-                user = User(
-                    id=uuid.uuid4(),
-                    email=email,
-                    name=name,
-                    hashed_password=get_password_hash("password123"),
-                    role="member",
-                    is_active=True,
-                    avatar_url=f"https://api.dicebear.com/7.x/avataaars/svg?seed={name.replace(' ', '')}",
-                )
-                db.add(user)
-                await db.commit()
-                await db.refresh(user)
-                logger.info(f"Created user: {name}")
-
-            team_members.append(user)
+            team_members.append(await _get_or_create_team_member(db, name))
 
         # Get admin user
         result = await db.execute(select(User).filter(User.email == "admin@example.com"))
@@ -100,35 +205,9 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
         projects = []
 
         for p_name in project_names:
-            result = await db.execute(select(Project).filter(Project.name == p_name))
-            project = result.scalars().first()
-            if not project:
-                project = Project(
-                    id=uuid.uuid4(),
-                    name=p_name,
-                    description=f"Analytics demo project: {p_name}",
-                    owner_id=admin_user.id,
-                    is_active=True,
-                )
-                db.add(project)
-                await db.commit()
-                await db.refresh(project)
-                logger.info(f"Created project: {p_name}")
-
-                # Add random members to project
-                members_to_add = random.sample(team_members, k=random.randint(2, len(team_members)))
-                for member in members_to_add:
-                    if member.id != project.owner_id:
-                        pm = ProjectMember(
-                            id=uuid.uuid4(),
-                            project_id=project.id,
-                            user_id=member.id,
-                            role=MemberRole.MEMBER.value,
-                        )
-                        db.add(pm)
-                await db.commit()
-
-            projects.append(project)
+            projects.append(
+                await _get_or_create_analytics_project(db, p_name, admin_user, team_members)
+            )
 
         # 3. Create Tasks and History
         logger.info("Generating tasks and history...")
@@ -138,79 +217,14 @@ async def seed_analytics_data():  # noqa: PLR0912, PLR0915
         start_date = end_date - timedelta(days=60)
 
         for project in projects:
-            # Create 20-40 tasks per project
-            num_tasks = random.randint(20, 40)
-
-            for _ in range(num_tasks):
-                # Random creation date
-                created_at = start_date + timedelta(days=random.randint(0, 50))
-
-                assignee = random.choice(team_members)
-                creator = random.choice(team_members)
-
-                status = random.choice(list(TaskStatus))
-                priority = random.choice(list(TaskPriority))
-
-                task = Task(
-                    id=uuid.uuid4(),
-                    title=f"Task {uuid.uuid4().hex[:8]}",
-                    description="Generated task for analytics testing",
-                    status=status,
-                    priority=priority,
-                    project_id=project.id,
-                    created_by=creator.id,
-                    assignee_id=assignee.id,
-                    due_date=created_at + timedelta(days=random.randint(2, 14)),
-                    created_at=created_at,
-                    updated_at=created_at,  # Initial update time
-                )
-                db.add(task)
-
-                # 3.1 Log Creation History
-                history_create = TaskHistory(
-                    id=uuid.uuid4(),
-                    activity_type=ActivityType.TASK_CREATED,
-                    project_id=project.id,
-                    task_id=task.id,
-                    user_id=creator.id,
-                    task_title=task.title,
-                    description=f"Created task: {task.title}",
-                    timestamp=created_at,
-                )
-                db.add(history_create)
-
-                # 3.2 Simulate Completion (if done)
-                if status == TaskStatus.DONE:
-                    # Completion happened 1-10 days after creation
-                    completed_at = created_at + timedelta(days=random.randint(1, 10))
-                    completed_at = min(completed_at, end_date)
-
-                    task.updated_at = completed_at
-
-                    history_complete = TaskHistory(
-                        id=uuid.uuid4(),
-                        activity_type=ActivityType.TASK_COMPLETED,
-                        project_id=project.id,
-                        task_id=task.id,
-                        user_id=assignee.id,
-                        task_title=task.title,
-                        description=f"Completed task: {task.title}",
-                        timestamp=completed_at,
-                        new_values='{"status": "done"}',
-                    )
-                    db.add(history_complete)
-
-                elif status == TaskStatus.IN_PROGRESS:
-                    # Update happened recently
-                    updated_at = created_at + timedelta(days=random.randint(1, 5))
-                    task.updated_at = updated_at
+            _seed_project_tasks(db, project, team_members, start_date, end_date)
 
         await db.commit()
         logger.info("Analytics data seeding completed successfully!")
 
     except Exception as e:
         # Use proper logging for errors instead of traceback.print_exc()
-        logger.error(f"An error occurred during seeding: {e}", exc_info=True)
+        logger.exception(f"An error occurred during seeding: {e}", exc_info=True)
         await db.rollback()
     finally:
         await db.close()

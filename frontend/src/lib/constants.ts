@@ -173,7 +173,7 @@ export const DATE_FORMATS = {
 
 // Validation Rules
 export const VALIDATION = {
-  EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+  EMAIL_REGEX: /^[^@\s]{1,254}@[^@\s]{1,254}\.[^@\s]{1,254}$/,
   USERNAME_REGEX: /^[a-zA-Z0-9_-]{3,20}$/,
   PASSWORD_MIN_LENGTH: 8,
   USERNAME_MIN_LENGTH: 3,

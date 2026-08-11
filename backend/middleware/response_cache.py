@@ -8,6 +8,8 @@ from typing import ClassVar
 
 from starlette.datastructures import MutableHeaders
 
+CACHE_CONTROL_PRIVATE_60 = "private, max-age=60, stale-while-revalidate=120"
+
 
 class ResponseCacheMiddleware:
     """
@@ -27,12 +29,12 @@ class ResponseCacheMiddleware:
         # Analytics overview - client-side cache with stale-while-revalidate for instant loads
         (
             re.compile(r"^/(?:api/v1/)?analytics/overview"),
-            "private, max-age=60, stale-while-revalidate=120",
+            CACHE_CONTROL_PRIVATE_60,
         ),
         # Dashboard endpoints - client-side cache with stale-while-revalidate
         (
             re.compile(r"^/(?:api/v1/)?dashboard/overview"),
-            "private, max-age=60, stale-while-revalidate=120",
+            CACHE_CONTROL_PRIVATE_60,
         ),
         (
             re.compile(r"^/(?:api/v1/)?dashboard/today-tasks"),
@@ -40,7 +42,7 @@ class ResponseCacheMiddleware:
         ),
         (
             re.compile(r"^/(?:api/v1/)?dashboard/recent-projects"),
-            "private, max-age=60, stale-while-revalidate=120",
+            CACHE_CONTROL_PRIVATE_60,
         ),
         (
             re.compile(r"^/(?:api/v1/)?dashboard/team-activity"),
@@ -69,6 +71,21 @@ class ResponseCacheMiddleware:
     def __init__(self, app):
         self.app = app
 
+    def _get_cache_control(self, method: str, path: str, headers: MutableHeaders) -> str | None:
+        if method != "GET":
+            return "no-store, no-cache, must-revalidate"
+
+        if any(pattern.match(path) for pattern in self.NO_CACHE_PATTERNS):
+            return "no-store, no-cache, must-revalidate"
+
+        for pattern, cache_control in self.CACHEABLE_PATTERNS:
+            if pattern.match(path):
+                return cache_control
+
+        if "Cache-Control" not in headers:
+            return "private, no-cache"
+        return None
+
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -80,30 +97,7 @@ class ResponseCacheMiddleware:
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
                 headers = MutableHeaders(scope=message)
-
-                cache_control = None
-
-                # Skip for non-GET requests (mutations should never be cached)
-                if method != "GET":
-                    cache_control = "no-store, no-cache, must-revalidate"
-                else:
-                    # Check if path matches no-cache patterns
-                    for pattern in self.NO_CACHE_PATTERNS:
-                        if pattern.match(path):
-                            cache_control = "no-store, no-cache, must-revalidate"
-                            break
-
-                    if not cache_control:
-                        # Check if path matches cacheable patterns
-                        for pattern, c_control in self.CACHEABLE_PATTERNS:
-                            if pattern.match(path):
-                                cache_control = c_control
-                                break
-
-                    # Default: private, no-cache (revalidate with server)
-                    if not cache_control and "Cache-Control" not in headers:
-                        cache_control = "private, no-cache"
-
+                cache_control = self._get_cache_control(method, path, headers)
                 if cache_control:
                     headers["Cache-Control"] = cache_control
 

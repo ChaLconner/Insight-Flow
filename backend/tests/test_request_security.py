@@ -58,6 +58,7 @@ class TestRequestSecurity:
     def test_get_trusted_proxies_cloud(self, monkeypatch):
         """Test cloud provider proxies."""
         monkeypatch.setenv("CLOUD_PROVIDER", "render")
+        monkeypatch.setenv("CLOUD_TRUSTED_PROXIES", "10.0.0.0/8")
         proxies = get_trusted_proxies()
         assert "10.0.0.0/8" in proxies
 

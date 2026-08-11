@@ -4,6 +4,84 @@
 
 import type { CustomNotification, NotificationState } from "./notification-store";
 
+const matchesNotificationDateRange = (
+  notification: CustomNotification,
+  dateRange: NotificationState["filters"]["dateRange"],
+): boolean => {
+  if (!dateRange) {
+    return true;
+  }
+
+  const notificationDate = new Date(notification.createdAt);
+  if (dateRange.start) {
+    if (notificationDate < dateRange.start) {
+      return false;
+    }
+  }
+  if (dateRange.end) {
+    if (notificationDate > dateRange.end) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const matchesNotificationType = (
+  notification: CustomNotification,
+  type: NotificationState["filters"]["type"],
+): boolean => {
+  if (type === "all") {
+    return true;
+  }
+  return notification.type === type;
+};
+
+const matchesNotificationPriority = (
+  notification: CustomNotification,
+  priority: NotificationState["filters"]["priority"],
+): boolean => {
+  if (priority === "all") {
+    return true;
+  }
+  return notification.priority === priority;
+};
+
+const matchesNotificationReadStatus = (
+  notification: CustomNotification,
+  readStatus: NotificationState["filters"]["readStatus"],
+): boolean => {
+  if (readStatus === "read") {
+    return notification.read;
+  }
+  if (readStatus === "unread") {
+    return !notification.read;
+  }
+  return true;
+};
+
+const matchesNotificationSearch = (
+  notification: CustomNotification,
+  search: string,
+): boolean => {
+  if (!search) {
+    return true;
+  }
+  return notification.message.toLowerCase().includes(search.toLowerCase());
+};
+
+const matchesNotificationFilters = (
+  notification: CustomNotification,
+  filters: NotificationState["filters"],
+): boolean => {
+  return [
+    matchesNotificationType(notification, filters.type),
+    matchesNotificationPriority(notification, filters.priority),
+    matchesNotificationReadStatus(notification, filters.readStatus),
+    matchesNotificationSearch(notification, filters.search),
+    matchesNotificationDateRange(notification, filters.dateRange),
+  ].every(Boolean);
+};
+
 export const notificationSelectors = {
   // Core selectors
   getNotifications: (state: NotificationState) => state.notifications,
@@ -21,39 +99,10 @@ export const notificationSelectors = {
   getReadNotifications: (state: NotificationState) =>
     state.notifications.filter((n) => n.read),
 
-  getFilteredNotifications: (state: NotificationState) => {
-    const { filters } = state;
-    return state.notifications.filter((notification) => {
-      if (filters.type !== "all" && notification.type !== filters.type) {
-        return false;
-      }
-      if (filters.priority !== "all" && notification.priority !== filters.priority) {
-        return false;
-      }
-      if (filters.readStatus === "read" && !notification.read) {
-        return false;
-      }
-      if (filters.readStatus === "unread" && notification.read) {
-        return false;
-      }
-      if (
-        filters.search &&
-        !notification.message.toLowerCase().includes(filters.search.toLowerCase())
-      ) {
-        return false;
-      }
-      if (filters.dateRange) {
-        const notificationDate = new Date(notification.createdAt);
-        if (filters.dateRange.start && notificationDate < filters.dateRange.start) {
-          return false;
-        }
-        if (filters.dateRange.end && notificationDate > filters.dateRange.end) {
-          return false;
-        }
-      }
-      return true;
-    });
-  },
+  getFilteredNotifications: (state: NotificationState) =>
+    state.notifications.filter((notification) =>
+      matchesNotificationFilters(notification, state.filters),
+    ),
 
   // Grouped views
   getNotificationsByPriority: (state: NotificationState) => {

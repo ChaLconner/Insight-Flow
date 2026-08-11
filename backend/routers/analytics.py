@@ -79,6 +79,88 @@ async def _get_user_map(db: AsyncSession, user_ids: set[Any]) -> dict[Any, User]
     return {user.id: user for user in users}
 
 
+def _parse_batch_project_ids(
+    project_ids: list[str],
+) -> tuple[list[uuid.UUID], dict[str, dict[str, Any]]]:
+    """Parse batch project IDs and record malformed input errors."""
+    results_map: dict[str, dict[str, Any]] = {}
+    valid_project_uuids = []
+    for project_id_str in project_ids:
+        try:
+            valid_project_uuids.append(uuid.UUID(project_id_str))
+        except ValueError:
+            results_map[project_id_str] = {
+                "projectId": project_id_str,
+                "error": "Invalid project ID format",
+            }
+    return valid_project_uuids, results_map
+
+
+def _group_batch_activities(
+    activities: list[Any], limit: int
+) -> tuple[dict[str, list[Any]], set[Any]]:
+    """Group at most ``limit`` activities per project and collect user IDs."""
+    activities_by_project: dict[str, list[Any]] = defaultdict(list)
+    user_ids_to_fetch: set[Any] = set()
+    for activity in activities:
+        project_id_str = str(activity.project_id)
+        if len(activities_by_project[project_id_str]) >= limit:
+            continue
+        activities_by_project[project_id_str].append(activity)
+        user_ids_to_fetch.add(activity.user_id)
+    return activities_by_project, user_ids_to_fetch
+
+
+async def _populate_batch_activity_results(
+    db: AsyncSession,
+    project_service: AsyncProjectService,
+    task_history_service: AsyncTaskHistoryService,
+    current_user: User,
+    valid_project_uuids: list[uuid.UUID],
+    limit: int,
+    results_map: dict[str, dict[str, Any]],
+) -> None:
+    """Populate valid and access-denied project results for a batch request."""
+    if not valid_project_uuids:
+        return
+
+    user_projects = await project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
+    project_map = {project.id: project for project in user_projects}
+    accessible_project_ids = set(project_map)
+    accessible_requested_uuids = [
+        project_id for project_id in valid_project_uuids if project_id in accessible_project_ids
+    ]
+
+    for project_id in valid_project_uuids:
+        if project_id not in accessible_project_ids:
+            results_map[str(project_id)] = {
+                "projectId": str(project_id),
+                "error": "Project not found or access denied",
+            }
+
+    if not accessible_requested_uuids:
+        return
+
+    total_limit = limit * len(accessible_requested_uuids) * 2
+    activities = await task_history_service.get_recent_activities_for_projects(
+        accessible_requested_uuids, limit=total_limit
+    )
+    activities_by_project, user_ids_to_fetch = _group_batch_activities(activities, limit)
+    user_map = await _get_user_map(db, user_ids_to_fetch)
+
+    for project_id in accessible_requested_uuids:
+        project_id_str = str(project_id)
+        project = project_map[project_id]
+        formatted_activities = [
+            _format_activity(activity, user_map, project.name, project_id_str)
+            for activity in activities_by_project.get(project_id_str, [])
+        ]
+        results_map[project_id_str] = {
+            "projectId": project_id_str,
+            "activities": formatted_activities,
+        }
+
+
 @router.get("/overview", response_model=AnalyticsOverviewResponse)
 @limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_analytics_overview(
@@ -159,7 +241,7 @@ async def get_contributions(
     return await analytics_service.get_project_contributions(project.id)
 
 
-@router.get("/projects/{project_id}/activity", response_model=dict[str, Any])
+@router.get("/projects/{project_id}/activity")
 @limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_recent_activity(
     request: Request,
@@ -180,7 +262,7 @@ async def get_recent_activity(
     return {"activities": formatted_activities, "total_count": len(formatted_activities)}
 
 
-@router.get("/activity", response_model=dict[str, Any])
+@router.get("/activity")
 @limiter.limit(RateLimits.ANALYTICS_READ)
 async def get_all_recent_activity(
     request: Request,
@@ -228,60 +310,16 @@ async def get_batch_recent_activity(
     """Get recent activity for multiple projects in batch. Kept for API compatibility."""
     project_ids_str = batch_request.project_ids
     limit = batch_request.limit or 10
-    results_map: dict[str, dict[str, Any]] = {}
-    valid_project_uuids: list[uuid.UUID] = []
-
-    for project_id_str in project_ids_str:
-        try:
-            valid_project_uuids.append(uuid.UUID(project_id_str))
-        except ValueError:
-            results_map[project_id_str] = {
-                "projectId": project_id_str,
-                "error": "Invalid project ID format",
-            }
-
-    if valid_project_uuids:
-        user_projects = await project_service.get_projects(user_id=uuid.UUID(str(current_user.id)))
-        project_map = {project.id: project for project in user_projects}
-        accessible_project_ids = set(project_map)
-        accessible_requested_uuids = [
-            project_id for project_id in valid_project_uuids if project_id in accessible_project_ids
-        ]
-
-        for project_id in valid_project_uuids:
-            if project_id not in accessible_project_ids:
-                results_map[str(project_id)] = {
-                    "projectId": str(project_id),
-                    "error": "Project not found or access denied",
-                }
-
-        if accessible_requested_uuids:
-            total_limit = limit * len(accessible_requested_uuids) * 2
-            activities = await task_history_service.get_recent_activities_for_projects(
-                accessible_requested_uuids, limit=total_limit
-            )
-            activities_by_project: dict[str, list[Any]] = defaultdict(list)
-            user_ids_to_fetch: set[Any] = set()
-
-            for activity in activities:
-                project_id_str = str(activity.project_id)
-                if len(activities_by_project[project_id_str]) < limit:
-                    activities_by_project[project_id_str].append(activity)
-                    user_ids_to_fetch.add(activity.user_id)
-
-            user_map = await _get_user_map(db, user_ids_to_fetch)
-
-            for project_id in accessible_requested_uuids:
-                project_id_str = str(project_id)
-                project = project_map[project_id]
-                formatted_activities = [
-                    _format_activity(activity, user_map, project.name, project_id_str)
-                    for activity in activities_by_project.get(project_id_str, [])
-                ]
-                results_map[project_id_str] = {
-                    "projectId": project_id_str,
-                    "activities": formatted_activities,
-                }
+    valid_project_uuids, results_map = _parse_batch_project_ids(project_ids_str)
+    await _populate_batch_activity_results(
+        db,
+        project_service,
+        task_history_service,
+        current_user,
+        valid_project_uuids,
+        limit,
+        results_map,
+    )
 
     return [
         results_map[project_id_str]

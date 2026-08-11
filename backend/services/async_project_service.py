@@ -4,6 +4,7 @@ Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
 import uuid
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -37,6 +38,9 @@ from services.cache_invalidation import (
     invalidate_dashboard_and_analytics_cache,
 )
 from utils.logger import logger
+
+PROJECT_NOT_FOUND_ERROR = "Project not found"
+UNKNOWN_USER_NAME = "Unknown User"
 
 
 class AsyncProjectService:
@@ -170,6 +174,77 @@ class AsyncProjectService:
             return projects_query.order_by(Project.created_at.asc(), Project.id.asc())
         return projects_query.order_by(Project.created_at.desc(), Project.id.asc())
 
+    async def _get_project_member_previews(
+        self, project_ids: list[uuid.UUID]
+    ) -> defaultdict[uuid.UUID, list[ProjectMember]]:
+        """Fetch the first five members for each project."""
+        ranked_members = (
+            select(
+                ProjectMember.id.label("id"),
+                func.row_number()
+                .over(
+                    partition_by=ProjectMember.project_id,
+                    order_by=ProjectMember.joined_at.asc(),
+                )
+                .label("rank"),
+            )
+            .filter(ProjectMember.project_id.in_(project_ids))
+            .subquery()
+        )
+        stmt = (
+            select(ProjectMember, User)
+            .join(User, ProjectMember.user_id == User.id)
+            .join(ranked_members, ProjectMember.id == ranked_members.c.id)
+            .filter(ranked_members.c.rank <= 5)
+        )
+        result = await self.db.execute(stmt)
+        member_map: defaultdict[uuid.UUID, list[ProjectMember]] = defaultdict(list)
+        for member, user in result.all():
+            set_committed_value(member, "user", user)
+            member_map[member.project_id].append(member)
+        return member_map
+
+    async def _get_project_activity(self, project_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Count project activity recorded during the last seven days."""
+        seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+        stmt = (
+            select(TaskHistory.project_id, func.count(TaskHistory.id))
+            .filter(
+                TaskHistory.project_id.in_(project_ids),
+                TaskHistory.created_at >= seven_days_ago,
+            )
+            .group_by(TaskHistory.project_id)
+        )
+        result = await self.db.execute(stmt)
+        return {row[0]: row[1] for row in result.all()}
+
+    @staticmethod
+    def _format_project_stats(
+        projects: list[Project],
+        stats_map: dict,
+        members_map: defaultdict[uuid.UUID, list[ProjectMember]],
+        activity_map: dict[uuid.UUID, int],
+    ) -> list[dict]:
+        """Combine project rows with their batched statistics."""
+        formatted_results = []
+        for project in projects:
+            stats = stats_map.get(project.id)
+            members = members_map.get(project.id, [])
+            formatted_results.append(
+                {
+                    "project": project,
+                    "task_count": stats.total if stats else 0,
+                    "completed_tasks": (
+                        stats.completed if stats and stats.completed is not None else 0
+                    ),
+                    "overdue_tasks": stats.overdue if stats and stats.overdue is not None else 0,
+                    "member_count": stats.member_count if stats else 0,
+                    "recent_activity": activity_map.get(project.id, 0),
+                    "members": members,
+                }
+            )
+        return formatted_results
+
     async def get_projects_with_stats(
         self,
         skip: int = 0,
@@ -185,7 +260,6 @@ class AsyncProjectService:
         Avoids Cartesian product explosion from multiple JOINs.
         """
         import time
-        from collections import defaultdict
 
         start_time = time.time()
 
@@ -252,83 +326,72 @@ class AsyncProjectService:
         stats_result = await self.db.execute(stats_stmt)
         stats_map = {row.project_id: row for row in stats_result.all()}
 
-        async def get_member_previews():
-            ranked_members = (
-                select(
-                    ProjectMember.id.label("id"),
-                    func.row_number()
-                    .over(
-                        partition_by=ProjectMember.project_id,
-                        order_by=ProjectMember.joined_at.asc(),
-                    )
-                    .label("rank"),
-                )
-                .filter(ProjectMember.project_id.in_(project_ids))
-                .subquery()
-            )
-            stmt = (
-                select(ProjectMember, User)
-                .join(User, ProjectMember.user_id == User.id)
-                .join(ranked_members, ProjectMember.id == ranked_members.c.id)
-                .filter(ranked_members.c.rank <= 5)
-            )
-            res = await self.db.execute(stmt)
-            m_map: defaultdict[uuid.UUID, list[ProjectMember]] = defaultdict(list)
-            for member, user in res.all():
-                set_committed_value(member, "user", user)
-                m_map[member.project_id].append(member)
-            return m_map
-
-        # Activity Query (Batched)
-        async def get_activity():
-            seven_days_ago = datetime.now(UTC) - timedelta(days=7)
-            stmt = (
-                select(TaskHistory.project_id, func.count(TaskHistory.id))
-                .filter(
-                    TaskHistory.project_id.in_(project_ids),
-                    TaskHistory.created_at >= seven_days_ago,
-                )
-                .group_by(TaskHistory.project_id)
-            )
-
-            res = await self.db.execute(stmt)
-            return {row[0]: row[1] for row in res.all()}
-
-        members_map = await get_member_previews()
-        activity_map = await get_activity()
-
-        # 3. Assemble Results
-        formatted_results = []
-        for project in projects:
-            stats = stats_map.get(project.id)
-            members = members_map.get(project.id, [])
-            member_count = stats.member_count if stats else 0
-            activity = activity_map.get(project.id, 0)
-
-            # Extract stats safely
-            task_count = stats.total if stats else 0
-            # Check for None explicitly as sum can return None
-            completed = stats.completed if stats and stats.completed is not None else 0
-            overdue = stats.overdue if stats and stats.overdue is not None else 0
-
-            formatted_results.append(
-                {
-                    "project": project,
-                    "task_count": task_count,
-                    "completed_tasks": completed,
-                    "overdue_tasks": overdue,
-                    "member_count": member_count,
-                    "recent_activity": activity,
-                    "members": members,
-                }
-            )
+        members_map = await self._get_project_member_previews(project_ids)
+        activity_map = await self._get_project_activity(project_ids)
+        formatted_results = self._format_project_stats(
+            projects, stats_map, members_map, activity_map
+        )
 
         logger.info(f"Async projects fetch optimized took {time.time() - start_time:.2f}s")
         return formatted_results
 
-    async def create_project(  # noqa: PLR0912, PLR0915
-        self, project_data: ProjectCreate, owner_id: uuid.UUID
-    ) -> Project:
+    @staticmethod
+    def _collect_project_member_requests(
+        members: list[ProjectMemberCreate], owner_id: uuid.UUID
+    ) -> dict[uuid.UUID, str]:
+        """Parse and de-duplicate member requests for a new project."""
+        requested_members: dict[uuid.UUID, str] = {}
+        for member_data in members:
+            if member_data.role == MemberRole.OWNER.value:
+                raise ValueError(
+                    "Project ownership is assigned to the project owner and cannot be added as a member"
+                )
+            try:
+                member_id = uuid.UUID(str(member_data.user_id))
+            except ValueError as exc:
+                raise ValueError("Invalid project member ID") from exc
+            if member_id != owner_id:
+                requested_members.setdefault(member_id, member_data.role)
+        return requested_members
+
+    async def _add_initial_project_members(
+        self,
+        db_project: Project,
+        members: list[ProjectMemberCreate] | None,
+        owner_id: uuid.UUID,
+    ) -> set[uuid.UUID]:
+        """Add validated initial members and return IDs whose caches need invalidation."""
+        cache_user_ids = {owner_id}
+        if not members:
+            return cache_user_ids
+
+        requested_members = self._collect_project_member_requests(members, owner_id)
+        if not await self._check_member_limit(owner_id, len(requested_members) + 1):
+            raise ValueError(
+                "Team member limit reached. Your plan allows fewer members per project."
+            )
+
+        if not requested_members:
+            return cache_user_ids
+
+        result = await self.db.execute(select(User.id).filter(User.id.in_(requested_members)))
+        existing_ids = set(result.scalars().all())
+        missing_ids = set(requested_members) - existing_ids
+        if missing_ids:
+            raise ValueError("One or more project members were not found")
+
+        role_map = {
+            MemberRole.ADMIN.value: MemberRole.ADMIN.value,
+            MemberRole.MEMBER.value: MemberRole.MEMBER.value,
+            MemberRole.OWNER.value: MemberRole.OWNER.value,
+        }
+        for member_id, requested_role in requested_members.items():
+            role_value = role_map.get(requested_role, MemberRole.MEMBER.value)
+            self.db.add(ProjectMember(project_id=db_project.id, user_id=member_id, role=role_value))
+            cache_user_ids.add(member_id)
+        return cache_user_ids
+
+    async def create_project(self, project_data: ProjectCreate, owner_id: uuid.UUID) -> Project:
         """Create a new project."""
         try:
             db_project = Project(
@@ -355,49 +418,9 @@ class AsyncProjectService:
             self.db.add(owner_member)
             cache_user_ids = {owner_id}
 
-            # Additional members
-            if project_data.members:
-                requested_members: dict[uuid.UUID, str] = {}
-                for member_data in project_data.members:
-                    if member_data.role == MemberRole.OWNER.value:
-                        raise ValueError(
-                            "Project ownership is assigned to the project owner and cannot be added as a member"
-                        )
-                    try:
-                        member_id = uuid.UUID(str(member_data.user_id))
-                    except ValueError as exc:
-                        raise ValueError("Invalid project member ID") from exc
-                    if member_id == owner_id:
-                        continue
-                    requested_members.setdefault(member_id, member_data.role)
-
-                # Check member limits (owner plus unique requested members).
-                current_count = 1
-                new_count = len(requested_members)
-                if not await self._check_member_limit(owner_id, current_count + new_count):
-                    raise ValueError(
-                        "Team member limit reached. Your plan allows fewer members per project."
-                    )
-
-                if requested_members:
-                    res = await self.db.execute(
-                        select(User.id).filter(User.id.in_(requested_members))
-                    )
-                    existing_ids = set(res.scalars().all())
-                    missing_ids = set(requested_members) - existing_ids
-                    if missing_ids:
-                        raise ValueError("One or more project members were not found")
-
-                    for uid, role_value in requested_members.items():
-                        if role_value not in {
-                            MemberRole.ADMIN.value,
-                            MemberRole.MEMBER.value,
-                        }:
-                            role_value = MemberRole.MEMBER.value
-                        self.db.add(
-                            ProjectMember(project_id=db_project.id, user_id=uid, role=role_value)
-                        )
-                        cache_user_ids.add(uid)
+            cache_user_ids = await self._add_initial_project_members(
+                db_project, project_data.members, owner_id
+            )
 
             await self.db.commit()
             await self.db.refresh(db_project)
@@ -487,7 +510,7 @@ class AsyncProjectService:
         """Update project information."""
         project = await self.get_project_by_id(project_id)
         if not project:
-            raise ValueError("Project not found")
+            raise ValueError(PROJECT_NOT_FOUND_ERROR)
 
         if not await self.is_project_admin(project_id, user_id):
             raise ValueError("Only project owners and admins can update projects")
@@ -545,7 +568,7 @@ class AsyncProjectService:
         """Delete a project."""
         project = await self.get_project_by_id(project_id)
         if not project:
-            raise ValueError("Project not found")
+            raise ValueError(PROJECT_NOT_FOUND_ERROR)
 
         # Check permission
         res = await self.db.execute(select(User).filter(User.id == user_id))
@@ -669,7 +692,63 @@ class AsyncProjectService:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def add_project_member(  # noqa: PLR0912
+    async def _prepare_project_member(
+        self,
+        project_id: uuid.UUID,
+        project: Project,
+        member_data: ProjectMemberCreate,
+    ) -> tuple[uuid.UUID, str]:
+        """Validate a member addition and return its normalized identity and role."""
+        user_uuid = uuid.UUID(str(member_data.user_id))
+        if member_data.role == MemberRole.OWNER.value:
+            raise ValueError("Ownership transfer requires the dedicated owner workflow")
+
+        result = await self.db.execute(
+            select(ProjectMember).filter(
+                ProjectMember.project_id == project_id, ProjectMember.user_id == user_uuid
+            )
+        )
+        if result.scalars().first():
+            raise ValueError("User is already a project member")
+
+        current_member_result = await self.db.execute(
+            select(func.count(ProjectMember.id)).filter(ProjectMember.project_id == project_id)
+        )
+        current_member_count = current_member_result.scalar() or 0
+        if not await self._check_member_limit(project.owner_id, current_member_count + 1):
+            raise ValueError("Team member limit reached for this project (based on owner's plan).")
+
+        role_map = {
+            "admin": MemberRole.ADMIN.value,
+            "member": MemberRole.MEMBER.value,
+            "owner": MemberRole.OWNER.value,
+        }
+        return user_uuid, role_map.get(member_data.role, member_data.role)
+
+    async def _log_project_member_added(
+        self,
+        project_id: uuid.UUID,
+        user_uuid: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        *,
+        commit: bool,
+    ) -> None:
+        """Record the member addition without failing the primary operation."""
+        try:
+            history_service = AsyncTaskHistoryService(self.db)
+            result = await self.db.execute(select(User).filter(User.id == user_uuid))
+            added_user = result.scalars().first()
+            if added_user:
+                await history_service.log_project_member_added(
+                    project_id,
+                    added_user.name or UNKNOWN_USER_NAME,
+                    actor_user_id,
+                    commit=commit,
+                )
+        except Exception as e:
+            logger.error(f"Failed to log activity: {e}")
+
+    async def add_project_member(
         self,
         project_id: uuid.UUID,
         member_data: ProjectMemberCreate,
@@ -680,43 +759,15 @@ class AsyncProjectService:
         """Add a member to a project."""
         project = await self.get_project_by_id(project_id)
         if not project:
-            raise ValueError("Project not found")
+            raise ValueError(PROJECT_NOT_FOUND_ERROR)
 
         if not await self.is_project_admin(project_id, user_id):
             raise ValueError("Only project owners and admins can add members")
 
         try:
-            user_uuid = uuid.UUID(str(member_data.user_id))
-            if member_data.role == MemberRole.OWNER.value:
-                raise ValueError("Ownership transfer requires the dedicated owner workflow")
-            # Check existing
-            res = await self.db.execute(
-                select(ProjectMember).filter(
-                    ProjectMember.project_id == project_id, ProjectMember.user_id == user_uuid
-                )
+            user_uuid, role_value = await self._prepare_project_member(
+                project_id, project, member_data
             )
-            if res.scalars().first():
-                raise ValueError("User is already a project member")
-
-            # Check member limits
-            current_member_res = await self.db.execute(
-                select(func.count(ProjectMember.id)).filter(ProjectMember.project_id == project_id)
-            )
-            current_member_count = current_member_res.scalar() or 0
-
-            if not await self._check_member_limit(project.owner_id, current_member_count + 1):
-                raise ValueError(
-                    "Team member limit reached for this project (based on owner's plan)."
-                )
-
-            # Create member
-            role_value = member_data.role
-            if role_value == "admin":
-                role_value = MemberRole.ADMIN.value
-            elif role_value == "member":
-                role_value = MemberRole.MEMBER.value
-            elif role_value == "owner":
-                role_value = MemberRole.OWNER.value
 
             db_member = ProjectMember(project_id=project_id, user_id=user_uuid, role=role_value)
             self.db.add(db_member)
@@ -729,20 +780,7 @@ class AsyncProjectService:
             await self.db.refresh(db_member)
             await invalidate_dashboard_and_analytics_cache(user_ids=cache_user_ids)
 
-            # Log activity
-            try:
-                history_service = AsyncTaskHistoryService(self.db)
-                added_user_res = await self.db.execute(select(User).filter(User.id == user_uuid))
-                added_user = added_user_res.scalars().first()
-                if added_user:
-                    await history_service.log_project_member_added(
-                        project_id,
-                        added_user.name or "Unknown User",
-                        user_id,
-                        commit=commit,
-                    )
-            except Exception as e:
-                logger.error(f"Failed to log activity: {e}")
+            await self._log_project_member_added(project_id, user_uuid, user_id, commit=commit)
 
             # Load with user
             res_loaded = await self.db.execute(
@@ -772,7 +810,7 @@ class AsyncProjectService:
         """Remove a member from a project."""
         project = await self.get_project_by_id(project_id)
         if not project:
-            raise ValueError("Project not found")
+            raise ValueError(PROJECT_NOT_FOUND_ERROR)
 
         if not await self.is_project_admin(project_id, user_id):
             raise ValueError("Only project owners and admins can remove members")
@@ -793,7 +831,7 @@ class AsyncProjectService:
             # Get user name for log
             user_res = await self.db.execute(select(User).filter(User.id == member_user_id))
             user = user_res.scalars().first()
-            member_name = user.name if user else "Unknown User"
+            member_name = user.name if user else UNKNOWN_USER_NAME
 
             cache_user_ids = await get_project_cache_user_ids(
                 self.db, project_id, (user_id, member_user_id)
@@ -815,7 +853,7 @@ class AsyncProjectService:
                 history_service = AsyncTaskHistoryService(self.db)
                 await history_service.log_project_member_removed(
                     project_id,
-                    member_name or "Unknown User",
+                    member_name or UNKNOWN_USER_NAME,
                     user_id,
                     commit=commit,
                 )
@@ -833,7 +871,7 @@ class AsyncProjectService:
         """Update a member's role."""
         project = await self.get_project_by_id(project_id)
         if not project:
-            raise ValueError("Project not found")
+            raise ValueError(PROJECT_NOT_FOUND_ERROR)
 
         if project.owner_id != user_id:
             raise ValueError("Only project owners can change member roles")
@@ -854,7 +892,7 @@ class AsyncProjectService:
             # Log preparation
             user_res = await self.db.execute(select(User).filter(User.id == member_user_id))
             user = user_res.scalars().first()
-            member_name = user.name if user else "Unknown User"
+            member_name = user.name if user else UNKNOWN_USER_NAME
 
             role_value = new_role
             if role_value == "admin":
@@ -875,7 +913,7 @@ class AsyncProjectService:
             try:
                 history_service = AsyncTaskHistoryService(self.db)
                 await history_service.log_project_member_role_changed(
-                    project_id, member_name or "Unknown User", new_role, user_id
+                    project_id, member_name or UNKNOWN_USER_NAME, new_role, user_id
                 )
             except Exception as e:
                 logger.error(f"Failed to log activity: {e}")
@@ -971,7 +1009,65 @@ class AsyncProjectService:
             "members": members,
         }
 
-    async def add_project_members_bulk(  # noqa: PLR0912, PLR0915
+    @staticmethod
+    def _parse_bulk_member_requests(
+        members_data: list[ProjectMemberCreate],
+    ) -> list[tuple[ProjectMemberCreate, uuid.UUID]]:
+        """Parse valid UUIDs from bulk member requests, skipping malformed IDs."""
+        parsed_members = []
+        for member_data in members_data:
+            try:
+                parsed_members.append((member_data, uuid.UUID(str(member_data.user_id))))
+            except ValueError:
+                continue
+        return parsed_members
+
+    def _build_bulk_project_members(
+        self,
+        project_id: uuid.UUID,
+        parsed_members: list[tuple[ProjectMemberCreate, uuid.UUID]],
+        existing_member_ids: set[uuid.UUID],
+        valid_users: dict[uuid.UUID, str | None],
+    ) -> tuple[list[ProjectMember], list[str | None]]:
+        """Create new member models from valid, non-existing bulk requests."""
+        role_map = {
+            "admin": MemberRole.ADMIN.value,
+            "member": MemberRole.MEMBER.value,
+            "owner": MemberRole.OWNER.value,
+        }
+        new_members = []
+        added_user_names = []
+        for member_data, user_id in parsed_members:
+            if user_id in existing_member_ids or user_id not in valid_users:
+                continue
+            if member_data.role == MemberRole.OWNER.value:
+                raise ValueError("Ownership transfer requires the dedicated owner workflow")
+            role_value = role_map.get(member_data.role, member_data.role)
+            db_member = ProjectMember(project_id=project_id, user_id=user_id, role=role_value)
+            self.db.add(db_member)
+            new_members.append(db_member)
+            added_user_names.append(valid_users[user_id])
+        return new_members, added_user_names
+
+    async def _log_bulk_member_activity(
+        self, project_id: uuid.UUID, added_user_names: list[str | None], user_id: uuid.UUID
+    ) -> None:
+        """Log one activity for a bulk member addition without failing the transaction."""
+        try:
+            history_service = AsyncTaskHistoryService(self.db)
+            if len(added_user_names) == 1:
+                await history_service.log_project_member_added(
+                    project_id, added_user_names[0] or UNKNOWN_USER_NAME, user_id
+                )
+                return
+            names_str = ", ".join(name or UNKNOWN_USER_NAME for name in added_user_names[:3])
+            if len(added_user_names) > 3:
+                names_str += f" and {len(added_user_names) - 3} others"
+            await history_service.log_project_member_added(project_id, names_str, user_id)
+        except Exception as e:
+            logger.error(f"Failed to log bulk add activity: {e}")
+
+    async def add_project_members_bulk(
         self, project_id: uuid.UUID, members_data: list[ProjectMemberCreate], user_id: uuid.UUID
     ) -> list[ProjectMember]:
         """
@@ -988,7 +1084,7 @@ class AsyncProjectService:
         """
         project = await self.get_project_by_id(project_id)
         if not project:
-            raise ValueError("Project not found")
+            raise ValueError(PROJECT_NOT_FOUND_ERROR)
 
         if not await self.is_project_admin(project_id, user_id):
             raise ValueError("Only project owners and admins can add members")
@@ -1012,16 +1108,10 @@ class AsyncProjectService:
             raise ValueError(f"Team member limit reached. Cannot add {len(members_data)} members.")
 
         try:
-            # Collect all user IDs to add
-            user_ids_to_add = []
-            for member_data in members_data:
-                try:
-                    user_ids_to_add.append(uuid.UUID(str(member_data.user_id)))
-                except ValueError:
-                    continue
-
-            if not user_ids_to_add:
+            parsed_members = self._parse_bulk_member_requests(members_data)
+            if not parsed_members:
                 return []
+            user_ids_to_add = [member_id for _, member_id in parsed_members]
 
             # Check which users already exist in the project
             existing_members_result = await self.db.execute(
@@ -1038,35 +1128,9 @@ class AsyncProjectService:
             )
             valid_users = {row[0]: row[1] for row in valid_users_result.all()}
 
-            # Create new members
-            new_members = []
-            added_user_names = []
-
-            for member_data in members_data:
-                try:
-                    uid = uuid.UUID(str(member_data.user_id))
-                except ValueError:
-                    continue
-
-                # Skip if already a member or user doesn't exist
-                if uid in existing_member_ids or uid not in valid_users:
-                    continue
-
-                # Normalize role
-                role_value = member_data.role
-                if role_value == MemberRole.OWNER.value:
-                    raise ValueError("Ownership transfer requires the dedicated owner workflow")
-                if role_value == "admin":
-                    role_value = MemberRole.ADMIN.value
-                elif role_value == "member":
-                    role_value = MemberRole.MEMBER.value
-                elif role_value == "owner":
-                    role_value = MemberRole.OWNER.value
-
-                db_member = ProjectMember(project_id=project_id, user_id=uid, role=role_value)
-                self.db.add(db_member)
-                new_members.append(db_member)
-                added_user_names.append(valid_users[uid])
+            new_members, added_user_names = self._build_bulk_project_members(
+                project_id, parsed_members, existing_member_ids, valid_users
+            )
 
             if not new_members:
                 return []
@@ -1083,21 +1147,7 @@ class AsyncProjectService:
             for member in new_members:
                 await self.db.refresh(member)
 
-            # Log activity for bulk add
-            try:
-                history_service = AsyncTaskHistoryService(self.db)
-                if len(added_user_names) == 1:
-                    await history_service.log_project_member_added(
-                        project_id, added_user_names[0], user_id
-                    )
-                else:
-                    # Log as a single activity for multiple members
-                    names_str = ", ".join(added_user_names[:3])
-                    if len(added_user_names) > 3:
-                        names_str += f" and {len(added_user_names) - 3} others"
-                    await history_service.log_project_member_added(project_id, names_str, user_id)
-            except Exception as e:
-                logger.error(f"Failed to log bulk add activity: {e}")
+            await self._log_bulk_member_activity(project_id, added_user_names, user_id)
 
             # Load members with user data
             member_ids = [m.id for m in new_members]

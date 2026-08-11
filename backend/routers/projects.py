@@ -36,6 +36,13 @@ from utils.response_helpers import (
 logger = setup_logger("projects_router")
 
 router = APIRouter(prefix="", tags=["project management"])
+PROJECT_NOT_FOUND_DETAIL = "Project not found"
+PROJECT_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"description": "Invalid project request"},
+    403: {"description": "The authenticated user lacks permission"},
+    404: {"description": "Project not found"},
+    500: {"description": "Project operation failed"},
+}
 
 # Route-level rate limiting for project operations
 from rate_limiter import RateLimits, limiter
@@ -47,7 +54,7 @@ class RoleUpdate(BaseModel):
     role: str
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post("/projects", response_model=ProjectResponse, responses=PROJECT_ERROR_RESPONSES)
 @limiter.limit(RateLimits.PROJECT_CREATE)
 async def create_project(
     request: Request,
@@ -64,7 +71,7 @@ async def create_project(
         # Fetch fresh details with helper
         project_details = await project_service.get_project_with_details(project.id)
         if not project_details:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=404, detail=PROJECT_NOT_FOUND_DETAIL)
         members = project_details["members"]
 
         return ProjectResponse.model_validate(
@@ -74,13 +81,17 @@ async def create_project(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        logger.exception(f"Unexpected error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create project"
         )
 
 
-@router.get("/projects", response_model=list[ProjectResponse])
+@router.get(
+    "/projects",
+    response_model=list[ProjectResponse],
+    responses=PROJECT_ERROR_RESPONSES,
+)
 @limiter.limit(RateLimits.API_READ)
 async def read_projects_list(
     request: Request,
@@ -115,11 +126,15 @@ async def read_projects_list(
 
         return project_responses
     except Exception as e:
-        logger.error(f"Error reading projects: {e}", exc_info=True)
+        logger.exception(f"Error reading projects: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to fetch projects")
 
 
-@router.get("/projects/{project_id}", response_model=ProjectWithMembers)
+@router.get(
+    "/projects/{project_id}",
+    response_model=ProjectWithMembers,
+    responses=PROJECT_ERROR_RESPONSES,
+)
 async def read_project(
     project: Project = Depends(require_project_member),
     project_service: AsyncProjectService = Depends(get_project_service),
@@ -128,7 +143,7 @@ async def read_project(
     """Get project by ID with members."""
     details = await project_service.get_project_with_details(project.id)
     if not details:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=PROJECT_NOT_FOUND_DETAIL)
 
     members = details["members"]
 
@@ -137,7 +152,11 @@ async def read_project(
     )
 
 
-@router.put("/projects/{project_id}", response_model=ProjectWithMembers)
+@router.put(
+    "/projects/{project_id}",
+    response_model=ProjectWithMembers,
+    responses=PROJECT_ERROR_RESPONSES,
+)
 @limiter.limit(RateLimits.PROJECT_UPDATE)
 async def update_project(
     request: Request,
@@ -155,7 +174,7 @@ async def update_project(
         # Return full details
         details = await project_service.get_project_with_details(updated_project.id)
         if not details:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=404, detail=PROJECT_NOT_FOUND_DETAIL)
         members = details["members"]
 
         return ProjectWithMembers.model_validate(
@@ -164,11 +183,14 @@ async def update_project(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error updating project: {e}", exc_info=True)
+        logger.exception(f"Error updating project: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update project")
 
 
-@router.delete("/projects/{project_id}")
+@router.delete(
+    "/projects/{project_id}",
+    responses=PROJECT_ERROR_RESPONSES,
+)
 @limiter.limit(RateLimits.PROJECT_DELETE)
 async def delete_project(
     request: Request,
@@ -186,7 +208,11 @@ async def delete_project(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/projects/{project_id}/members", response_model=list[ProjectMemberResponse])
+@router.get(
+    "/projects/{project_id}/members",
+    response_model=list[ProjectMemberResponse],
+    responses=PROJECT_ERROR_RESPONSES,
+)
 async def read_project_members(
     project: Project = Depends(require_project_member),
     project_service: AsyncProjectService = Depends(get_project_service),
@@ -199,7 +225,11 @@ async def read_project_members(
     return [ProjectMemberResponse.model_validate(build_project_member_response(m)) for m in members]
 
 
-@router.post("/projects/{project_id}/members", response_model=ProjectMemberResponse)
+@router.post(
+    "/projects/{project_id}/members",
+    response_model=ProjectMemberResponse,
+    responses=PROJECT_ERROR_RESPONSES,
+)
 @limiter.limit(RateLimits.PROJECT_MEMBERS)
 async def add_project_member(
     request: Request,
@@ -238,11 +268,14 @@ async def add_project_member(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error adding member: {e}", exc_info=True)
+        logger.exception(f"Error adding member: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to add member")
 
 
-@router.delete("/projects/{project_id}/members/{member_user_id}")
+@router.delete(
+    "/projects/{project_id}/members/{member_user_id}",
+    responses=PROJECT_ERROR_RESPONSES,
+)
 @limiter.limit(RateLimits.PROJECT_MEMBERS)
 async def remove_project_member(
     request: Request,
@@ -279,7 +312,10 @@ async def remove_project_member(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/projects/{project_id}/members/{member_user_id}/role")
+@router.put(
+    "/projects/{project_id}/members/{member_user_id}/role",
+    responses=PROJECT_ERROR_RESPONSES,
+)
 async def update_member_role(
     member_user_id: str,
     role_update: RoleUpdate,
@@ -296,5 +332,5 @@ async def update_member_role(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error updating role: {e}", exc_info=True)
+        logger.exception(f"Error updating role: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to update role")

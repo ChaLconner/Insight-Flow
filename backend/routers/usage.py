@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 
 from dependencies.auth import get_current_user
@@ -10,8 +12,8 @@ router = APIRouter(prefix="/usage", tags=["usage"])
 
 @router.get("/stats")
 async def get_usage_stats(
-    current_user: User = Depends(get_current_user),
-    usage_service: AsyncUsageService = Depends(get_usage_service),
+    current_user: Annotated[User, Depends(get_current_user)],
+    usage_service: Annotated[AsyncUsageService, Depends(get_usage_service)],
 ):
     """
     Get usage statistics for the current user.

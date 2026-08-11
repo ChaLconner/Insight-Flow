@@ -12,14 +12,14 @@ export const useNotificationFilters = () => {
   const { filters, updateFilters, resetFilters } = useNotifications();
 
   const setTypeFilter = useCallback(
-    (type: string | "all") => {
+    (type: string) => {
       updateFilters({ type });
     },
     [updateFilters],
   );
 
   const setPriorityFilter = useCallback(
-    (priority: string | "all") => {
+    (priority: string) => {
       updateFilters({ priority });
     },
     [updateFilters],

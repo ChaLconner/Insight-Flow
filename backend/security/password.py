@@ -9,6 +9,7 @@ Provides:
 - Context-aware password restrictions
 """
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -86,7 +87,7 @@ def verify_and_rehash(plain_password: str, hashed_password: str) -> tuple[bool, 
         return True, None
 
     except Exception as e:
-        logger.error(f"Password verification error: {e}")
+        logger.exception(f"Password verification error: {e}")
         return False, None
 
 
@@ -99,7 +100,7 @@ def get_hash_algorithm(hashed_password: str) -> str:
     """Identify the algorithm used for a password hash."""
     if hashed_password.startswith("$argon2"):
         return "argon2id"
-    elif hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
+    elif hashed_password.startswith(("$2b$", "$2a$")):
         return "bcrypt"
     return "unknown"
 
@@ -109,7 +110,10 @@ def get_hash_algorithm(hashed_password: str) -> str:
 # =============================================================================
 
 
-async def check_password_breach(password: str, timeout: float = 2.0) -> tuple[bool, int]:
+HIBP_REQUEST_TIMEOUT_SECONDS = 2.0
+
+
+async def check_password_breach(password: str) -> tuple[bool, int]:
     """
     Check if password has been exposed in known data breaches.
 
@@ -117,7 +121,6 @@ async def check_password_breach(password: str, timeout: float = 2.0) -> tuple[bo
 
     Args:
         password: Password to check
-        timeout: API timeout in seconds
 
     Returns:
         tuple[bool, int]: (is_breached, breach_count)
@@ -133,12 +136,12 @@ async def check_password_breach(password: str, timeout: float = 2.0) -> tuple[bo
         prefix, suffix = sha1_hash[:5], sha1_hash[5:]
 
         # Query HIBP API with hash prefix (k-Anonymity)
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://api.pwnedpasswords.com/range/{prefix}",
-                headers={"Add-Padding": "true"},  # Padding to prevent timing attacks
-                timeout=timeout,
-            )
+        async with asyncio.timeout(HIBP_REQUEST_TIMEOUT_SECONDS):
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"https://api.pwnedpasswords.com/range/{prefix}",
+                    headers={"Add-Padding": "true"},  # Padding to prevent timing attacks
+                )
 
             if response.status_code != 200:
                 logger.warning(f"HIBP API returned status {response.status_code}")
@@ -154,11 +157,11 @@ async def check_password_breach(password: str, timeout: float = 2.0) -> tuple[bo
 
             return False, 0
 
-    except httpx.TimeoutException:
+    except (TimeoutError, httpx.TimeoutException):
         logger.warning("HIBP API timeout - skipping breach check")
         return False, 0
     except Exception as e:
-        logger.error(f"HIBP check failed: {e}")
+        logger.exception(f"HIBP check failed: {e}")
         return False, 0
 
 
@@ -224,7 +227,7 @@ def calculate_entropy(password: str) -> float:
     if char_space == 0:
         return 0.0
 
-    # Entropy = log2(char_space^length) = length * log2(char_space)
+    # Calculate entropy from the password length and available character space.
     entropy = len(password) * math.log2(char_space)
 
     return round(entropy, 2)
@@ -307,27 +310,9 @@ class PasswordPolicy:
     def __init__(self, config: PasswordPolicyConfig | None = None):
         self.config = config or PasswordPolicyConfig()
 
-    async def validate(  # noqa: PLR0912
-        self,
-        password: str,
-        user_context: dict[str, Any] | None = None,
-        check_breach: bool | None = None,
-    ) -> list[PolicyViolation]:
-        """
-        Validate password against policy rules.
-
-        Args:
-            password: Password to validate
-            user_context: Dict with user info (username, email, first_name, etc.)
-            check_breach: Override config's breach check setting
-
-        Returns:
-            List of policy violations (empty if password is valid)
-        """
+    def _validate_basic_rules(self, password: str) -> list[PolicyViolation]:
         violations: list[PolicyViolation] = []
-        user_context = user_context or {}
 
-        # Length checks
         if len(password) < self.config.min_length:
             violations.append(
                 PolicyViolation(
@@ -344,42 +329,40 @@ class PasswordPolicy:
                 )
             )
 
-        # Character class checks
-        if self.config.require_uppercase and not re.search(r"[A-Z]", password):
-            violations.append(
-                PolicyViolation(
-                    PasswordPolicyViolation.NO_UPPERCASE,
-                    "Password must contain at least one uppercase letter",
-                )
-            )
+        character_rules = (
+            (
+                self.config.require_uppercase,
+                r"[A-Z]",
+                PasswordPolicyViolation.NO_UPPERCASE,
+                "Password must contain at least one uppercase letter",
+            ),
+            (
+                self.config.require_lowercase,
+                r"[a-z]",
+                PasswordPolicyViolation.NO_LOWERCASE,
+                "Password must contain at least one lowercase letter",
+            ),
+            (
+                self.config.require_digit,
+                r"\d",
+                PasswordPolicyViolation.NO_DIGIT,
+                "Password must contain at least one digit",
+            ),
+            (
+                self.config.require_special,
+                r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?`~]",
+                PasswordPolicyViolation.NO_SPECIAL,
+                "Password must contain at least one special character",
+            ),
+        )
+        for required, pattern, violation_type, message in character_rules:
+            if required and not re.search(pattern, password):
+                violations.append(PolicyViolation(violation_type, message))
 
-        if self.config.require_lowercase and not re.search(r"[a-z]", password):
-            violations.append(
-                PolicyViolation(
-                    PasswordPolicyViolation.NO_LOWERCASE,
-                    "Password must contain at least one lowercase letter",
-                )
-            )
+        return violations
 
-        if self.config.require_digit and not re.search(r"\d", password):
-            violations.append(
-                PolicyViolation(
-                    PasswordPolicyViolation.NO_DIGIT,
-                    "Password must contain at least one digit",
-                )
-            )
-
-        if self.config.require_special and not re.search(
-            r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?`~]", password
-        ):
-            violations.append(
-                PolicyViolation(
-                    PasswordPolicyViolation.NO_SPECIAL,
-                    "Password must contain at least one special character",
-                )
-            )
-
-        # Entropy check
+    def _validate_entropy_and_sequence(self, password: str) -> list[PolicyViolation]:
+        violations: list[PolicyViolation] = []
         entropy = calculate_entropy(password)
         if entropy < self.config.min_entropy_bits:
             violations.append(
@@ -391,7 +374,6 @@ class PasswordPolicy:
                 )
             )
 
-        # Consecutive character check
         if self.config.max_consecutive_chars > 0:
             pattern = rf"(.)\1{{{self.config.max_consecutive_chars},}}"
             if re.search(pattern, password):
@@ -403,58 +385,89 @@ class PasswordPolicy:
                     )
                 )
 
-        # Banned pattern check
+        return violations
+
+    def _validate_banned_patterns(self, password: str) -> list[PolicyViolation]:
         password_lower = password.lower()
-        for pattern in self.config.banned_patterns:
-            if re.search(pattern, password_lower):
-                violations.append(
-                    PolicyViolation(
-                        PasswordPolicyViolation.BANNED_PATTERN,
-                        "Password contains a commonly used pattern",
-                    )
+        if any(re.search(pattern, password_lower) for pattern in self.config.banned_patterns):
+            return [
+                PolicyViolation(
+                    PasswordPolicyViolation.BANNED_PATTERN,
+                    "Password contains a commonly used pattern",
                 )
-                break
+            ]
+        return []
 
-        # Context-aware check (username, email in password)
-        if self.config.block_context_words:
-            for field_name in ["username", "email", "first_name", "last_name"]:
-                context_value = user_context.get(field_name, "")
-                if context_value and len(context_value) >= 3:
-                    # For email, also check the local part
-                    if field_name == "email" and "@" in context_value:
-                        email_local = context_value.split("@")[0].lower()
-                        if email_local in password_lower:
-                            violations.append(
-                                PolicyViolation(
-                                    PasswordPolicyViolation.CONTEXT_WORD,
-                                    f"Password cannot contain your {field_name}",
-                                )
-                            )
-                            break
-                    elif context_value.lower() in password_lower:
-                        violations.append(
-                            PolicyViolation(
-                                PasswordPolicyViolation.CONTEXT_WORD,
-                                f"Password cannot contain your {field_name}",
-                            )
-                        )
-                        break
+    def _validate_context_words(
+        self, password: str, user_context: dict[str, Any]
+    ) -> list[PolicyViolation]:
+        if not self.config.block_context_words:
+            return []
 
-        # Breach check (async, can be slow)
+        password_lower = password.lower()
+        for field_name in ["username", "email", "first_name", "last_name"]:
+            context_value = user_context.get(field_name, "")
+            if not context_value or len(context_value) < 3:
+                continue
+
+            context_word = context_value.lower()
+            if field_name == "email" and "@" in context_value:
+                context_word = context_value.split("@")[0].lower()
+
+            if context_word in password_lower:
+                return [
+                    PolicyViolation(
+                        PasswordPolicyViolation.CONTEXT_WORD,
+                        f"Password cannot contain your {field_name}",
+                    )
+                ]
+
+        return []
+
+    async def _check_breach(
+        self, password: str, check_breach: bool | None, violations: list[PolicyViolation]
+    ) -> PolicyViolation | None:
         should_check_breach = (
             check_breach if check_breach is not None else self.config.check_breached
         )
-        if should_check_breach and len(violations) == 0:
-            # Only check breach if no other errors (to save API calls)
-            is_breached, count = await check_password_breach(password)
-            if is_breached:
-                violations.append(
-                    PolicyViolation(
-                        PasswordPolicyViolation.BREACHED,
-                        f"Password found in {count:,} data breaches. Please choose a different password.",
-                        severity="error",
-                    )
-                )
+        if not should_check_breach or violations:
+            return None
+
+        is_breached, count = await check_password_breach(password)
+        if not is_breached:
+            return None
+        return PolicyViolation(
+            PasswordPolicyViolation.BREACHED,
+            f"Password found in {count:,} data breaches. Please choose a different password.",
+            severity="error",
+        )
+
+    async def validate(
+        self,
+        password: str,
+        user_context: dict[str, Any] | None = None,
+        check_breach: bool | None = None,
+    ) -> list[PolicyViolation]:
+        """
+        Validate password against policy rules.
+
+        Args:
+            password: Password to validate
+            user_context: Dict with user info (username, email, first_name, etc.)
+            check_breach: Override config's breach check setting
+
+        Returns:
+            List of policy violations (empty if password is valid)
+        """
+        user_context = user_context or {}
+        violations = self._validate_basic_rules(password)
+        violations.extend(self._validate_entropy_and_sequence(password))
+        violations.extend(self._validate_banned_patterns(password))
+        violations.extend(self._validate_context_words(password, user_context))
+
+        breach_violation = await self._check_breach(password, check_breach, violations)
+        if breach_violation:
+            violations.append(breach_violation)
 
         return violations
 

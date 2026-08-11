@@ -26,8 +26,6 @@ const CreationCompletionChartComponent: React.FC<
   // Memoize data validation check
   const hasData = useMemo(
     () =>
-      data &&
-      data.length > 0 &&
       data.some((d) => d.created > 0 || d.completed > 0),
     [data],
   );

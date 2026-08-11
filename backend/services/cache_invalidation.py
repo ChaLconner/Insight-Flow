@@ -45,7 +45,7 @@ async def invalidate_dashboard_and_analytics_cache(
             await invalidate_dashboard_cache(affected_id)
             await invalidate_analytics_cache(affected_id)
     except Exception as exc:
-        logger.error(f"Failed to invalidate dashboard/analytics cache: {exc}")
+        logger.exception(f"Failed to invalidate dashboard/analytics cache: {exc}")
 
 
 async def get_project_cache_user_ids(

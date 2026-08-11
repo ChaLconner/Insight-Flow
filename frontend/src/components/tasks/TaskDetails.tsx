@@ -29,9 +29,16 @@ import {
   X,
   Briefcase,
 } from "lucide-react";
-import { format, differenceInDays, isPast, isToday, isTomorrow } from "date-fns";
-import type { Task, TaskComment, UpdateTaskRequest } from "@/types";
+import { format } from "date-fns";
+import type { Task, TaskComment } from "@/types";
 import { TaskStatus, TaskPriority, TaskType } from "@/types";
+import {
+  buildTaskUpdateRequest,
+  getDueDateBadgeColor,
+  getDueDateIconColor,
+  getDueDateLabel,
+  renderDescription,
+} from "./task-details-helpers";
 import { tasksApi } from "@/lib/api-endpoints";
 import {
   DropdownMenu,
@@ -49,85 +56,65 @@ interface TaskDetailsProps {
   backLabel: string;
 }
 
-const renderDescription = (text: string) => {
-  if (!text) {
-    return (
-      <span className="text-muted-foreground/60 italic">No description provided.</span>
-    );
-  }
+interface TaskDeleteDialogProps {
+  readonly open: boolean;
+  readonly taskTitle: string;
+  readonly isDeleting: boolean;
+  readonly onClose: () => void;
+  readonly onDelete: () => void;
+}
 
-  const lines = text.split("\n");
-  const elements: JSX.Element[] = [];
-  let listBuffer: JSX.Element[] = [];
-  let inList = false;
-  let listType = "ul";
-
-  lines.forEach((line, index) => {
-    const trimmed = line.trim();
-    const isBullet = trimmed.startsWith("- ") || trimmed.startsWith("* ");
-    const isNumber = /^\d+\.\s/.test(trimmed);
-
-    if (isBullet || isNumber) {
-      if (!inList) {
-        inList = true;
-        listType = isNumber ? "ol" : "ul";
-      }
-      const content = trimmed.replace(/^[-*] |\d+\.\s/, "");
-      listBuffer.push(
-        <li key={`li-${index}`} className="ml-4 pl-1">
-          {content}
-        </li>,
-      );
-    } else {
-      if (inList) {
-        elements.push(
-          listType === "ul" ? (
-            <ul key={`ul-${index}`} className="list-disc mb-4 space-y-1">
-              {listBuffer}
-            </ul>
-          ) : (
-            <ol key={`ol-${index}`} className="list-decimal mb-4 space-y-1">
-              {listBuffer}
-            </ol>
-          ),
-        );
-        listBuffer = [];
-        inList = false;
-      }
-      if (trimmed) {
-        elements.push(
-          <p key={`p-${index}`} className="mb-2 min-h-[1.5em]">
-            {line}
-          </p>,
-        );
-      } else {
-        elements.push(<br key={`br-${index}`} />);
-      }
-    }
-  });
-  if (inList && listBuffer.length > 0) {
-    elements.push(
-      listType === "ul" ? (
-        <ul key="ul-last" className="list-disc mb-4 space-y-1">
-          {listBuffer}
-        </ul>
-      ) : (
-        <ol key="ol-last" className="list-decimal mb-4 space-y-1">
-          {listBuffer}
-        </ol>
-      ),
-    );
-  }
+function TaskDeleteDialog({
+  open,
+  taskTitle,
+  isDeleting,
+  onClose,
+  onDelete,
+}: TaskDeleteDialogProps) {
   return (
-    <div className="text-muted-foreground leading-relaxed text-[15px]">{elements}</div>
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-popover border border-border rounded-xl p-6 max-w-sm w-full shadow-2xl"
+          >
+            <h3 className="text-lg font-bold text-foreground mb-2">Delete Task?</h3>
+            <p className="text-muted-foreground text-sm mb-6">
+              Are you sure you want to delete{" "}
+              <span className="text-foreground font-medium">"{taskTitle}"</span>?
+              This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="ghost"
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground hover:bg-accent"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onDelete}
+                disabled={isDeleting}
+                className="bg-red-500/10 text-red-500 hover:bg-red-500/20 hover:text-red-400"
+              >
+                {isDeleting ? "Deleting..." : "Delete Task"}
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
-};
+}
 
 export function TaskDetails({
   task: initialTask,
   backLink,
   backLabel,
-}: TaskDetailsProps) {
+}: Readonly<TaskDetailsProps>) {
   const router = useRouter();
   const [task, setTask] = useState<Task>(initialTask);
   const [isEditing, setIsEditing] = useState(false);
@@ -208,20 +195,17 @@ export function TaskDetails({
     const previousTask = task;
 
     try {
-      const taskData: UpdateTaskRequest = {
+      const taskData = buildTaskUpdateRequest({
         title,
         description,
         priority,
         status,
         type,
-        tags: tags
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-        dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
-        estimatedHours: estimatedHours ? parseFloat(estimatedHours) : undefined,
-        actualHours: actualHours ? parseFloat(actualHours) : undefined,
-      };
+        tags,
+        dueDate,
+        estimatedHours,
+        actualHours,
+      });
 
       // 1. Optimistic Update: Update UI immediately
       const optimisticTask = {
@@ -605,15 +589,17 @@ export function TaskDetails({
                 </div>
 
                 <div className="space-y-3">
-                  {isCommentsLoading ? (
+                  {isCommentsLoading && (
                     <div className="rounded-xl border border-border bg-background/40 px-4 py-6 text-sm text-muted-foreground">
                       Loading comments...
                     </div>
-                  ) : comments.length === 0 ? (
+                  )}
+                  {!isCommentsLoading && comments.length === 0 && (
                     <div className="rounded-xl border border-dashed border-border bg-background/30 px-4 py-6 text-sm text-muted-foreground">
                       No comments yet. Start the discussion here.
                     </div>
-                  ) : (
+                  )}
+                  {!isCommentsLoading && comments.length > 0 && (
                     comments.map((comment) => (
                       <div
                         key={comment.id}
@@ -655,20 +641,7 @@ export function TaskDetails({
                     <Calendar
                       className={cn(
                         "h-5 w-5 mt-0.5 transition-colors shrink-0",
-                        (() => {
-                          if (!task.dueDate) {
-                            return "text-zinc-400";
-                          }
-                          const date = new Date(task.dueDate);
-                          const today = new Date();
-                          if (isPast(date) && !isToday(date)) {
-                            return "text-red-500 dark:text-red-400";
-                          }
-                          if (differenceInDays(date, today) <= 2) {
-                            return "text-amber-500 dark:text-amber-400";
-                          }
-                          return "text-blue-500 dark:text-blue-400";
-                        })(),
+                        getDueDateIconColor(task.dueDate),
                       )}
                     />
 
@@ -704,35 +677,10 @@ export function TaskDetails({
                               <span
                                 className={cn(
                                   "text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm tracking-wider",
-                                  (() => {
-                                    const date = new Date(task.dueDate);
-                                    if (isPast(date) && !isToday(date)) {
-                                      return "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400";
-                                    }
-                                    if (isToday(date)) {
-                                      return "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400";
-                                    }
-                                    if (isTomorrow(date)) {
-                                      return "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400";
-                                    }
-                                    return "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400";
-                                  })()
+                                  getDueDateBadgeColor(task.dueDate),
                                 )}
                               >
-                                {(() => {
-                                  const date = new Date(task.dueDate);
-                                  const today = new Date();
-                                  if (isPast(date) && !isToday(date)) {
-                                    return "Overdue";
-                                  }
-                                  if (isToday(date)) {
-                                    return "Today";
-                                  }
-                                  if (isTomorrow(date)) {
-                                    return "Tomorrow";
-                                  }
-                                  return `${differenceInDays(date, today)} days left`;
-                                })()}
+                                {getDueDateLabel(task.dueDate)}
                               </span>
                             )}
                           </div>
@@ -773,44 +721,13 @@ export function TaskDetails({
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      <AnimatePresence>
-        {isDeleteModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-popover border border-border rounded-xl p-6 max-w-sm w-full shadow-2xl"
-            >
-              <h3 className="text-lg font-bold text-foreground mb-2">
-                Delete Task?
-              </h3>
-              <p className="text-muted-foreground text-sm mb-6">
-                Are you sure you want to delete{" "}
-                <span className="text-foreground font-medium">"{task.title}"</span>?
-                This action cannot be undone.
-              </p>
-              <div className="flex justify-end gap-3">
-                <Button
-                  variant="ghost"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="text-muted-foreground hover:text-foreground hover:bg-accent"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleDelete}
-                  disabled={isDeleting}
-                  className="bg-red-500/10 text-red-500 hover:bg-red-500/20 hover:text-red-400"
-                >
-                  {isDeleting ? "Deleting..." : "Delete Task"}
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <TaskDeleteDialog
+        open={isDeleteModalOpen}
+        taskTitle={task.title}
+        isDeleting={isDeleting}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }

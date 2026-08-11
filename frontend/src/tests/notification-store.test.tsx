@@ -81,7 +81,7 @@ describe("NotificationStore", () => {
         result.current.addNotification(notification);
       });
 
-      expect(result.current.notifications.length).toBe(1);
+      expect(result.current.notifications).toHaveLength(1);
       expect(result.current.notifications[0].title).toBe("Test Notification");
       expect(result.current.unreadCount).toBe(1);
     });
@@ -191,7 +191,7 @@ describe("NotificationStore", () => {
         });
       });
 
-      expect(result.current.notifications.length).toBe(1);
+      expect(result.current.notifications).toHaveLength(1);
 
       const notifId = result.current.notifications[0]?.id;
       if (notifId) {
@@ -199,7 +199,7 @@ describe("NotificationStore", () => {
           result.current.removeNotification(notifId);
         });
 
-        expect(result.current.notifications.length).toBe(0);
+        expect(result.current.notifications).toHaveLength(0);
       }
     });
 
@@ -293,7 +293,7 @@ describe("NotificationStore", () => {
       const systemNotifs = result.current.getNotificationsByType(
         NotificationType.SYSTEM,
       );
-      expect(systemNotifs.length).toBe(1);
+      expect(systemNotifs).toHaveLength(1);
       expect(systemNotifs[0].type).toBe(NotificationType.SYSTEM);
     });
 
@@ -321,7 +321,7 @@ describe("NotificationStore", () => {
       });
 
       const unread = result.current.getUnreadNotifications();
-      expect(unread.length).toBe(1);
+      expect(unread).toHaveLength(1);
       expect(unread[0].read).toBe(false);
     });
 
@@ -366,7 +366,7 @@ describe("NotificationStore", () => {
       });
 
       const recent = result.current.getRecentNotifications(5);
-      expect(recent.length).toBe(5);
+      expect(recent).toHaveLength(5);
     });
   });
 
@@ -439,13 +439,13 @@ describe("NotificationStore", () => {
         });
       });
 
-      expect(result.current.notifications.length).toBe(2);
+      expect(result.current.notifications).toHaveLength(2);
 
       act(() => {
         result.current.clearAllNotifications();
       });
 
-      expect(result.current.notifications.length).toBe(0);
+      expect(result.current.notifications).toHaveLength(0);
       expect(result.current.unreadCount).toBe(0);
     });
 
@@ -476,7 +476,7 @@ describe("NotificationStore", () => {
         result.current.clearReadNotifications();
       });
 
-      expect(result.current.notifications.length).toBe(1);
+      expect(result.current.notifications).toHaveLength(1);
       expect(result.current.notifications[0].title).toBe("Unread");
     });
   });
@@ -629,6 +629,13 @@ describe("NotificationStore", () => {
         
         mockState.filters.dateRange = { start: tomorrow };
         expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(0);
+
+        mockState.filters.dateRange = { end: yesterday };
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(0);
+
+        mockState.filters.dateRange = undefined;
+        mockState.filters.readStatus = "unread";
+        expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(1);
     });
   });
 });

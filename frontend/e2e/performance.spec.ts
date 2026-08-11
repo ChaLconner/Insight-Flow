@@ -67,9 +67,7 @@ test.describe('Performance Tests', () => {
 
     test('should have minimal Cumulative Layout Shift', async ({ page }) => {
       await page.goto('/auth/login');
-      
-      // Wait for page to stabilize
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
       
       const cls = await page.evaluate(() => {
         return new Promise<number>((resolve) => {
@@ -136,6 +134,7 @@ test.describe('Performance Tests', () => {
       if (blockingResources.length > 0) {
         console.log('Render-blocking resources:', blockingResources.map((r) => r.name));
       }
+      expect(blockingResources).toHaveLength(0);
     });
 
     test('should use efficient caching', async ({ page }) => {
@@ -147,9 +146,6 @@ test.describe('Performance Tests', () => {
       await page.goto('/auth/login');
       await page.waitForLoadState('networkidle');
       const firstLoadTime = Date.now() - firstStartTime;
-      
-      // Wait a bit for caching to settle
-      await page.waitForTimeout(1000);
       
       // Second visit (should use cache)
       const secondStartTime = Date.now();
@@ -166,6 +162,7 @@ test.describe('Performance Tests', () => {
 
   test.describe('Image Optimization', () => {
     test('should lazy load images below the fold', async ({ page }) => {
+      // This authenticated E2E case runs when the CI environment supplies credentials.
       test.skip(!hasE2EAuth, 'E2E credentials are not configured');
       await page.goto('/dashboard');
       
@@ -191,6 +188,7 @@ test.describe('Performance Tests', () => {
     });
 
     test('should use modern image formats', async ({ page }) => {
+      // This authenticated E2E case runs when the CI environment supplies credentials.
       test.skip(!hasE2EAuth, 'E2E credentials are not configured');
       await page.goto('/dashboard');
       
@@ -242,7 +240,12 @@ test.describe('Performance Tests', () => {
         }
       });
       
-      await page.waitForTimeout(2000);
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          })
+      );
       
       const tasks = await page.evaluate(() => {
         // @ts-ignore
@@ -338,8 +341,8 @@ test.describe('Performance Tests', () => {
         );
         expect(finalMemory).toBeLessThan(allowedGrowth);
       } else {
-        // If memory API not available, just verify navigation succeeded
-        expect(true).toBe(true);
+        // If memory API is unavailable, the successful page navigation is the fallback signal.
+        await expect(page).toHaveURL(/auth\/login/);
       }
     });
   });
@@ -426,13 +429,10 @@ test.describe('Accessibility Performance', () => {
     
     // Focus the email input first to ensure we start from a known state
     await emailInput.focus();
-    await page.waitForTimeout(100);
     
     // Tab through the page
     for (let i = 0; i < 10; i++) {
       await page.keyboard.press('Tab');
-      // Small delay to allow focus transitions
-      await page.waitForTimeout(100);
     }
     
     // Should have at most one focused element

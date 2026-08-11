@@ -40,6 +40,13 @@ const PricingCard = ({ plan, index, isVisible }: { plan: PlanData; index: number
     }`;
   };
 
+  let ctaClass = "bg-zinc-100 text-zinc-900 hover:bg-white";
+  if (plan.popular) {
+    ctaClass = "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/25";
+  } else if (plan.name === "Free") {
+    ctaClass = "bg-zinc-800 hover:bg-zinc-700 text-white border border-white/10";
+  }
+
   return (
     <div
       className={`relative p-8 rounded-2xl border transition-all duration-700 flex flex-col ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
@@ -75,8 +82,8 @@ const PricingCard = ({ plan, index, isVisible }: { plan: PlanData; index: number
       </div>
 
       <ul className="space-y-4 mb-8 flex-1">
-        {plan.features.map((feature: string, i: number) => (
-          <li key={i} className="flex items-center gap-3 text-sm text-zinc-300">
+        {plan.features.map((feature: string) => (
+          <li key={feature} className="flex items-center gap-3 text-sm text-zinc-300">
             <CheckCircle2
               size={18}
               className={`shrink-0 ${
@@ -90,13 +97,7 @@ const PricingCard = ({ plan, index, isVisible }: { plan: PlanData; index: number
 
       <Link
         href={getHref()}
-        className={`w-full inline-flex justify-center items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 ${
-          plan.popular
-            ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/25"
-            : plan.name === "Free"
-            ? "bg-zinc-800 hover:bg-zinc-700 text-white border border-white/10"
-            : "bg-zinc-100 text-zinc-900 hover:bg-white"
-        }`}
+        className={`w-full inline-flex justify-center items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 ${ctaClass}`}
       >
         {plan.cta}
       </Link>
@@ -158,13 +159,15 @@ export function PricingSection() {
       return staticPlans.map(p => {
         const apiPlan = fetchedPlans[p.id];
         if (apiPlan) {
+          const projectLimit = apiPlan.project_limit > 1000 ? "Unlimited" : `Up to ${apiPlan.project_limit}`;
+          const memberLimit = apiPlan.member_limit > 1000 ? "Unlimited" : `Up to ${apiPlan.member_limit}`;
           return {
             ...p,
             price: apiPlan.price_monthly.toString(),
             originalPrice: apiPlan.original_price ? apiPlan.original_price.toString() : undefined,
             features: [
-              `${apiPlan.project_limit > 1000 ? "Unlimited" : `Up to ${apiPlan.project_limit}`} projects`,
-              `${apiPlan.member_limit > 1000 ? "Unlimited" : `Up to ${apiPlan.member_limit}`} team members`
+              `${projectLimit} projects`,
+              `${memberLimit} team members`
             ],
           };
         }
@@ -217,7 +220,7 @@ export function PricingSection() {
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {mergedPlans.map((plan, i) => (
-          <PricingCard key={i} plan={plan} index={i} isVisible={isVisible} />
+          <PricingCard key={plan.id} plan={plan} index={i} isVisible={isVisible} />
         ))}
       </div>
     </div>

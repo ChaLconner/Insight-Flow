@@ -20,14 +20,15 @@ export async function generateMetadata({
       title: `${project.name} | Insight Flow`,
       description: project.description,
     };
-  } catch (_e) {
+  } catch (error) {
+    console.warn("Failed to load project metadata:", error);
     return {
       title: "Project Not Found | Insight Flow",
     };
   }
 }
 
-export default async function ProjectDetailsPage({ params }: PageProps) {
+export default async function ProjectDetailsPage({ params }: Readonly<PageProps>) {
   try {
     const { id } = await params;
     const project = await serverApi.getProject(id);

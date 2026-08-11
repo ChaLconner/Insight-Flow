@@ -162,20 +162,22 @@ export default function ProjectSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
+              <label htmlFor="project-name" className="text-sm font-medium text-foreground">
                 Project Name
               </label>
               <Input
+                id="project-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="bg-background border-border text-foreground"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
+              <label htmlFor="project-description" className="text-sm font-medium text-foreground">
                 Description
               </label>
               <Textarea
+                id="project-description"
                 value={description}
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   setDescription(e.target.value)

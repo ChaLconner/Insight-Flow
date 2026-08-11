@@ -2,13 +2,11 @@
 Tests for services/scheduler.py
 """
 
-import os
-
 
 class TestSchedulerConfiguration:
-    def test_scheduler_skipped_in_test_environment(self):
+    def test_scheduler_skipped_in_test_environment(self, monkeypatch):
         """Test that scheduler is skipped in test environment."""
-        os.environ["TESTING"] = "true"
+        monkeypatch.setenv("TESTING", "true")
 
         from services.scheduler import shutdown_scheduler, start_scheduler
 
@@ -33,9 +31,9 @@ class TestSchedulerConfiguration:
 
 
 class TestSchedulerJobs:
-    def test_get_scheduler_returns_none_in_test(self):
+    def test_get_scheduler_returns_none_in_test(self, monkeypatch):
         """Test get_scheduler returns None in test environment."""
-        os.environ["TESTING"] = "true"
+        monkeypatch.setenv("TESTING", "true")
 
         from services.scheduler import get_scheduler
 

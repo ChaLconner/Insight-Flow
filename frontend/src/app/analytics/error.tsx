@@ -5,10 +5,10 @@ import { RouteErrorState } from "@/components/error/RouteErrorState";
 export default function AnalyticsError({
   error,
   reset,
-}: {
+}: Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}>) {
   return (
     <RouteErrorState
       error={error}

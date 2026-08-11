@@ -64,7 +64,7 @@ class SecurityLogService:
             await db.commit()
 
         except Exception as e:
-            logger.error(f"Failed to write security log: {e}")
+            logger.exception(f"Failed to write security log: {e}")
             # Don't raise, we don't want to break the app flow just for logging
 
     @staticmethod

@@ -9,7 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export function UsersPageSkeleton() {
   return (
-    <div className="space-y-8" role="status" aria-label="Loading users page">
+    <div
+      className="space-y-8"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label="Loading users page"
+    >
       <span className="sr-only">Loading users...</span>
 
       {/* Header Skeleton */}
@@ -26,8 +31,8 @@ export function UsersPageSkeleton() {
 
       {/* Stats Grid Skeleton */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i} className="border-border bg-card backdrop-blur-sm">
+        {["stat-0", "stat-1", "stat-2", "stat-3"].map((key) => (
+          <Card key={key} className="border-border bg-card backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <Skeleton className="h-4 w-24" aria-hidden="true" />
               <Skeleton className="h-4 w-4" aria-hidden="true" />
@@ -54,8 +59,8 @@ export function UsersPageSkeleton() {
       <Card className="border-border bg-card backdrop-blur-sm">
         <CardContent className="p-0">
           <div className="divide-y divide-border">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="p-6">
+            {["user-0", "user-1", "user-2", "user-3", "user-4"].map((key) => (
+              <div key={key} className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <Skeleton

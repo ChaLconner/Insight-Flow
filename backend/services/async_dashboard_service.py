@@ -4,6 +4,7 @@ Refactored for SQLAlchemy 2.0+ Async operations.
 """
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -42,6 +43,111 @@ class AsyncDashboardService:
                 or_(Project.owner_id == user_id, ProjectMember.user_id == user_id),
             )
         )
+
+    @staticmethod
+    def _get_cached_list(cached: Any) -> list[dict[str, Any]] | None:
+        """Normalize a cached list payload or return None on a cache miss."""
+        if not isinstance(cached, dict):
+            return None
+        cached_list = cached.get("_list_data")
+        if not isinstance(cached_list, list):
+            return None
+        return [
+            {str(key): value for key, value in item.items()}
+            for item in cached_list
+            if isinstance(item, dict)
+        ]
+
+    @staticmethod
+    def _format_recent_project_rows(rows: list) -> list[dict[str, Any]]:
+        """Format project aggregate rows for the dashboard API."""
+        projects = []
+        for project, p_total, p_completed in rows:
+            p_total = p_total or 0
+            p_completed = p_completed or 0
+            progress = round(p_completed / p_total * 100) if p_total > 0 else 0
+            projects.append(
+                {
+                    "id": str(project.id),
+                    "name": project.name,
+                    "description": project.description,
+                    "progress": progress,
+                    "color": project.color or "#6366f1",
+                    "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+                }
+            )
+        return projects
+
+    @staticmethod
+    def _format_recent_activity_row(
+        activity: TaskHistory,
+        user: User | None,
+        project: Project | None,
+        task: Task | None,
+        action_map: dict[str, str],
+    ) -> dict[str, Any]:
+        """Format one task-history row for the dashboard API."""
+        activity_type = (
+            activity.activity_type.value
+            if hasattr(activity.activity_type, "value")
+            else str(activity.activity_type)
+        )
+        if task:
+            target = task.title
+        elif project:
+            target = project.name
+        else:
+            target = "Unknown Target"
+
+        project_info = None
+        if project:
+            project_info = {
+                "name": project.name,
+                "id": str(activity.project_id),
+            }
+
+        return {
+            "id": str(activity.id),
+            "user": {
+                "name": user.name if user else "Unknown User",
+                "id": str(activity.user_id),
+                "avatar": user.avatar_url if user else None,
+            },
+            "action": action_map.get(activity_type, "performed action"),
+            "target": target,
+            "time": activity.timestamp.isoformat() if activity.timestamp else None,
+            "project": project_info,
+        }
+
+    @staticmethod
+    def _format_recent_activity_rows(rows: Sequence[Any]) -> list[dict[str, Any]]:
+        """Format task-history rows for the dashboard API."""
+        action_map = {
+            "TASK_CREATED": "created task",
+            "TASK_UPDATED": "updated task",
+            "TASK_COMPLETED": "completed task",
+            "TASK_ASSIGNED": "assigned task",
+            "TASK_UNASSIGNED": "unassigned task",
+            "TASK_DELETED": "deleted task",
+            "PROJECT_MEMBER_ADDED": "added member to project",
+            "PROJECT_MEMBER_REMOVED": "removed member from project",
+            "PROJECT_MEMBER_ROLE_CHANGED": "changed member role in project",
+            "PROJECT_UPDATED": "updated project",
+            "PROJECT_CREATED": "created project",
+        }
+        activities = []
+        for activity, user, project, task in rows:
+            activities.append(
+                AsyncDashboardService._format_recent_activity_row(
+                    activity, user, project, task, action_map
+                )
+            )
+        return activities
+
+    @staticmethod
+    def _overview_metric(values: Any, key: str) -> int:
+        """Read an aggregate metric with the query's zero-value fallback."""
+        return values[key] or 0
 
     async def get_overview_stats(self, user_id: uuid.UUID) -> dict[str, Any]:
         """
@@ -225,35 +331,35 @@ class AsyncDashboardService:
         row = combined_result.first()
         if row is None:
             empty_response = self._get_empty_stats_response()
-            await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
+            await cache_service.set(cache_key, empty_response, ttl=DASHBOARD_CACHE_TTL)
             return empty_response
 
         values = row._mapping
-        total_projects = values["total_projects"] or 0
-        projects_created_last_30_days = values["projects_created_30d"] or 0
+        total_projects = self._overview_metric(values, "total_projects")
+        projects_created_last_30_days = self._overview_metric(values, "projects_created_30d")
         if total_projects == 0:
             empty_response = self._get_empty_stats_response()
-            await cache_service.set(cache_key, empty_response, timeout=DASHBOARD_CACHE_TTL)
+            await cache_service.set(cache_key, empty_response, ttl=DASHBOARD_CACHE_TTL)
             return empty_response
 
-        total_tasks = values["total_tasks"] or 0
-        completed_tasks = values["completed_tasks"] or 0
-        in_progress_tasks = values["in_progress_tasks"] or 0
-        pending_review_tasks = values["pending_review_tasks"] or 0
+        total_tasks = self._overview_metric(values, "total_tasks")
+        completed_tasks = self._overview_metric(values, "completed_tasks")
+        in_progress_tasks = self._overview_metric(values, "in_progress_tasks")
+        pending_review_tasks = self._overview_metric(values, "pending_review_tasks")
 
         # Trends processing
         previous_total_projects = total_projects - projects_created_last_30_days
         projects_change = self._calculate_percentage_change(total_projects, previous_total_projects)
 
-        tasks_completed_last_30_days = values["completed_30d"] or 0
-        my_completed_last_30_days = values["my_completed_30d"] or 0
-        team_velocity_val = values["velocity_7d"] or 0
-        prev_velocity_val = values["velocity_prev_7d"] or 0
+        tasks_completed_last_30_days = self._overview_metric(values, "completed_30d")
+        my_completed_last_30_days = self._overview_metric(values, "my_completed_30d")
+        team_velocity_val = self._overview_metric(values, "velocity_7d")
+        prev_velocity_val = self._overview_metric(values, "velocity_prev_7d")
 
-        new_active_tasks = values["new_active_tasks"] or 0
-        new_completed_tasks = values["new_completed_tasks"] or 0
-        my_new_active_tasks = values["my_new_active_tasks"] or 0
-        my_new_completed_tasks = values["my_new_completed_tasks"] or 0
+        new_active_tasks = self._overview_metric(values, "new_active_tasks")
+        new_completed_tasks = self._overview_metric(values, "new_completed_tasks")
+        my_new_active_tasks = self._overview_metric(values, "my_new_active_tasks")
+        my_new_completed_tasks = self._overview_metric(values, "my_new_completed_tasks")
 
         # Calculate changes
         # Logic: Previous Active = Current Active - New Active + (Total Completed in Period - Completed in Period that were Created in Period)
@@ -295,7 +401,7 @@ class AsyncDashboardService:
         }
 
         # B6: Cache result
-        await cache_service.set(cache_key, result, timeout=DASHBOARD_CACHE_TTL)
+        await cache_service.set(cache_key, result, ttl=DASHBOARD_CACHE_TTL)
         return result
 
     async def get_recent_projects(self, user_id: uuid.UUID, limit: int = 5) -> list[dict[str, Any]]:
@@ -303,14 +409,9 @@ class AsyncDashboardService:
         # B6: Cache recent projects (wrap in dict for cache compatibility)
         cache_key = f"dashboard:recent_projects:{user_id}:{limit}"
         cached = await cache_service.get(cache_key)
-        if isinstance(cached, dict):
-            cached_list = cached.get("_list_data")
-            if isinstance(cached_list, list):
-                cached_projects: list[dict[str, Any]] = []
-                for item in cached_list:
-                    if isinstance(item, dict):
-                        cached_projects.append({str(key): value for key, value in item.items()})
-                return cached_projects
+        cached_projects = self._get_cached_list(cached)
+        if cached_projects is not None:
+            return cached_projects
 
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
 
@@ -331,26 +432,10 @@ class AsyncDashboardService:
         )
 
         result = await self.db.execute(query)
-        rows = result.all()
-
-        projects = []
-        for project, p_total, p_completed in rows:
-            p_total = p_total or 0
-            p_completed = p_completed or 0
-            progress = round(p_completed / p_total * 100) if p_total > 0 else 0
-            projects.append(
-                {
-                    "id": str(project.id),
-                    "name": project.name,
-                    "description": project.description,
-                    "progress": progress,
-                    "color": project.color or "#6366f1",
-                    "updated_at": project.updated_at.isoformat() if project.updated_at else None,
-                }
-            )
+        projects = self._format_recent_project_rows(result.all())
 
         # B6: Cache result (wrap list in dict for cache compatibility)
-        await cache_service.set(cache_key, {"_list_data": projects}, timeout=DASHBOARD_CACHE_TTL)
+        await cache_service.set(cache_key, {"_list_data": projects}, ttl=DASHBOARD_CACHE_TTL)
         return projects
 
     async def get_recent_activities(
@@ -359,14 +444,9 @@ class AsyncDashboardService:
         """Get recent team activities using optimized async queries."""
         cache_key = f"dashboard:recent_activities:{user_id}:{limit}"
         cached = await cache_service.get(cache_key)
-        if isinstance(cached, dict):
-            cached_list = cached.get("_list_data")
-            if isinstance(cached_list, list):
-                cached_activities: list[dict[str, Any]] = []
-                for item in cached_list:
-                    if isinstance(item, dict):
-                        cached_activities.append({str(key): value for key, value in item.items()})
-                return cached_activities
+        cached_activities = self._get_cached_list(cached)
+        if cached_activities is not None:
+            return cached_activities
 
         accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
 
@@ -381,56 +461,9 @@ class AsyncDashboardService:
         )
 
         result = await self.db.execute(query)
-        rows = result.all()
+        activity_list = self._format_recent_activity_rows(result.all())
 
-        action_map = {
-            "TASK_CREATED": "created task",
-            "TASK_UPDATED": "updated task",
-            "TASK_COMPLETED": "completed task",
-            "TASK_ASSIGNED": "assigned task",
-            "TASK_UNASSIGNED": "unassigned task",
-            "TASK_DELETED": "deleted task",
-            "PROJECT_MEMBER_ADDED": "added member to project",
-            "PROJECT_MEMBER_REMOVED": "removed member from project",
-            "PROJECT_MEMBER_ROLE_CHANGED": "changed member role in project",
-            "PROJECT_UPDATED": "updated project",
-            "PROJECT_CREATED": "created project",
-        }
-
-        activity_list = []
-        for activity, user, project, task in rows:
-            activity_type_str = (
-                activity.activity_type.value
-                if hasattr(activity.activity_type, "value")
-                else str(activity.activity_type)
-            )
-            action = action_map.get(activity_type_str, "performed action")
-
-            activity_list.append(
-                {
-                    "id": str(activity.id),
-                    "user": {
-                        "name": user.name if user else "Unknown User",
-                        "id": str(activity.user_id),
-                        "avatar": user.avatar_url if user else None,
-                    },
-                    "action": action,
-                    "target": task.title
-                    if task
-                    else (project.name if project else "Unknown Target"),
-                    "time": activity.timestamp.isoformat() if activity.timestamp else None,
-                    "project": {
-                        "name": project.name if project else "Unknown Project",
-                        "id": str(activity.project_id) if project else None,
-                    }
-                    if project
-                    else None,
-                }
-            )
-
-        await cache_service.set(
-            cache_key, {"_list_data": activity_list}, timeout=DASHBOARD_CACHE_TTL
-        )
+        await cache_service.set(cache_key, {"_list_data": activity_list}, ttl=DASHBOARD_CACHE_TTL)
         return activity_list
 
     async def get_today_tasks(self, user_id: uuid.UUID, limit: int = 10) -> list[dict[str, Any]]:
@@ -479,7 +512,7 @@ class AsyncDashboardService:
         ]
 
         # B6: Cache result (shorter TTL for tasks)
-        await cache_service.set(cache_key, {"_list_data": task_list}, timeout=60)
+        await cache_service.set(cache_key, {"_list_data": task_list}, ttl=60)
         return task_list
 
     @staticmethod

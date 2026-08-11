@@ -84,12 +84,15 @@ async def init_database():  # noqa: PLR0915
 
         print("\n[3/5] Applying Alembic migrations...")
         backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+        migration_command = [sys.executable, "-m", "alembic", "upgrade", "head"]
+        migration_process = await asyncio.create_subprocess_exec(
+            *migration_command,
             cwd=backend_dir,
             env=os.environ.copy(),
-            check=True,
         )
+        migration_return_code = await migration_process.wait()
+        if migration_return_code != 0:
+            raise subprocess.CalledProcessError(migration_return_code, migration_command)
         print("✓ Alembic migrations applied successfully")
 
         async with engine.begin() as conn:

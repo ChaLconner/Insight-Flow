@@ -58,6 +58,14 @@ export class ApiError<T = unknown> extends Error {
 // Type alias for backward compatibility
 export type AxiosError<T = unknown> = ApiError<T>;
 
+type ApiErrorLike = {
+  code?: string;
+  response?: {
+    status: number;
+    data?: unknown;
+  };
+};
+
 export function isAxiosError(error: unknown): error is ApiError<any> {
   return Boolean(
     error &&
@@ -145,14 +153,19 @@ const processQueue = (error: Error | null, token: unknown = null) => {
   failedQueue = [];
 };
 
-async function executeFetch<T = any>(
-  endpoint: string,
-  config: FetchRequestConfig = {}
-): Promise<AxiosLikeResponse<T>> {
-  if (isLoggingOut && !config.skipLogoutGuard) {
-    return new Promise(() => {});
-  }
+const AUTH_ENDPOINTS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/google",
+  "/auth/github",
+  "/auth/refresh",
+  "/auth/logout",
+  "/auth/me",
+];
 
+function buildRequestUrl(endpoint: string, config: FetchRequestConfig): string {
   const baseURL = config.baseURL ?? API_CONFIG.BASE_URL;
   let url = endpoint.startsWith("http") ? endpoint : `${baseURL}${endpoint}`;
 
@@ -160,7 +173,13 @@ async function executeFetch<T = any>(
     const searchParams = new URLSearchParams();
     Object.entries(config.params).forEach(([key, val]) => {
       if (val != null) {
-        searchParams.append(key, String(val));
+        if (typeof val === "string") {
+          searchParams.append(key, val);
+        } else if (typeof val === "number" || typeof val === "boolean" || typeof val === "bigint") {
+          searchParams.append(key, val.toString());
+        } else if (typeof val === "object") {
+          searchParams.append(key, JSON.stringify(val) ?? "");
+        }
       }
     });
     const queryString = searchParams.toString();
@@ -169,115 +188,166 @@ async function executeFetch<T = any>(
     }
   }
 
+  return url;
+}
+
+function buildRequestHeaders(config: FetchRequestConfig): Record<string, string> {
   const headers: Record<string, string> = {
     ...(config.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(config.headers as Record<string, string>),
   };
-
   const csrfToken = getCSRFToken();
   if (csrfToken) {
     headers["X-CSRF-Token"] = csrfToken;
   }
+  return headers;
+}
 
-  const timeoutMs = config.timeout ?? API_CONFIG.TIMEOUT;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
+function buildFetchOptions(
+  config: FetchRequestConfig,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): RequestInit {
   const requestConfig = { ...config };
   delete requestConfig.skipAuthRefresh;
   delete requestConfig.skipLogoutGuard;
   delete requestConfig.authRetry;
 
-  const fetchOptions: RequestInit = {
+  return {
     ...requestConfig,
     headers,
-    signal: controller.signal,
+    signal,
     credentials: config.withCredentials !== false ? "include" : "same-origin",
   };
+}
+
+function getResponseHeaders(response: Response): Record<string, string> {
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  return headers;
+}
+
+async function parseResponseData(response: Response, responseType: FetchRequestConfig["responseType"]): Promise<any> {
+  if (responseType === "blob") {
+    return response.blob();
+  }
+  if (responseType === "text") {
+    return response.text();
+  }
+
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return text;
+  }
+}
+
+function createResponseError(
+  data: any,
+  response: Response,
+  headers: Record<string, string>,
+  url: string,
+  config: FetchRequestConfig,
+): ApiError {
+  return new ApiError(
+    typeof data?.detail === "string" ? data.detail : data?.message ?? `HTTP error ${response.status}`,
+    {
+      data,
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    },
+    { url, method: config.method },
+  );
+}
+
+function isAuthEndpoint(endpoint: string): boolean {
+  return AUTH_ENDPOINTS.some((path) => endpoint.includes(path));
+}
+
+async function retryAfterTokenRefresh<T>(
+  endpoint: string,
+  config: FetchRequestConfig,
+): Promise<AxiosLikeResponse<T>> {
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      failedQueue.push({ resolve, reject });
+    }).then(() => executeFetch<T>(endpoint, { ...config, authRetry: true }));
+  }
+
+  isRefreshing = true;
+  try {
+    await executeFetch("/auth/refresh", {
+      method: "POST",
+      skipAuthRefresh: true,
+      skipLogoutGuard: true,
+    });
+    processQueue(null);
+    return executeFetch<T>(endpoint, { ...config, authRetry: true });
+  } catch (refreshErr) {
+    try {
+      await executeFetch("/auth/me", {
+        method: "GET",
+        skipAuthRefresh: true,
+        skipLogoutGuard: true,
+      });
+      processQueue(null);
+      return executeFetch<T>(endpoint, { ...config, authRetry: true });
+    } catch {
+      processQueue(refreshErr as Error);
+      await clearAuthTokens();
+      throw refreshErr;
+    }
+  } finally {
+    isRefreshing = false;
+  }
+}
+
+async function retryUnauthorized<T>(
+  endpoint: string,
+  config: FetchRequestConfig,
+  status: number,
+): Promise<AxiosLikeResponse<T> | null> {
+  const skipAuthRefresh = config.skipAuthRefresh === true;
+  const authRetryAlreadyAttempted = config.authRetry === true;
+  if (status !== 401 || skipAuthRefresh || authRetryAlreadyAttempted || isAuthEndpoint(endpoint)) {
+    return null;
+  }
+  return retryAfterTokenRefresh<T>(endpoint, config);
+}
+
+async function executeFetch<T = any>(
+  endpoint: string,
+  config: FetchRequestConfig = {}
+): Promise<AxiosLikeResponse<T>> {
+  if (isLoggingOut && !config.skipLogoutGuard) {
+    return new Promise(() => {});
+  }
+
+  const url = buildRequestUrl(endpoint, config);
+  const headers = buildRequestHeaders(config);
+
+  const timeoutMs = config.timeout ?? API_CONFIG.TIMEOUT;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const fetchOptions = buildFetchOptions(config, headers, controller.signal);
 
   try {
     const res = await fetch(url, fetchOptions);
     clearTimeout(timeoutId);
-
-    const resHeaders: Record<string, string> = {};
-    res.headers.forEach((value, key) => {
-      resHeaders[key] = value;
-    });
-
-    let data: any;
-    if (config.responseType === "blob") {
-      data = await res.blob();
-    } else if (config.responseType === "text") {
-      data = await res.text();
-    } else {
-      const text = await res.text();
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        data = text;
-      }
-    }
+    const resHeaders = getResponseHeaders(res);
+    const data = await parseResponseData(res, config.responseType);
 
     if (!res.ok) {
-      const errorObj = new ApiError(
-        typeof data?.detail === "string" ? data.detail : data?.message ?? `HTTP error ${res.status}`,
-        {
-          data,
-          status: res.status,
-          statusText: res.statusText,
-          headers: resHeaders,
-        },
-        { url, method: config.method }
-      );
-
-      // Handle 401 Unauthorized token refresh
-      const isAuthEndpoint =
-        endpoint.includes("/auth/login") ||
-        endpoint.includes("/auth/register") ||
-        endpoint.includes("/auth/forgot-password") ||
-        endpoint.includes("/auth/reset-password") ||
-        endpoint.includes("/auth/google") ||
-        endpoint.includes("/auth/github") ||
-        endpoint.includes("/auth/refresh") ||
-        endpoint.includes("/auth/logout") ||
-        endpoint.includes("/auth/me");
-
-      if (res.status === 401 && !config.skipAuthRefresh && !config.authRetry && !isAuthEndpoint) {
-        if (isRefreshing) {
-          return new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject });
-          }).then(() => executeFetch<T>(endpoint, { ...config, authRetry: true }));
-        }
-
-        isRefreshing = true;
-        try {
-          await executeFetch("/auth/refresh", {
-            method: "POST",
-            skipAuthRefresh: true,
-            skipLogoutGuard: true,
-          });
-          processQueue(null);
-          return executeFetch<T>(endpoint, { ...config, authRetry: true });
-        } catch (refreshErr) {
-          try {
-            await executeFetch("/auth/me", {
-              method: "GET",
-              skipAuthRefresh: true,
-              skipLogoutGuard: true,
-            });
-            processQueue(null);
-            return executeFetch<T>(endpoint, { ...config, authRetry: true });
-          } catch {
-            processQueue(refreshErr as Error);
-            await clearAuthTokens();
-            throw refreshErr;
-          }
-        } finally {
-          isRefreshing = false;
-        }
+      const retryResponse = await retryUnauthorized<T>(endpoint, config, res.status);
+      if (retryResponse) {
+        return retryResponse;
       }
 
-      throw errorObj;
+      throw createResponseError(data, res, resHeaders, url, config);
     }
 
     return {
@@ -302,6 +372,16 @@ async function executeFetch<T = any>(
   }
 }
 
+function serializeRequestBody(data: unknown): BodyInit | undefined {
+  if (data instanceof FormData) {
+    return data;
+  }
+  if (data === undefined) {
+    return undefined;
+  }
+  return JSON.stringify(data);
+}
+
 export const apiClient = {
   get: <T = any>(url: string, config?: FetchRequestConfig) =>
     executeFetch<T>(url, { ...config, method: "GET" }),
@@ -309,19 +389,19 @@ export const apiClient = {
     executeFetch<T>(url, {
       ...config,
       method: "POST",
-      body: data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined,
+      body: serializeRequestBody(data),
     }),
   put: <T = any>(url: string, data?: any, config?: FetchRequestConfig) =>
     executeFetch<T>(url, {
       ...config,
       method: "PUT",
-      body: data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined,
+      body: serializeRequestBody(data),
     }),
   patch: <T = any>(url: string, data?: any, config?: FetchRequestConfig) =>
     executeFetch<T>(url, {
       ...config,
       method: "PATCH",
-      body: data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined,
+      body: serializeRequestBody(data),
     }),
   delete: <T = any>(url: string, config?: FetchRequestConfig) =>
     executeFetch<T>(url, { ...config, method: "DELETE" }),
@@ -333,7 +413,7 @@ export const apiClient = {
         ...opts,
         ...config,
         method: "POST",
-        body: data instanceof FormData ? data : data !== undefined ? JSON.stringify(data) : undefined,
+        body: serializeRequestBody(data),
       }),
   }),
 };
@@ -375,7 +455,7 @@ async function clearAuthTokens(): Promise<void> {
   window.location.href = "/auth/login";
 }
 
-export function getAxiosErrorMessage(error: ApiError | any): string {
+export function getAxiosErrorMessage(error: ApiErrorLike): string {
   if (!error.response) {
     if (error.code === "ECONNABORTED") {
       return "Request timeout. Please check your connection and try again.";
@@ -388,6 +468,7 @@ export function getAxiosErrorMessage(error: ApiError | any): string {
 
   switch (status) {
     case 400:
+    case 422:
       return (
         data?.message ??
         (typeof data?.detail === "string" ? data.detail : JSON.stringify(data?.detail)) ??
@@ -399,12 +480,6 @@ export function getAxiosErrorMessage(error: ApiError | any): string {
       return data?.message ?? (typeof data?.detail === "string" ? data.detail : ERROR_MESSAGES.FORBIDDEN);
     case 404:
       return data?.message ?? (typeof data?.detail === "string" ? data.detail : ERROR_MESSAGES.NOT_FOUND);
-    case 422:
-      return (
-        data?.message ??
-        (typeof data?.detail === "string" ? data.detail : JSON.stringify(data?.detail)) ??
-        ERROR_MESSAGES.VALIDATION_ERROR
-      );
     case 429:
       return ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
     case 500:
@@ -450,7 +525,7 @@ export async function downloadFile(url: string, filename?: string): Promise<void
     link.download = filename ?? "download";
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
     window.URL.revokeObjectURL(downloadUrl);
   } catch (error) {
     console.error("Download failed:", error);

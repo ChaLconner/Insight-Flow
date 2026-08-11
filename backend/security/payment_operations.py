@@ -18,8 +18,6 @@ from uuid import UUID
 
 from stripe import (
     APIConnectionError,
-    AuthenticationError,
-    CardError,
     InvalidRequestError,
     RateLimitError,
 )
@@ -115,6 +113,25 @@ def generate_customer_key(user_id: UUID, email: str) -> str:
 # ============================================================================
 
 
+def _retry_log_message(
+    error: RateLimitError | APIConnectionError | InvalidRequestError,
+    attempt: int,
+    max_retries: int,
+) -> str:
+    if isinstance(error, RateLimitError):
+        return f"Rate limit hit, attempt {attempt + 1}/{max_retries}"
+    if isinstance(error, APIConnectionError):
+        return f"Connection error, attempt {attempt + 1}/{max_retries}"
+    if "temporarily" in str(error).lower() or "try again" in str(error).lower():
+        return f"Temporary error, attempt {attempt + 1}/{max_retries}"
+    raise error
+
+
+def _retry_delay(retry_delay: float, attempt: int, exponential_backoff: bool) -> float:
+    multiplier = 2**attempt if exponential_backoff else 1
+    return retry_delay * multiplier
+
+
 def retry_on_stripe_error(
     max_retries: int = 3, retry_delay: float = 1.0, exponential_backoff: bool = True
 ):
@@ -140,30 +157,13 @@ def retry_on_stripe_error(
                 try:
                     return await func(*args, **kwargs)
 
-                except RateLimitError as e:
+                except (RateLimitError, APIConnectionError, InvalidRequestError) as e:
                     last_error = e
-                    logger.warning(f"Rate limit hit, attempt {attempt + 1}/{max_retries}")
-
-                except APIConnectionError as e:
-                    last_error = e
-                    logger.warning(f"Connection error, attempt {attempt + 1}/{max_retries}")
-
-                except InvalidRequestError as e:
-                    # Only retry if it's a temporary issue
-                    if "temporarily" in str(e).lower() or "try again" in str(e).lower():
-                        last_error = e
-                        logger.warning(f"Temporary error, attempt {attempt + 1}/{max_retries}")
-                    else:
-                        raise
-
-                except (CardError, AuthenticationError):
-                    # Don't retry these
-                    raise
+                    logger.warning(_retry_log_message(e, attempt, max_retries))
 
                 # Wait before retry
                 if attempt < max_retries - 1:
-                    delay = retry_delay * (2**attempt if exponential_backoff else 1)
-                    await asyncio.sleep(delay)
+                    await asyncio.sleep(_retry_delay(retry_delay, attempt, exponential_backoff))
 
             # All retries exhausted
             if last_error:

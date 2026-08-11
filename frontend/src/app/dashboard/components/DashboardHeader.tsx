@@ -35,7 +35,7 @@ const DashboardHeader = memo(function DashboardHeader(
           variant="outline"
           className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1"
         >
-          <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />{" "}
           System Online
         </Badge>
 

@@ -38,7 +38,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+def validation_exception_handler(request: Request, exc: RequestValidationError):
     """
     Standardize validation errors.
     Security: Only expose field names, not internal details.
@@ -78,7 +78,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-async def app_error_handler(request: Request, exc: AppError):
+def app_error_handler(request: Request, exc: AppError):
     """
     Handle standardized AppErrors.
     """
@@ -93,7 +93,7 @@ async def app_error_handler(request: Request, exc: AppError):
     )
 
 
-async def value_error_handler(request: Request, exc: ValueError):
+def value_error_handler(request: Request, exc: ValueError):
     """
     Handle ValueError exceptions.
     Security: Log full error internally, return safe message to client.
@@ -130,7 +130,7 @@ async def value_error_handler(request: Request, exc: ValueError):
     )
 
 
-async def integrity_error_handler(request: Request, exc: IntegrityError):
+def integrity_error_handler(request: Request, exc: IntegrityError):
     """
     Handle database integrity errors.
     Security: Never expose database details to client.
@@ -158,7 +158,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
     )
 
 
-async def global_exception_handler(request: Request, exc: Exception):
+def global_exception_handler(request: Request, exc: Exception):
     """
     Handle all unhandled exceptions.
     Security: Never expose internal errors to client in production.

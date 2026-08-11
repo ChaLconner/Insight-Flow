@@ -10,7 +10,7 @@ export function PasswordVisibilityButton({
   isVisible,
   onToggle,
   disabled,
-}: PasswordVisibilityButtonProps) {
+}: Readonly<PasswordVisibilityButtonProps>) {
   const label = isVisible ? "Hide password" : "Show password";
 
   return (

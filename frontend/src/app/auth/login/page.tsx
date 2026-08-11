@@ -19,7 +19,7 @@ import { getAuthRedirectUrl } from "@/lib/auth-redirect";
 import {
   Mail,
   Lock,
-  Github,
+  GitBranch,
   ArrowLeft,
   ArrowRight,
   Loader2,
@@ -231,7 +231,7 @@ function LoginForm() {
               disabled={isLoading}
               title="Sign in with GitHub"
             >
-              <Github className="h-4 w-4 mr-3" />
+              <GitBranch className="h-4 w-4 mr-3" />
               Continue with GitHub
             </Button>
           </div>

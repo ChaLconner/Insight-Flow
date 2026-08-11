@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart as RechartsPieChart,
   Pie,
-  Cell,
   Tooltip,
   ResponsiveContainer,
   Legend,
@@ -40,6 +39,10 @@ const renderPriorityLabel = ({ payload, percent, name }: PieLabelRenderProps) =>
   return `${displayName} ${(valuePercent * 100).toFixed(0)}%`;
 };
 
+const renderPriorityLegend = (value: string | number) => (
+  <span className="text-muted-foreground">{value}</span>
+);
+
 const PriorityChartComponent: React.FC<PriorityChartProps> = ({
   data = [],
 }) => {
@@ -51,6 +54,7 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
         displayName: item.name
           ? item.name.charAt(0).toUpperCase() + item.name.slice(1)
           : "Unknown",
+        fill: PRIORITY_COLORS[item.name.toLowerCase()] || "#6b7280",
       })),
     [data],
   );
@@ -95,17 +99,8 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
                 nameKey="displayName"
                 label={renderPriorityLabel}
                 labelLine={false}
-              >
-                {formattedData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={
-                      PRIORITY_COLORS[entry.name.toLowerCase()] || "#6b7280"
-                    }
-                    strokeWidth={0}
-                  />
-                ))}
-              </Pie>
+                strokeWidth={0}
+              />
               <Tooltip
                 contentStyle={analyticsTooltipStyle}
                 itemStyle={analyticsTooltipTextStyle}
@@ -114,9 +109,7 @@ const PriorityChartComponent: React.FC<PriorityChartProps> = ({
               />
               <Legend
                 wrapperStyle={{ paddingTop: "20px" }}
-                formatter={(value) => (
-                  <span className="text-muted-foreground">{value}</span>
-                )}
+                formatter={renderPriorityLegend}
               />
             </RechartsPieChart>
           </ResponsiveContainer>

@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import BaseModel
 from .base_enum import BaseEnum
 
+CASCADE_DELETE_ORPHAN = "all, delete-orphan"
+
 if TYPE_CHECKING:
     from .analytics import TaskAttachment, TaskComment, TaskDependency, TaskTimeTracking
     from .project import Project
@@ -92,25 +94,25 @@ class Task(BaseModel):
         "User", foreign_keys=[created_by], back_populates="created_tasks"
     )
     comments: Mapped[list["TaskComment"]] = relationship(
-        "TaskComment", back_populates="task", cascade="all, delete-orphan"
+        "TaskComment", back_populates="task", cascade=CASCADE_DELETE_ORPHAN
     )
     attachments: Mapped[list["TaskAttachment"]] = relationship(
-        "TaskAttachment", back_populates="task", cascade="all, delete-orphan"
+        "TaskAttachment", back_populates="task", cascade=CASCADE_DELETE_ORPHAN
     )
     dependencies: Mapped[list["TaskDependency"]] = relationship(
         "TaskDependency",
         foreign_keys="TaskDependency.task_id",
         back_populates="task",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_DELETE_ORPHAN,
     )
     dependents: Mapped[list["TaskDependency"]] = relationship(
         "TaskDependency",
         foreign_keys="TaskDependency.depends_on_task_id",
         back_populates="depends_on_task",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_DELETE_ORPHAN,
     )
     time_tracking: Mapped[list["TaskTimeTracking"]] = relationship(
-        "TaskTimeTracking", back_populates="task", cascade="all, delete-orphan"
+        "TaskTimeTracking", back_populates="task", cascade=CASCADE_DELETE_ORPHAN
     )
 
     __table_args__ = (

@@ -87,8 +87,8 @@ export const useTheme = () => {
       }
 
       // Set data attributes for CSS customization
-      root.setAttribute("data-theme", currentTheme);
-      root.setAttribute("data-color-scheme", colorScheme);
+      root.dataset.theme = currentTheme;
+      root.dataset.colorScheme = colorScheme;
 
       // Update color-scheme property for native controls
       root.style.colorScheme = colorScheme;

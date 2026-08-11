@@ -19,6 +19,8 @@ from sqlalchemy.pool import NullPool
 from config import get_settings
 from models import Base
 
+ASYNC_DATABASE_SCHEME = "postgresql+asyncpg://"
+
 # Load settings
 settings = get_settings()
 
@@ -32,11 +34,11 @@ database_url = settings.database.url
 
 # Ensure correct driver for async (asyncpg)
 if database_url.startswith("postgresql://"):
-    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    database_url = database_url.replace("postgresql://", ASYNC_DATABASE_SCHEME, 1)
 elif database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    database_url = database_url.replace("postgres://", ASYNC_DATABASE_SCHEME, 1)
 elif database_url.startswith("postgresql+pg8000://"):
-    database_url = database_url.replace("postgresql+pg8000://", "postgresql+asyncpg://", 1)
+    database_url = database_url.replace("postgresql+pg8000://", ASYNC_DATABASE_SCHEME, 1)
 
 # Redact password from logged URL for security
 redacted_url = database_url
@@ -51,7 +53,7 @@ if "@" in redacted_url and ":" in redacted_url:
             username = user_part.split("://")[1] if "://" in user_part else user_part
             redacted_url = f"{scheme_part}{username}:****@{suffix}"
     except Exception:
-        redacted_url = "postgresql+asyncpg://****:****@****"
+        redacted_url = f"{ASYNC_DATABASE_SCHEME}****:****@****"
 
 db_logger.info(f"DATABASE_URL: {redacted_url}")
 db_logger.info("=" * 50)
@@ -141,7 +143,7 @@ async def get_async_db() -> AsyncGenerator[AsyncSession]:
         await session.rollback()
         raise
     except Exception as e:
-        db_logger.error(f"Database session error: {e}")
+        db_logger.exception(f"Database session error: {e}")
         await session.rollback()
         raise e
     finally:
@@ -160,7 +162,7 @@ async def init_database():
             # Just a simple ping to ensure connection works
             await conn.execute(text("SELECT 1"))
     except Exception as e:
-        db_logger.error(f"Database connection check failed: {e}")
+        db_logger.exception(f"Database connection check failed: {e}")
         raise e
 
 

@@ -70,17 +70,17 @@ export function __clearDowngradeEligibilityCacheForTests(): void {
 registerAuthenticatedCacheClearer(clearDowngradeEligibilityCache);
 
 interface ChangePlanDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  currentPlan: string;
-  planConfig: PlanInfo;
-  plans: Record<string, PlanInfo>;
-  plansLoading: boolean;
-  methods: PaymentMethod[];
-  selectedPaymentMethodId: string | null;
-  onPaymentMethodChange: (id: string) => void;
-  onAddCard: () => void;
-  onConfirm: (planKey: string) => Promise<void>;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly currentPlan: string;
+  readonly planConfig: PlanInfo;
+  readonly plans: Record<string, PlanInfo>;
+  readonly plansLoading: boolean;
+  readonly methods: PaymentMethod[];
+  readonly selectedPaymentMethodId: string | null;
+  readonly onPaymentMethodChange: (id: string) => void;
+  readonly onAddCard: () => void;
+  readonly onConfirm: (planKey: string) => Promise<void>;
 }
 
 export function ChangePlanDialog({
@@ -224,18 +224,23 @@ export function ChangePlanDialog({
               const isPlanUpgrade = targetIdx > currentIndex;
               const isPlanDowngrade = targetIdx < currentIndex;
               const priceDiff = plan.price_monthly - planConfig.price_monthly;
+              let planAction = "Select";
+              if (isPlanUpgrade) {
+                planAction = "Upgrade";
+              } else if (isPlanDowngrade) {
+                planAction = "Downgrade";
+              }
               
               return (
                 <div 
                   key={key} 
                   className={`
-                    relative rounded-xl border p-4 cursor-pointer transition-all duration-200
+                    relative rounded-xl border p-4 transition-all duration-200
                     ${isActive 
                       ? 'border-blue-500 bg-blue-500/5 ring-1 ring-blue-500 cursor-default' 
                       : 'border-border bg-card hover:border-primary/50 hover:shadow-md hover:scale-[1.02]'
                     }
                   `}
-                  onClick={() => !isActive && handleSelectPlan(key)}
                 >
                   {/* Badges */}
                   <div className="absolute -top-2 -right-2 flex gap-1">
@@ -283,7 +288,7 @@ export function ChangePlanDialog({
                     )}
                     {plan.is_limited_offer && !isActive && (
                       <p className="text-xs text-red-500 font-medium mt-1 flex items-center gap-1">
-                        <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                        <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>{" "}
                         Limited Time Offer
                       </p>
                     )}
@@ -310,7 +315,7 @@ export function ChangePlanDialog({
                         handleSelectPlan(key);
                       }}
                     >
-                      {isPlanUpgrade ? 'Upgrade' : isPlanDowngrade ? 'Downgrade' : 'Select'}
+                      {planAction}
                     </Button>
                   )}
                 </div>
@@ -324,7 +329,6 @@ export function ChangePlanDialog({
           <ConfirmationView
             selectedPlan={selectedPlan}
             targetPlan={plans[selectedPlan]}
-            currentPlan={currentPlan}
             planConfig={planConfig}
             isUpgrade={isUpgrade}
             isDowngrade={isDowngrade}
@@ -347,22 +351,225 @@ export function ChangePlanDialog({
   );
 }
 
+interface PlanComparisonProps {
+  readonly targetPlan: PlanInfo;
+  readonly planConfig: PlanInfo;
+  readonly isUpgrade: boolean;
+}
+
+function PlanComparison({ targetPlan, planConfig, isUpgrade }: PlanComparisonProps) {
+  return (
+    <div className="flex items-center justify-center gap-4">
+      <div className="text-center p-4 rounded-lg bg-muted/50 flex-1">
+        <p className="text-xs text-muted-foreground mb-1">Current Plan</p>
+        <p className={`font-semibold ${planConfig.color}`}>{planConfig.name}</p>
+        <p className="text-lg font-bold">
+          ${planConfig.price_monthly > 0 ? planConfig.price_monthly.toFixed(2) : "0"}
+          <span className="text-xs font-normal">/mo</span>
+        </p>
+      </div>
+
+      <div className={`p-2 rounded-full ${isUpgrade ? "bg-emerald-500/10" : "bg-orange-500/10"}`}>
+        {isUpgrade ? (
+          <ArrowUp className="h-5 w-5 text-emerald-500" />
+        ) : (
+          <ArrowDown className="h-5 w-5 text-orange-500" />
+        )}
+      </div>
+
+      <div className="text-center p-4 rounded-lg bg-primary/5 border border-primary/20 flex-1">
+        <p className="text-xs text-muted-foreground mb-1">New Plan</p>
+        <p className={`font-semibold ${targetPlan.color}`}>{targetPlan.name}</p>
+        {targetPlan.original_price && targetPlan.original_price > targetPlan.price_monthly && (
+          <p className="text-xs text-muted-foreground line-through">
+            ${targetPlan.original_price.toFixed(2)}/mo
+          </p>
+        )}
+        <p className="text-lg font-bold">
+          ${targetPlan.price_monthly > 0 ? targetPlan.price_monthly.toFixed(2) : "0"}
+          <span className="text-xs font-normal">/mo</span>
+        </p>
+        {targetPlan.discount_percent > 0 && (
+          <Badge className="bg-red-500 text-white hover:bg-red-500 text-xs mt-1">
+            {targetPlan.discount_percent}% OFF
+          </Badge>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface PriceChangeInfoProps {
+  readonly targetPlan: PlanInfo;
+  readonly isUpgrade: boolean;
+  readonly priceDiff: number;
+}
+
+function PriceChangeInfo({ targetPlan, isUpgrade, priceDiff }: PriceChangeInfoProps) {
+  let priceMessage = "No change in billing";
+  if (priceDiff > 0) {
+    priceMessage = `Your billing will increase by $${priceDiff.toFixed(2)}/month`;
+  } else if (priceDiff < 0) {
+    priceMessage = `You'll save $${Math.abs(priceDiff).toFixed(2)}/month`;
+  }
+
+  return (
+    <div className={`p-4 rounded-lg border ${isUpgrade ? "bg-emerald-500/5 border-emerald-500/20" : "bg-orange-500/5 border-orange-500/20"}`}>
+      <div className="flex items-center gap-3">
+        {isUpgrade ? (
+          <TrendingUp className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+        ) : (
+          <TrendingDown className="h-5 w-5 text-orange-500 flex-shrink-0" />
+        )}
+        <div>
+          <p className={`font-medium ${isUpgrade ? "text-emerald-600 dark:text-emerald-400" : "text-orange-600 dark:text-orange-400"}`}>
+            {isUpgrade ? "Upgrade" : "Downgrade"} to {targetPlan.name}
+          </p>
+          <p className="text-sm text-muted-foreground">{priceMessage}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface DowngradeWarningSectionProps {
+  readonly planConfig: PlanInfo;
+  readonly targetPlan: PlanInfo;
+  readonly warnings: DowngradeWarning[];
+}
+
+function DowngradeWarningSection({
+  planConfig,
+  targetPlan,
+  warnings,
+}: DowngradeWarningSectionProps) {
+  return (
+    <div className="p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium text-destructive">
+            {warnings.length > 0 ? "Cannot Downgrade" : "Downgrade Warning"}
+          </p>
+
+          {warnings.length > 0 ? (
+            <div className="mt-2 space-y-3">
+              {warnings.map((warning) => (
+                <div key={`${warning.type}-${warning.message}`} className="text-sm">
+                  <p className="text-destructive font-medium">{warning.message}</p>
+                  <p className="text-muted-foreground mt-1">{warning.action_required}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground mt-1">
+                Downgrading may affect your access to certain features:
+              </p>
+              <ul className="text-sm text-muted-foreground mt-2 space-y-1">
+                {planConfig.project_limit > targetPlan.project_limit && (
+                  <li>
+                    • Project limit will decrease from {planConfig.project_limit > 1000 ? "unlimited" : planConfig.project_limit} to {targetPlan.project_limit}
+                  </li>
+                )}
+                {planConfig.member_limit > targetPlan.member_limit && (
+                  <li>
+                    • Team member limit will decrease from {planConfig.member_limit > 1000 ? "unlimited" : planConfig.member_limit} to {targetPlan.member_limit}
+                  </li>
+                )}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanFeatures({ targetPlan }: Readonly<{ targetPlan: PlanInfo }>) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-foreground">What's included in {targetPlan.name}:</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          {targetPlan.project_limit > 1000 ? "Unlimited" : `Up to ${targetPlan.project_limit}`} projects
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          {targetPlan.member_limit > 1000 ? "Unlimited" : `${targetPlan.member_limit}`} team members
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          All {targetPlan.name} features
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ConfirmationActionsProps {
+  readonly selectedPlan: string;
+  readonly isUpgrade: boolean;
+  readonly downgradeWarnings: DowngradeWarning[];
+  readonly methods: PaymentMethod[];
+  readonly isUpdatingPlan: boolean;
+  readonly isCheckingDowngrade: boolean;
+  readonly onBack: () => void;
+  readonly onConfirm: () => void;
+}
+
+function ConfirmationActions({
+  selectedPlan,
+  isUpgrade,
+  downgradeWarnings,
+  methods,
+  isUpdatingPlan,
+  isCheckingDowngrade,
+  onBack,
+  onConfirm,
+}: ConfirmationActionsProps) {
+  const isBlocked =
+    isUpdatingPlan ||
+    isCheckingDowngrade ||
+    downgradeWarnings.length > 0 ||
+    (selectedPlan !== "free" && methods.length === 0);
+  const confirmationAction = isUpgrade ? "Upgrade" : "Downgrade";
+  const confirmationLabel =
+    downgradeWarnings.length > 0 ? "Cannot Proceed" : `Confirm ${confirmationAction}`;
+
+  return (
+    <div className="flex justify-end gap-3 mt-4">
+      <Button variant="outline" onClick={onBack} disabled={isUpdatingPlan}>
+        Back
+      </Button>
+      <Button
+        onClick={onConfirm}
+        disabled={isBlocked}
+        className={`${isUpgrade ? "bg-emerald-600 hover:bg-emerald-700" : "bg-primary"}`}
+      >
+        {(isUpdatingPlan || isCheckingDowngrade) && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+        {confirmationLabel}
+      </Button>
+    </div>
+  );
+}
+
 interface ConfirmationViewProps {
-  selectedPlan: string;
-  targetPlan: PlanInfo;
-  currentPlan: string;
-  planConfig: PlanInfo;
-  isUpgrade: boolean;
-  isDowngrade: boolean;
-  downgradeWarnings: DowngradeWarning[];
-  methods: PaymentMethod[];
-  selectedPaymentMethodId: string | null;
-  onPaymentMethodChange: (id: string) => void;
-  onAddCard: () => void;
-  onBack: () => void;
-  onConfirm: () => void;
-  isUpdatingPlan: boolean;
-  isCheckingDowngrade: boolean;
+  readonly selectedPlan: string;
+  readonly targetPlan: PlanInfo;
+  readonly planConfig: PlanInfo;
+  readonly isUpgrade: boolean;
+  readonly isDowngrade: boolean;
+  readonly downgradeWarnings: DowngradeWarning[];
+  readonly methods: PaymentMethod[];
+  readonly selectedPaymentMethodId: string | null;
+  readonly onPaymentMethodChange: (id: string) => void;
+  readonly onAddCard: () => void;
+  readonly onBack: () => void;
+  readonly onConfirm: () => void;
+  readonly isUpdatingPlan: boolean;
+  readonly isCheckingDowngrade: boolean;
 }
 
 function ConfirmationView({
@@ -381,135 +588,25 @@ function ConfirmationView({
   isUpdatingPlan,
   isCheckingDowngrade,
 }: ConfirmationViewProps) {
-  if (!targetPlan) {return null;}
+  if (!targetPlan) {
+    return null;
+  }
 
   const priceDiff = targetPlan.price_monthly - planConfig.price_monthly;
 
   return (
     <div className="py-4 space-y-6">
-      {/* Plan Comparison */}
-      <div className="flex items-center justify-center gap-4">
-        <div className="text-center p-4 rounded-lg bg-muted/50 flex-1">
-          <p className="text-xs text-muted-foreground mb-1">Current Plan</p>
-          <p className={`font-semibold ${planConfig.color}`}>{planConfig.name}</p>
-          <p className="text-lg font-bold">
-            ${planConfig.price_monthly > 0 ? planConfig.price_monthly.toFixed(2) : '0'}
-            <span className="text-xs font-normal">/mo</span>
-          </p>
-        </div>
-        
-        <div className={`p-2 rounded-full ${isUpgrade ? 'bg-emerald-500/10' : 'bg-orange-500/10'}`}>
-          {isUpgrade ? (
-            <ArrowUp className="h-5 w-5 text-emerald-500" />
-          ) : (
-            <ArrowDown className="h-5 w-5 text-orange-500" />
-          )}
-        </div>
-        
-        <div className="text-center p-4 rounded-lg bg-primary/5 border border-primary/20 flex-1">
-          <p className="text-xs text-muted-foreground mb-1">New Plan</p>
-          <p className={`font-semibold ${targetPlan.color}`}>{targetPlan.name}</p>
-          {targetPlan.original_price && targetPlan.original_price > targetPlan.price_monthly && (
-            <p className="text-xs text-muted-foreground line-through">
-              ${targetPlan.original_price.toFixed(2)}/mo
-            </p>
-          )}
-          <p className="text-lg font-bold">
-            ${targetPlan.price_monthly > 0 ? targetPlan.price_monthly.toFixed(2) : '0'}
-            <span className="text-xs font-normal">/mo</span>
-          </p>
-          {targetPlan.discount_percent > 0 && (
-            <Badge className="bg-red-500 text-white hover:bg-red-500 text-xs mt-1">
-              {targetPlan.discount_percent}% OFF
-            </Badge>
-          )}
-        </div>
-      </div>
-      
-      {/* Price Change Info */}
-      <div className={`p-4 rounded-lg border ${isUpgrade ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-orange-500/5 border-orange-500/20'}`}>
-        <div className="flex items-center gap-3">
-          {isUpgrade ? (
-            <TrendingUp className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-          ) : (
-            <TrendingDown className="h-5 w-5 text-orange-500 flex-shrink-0" />
-          )}
-          <div>
-            <p className={`font-medium ${isUpgrade ? 'text-emerald-600 dark:text-emerald-400' : 'text-orange-600 dark:text-orange-400'}`}>
-              {isUpgrade ? 'Upgrade' : 'Downgrade'} to {targetPlan.name}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {priceDiff > 0 
-                ? `Your billing will increase by $${priceDiff.toFixed(2)}/month`
-                : priceDiff < 0 
-                  ? `You'll save $${Math.abs(priceDiff).toFixed(2)}/month`
-                  : 'No change in billing'
-              }
-            </p>
-          </div>
-        </div>
-      </div>
-      
-      {/* Downgrade Warning */}
+      <PlanComparison targetPlan={targetPlan} planConfig={planConfig} isUpgrade={isUpgrade} />
+      <PriceChangeInfo targetPlan={targetPlan} isUpgrade={isUpgrade} priceDiff={priceDiff} />
       {isDowngrade && (
-        <div className="p-4 rounded-lg bg-destructive/5 border border-destructive/20">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-medium text-destructive">
-                {downgradeWarnings.length > 0 ? "Cannot Downgrade" : "Downgrade Warning"}
-              </p>
-              
-              {downgradeWarnings.length > 0 ? (
-                <div className="mt-2 space-y-3">
-                  {downgradeWarnings.map((warning, idx) => (
-                    <div key={idx} className="text-sm">
-                      <p className="text-destructive font-medium">{warning.message}</p>
-                      <p className="text-muted-foreground mt-1">{warning.action_required}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Downgrading may affect your access to certain features:
-                  </p>
-                  <ul className="text-sm text-muted-foreground mt-2 space-y-1">
-                    {planConfig.project_limit > targetPlan.project_limit && (
-                      <li>• Project limit will decrease from {planConfig.project_limit > 1000 ? 'unlimited' : planConfig.project_limit} to {targetPlan.project_limit}</li>
-                    )}
-                    {planConfig.member_limit > targetPlan.member_limit && (
-                      <li>• Team member limit will decrease from {planConfig.member_limit > 1000 ? 'unlimited' : planConfig.member_limit} to {targetPlan.member_limit}</li>
-                    )}
-                  </ul>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <DowngradeWarningSection
+          planConfig={planConfig}
+          targetPlan={targetPlan}
+          warnings={downgradeWarnings}
+        />
       )}
-      
-      {/* What's Included */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-foreground">What's included in {targetPlan.name}:</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            {targetPlan.project_limit > 1000 ? "Unlimited" : `Up to ${targetPlan.project_limit}`} projects
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            {targetPlan.member_limit > 1000 ? "Unlimited" : `${targetPlan.member_limit}`} team members
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            All {targetPlan.name} features
-          </div>
-        </div>
-      </div>
-      
-      {/* Payment Method Selection */}
-      {selectedPlan !== 'free' && (
+      <PlanFeatures targetPlan={targetPlan} />
+      {selectedPlan !== "free" && (
         <PaymentMethodSelector
           methods={methods}
           selectedPaymentMethodId={selectedPaymentMethodId}
@@ -517,25 +614,16 @@ function ConfirmationView({
           onAddCard={onAddCard}
         />
       )}
-
-      {/* Action Buttons */}
-      <div className="flex justify-end gap-3 mt-4">
-        <Button 
-          variant="outline" 
-          onClick={onBack}
-          disabled={isUpdatingPlan}
-        >
-          Back
-        </Button>
-        <Button 
-          onClick={onConfirm}
-          disabled={isUpdatingPlan || isCheckingDowngrade || downgradeWarnings.length > 0 || (selectedPlan !== 'free' && methods.length === 0)}
-          className={`${isUpgrade ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-primary'}`}
-        >
-          {(isUpdatingPlan || isCheckingDowngrade) && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-          {downgradeWarnings.length > 0 ? 'Cannot Proceed' : `Confirm ${isUpgrade ? 'Upgrade' : 'Downgrade'}`}
-        </Button>
-      </div>
+      <ConfirmationActions
+        selectedPlan={selectedPlan}
+        isUpgrade={isUpgrade}
+        downgradeWarnings={downgradeWarnings}
+        methods={methods}
+        isUpdatingPlan={isUpdatingPlan}
+        isCheckingDowngrade={isCheckingDowngrade}
+        onBack={onBack}
+        onConfirm={onConfirm}
+      />
     </div>
   );
 }
@@ -552,7 +640,7 @@ function PaymentMethodSelector({
   selectedPaymentMethodId,
   onPaymentMethodChange,
   onAddCard,
-}: PaymentMethodSelectorProps) {
+}: Readonly<PaymentMethodSelectorProps>) {
   return (
     <div className={`p-4 rounded-lg border ${methods.length > 0 ? 'bg-muted/50 border-border' : 'bg-amber-500/5 border-amber-500/20'}`}>
       <div className="flex items-center gap-3">

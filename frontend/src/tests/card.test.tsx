@@ -97,7 +97,7 @@ describe("Card Component", () => {
           <p>Card body content</p>
         </CardContent>
         <CardFooter>
-          <button>Action Button</button>
+          <button type="button">Action Button</button>
         </CardFooter>
       </Card>,
     );

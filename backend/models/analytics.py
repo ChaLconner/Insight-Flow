@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from .task import Task
     from .user import User
 
+PROJECTS_ID = "projects.id"
+USERS_ID = "users.id"
+TASKS_ID = "tasks.id"
+
 
 class AnalyticsPeriod(enum.StrEnum):
     """Enum for analytics periods."""
@@ -43,7 +47,7 @@ class ProjectAnalytics(BaseModel):
     __tablename__ = "project_analytics"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(PROJECTS_ID), nullable=False, index=True
     )
     period: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
@@ -84,10 +88,10 @@ class UserProductivity(BaseModel):
     __tablename__ = "user_productivity"
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(USERS_ID), nullable=False, index=True
     )
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(PROJECTS_ID), nullable=False, index=True
     )
     period: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
     date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
@@ -127,10 +131,10 @@ class TaskTimeTracking(BaseModel):
     __tablename__ = "task_time_tracking"
 
     task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(TASKS_ID), nullable=False, index=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(USERS_ID), nullable=False, index=True
     )
 
     # Time tracking
@@ -159,7 +163,7 @@ class ProjectMilestone(BaseModel):
     __tablename__ = "project_milestones"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(PROJECTS_ID), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -197,10 +201,10 @@ class TaskDependency(BaseModel):
     __tablename__ = "task_dependencies"
 
     task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(TASKS_ID), nullable=False, index=True
     )
     depends_on_task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(TASKS_ID), nullable=False, index=True
     )
     dependency_type: Mapped[str] = mapped_column(String(20), default="finish_to_start")
 
@@ -231,10 +235,10 @@ class TaskComment(BaseModel):
     __tablename__ = "task_comments"
 
     task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(TASKS_ID), nullable=False, index=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(USERS_ID), nullable=False, index=True
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -259,10 +263,10 @@ class TaskAttachment(BaseModel):
     __tablename__ = "task_attachments"
 
     task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(TASKS_ID), nullable=False, index=True
     )
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(USERS_ID), nullable=False, index=True
     )
 
     # File information
@@ -301,7 +305,7 @@ class ProjectTagAssociation(BaseModel):
     __tablename__ = "project_tag_associations"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(PROJECTS_ID), nullable=False, index=True
     )
     tag_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("project_tags.id"), nullable=False, index=True

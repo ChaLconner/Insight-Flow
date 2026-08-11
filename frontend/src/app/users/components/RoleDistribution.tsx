@@ -19,7 +19,7 @@ const ROLE_ITEMS = [
   { key: "viewers", label: "Viewers", icon: User, color: "text-muted-foreground" },
 ] as const;
 
-export function RoleDistribution({ stats }: RoleDistributionProps) {
+export function RoleDistribution({ stats }: Readonly<RoleDistributionProps>) {
   return (
     <Card className="border-border bg-card backdrop-blur-sm">
       <CardHeader>

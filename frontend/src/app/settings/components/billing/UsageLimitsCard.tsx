@@ -15,7 +15,7 @@ interface UsageLimitsCardProps {
   planConfig: PlanInfo;
 }
 
-export function UsageLimitsCard({ usageStats, planConfig }: UsageLimitsCardProps) {
+export function UsageLimitsCard({ usageStats, planConfig }: Readonly<UsageLimitsCardProps>) {
   // Animation state
   const [mounted, setMounted] = useState(false);
   useEffect(() => {

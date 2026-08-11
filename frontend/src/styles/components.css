@@ -180,13 +180,13 @@
 }
 
 .priority-medium {
-  color: hsl(38 92% 50%);
-  background-color: hsl(38 92% 50% / 0.1);
-  border-color: hsl(38 92% 50% / 0.2);
+  color: hsl(38 92% 28%);
+  background-color: hsl(38 92% 90%);
+  border-color: hsl(38 92% 65%);
 }
 
 .priority-low {
-  color: hsl(142 76% 36%);
-  background-color: hsl(142 76% 36% / 0.1);
-  border-color: hsl(142 76% 36% / 0.2);
+  color: hsl(142 76% 24%);
+  background-color: hsl(142 76% 90%);
+  border-color: hsl(142 76% 55%);
 }

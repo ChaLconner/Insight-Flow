@@ -10,7 +10,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 import type { TooltipValueType } from "recharts";
 import { Button } from "@/components/ui/button";
@@ -246,14 +245,11 @@ const WorkloadChartComponent: React.FC<WorkloadChartProps> = ({
                 formatter={formatWorkloadTooltip}
                 labelFormatter={(label) => `👤 ${label}`}
               />
-              <Bar dataKey="tasks" radius={[0, 6, 6, 0]}>
-                {displayData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={`rgba(139, 92, 246, ${0.6 + (index < 3 ? (3 - index) * 0.13 : 0)})`}
-                  />
-                ))}
-              </Bar>
+              <Bar
+                dataKey="tasks"
+                radius={[0, 6, 6, 0]}
+                fill="rgba(139, 92, 246, 0.8)"
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -11,7 +11,11 @@ function normalizeBaseUrl(value: string): string {
       ? trimmed
       : `https://${trimmed}`;
 
-  return withProtocol.replace(/\/+$/, "");
+  let normalized = withProtocol;
+  while (normalized.endsWith("/")) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
 }
 
 export function resolveAppUrl(options?: {

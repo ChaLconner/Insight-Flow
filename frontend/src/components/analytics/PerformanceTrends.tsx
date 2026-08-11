@@ -19,9 +19,9 @@ const PerformanceTrendsComponent: React.FC<PerformanceTrendsProps> = ({
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {trends.map((trend: AnalyticsTrend, index: number) => (
+          {trends.map((trend: AnalyticsTrend) => (
             <div
-              key={index}
+              key={trend.metric}
               className="flex items-center justify-between p-4 rounded-lg bg-secondary"
             >
               <div>

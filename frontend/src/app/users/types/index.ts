@@ -1,5 +1,7 @@
-import type { User } from "@/types";
-import type { UserRole } from "@/types";
+import type { User, UserRole } from "@/types";
+
+type RoleFilter = UserRole | "all";
+type UserStatusFilter = "all" | "active" | "inactive";
 
 /**
  * User statistics data structure
@@ -33,8 +35,8 @@ export const DEFAULT_USER_STATS: UserStatsData = {
 export interface UserFiltersState {
   searchQuery: string;
   debouncedSearchQuery: string;
-  roleFilter: UserRole | "all";
-  statusFilter: "all" | "active" | "inactive";
+  roleFilter: RoleFilter;
+  statusFilter: UserStatusFilter;
 }
 
 /**

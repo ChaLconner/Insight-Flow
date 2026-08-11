@@ -46,7 +46,7 @@ export function ProjectModal({
   project,
   mode,
   onSubmit,
-}: ProjectModalProps) {
+}: Readonly<ProjectModalProps>) {
   const id = useId();
   // No longer fetching all users on mount
 
@@ -217,7 +217,9 @@ export function ProjectModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
+        aria-label="Close project dialog"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
@@ -412,6 +414,7 @@ export function ProjectModal({
                     </p>
                   </div>
                   <label htmlFor={`${id}-allowPublicAccess`} className="relative inline-flex items-center cursor-pointer">
+                    <span className="sr-only">Allow public access</span>
                     <input
                       id={`${id}-allowPublicAccess`}
                       name="allowPublicAccess"
@@ -441,6 +444,7 @@ export function ProjectModal({
                     </p>
                   </div>
                   <label htmlFor={`${id}-requireApproval`} className="relative inline-flex items-center cursor-pointer">
+                    <span className="sr-only">Require approval</span>
                     <input
                       id={`${id}-requireApproval`}
                       name="requireApproval"

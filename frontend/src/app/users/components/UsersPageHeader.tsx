@@ -16,7 +16,7 @@ export function UsersPageHeader({
   onRefresh,
   onInvite,
   isRefreshing,
-}: UsersPageHeaderProps) {
+}: Readonly<UsersPageHeaderProps>) {
   return (
     <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div>
@@ -25,11 +25,10 @@ export function UsersPageHeader({
           Manage team members and their permissions.
         </p>
       </div>
-      <div
+      <fieldset
         className="flex gap-2 w-full sm:w-auto"
-        role="group"
-        aria-label="Page actions"
       >
+        <legend className="sr-only">Page actions</legend>
         <Button
           type="button"
           variant="outline"
@@ -49,7 +48,7 @@ export function UsersPageHeader({
           <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
           Invite User
         </Button>
-      </div>
+      </fieldset>
     </header>
   );
 }

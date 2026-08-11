@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, type RegisterSchema } from "@/lib/validations/auth";
 import { getErrorMessage } from "@/lib/error-utils";
+import { random } from "@/lib/utils";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getSocialSignupRedirect } from "@/lib/auth-redirect";
@@ -22,7 +23,7 @@ import {
   Mail,
   Lock,
 
-  Github,
+  GitBranch,
   ArrowRight,
   Loader2,
   Layers,
@@ -91,7 +92,7 @@ function RegisterPageContent() {
     try {
       // Generate unique username from email
       const emailPrefix = values.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
-      const uniqueSuffix = Math.floor(1000 + Math.random() * 9000);
+      const uniqueSuffix = random(1000, 9999);
       const username = `${emailPrefix}${uniqueSuffix}`;
 
       // Transform frontend data to match backend UserCreate schema
@@ -246,7 +247,7 @@ function RegisterPageContent() {
                 disabled={isLoading}
                 title="Sign up with GitHub"
               >
-                <Github className="h-4 w-4 mr-3" />
+                <GitBranch className="h-4 w-4 mr-3" />
                 Continue with GitHub
               </Button>
             </div>

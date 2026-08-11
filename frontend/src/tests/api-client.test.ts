@@ -51,7 +51,11 @@ describe('API Client Configuration', () => {
       });
     });
 
-    await apiClient.post('/test-post', { a: 1 }, { params: { query: 'search', page: 2 } });
+    await apiClient.post('/test-post', {
+      a: 1,
+    }, {
+      params: { query: 'search', page: 2, filters: { status: 'open' } },
+    });
     await apiClient.put('/test-put', { b: 2 });
     await apiClient.patch('/test-patch', { c: 3 });
     await apiClient.delete('/test-delete');
@@ -140,7 +144,14 @@ describe('API Client Configuration', () => {
     let protectedBCalls = 0;
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = String(input);
+      let url: string;
+      if (typeof input === "string") {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.toString();
+      } else {
+        url = input.url;
+      }
       if (url.includes('/protected-a')) {
         protectedACalls += 1;
         return protectedACalls === 1
@@ -189,6 +200,20 @@ describe('API Client Configuration', () => {
     ).resolves.toMatchObject({ data: { ok: true } });
     setLoggingOut(false);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should hold non-explicit requests while logout guard is active', async () => {
+    setLoggingOut(true);
+    const request = apiClient.get('/protected');
+
+    await expect(
+      Promise.race([
+        request.then(() => 'resolved'),
+        Promise.resolve('guarded'),
+      ]),
+    ).resolves.toBe('guarded');
+
+    setLoggingOut(false);
   });
 
   it('should handle network abort / timeout error', async () => {
@@ -356,6 +381,7 @@ describe('downloadFile helper', () => {
       href: '',
       download: '',
       click: linkClickSpy,
+      remove: vi.fn(),
     } as unknown as HTMLAnchorElement;
 
     vi.spyOn(document, 'createElement').mockReturnValue(anchorMock);

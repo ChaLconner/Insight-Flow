@@ -252,8 +252,8 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
           )}
           {/* List Skeleton */}
           <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <Card key={i} className="border-border bg-card">
+            {["task-0", "task-1", "task-2", "task-3", "task-4"].map((key) => (
+              <Card key={key} className="border-border bg-card">
                 <CardContent className="p-4">
                   <div className="flex gap-4">
                     <Skeleton className="h-4 w-4 rounded-full" />
@@ -340,7 +340,7 @@ export const TaskList = forwardRef<TaskListRef, TaskListProps>(
                 className="pl-10 bg-background border-border text-foreground placeholder:text-muted-foreground h-10"
               />
               {localSearchQuery && (
-                <button
+                <button type="button"
                   onClick={handleClearSearch}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-all duration-200"
                   title="Clear search"

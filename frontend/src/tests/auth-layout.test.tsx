@@ -25,8 +25,8 @@ describe("AuthLayout theme isolation", () => {
     const root = document.documentElement;
     root.className = "light custom-root";
     root.style.colorScheme = "light";
-    root.setAttribute("data-theme", "light");
-    root.setAttribute("data-color-scheme", "light");
+    root.dataset.theme = "light";
+    root.dataset.colorScheme = "light";
 
     const { unmount } = render(
       <AuthLayout>
@@ -52,8 +52,8 @@ describe("AuthLayout theme isolation", () => {
     const root = document.documentElement;
     root.className = "dark";
     root.style.colorScheme = "dark";
-    root.removeAttribute("data-theme");
-    root.removeAttribute("data-color-scheme");
+    delete root.dataset.theme;
+    delete root.dataset.colorScheme;
 
     const { unmount } = render(
       <AuthLayout>

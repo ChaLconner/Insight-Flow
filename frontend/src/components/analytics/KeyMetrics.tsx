@@ -129,9 +129,9 @@ const KeyMetricsComponent: React.FC<KeyMetricsProps> = ({
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      {metrics.map((metric, index) => (
+      {metrics.map((metric) => (
         <MetricCard
-          key={index}
+          key={metric.title}
           title={metric.title}
           value={metric.value}
           icon={metric.icon}

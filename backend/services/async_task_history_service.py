@@ -64,7 +64,7 @@ class AsyncTaskHistoryService:
             return activity
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Error created activity: {e}")
+            logger.exception(f"Error created activity: {e}")
             raise ValueError(f"Failed to create activity: {e!s}")
 
     async def get_recent_activities(

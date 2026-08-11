@@ -334,10 +334,10 @@ describe("Memory Management", () => {
     };
 
     const unsubscribe = subscribe(() => {});
-    expect(subscriptions.length).toBe(1);
+    expect(subscriptions).toHaveLength(1);
 
     unsubscribe();
-    expect(subscriptions.length).toBe(0);
+    expect(subscriptions).toHaveLength(0);
   });
 });
 
@@ -351,7 +351,7 @@ describe("Network Performance", () => {
       ];
 
       const batchableRequests = requests.filter((r) => r.batch);
-      expect(batchableRequests.length).toBe(3);
+      expect(batchableRequests).toHaveLength(3);
     });
 
     it("should use request deduplication", () => {

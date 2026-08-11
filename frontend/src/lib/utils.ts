@@ -162,6 +162,18 @@ export function getInitials(name: string): string {
     .join("");
 }
 
+/** Return a cryptographically strong random fraction for identifiers and bounds. */
+export function secureRandomFloat(): number {
+  const cryptoApi = globalThis.crypto;
+  if (!cryptoApi || typeof cryptoApi.getRandomValues !== "function") {
+    throw new Error("Secure random generator is unavailable");
+  }
+
+  const values = new Uint32Array(1);
+  cryptoApi.getRandomValues(values);
+  return values[0] / 2 ** 32;
+}
+
 /**
  * Generate random ID
  */
@@ -170,7 +182,7 @@ export function generateId(length: number = 8): string {
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let result = "";
   for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    result += chars.charAt(Math.floor(secureRandomFloat() * chars.length));
   }
   return result;
 }
@@ -179,12 +191,11 @@ export function generateId(length: number = 8): string {
  * Generate slug from string
  */
 export function generateSlug(str: string): string {
-  return str
+  const cleaned = str
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^\w\s-]/g, "");
+  return cleaned.split(/\s|_|-/).filter(Boolean).join("-");
 }
 
 // ===========================================
@@ -220,7 +231,7 @@ export function clamp(num: number, min: number, max: number): number {
  * Generate random number between min and max
  */
 export function random(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  return Math.floor(secureRandomFloat() * (max - min + 1)) + min;
 }
 
 // ===========================================
@@ -296,9 +307,9 @@ export function deepClone<T>(obj: T): T {
     return obj;
   }
   if (obj instanceof Date) {
-    return new Date(obj.getTime()) as unknown as T;
+    return new Date(obj) as unknown as T;
   }
-  if (obj instanceof Array) {
+  if (Array.isArray(obj)) {
     return obj.map((item) => deepClone(item)) as unknown as T;
   }
   if (typeof obj === "object") {
@@ -373,7 +384,7 @@ export function transformKeys<T extends Record<string, unknown>>(
  * Validate email
  */
 export function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailRegex = /^[^@\s]{1,254}@[^@\s]{1,254}\.[^@\s]{1,254}$/;
   return emailRegex.test(email);
 }
 
@@ -402,7 +413,7 @@ export function validatePassword(password: string): {
     errors.push("Password must contain at least one number");
   }
 
-  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>.?/]/.test(password)) {
+  if (!/[^A-Za-z0-9\s]/.test(password)) {
     errors.push("Password must contain at least one special character");
   }
 
@@ -490,9 +501,9 @@ export function removeFromStorage(key: string): boolean {
  * Convert hex to rgba
  */
 export function hexToRgba(hex: string, alpha: number = 1): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
@@ -500,9 +511,9 @@ export function hexToRgba(hex: string, alpha: number = 1): string {
  * Get contrast color (black or white) for given hex color
  */
 export function getContrastColor(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luminance > 0.5 ? "#0000" : "#ffffff";
 }
@@ -523,7 +534,7 @@ export function formatFileSize(bytes: number): string {
   const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 /**

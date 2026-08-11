@@ -21,7 +21,7 @@ export function DeleteProjectModal({
   onConfirm,
   project,
   isDeleting,
-}: DeleteProjectModalProps) {
+}: Readonly<DeleteProjectModalProps>) {
   const [confirmName, setConfirmName] = useState("");
 
   // Reset input when modal opens

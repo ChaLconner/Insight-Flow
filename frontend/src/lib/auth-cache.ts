@@ -18,7 +18,7 @@ export function registerAuthenticatedCacheClearer(
 /** Clear every registered authenticated cache on login, logout, or expiry. */
 export async function clearAuthenticatedCaches(): Promise<void> {
   const results = await Promise.allSettled(
-    [...authenticatedCacheClearers].map((clearer) => clearer()),
+    [...authenticatedCacheClearers].map((clearer) => Promise.resolve(clearer())),
   );
 
   for (const result of results) {

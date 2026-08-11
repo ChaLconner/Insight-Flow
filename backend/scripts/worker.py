@@ -83,7 +83,7 @@ async def _claim_next_job(worker_id: str) -> BackgroundJob | None:
         async with AsyncSessionLocal() as db:
             return await claim_job(db, worker_id)
     except Exception as exc:
-        logger.error("Failed to claim background job: %s", exc)
+        logger.exception("Failed to claim background job: %s", exc)
         return None
 
 
@@ -131,12 +131,12 @@ async def _process_job(job: BackgroundJob, worker_id: str) -> None:
         logger.info("Completed background job %s (%s)", job.id, job.job_type)
     except Exception as exc:
         await _stop_lease_renewal(lease_stop, lease_task)
-        logger.error("Background job %s (%s) failed: %s", job.id, job.job_type, exc)
+        logger.exception("Background job %s (%s) failed: %s", job.id, job.job_type, exc)
         try:
             async with AsyncSessionLocal() as db:
                 await fail_job(db, job.id, worker_id, str(exc))
         except Exception as fail_exc:
-            logger.error("Failed to record background job failure: %s", fail_exc)
+            logger.exception("Failed to record background job failure: %s", fail_exc)
 
 
 async def run_worker(stop_event: asyncio.Event) -> None:
@@ -157,7 +157,7 @@ async def run_worker(stop_event: asyncio.Event) -> None:
             )
             job = await _claim_next_job(worker_id)
         except Exception as exc:
-            logger.error("Failed during worker poll: %s", exc)
+            logger.exception("Failed during worker poll: %s", exc)
 
         if job is None:
             with suppress(TimeoutError):

@@ -139,7 +139,9 @@ class RequestContextMiddleware:
 
         except Exception as e:
             duration_ms = (time.perf_counter() - scope["state"]["start_time"]) * 1000
-            logger.error(f"[{request_id[:8]}] {method} {path} - ERROR: {e!s} ({duration_ms:.2f}ms)")
+            logger.exception(
+                f"[{request_id[:8]}] {method} {path} - ERROR: {e!s} ({duration_ms:.2f}ms)"
+            )
             raise
 
     def _log_request(

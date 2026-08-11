@@ -7,6 +7,7 @@ import { test, expect } from '@playwright/test';
 const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
 
 test.describe('Dashboard Page', () => {
+  // These authenticated E2E cases run when the CI environment supplies credentials.
   test.skip(!hasE2EAuth, 'E2E credentials are not configured');
 
   test.beforeEach(async ({ page }) => {
@@ -24,6 +25,7 @@ test.describe('Dashboard Page', () => {
 });
 
 test.describe('Projects Page', () => {
+  // These authenticated E2E cases run when the CI environment supplies credentials.
   test.skip(!hasE2EAuth, 'E2E credentials are not configured');
 
   test('should display projects page when authenticated', async ({ page }) => {
@@ -47,6 +49,7 @@ test.describe('Projects Page', () => {
 });
 
 test.describe('Tasks Page', () => {
+  // These authenticated E2E cases run when the CI environment supplies credentials.
   test.skip(!hasE2EAuth, 'E2E credentials are not configured');
 
   test('should display tasks page when authenticated', async ({ page }) => {
@@ -61,6 +64,7 @@ test.describe('Tasks Page', () => {
 });
 
 test.describe('Settings Page', () => {
+  // These authenticated E2E cases run when the CI environment supplies credentials.
   test.skip(!hasE2EAuth, 'E2E credentials are not configured');
 
   test('should display settings page when authenticated', async ({ page }) => {
@@ -206,15 +210,18 @@ test.describe('Error Handling', () => {
   test('should handle network errors gracefully', async ({ page }) => {
     // Simulate offline
     await page.context().setOffline(true);
+    let navigationFailed = false;
     
     try {
       await page.goto('/auth/login', { timeout: 5000 });
     } catch {
       // Expected to fail when offline
+      navigationFailed = true;
     }
     
     // Restore online state
     await page.context().setOffline(false);
+    expect(navigationFailed).toBe(true);
   });
 });
 
@@ -248,6 +255,6 @@ test.describe('Performance', () => {
     );
     
     // Should have no critical console errors
-    expect(criticalErrors.length).toBe(0);
+    expect(criticalErrors).toHaveLength(0);
   });
 });

@@ -111,12 +111,15 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should successfully login with valid credentials', async ({ page }) => {
+    // This E2E case needs externally supplied credentials and runs in authenticated CI.
     test.skip(!E2E_EMAIL || !E2E_PASSWORD, 'E2E credentials are not configured');
 
     await loginWithE2ECredentials(page);
+    await expect(page).not.toHaveURL(/\/auth\/login/);
   });
 
   test('should logout successfully when authenticated', async ({ page }) => {
+    // This E2E case needs externally supplied credentials and runs in authenticated CI.
     test.skip(!hasE2EAuth, 'E2E credentials are not configured');
 
     // beforeEach clears storageState cookies, so establish a fresh session first.
@@ -154,9 +157,6 @@ test.describe('Register Flow', () => {
     await page.getByRole('textbox', { name: /name/i }).first().fill('Test User');
     await page.getByRole('textbox', { name: /email/i }).fill('test@example.com');
     await page.locator('input[type="password"]').first().fill('123');
-    
-    // Wait for validation
-    await page.waitForTimeout(500);
     
     const submitButton = page.getByRole('button', { name: /sign up|register|create/i });
     

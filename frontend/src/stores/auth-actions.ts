@@ -82,8 +82,9 @@ export const authActions = {
         
         // After successful logout API call, prevent any further API requests
         setLoggingOut(true);
-      } catch (_) {
-        // ignore errors during logout (e.g. network error, 401, etc.)
+      } catch (error) {
+        console.warn("Server-side logout failed; continuing client logout.", error);
+        // Ignore errors during logout (e.g. network error, 401, etc.)
         // We still want to clear client state and redirect
         // Set loggingOut to prevent further requests even on error
         const { setLoggingOut } = await import("@/lib/api-client");
@@ -133,28 +134,32 @@ async function clearClientCaches(): Promise<void> {
   try {
     const { clearAuthenticatedCaches } = await import("@/lib/auth-cache");
     await clearAuthenticatedCaches();
-  } catch (_) {
+  } catch (error) {
+    console.warn("Failed to clear authenticated caches.", error);
     // Cache clearing is best-effort; auth transition must continue.
   }
 
   try {
     const { clearDeduplicatedRequests } = await import("@/lib/api-client");
     clearDeduplicatedRequests();
-  } catch (_) {
+  } catch (error) {
+    console.warn("Failed to clear deduplicated requests.", error);
     // Cache clearing is best-effort; logout must continue.
   }
 
   try {
     const { clearQueryCache } = await import("@/providers/query-provider");
     clearQueryCache();
-  } catch (_) {
+  } catch (error) {
+    console.warn("Failed to clear the query cache.", error);
     // Cache clearing is best-effort; logout must continue.
   }
 
   try {
     const { TokenManager } = await import("@/utils/token-manager");
     TokenManager.clearTokens();
-  } catch (_) {
+  } catch (error) {
+    console.warn("Failed to clear stored tokens.", error);
     // Cache clearing is best-effort; logout must continue.
   }
 }
@@ -165,7 +170,8 @@ async function clearServiceWorkerCaches(): Promise<void> {
       "@/components/providers/service-worker-registration"
     );
     await clearServiceWorkerCache();
-  } catch (_) {
+  } catch (error) {
+    console.warn("Failed to clear service-worker caches.", error);
     // Cache clearing is best-effort; logout must continue.
   }
 }

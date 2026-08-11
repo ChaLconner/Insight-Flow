@@ -138,7 +138,7 @@ class RedisRateLimitMiddleware:
             return is_allowed, remaining
 
         except Exception as e:
-            logger.error(f"Redis rate limit check failed: {e}")
+            logger.exception(f"Redis rate limit check failed: {e}")
             if self.fail_closed:
                 return False, -1
             # Development fallback: allow request if Redis fails.
@@ -268,7 +268,7 @@ class RedisRateLimiter:
             return is_allowed, remaining
 
         except Exception as e:
-            logger.error(f"Redis rate limit check failed: {e}")
+            logger.exception(f"Redis rate limit check failed: {e}")
             return True, calls
 
     async def reset(self, identifier: str) -> bool:
@@ -288,5 +288,5 @@ class RedisRateLimiter:
                 await res
             return True
         except Exception as e:
-            logger.error(f"Failed to reset rate limit: {e}")
+            logger.exception(f"Failed to reset rate limit: {e}")
             return False

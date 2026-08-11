@@ -118,7 +118,7 @@ async def readiness_check():
                 _readiness_cache = (time.monotonic(), payload)
             return JSONResponse(status_code=payload["status_code"], content=payload["body"])
     except Exception as e:
-        logger.error(f"Readiness check failed: {e}")
+        logger.exception(f"Readiness check failed: {e}")
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "not_ready"},
@@ -314,7 +314,7 @@ async def _probe_database(settings: Any) -> dict[str, Any]:
                 "cached": False,
             }
         except Exception as exc:
-            logger.error(f"Database health check failed: {exc}")
+            logger.exception(f"Database health check failed: {exc}")
             result = {"healthy": False, "error": str(exc), "cached": False}
 
         if ttl > 0:

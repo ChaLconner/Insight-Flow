@@ -20,14 +20,15 @@ export function EmptyState({
   roleFilter,
   statusFilter,
   onInviteClick,
-}: EmptyStateProps) {
+}: Readonly<EmptyStateProps>) {
   const hasFilters =
     searchQuery || roleFilter !== "all" || statusFilter !== "all";
 
   return (
     <div
       className="text-center py-12"
-      role="status"
+      aria-live="polite"
+      aria-atomic="true"
       aria-label={
         hasFilters ? "No users match your filters" : "No users in team"
       }

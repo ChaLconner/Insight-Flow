@@ -33,7 +33,7 @@ interface RoleBadgeProps {
   role: UserRole;
 }
 
-export function RoleBadge({ role }: RoleBadgeProps) {
+export function RoleBadge({ role }: Readonly<RoleBadgeProps>) {
   const config = ROLE_CONFIG[role];
 
   if (!config) {
@@ -59,7 +59,7 @@ interface StatusBadgeProps {
   user: UserType;
 }
 
-export function StatusBadge({ user }: StatusBadgeProps) {
+export function StatusBadge({ user }: Readonly<StatusBadgeProps>) {
   if (!user.isActive) {
     return (
       <Badge className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400">

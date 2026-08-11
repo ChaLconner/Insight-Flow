@@ -46,8 +46,9 @@ async def test_create_project_limit_check(
     await async_project_service.create_project(ProjectCreate(name="P2"), test_user.id)
 
     # Act & Assert - Try to create 3rd
+    third_project = ProjectCreate(name="P3")
     with pytest.raises(ValueError, match="Project limit reached"):
-        await async_project_service.create_project(ProjectCreate(name="P3"), test_user.id)
+        await async_project_service.create_project(third_project, test_user.id)
 
 
 @pytest.mark.asyncio
@@ -204,10 +205,9 @@ async def test_update_project_not_owner(
     await async_session.commit()
     await async_session.refresh(other_user)
 
+    update_data = ProjectUpdate(name="New")
     with pytest.raises(ValueError, match="Only project owners and admins"):
-        await async_project_service.update_project(
-            project.id, ProjectUpdate(name="New"), other_user.id
-        )
+        await async_project_service.update_project(project.id, update_data, other_user.id)
 
 
 @pytest.mark.asyncio
@@ -435,10 +435,9 @@ async def test_check_member_limit(async_project_service, test_user, async_sessio
     )
 
     # Add 3rd member -> Total 4. Should Fail.
+    member_data = ProjectMemberCreate(user_id=str(u3.id), role="member")
     with pytest.raises(ValueError, match="Team member limit reached"):
-        await async_project_service.add_project_member(
-            p.id, ProjectMemberCreate(user_id=str(u3.id), role="member"), test_user.id
-        )
+        await async_project_service.add_project_member(p.id, member_data, test_user.id)
 
 
 @pytest.mark.asyncio

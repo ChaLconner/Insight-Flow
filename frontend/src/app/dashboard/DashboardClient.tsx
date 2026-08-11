@@ -3,23 +3,22 @@
 import { useMemo, useCallback, useRef, Suspense } from "react";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { useAuthStore } from "@/stores/auth-store";
-import { useDashboard } from "@/hooks/use-dashboard";
+import { dashboardKeys, useDashboard } from "@/hooks/use-dashboard";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useQueryClient } from "@tanstack/react-query";
-import { dashboardKeys } from "@/hooks/use-dashboard";
 
 import dynamic from "next/dynamic";
 import { DashboardHeader } from "./components/DashboardHeader";
-import { DashboardSkeleton } from "./components/DashboardSkeleton";
+import {
+  ActivityFeedSkeleton,
+  DashboardSkeleton,
+  ProjectsListSkeleton,
+  StatsGridSkeleton,
+} from "./components/DashboardSkeleton";
 import { DashboardError } from "./components/DashboardError";
 
 // Lazy load components to reduce initial bundle size
 import { DashboardStats } from "./components/DashboardStats";
-import {
-  ProjectsListSkeleton,
-  ActivityFeedSkeleton,
-  StatsGridSkeleton,
-} from "./components/DashboardSkeleton";
 
 // Lazy load components to reduce initial bundle size
 const RecentProjects = dynamic(
@@ -35,9 +34,11 @@ const RecentActivity = dynamic(
   },
 );
 
-import type { DashboardStatsData } from "./components";
-import type { ProjectCardProject } from "./components";
-import type { ActivityItemData } from "./components";
+import type {
+  ActivityItemData,
+  DashboardStatsData,
+  ProjectCardProject,
+} from "./components";
 import {
   isEditableEventTarget,
   useDocumentKeyDown,

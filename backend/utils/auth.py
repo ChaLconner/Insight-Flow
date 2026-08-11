@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 
 logger = setup_logger("auth_utils")
 
+INVALID_CREDENTIALS_DETAIL = "Could not validate credentials"
+TOKEN_REVOKED_DETAIL = "Token has been revoked"
+
 # Load environment variables
 load_dotenv()
 
@@ -161,13 +164,13 @@ def verify_token(
     except (PyJWTError, InvalidTokenError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
     except HTTPException:
@@ -175,7 +178,7 @@ def verify_token(
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=INVALID_CREDENTIALS_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -205,7 +208,7 @@ def verify_token_with_blacklist(token: str, db_session: "Session") -> dict[str, 
     if token_jti and TokenBlacklist.is_token_blacklisted(db_session, token_jti):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has been revoked",
+            detail=TOKEN_REVOKED_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -241,16 +244,16 @@ async def async_verify_token_with_blacklist(
         if cached_status is not None and cached_status.get("revoked"):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
+                detail=TOKEN_REVOKED_DETAIL,
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
         is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
         if is_revoked:
-            await cache_service.set(cache_key, {"revoked": True}, timeout=3600)
+            await cache_service.set(cache_key, {"revoked": True}, ttl=3600)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
+                detail=TOKEN_REVOKED_DETAIL,
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

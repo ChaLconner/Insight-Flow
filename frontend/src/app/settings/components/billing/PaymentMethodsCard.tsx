@@ -23,7 +23,48 @@ export function PaymentMethodsCard({
   onAddCard,
   onSetDefault,
   onDelete,
-}: PaymentMethodsCardProps) {
+}: Readonly<PaymentMethodsCardProps>) {
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-10 w-14 rounded" />
+              <div className="space-y-1">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            </div>
+            <Skeleton className="h-8 w-8 rounded mr-2" />
+          </div>
+        </div>
+      );
+    }
+
+    if (methods.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <CreditCard className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+          <p className="text-muted-foreground">No cards added yet</p>
+          <p className="text-sm text-muted-foreground/70 mt-1">
+            Add a card to enable paid subscriptions
+          </p>
+        </div>
+      );
+    }
+
+    return methods.filter(Boolean).map((method) => (
+      <PaymentMethodCard
+        key={method.id}
+        method={method}
+        onSetDefault={onSetDefault}
+        onDelete={onDelete}
+        isLoading={isLoading}
+      />
+    ));
+  };
+
   return (
     <Card className="border-border bg-card">
       <CardHeader>
@@ -48,40 +89,7 @@ export function PaymentMethodsCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {isLoading ? (
-          <div className="space-y-3">
-            {[1].map((i) => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-lg border border-border bg-card">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-10 w-14 rounded" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                </div>
-                <Skeleton className="h-8 w-8 rounded mr-2" />
-              </div>
-            ))}
-          </div>
-        ) : methods.length === 0 ? (
-          <div className="text-center py-8">
-            <CreditCard className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-muted-foreground">No cards added yet</p>
-            <p className="text-sm text-muted-foreground/70 mt-1">
-              Add a card to enable paid subscriptions
-            </p>
-          </div>
-        ) : (
-          methods.filter(Boolean).map((method) => (
-            <PaymentMethodCard
-              key={method.id}
-              method={method}
-              onSetDefault={onSetDefault}
-              onDelete={onDelete}
-              isLoading={isLoading}
-            />
-          ))
-        )}
+        {renderContent()}
       </CardContent>
     </Card>
   );

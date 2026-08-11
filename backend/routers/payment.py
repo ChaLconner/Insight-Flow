@@ -35,6 +35,7 @@ from services.payment_service import PaymentService, get_payment_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payment", tags=["payment"])
+PAYMENT_NOT_CONFIGURED_DETAIL = "Payment service is not configured"
 
 
 def get_service() -> PaymentService:
@@ -176,7 +177,7 @@ async def create_setup_intent(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     try:
@@ -236,7 +237,7 @@ async def add_payment_method(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     try:
@@ -273,7 +274,7 @@ async def set_default_payment_method(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     method = await service.set_default_payment_method(db, method_id, current_user.id)
@@ -300,7 +301,7 @@ async def delete_payment_method(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     try:
@@ -433,7 +434,7 @@ async def create_subscription(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     try:
@@ -471,7 +472,7 @@ async def cancel_subscription(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     subscription = await service.cancel_subscription(db, current_user.id, cancel_immediately)
@@ -493,7 +494,7 @@ async def resume_subscription(
     if not service.is_configured:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Payment service is not configured",
+            detail=PAYMENT_NOT_CONFIGURED_DETAIL,
         )
 
     try:
@@ -542,7 +543,16 @@ def is_stripe_ip(ip: str) -> bool:
     )
 
 
-@router.post("/webhook", include_in_schema=False)
+@router.post(
+    "/webhook",
+    include_in_schema=False,
+    responses={
+        400: {"description": "Invalid webhook request"},
+        403: {"description": "Unauthorized webhook source"},
+        413: {"description": "Webhook payload too large"},
+        503: {"description": "Webhook endpoint is not configured"},
+    },
+)
 @limiter.limit(RateLimits.WEBHOOK)
 async def stripe_webhook(
     request: Request,

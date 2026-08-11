@@ -9,6 +9,7 @@ import httpx
 from utils.logger import mask_email, setup_logger
 
 logger = setup_logger("github_oauth")
+GITHUB_ACCEPT_HEADER = "application/vnd.github.v3+json"
 
 # Load environment variables
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
@@ -116,7 +117,7 @@ def exchange_code_for_token(code: str, redirect_uri: str | None = None) -> str |
         return _extract_access_token(data)
 
     except Exception as e:
-        logger.error(f"Error exchanging code for token: {e}")
+        logger.exception(f"Error exchanging code for token: {e}")
         return None
 
 
@@ -136,7 +137,7 @@ def get_github_user_info(access_token: str) -> dict | None:
             "https://api.github.com/user",
             headers={
                 "Authorization": f"Bearer {access_token}",
-                "Accept": "application/vnd.github.v3+json",
+                "Accept": GITHUB_ACCEPT_HEADER,
             },
             timeout=30.0,
         )
@@ -156,7 +157,7 @@ def get_github_user_info(access_token: str) -> dict | None:
                 "https://api.github.com/user/emails",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json",
+                    "Accept": GITHUB_ACCEPT_HEADER,
                 },
                 timeout=30.0,
             )
@@ -168,7 +169,7 @@ def get_github_user_info(access_token: str) -> dict | None:
         return _build_github_user_info(user_data, email)
 
     except Exception as e:
-        logger.error(f"Error getting GitHub user info: {e}")
+        logger.exception(f"Error getting GitHub user info: {e}")
         return None
 
 
@@ -247,7 +248,7 @@ async def async_exchange_code_for_token(code: str, redirect_uri: str | None = No
             exchange_code_for_token, code, resolve_github_redirect_uri(redirect_uri)
         )
     except Exception as e:
-        logger.error(f"Error exchanging code for token: {e}")
+        logger.exception(f"Error exchanging code for token: {e}")
         return None
 
 
@@ -271,7 +272,7 @@ async def async_get_github_user_info(access_token: str) -> dict | None:
                 "https://api.github.com/user",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/vnd.github.v3+json",
+                    "Accept": GITHUB_ACCEPT_HEADER,
                 },
             )
 
@@ -290,7 +291,7 @@ async def async_get_github_user_info(access_token: str) -> dict | None:
                     "https://api.github.com/user/emails",
                     headers={
                         "Authorization": f"Bearer {access_token}",
-                        "Accept": "application/vnd.github.v3+json",
+                        "Accept": GITHUB_ACCEPT_HEADER,
                     },
                 )
 
@@ -306,5 +307,5 @@ async def async_get_github_user_info(access_token: str) -> dict | None:
 
         return await asyncio.to_thread(get_github_user_info, access_token)
     except Exception as e:
-        logger.error(f"Error getting GitHub user info: {e}")
+        logger.exception(f"Error getting GitHub user info: {e}")
         return None

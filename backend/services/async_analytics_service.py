@@ -68,7 +68,7 @@ class AsyncAnalyticsService:
 
             if total_projects == 0:
                 result = self._get_empty_analytics_response()
-                await cache_service.set(cache_key, result, timeout=ANALYTICS_CACHE_TTL)
+                await cache_service.set(cache_key, result, ttl=ANALYTICS_CACHE_TTL)
                 return result
 
             # Run DB work sequentially on the shared AsyncSession. AsyncSession is not
@@ -109,12 +109,12 @@ class AsyncAnalyticsService:
             }
 
             # Cache result using CacheService
-            await cache_service.set(cache_key, result, timeout=ANALYTICS_CACHE_TTL)
+            await cache_service.set(cache_key, result, ttl=ANALYTICS_CACHE_TTL)
 
             return result
 
         except Exception as e:
-            logger.error(f"Error generating analytics overview for user {user_id}: {e}")
+            logger.exception(f"Error generating analytics overview for user {user_id}: {e}")
             raise
 
     async def _get_overview_metrics(
@@ -556,6 +556,18 @@ class AsyncAnalyticsService:
             "dailyTrends": [],
         }
 
+    @staticmethod
+    def _order_workload_query(
+        query: Any, sort_by: str, sort_order: str, sort_by_name: Any, task_count: Any
+    ) -> Any:
+        if sort_by == "name":
+            if sort_order == "asc":
+                return query.order_by(sort_by_name.asc(), task_count.desc())
+            return query.order_by(sort_by_name.desc(), task_count.desc())
+        if sort_order == "asc":
+            return query.order_by(task_count.asc(), sort_by_name.asc())
+        return query.order_by(task_count.desc(), sort_by_name.asc())
+
     # Extend AsyncAnalyticsService with additional methods
     async def get_team_workload_paginated(
         self,
@@ -597,15 +609,7 @@ class AsyncAnalyticsService:
             )
 
         sort_by_name = func.coalesce(User.name, User.username, User.email)
-        if sort_by == "name":
-            if sort_order == "asc":
-                query = query.order_by(sort_by_name.asc(), task_count.desc())
-            else:
-                query = query.order_by(sort_by_name.desc(), task_count.desc())
-        elif sort_order == "asc":
-            query = query.order_by(task_count.asc(), sort_by_name.asc())
-        else:
-            query = query.order_by(task_count.desc(), sort_by_name.asc())
+        query = self._order_workload_query(query, sort_by, sort_order, sort_by_name, task_count)
 
         count_result = await self.db.execute(
             select(func.count()).select_from(query.order_by(None).subquery())

@@ -18,14 +18,15 @@ export async function generateMetadata({
       title: `${task.title} | Insight Flow`,
       description: task.description,
     };
-  } catch (_e) {
+  } catch (error) {
+    console.warn("Failed to load task metadata:", error);
     return {
       title: "Task Not Found | Insight Flow",
     };
   }
 }
 
-export default async function TaskDetailsPage({ params }: PageProps) {
+export default async function TaskDetailsPage({ params }: Readonly<PageProps>) {
   try {
     const { id } = await params;
     const task = await serverApi.getTask(id);
@@ -35,7 +36,8 @@ export default async function TaskDetailsPage({ params }: PageProps) {
         <TaskDetails task={task} backLink="/projects?tab=tasks" backLabel="Back to Tasks" />
       </DashboardLayout>
     );
-  } catch (_error) {
+  } catch (error) {
+    console.warn("Failed to load task details:", error);
     notFound();
   }
 }

@@ -76,7 +76,35 @@ DECLINE_CODE_MESSAGES = {
 }
 
 
-def get_safe_error_message(error: Exception, include_code: bool = False) -> str:  # noqa: PLR0912
+def _get_card_error_details(error: CardError) -> tuple[str, str | None]:
+    """Return the most specific safe message for a card error."""
+    error_code = error.code
+    decline_code = getattr(error, "decline_code", None)
+    if decline_code and decline_code in DECLINE_CODE_MESSAGES:
+        return DECLINE_CODE_MESSAGES[decline_code], error_code
+    if error_code and error_code in SAFE_ERROR_MESSAGES:
+        return SAFE_ERROR_MESSAGES[error_code], error_code
+    return SAFE_ERROR_MESSAGES["card_declined"], error_code
+
+
+def _get_invalid_request_details(error: InvalidRequestError) -> tuple[str, str | None]:
+    """Return a safe message for known Stripe invalid-request cases."""
+    error_code = getattr(error, "code", "invalid_request_error")
+    error_str = str(error).lower()
+    known_messages = {
+        "no such customer": "Your payment profile needs to be refreshed. Please try again.",
+        "no such payment_method": "This payment method is no longer available. Please add a new card.",
+        "no such subscription": "Subscription not found. Please refresh and try again.",
+    }
+    for pattern, message in known_messages.items():
+        if pattern in error_str:
+            return message, error_code
+    return SAFE_ERROR_MESSAGES.get(
+        error_code, SAFE_ERROR_MESSAGES["invalid_request_error"]
+    ), error_code
+
+
+def get_safe_error_message(error: Exception, include_code: bool = False) -> str:
     """
     Convert a Stripe exception to a user-friendly error message.
 
@@ -88,39 +116,16 @@ def get_safe_error_message(error: Exception, include_code: bool = False) -> str:
         A safe, user-friendly error message
     """
     error_code = None
-    decline_code = None
 
     if isinstance(error, CardError):
-        error_code = error.code
-        decline_code = getattr(error, "decline_code", None)
-
-        # Try decline code first (more specific)
-        if decline_code and decline_code in DECLINE_CODE_MESSAGES:
-            message = DECLINE_CODE_MESSAGES[decline_code]
-        elif error_code and error_code in SAFE_ERROR_MESSAGES:
-            message = SAFE_ERROR_MESSAGES[error_code]
-        else:
-            message = SAFE_ERROR_MESSAGES["card_declined"]
+        message, error_code = _get_card_error_details(error)
 
     elif isinstance(error, RateLimitError):
         message = SAFE_ERROR_MESSAGES["rate_limit"]
         error_code = "rate_limit"
 
     elif isinstance(error, InvalidRequestError):
-        error_code = getattr(error, "code", "invalid_request_error")
-
-        # Check for specific known patterns
-        error_str = str(error).lower()
-        if "no such customer" in error_str:
-            message = "Your payment profile needs to be refreshed. Please try again."
-        elif "no such payment_method" in error_str:
-            message = "This payment method is no longer available. Please add a new card."
-        elif "no such subscription" in error_str:
-            message = "Subscription not found. Please refresh and try again."
-        elif error_code in SAFE_ERROR_MESSAGES:
-            message = SAFE_ERROR_MESSAGES[error_code]
-        else:
-            message = SAFE_ERROR_MESSAGES["invalid_request_error"]
+        message, error_code = _get_invalid_request_details(error)
 
     elif isinstance(error, AuthenticationError):
         # Log internally but don't expose API key issues

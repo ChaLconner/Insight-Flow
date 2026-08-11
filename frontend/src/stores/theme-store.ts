@@ -61,8 +61,8 @@ const getInitialTheme = (): Theme => {
           return parsed.state.theme;
         }
       }
-    } catch (_) {
-      // Ignore parsing errors
+    } catch (error) {
+      console.warn("Failed to parse persisted theme; using the default.", error);
     }
   }
   return "dark"; // Default fallback
@@ -74,9 +74,24 @@ const systemPrefersDark = typeof window !== "undefined"
   ? window.matchMedia("(prefers-color-scheme: dark)").matches
   : false;
 
-const initialResolvedTheme = isSystem
-  ? (systemPrefersDark ? "dark" : "light")
-  : (initialTheme === "light" ? "light" : "dark");
+function resolveTheme(theme: Theme, prefersDark: boolean): "light" | "dark" {
+  if (theme === "system") {
+    return prefersDark ? "dark" : "light";
+  }
+  return theme === "light" ? "light" : "dark";
+}
+
+function getNextTheme(theme: Theme): Theme {
+  if (theme === "light") {
+    return "dark";
+  }
+  if (theme === "dark") {
+    return "system";
+  }
+  return "light";
+}
+
+const initialResolvedTheme = resolveTheme(initialTheme, systemPrefersDark);
 
 let systemThemeListenerCleanup: (() => void) | null = null;
 
@@ -102,8 +117,7 @@ export const useThemeStore = create<ThemeState>()(
           theme,
           currentTheme: theme, // Keep alias in sync
           isSystemMode: theme === "system",
-          nextTheme:
-            theme === "light" ? "dark" : theme === "dark" ? "system" : "light",
+          nextTheme: getNextTheme(theme),
         });
 
         // Apply theme immediately if not system (client-side only)
@@ -246,8 +260,8 @@ export const useThemeStore = create<ThemeState>()(
         // Add new theme class
         root.classList.add(theme);
         root.style.colorScheme = theme;
-        root.setAttribute("data-theme", theme);
-        root.setAttribute("data-color-scheme", theme);
+        root.dataset.theme = theme;
+        root.dataset.colorScheme = theme;
 
         // Update resolved theme
         get().setResolvedTheme(theme);

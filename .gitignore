@@ -72,6 +72,7 @@ pids/
 .mypy_cache
 .pytest_cache
 .ruff_cache/
+.scannerwork/
 .hypothesis
 .tox/
 

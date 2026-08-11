@@ -132,6 +132,37 @@ class CSRFMiddleware:
         # Prefix exemptions must be explicit; auth endpoints are exact-match only.
         return any(path.startswith(exempt_prefix) for exempt_prefix in CSRF_EXEMPT_PREFIXES)
 
+    async def _call_with_csrf_cookie(self, scope, receive, send, csrf_token: str) -> None:
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                cookie_val = (
+                    f"{self.cookie_name}={csrf_token}; Max-Age={CSRF_COOKIE_MAX_AGE}; "
+                    f"Path=/; SameSite={self.cookie_samesite}"
+                )
+                if self.cookie_secure:
+                    cookie_val += "; Secure"
+                if self.cookie_httponly:
+                    cookie_val += "; HttpOnly"
+                headers.append("set-cookie", cookie_val)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+    async def _reject_invalid_token(self, request: Request, scope, receive, send) -> None:
+        client_host = request.client.host if request.client else "unknown"
+        logger.warning(
+            f"CSRF validation failed for {request.method} {request.url.path} from {client_host}"
+        )
+        response = JSONResponse(
+            status_code=403,
+            content={
+                "detail": "CSRF token validation failed",
+                "code": "CSRF_VALIDATION_FAILED",
+            },
+        )
+        await response(scope, receive, send)
+
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             await self.app(scope, receive, send)
@@ -148,20 +179,7 @@ class CSRFMiddleware:
         if request.method in SAFE_METHODS:
             # Ensure CSRF cookie is set for subsequent requests
             if not request.cookies.get(self.cookie_name):
-                csrf_token = generate_csrf_token()
-
-                async def send_wrapper(message):
-                    if message["type"] == "http.response.start":
-                        headers = MutableHeaders(scope=message)
-                        cookie_val = f"{self.cookie_name}={csrf_token}; Max-Age={CSRF_COOKIE_MAX_AGE}; Path=/; SameSite={self.cookie_samesite}"
-                        if self.cookie_secure:
-                            cookie_val += "; Secure"
-                        if self.cookie_httponly:
-                            cookie_val += "; HttpOnly"
-                        headers.append("set-cookie", cookie_val)
-                    await send(message)
-
-                await self.app(scope, receive, send_wrapper)
+                await self._call_with_csrf_cookie(scope, receive, send, generate_csrf_token())
             else:
                 await self.app(scope, receive, send)
             return
@@ -176,18 +194,7 @@ class CSRFMiddleware:
         header_token = request.headers.get(self.header_name)
 
         if not validate_csrf_token(cookie_token, header_token):
-            client_host = request.client.host if request.client else "unknown"
-            logger.warning(
-                f"CSRF validation failed for {request.method} {request.url.path} from {client_host}"
-            )
-            response = JSONResponse(
-                status_code=403,
-                content={
-                    "detail": "CSRF token validation failed",
-                    "code": "CSRF_VALIDATION_FAILED",
-                },
-            )
-            await response(scope, receive, send)
+            await self._reject_invalid_token(request, scope, receive, send)
             return
 
         await self.app(scope, receive, send)
