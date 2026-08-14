@@ -39,6 +39,44 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
+def _create_security_logs() -> None:
+    """Recreate the security log table after the metadata sync reset."""
+    op.create_table(
+        "security_logs",
+        sa.Column(
+            "id",
+            sa.UUID(),
+            server_default=sa.text("gen_random_uuid()"),
+            autoincrement=False,
+            nullable=False,
+        ),
+        sa.Column("event_type", sa.VARCHAR(length=50), autoincrement=False, nullable=False),
+        sa.Column(
+            "timestamp",
+            postgresql.TIMESTAMP(timezone=True),
+            server_default=sa.text(_NOW_SQL),
+            autoincrement=False,
+            nullable=False,
+        ),
+        sa.Column("severity", sa.VARCHAR(length=20), autoincrement=False, nullable=False),
+        sa.Column("user_id", sa.UUID(), autoincrement=False, nullable=True),
+        sa.Column("ip_address", sa.VARCHAR(length=45), autoincrement=False, nullable=True),
+        sa.Column("user_agent", sa.VARCHAR(length=255), autoincrement=False, nullable=True),
+        sa.Column("request_path", sa.VARCHAR(length=255), autoincrement=False, nullable=True),
+        sa.Column("request_method", sa.VARCHAR(length=10), autoincrement=False, nullable=True),
+        sa.Column(
+            "details",
+            postgresql.JSON(astext_type=sa.Text()),
+            autoincrement=False,
+            nullable=True,
+        ),
+        sa.PrimaryKeyConstraint("id", name="security_logs_pkey"),
+    )
+    op.create_index("ix_security_logs_user_id", "security_logs", ["user_id"], unique=False)
+    op.create_index("ix_security_logs_timestamp", "security_logs", ["timestamp"], unique=False)
+    op.create_index("ix_security_logs_event_type", "security_logs", ["event_type"], unique=False)
+
+
 def upgrade() -> None:
     """
     Apply the migration changes.
@@ -56,6 +94,7 @@ def upgrade() -> None:
     op.drop_index('ix_security_logs_timestamp', table_name='security_logs')
     op.drop_index('ix_security_logs_user_id', table_name='security_logs')
     op.drop_table('security_logs')
+    _create_security_logs()
     op.alter_column('auth_audits', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
@@ -687,20 +726,5 @@ def downgrade() -> None:
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
                existing_server_default=sa.text(_NOW_SQL))
-    op.create_table('security_logs',
-    sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), autoincrement=False, nullable=False),
-    sa.Column('event_type', sa.VARCHAR(length=50), autoincrement=False, nullable=False),
-    sa.Column('timestamp', postgresql.TIMESTAMP(timezone=True), server_default=sa.text(_NOW_SQL), autoincrement=False, nullable=False),
-    sa.Column('severity', sa.VARCHAR(length=20), autoincrement=False, nullable=False),
-    sa.Column('user_id', sa.UUID(), autoincrement=False, nullable=True),
-    sa.Column('ip_address', sa.VARCHAR(length=45), autoincrement=False, nullable=True),
-    sa.Column('user_agent', sa.VARCHAR(length=255), autoincrement=False, nullable=True),
-    sa.Column('request_path', sa.VARCHAR(length=255), autoincrement=False, nullable=True),
-    sa.Column('request_method', sa.VARCHAR(length=10), autoincrement=False, nullable=True),
-    sa.Column('details', postgresql.JSON(astext_type=sa.Text()), autoincrement=False, nullable=True),
-    sa.PrimaryKeyConstraint('id', name='security_logs_pkey')
-    )
-    op.create_index('ix_security_logs_user_id', 'security_logs', ['user_id'], unique=False)
-    op.create_index('ix_security_logs_timestamp', 'security_logs', ['timestamp'], unique=False)
-    op.create_index('ix_security_logs_event_type', 'security_logs', ['event_type'], unique=False)
+    _create_security_logs()
     # ### end Alembic commands ###
