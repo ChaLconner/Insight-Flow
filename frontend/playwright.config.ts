@@ -3,6 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === '1';
 const startBackend = process.env.PLAYWRIGHT_START_BACKEND === '1';
 const useProductionBuild = process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1';
+const authStatePath = (projectName: string) =>
+  `./e2e/.auth/${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
 const frontendServer = {
   command: useProductionBuild
     ? 'cross-env NEXT_PUBLIC_E2E=1 VERCEL=1 npm run build && cross-env NEXT_PUBLIC_E2E=1 VERCEL=1 npm run start'
@@ -59,9 +61,6 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: process.env.BASE_URL ?? 'http://localhost:3000',
 
-    /* Reuse the state produced by globalSetup for authenticated scenarios. */
-    storageState: './e2e/.auth/user.json',
-    
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
     
@@ -85,27 +84,27 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], storageState: authStatePath('chromium') },
     },
     
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { ...devices['Desktop Firefox'], storageState: authStatePath('firefox') },
     },
     
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: { ...devices['Desktop Safari'], storageState: authStatePath('webkit') },
     },
     
     /* Test against mobile viewports */
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: { ...devices['Pixel 5'], storageState: authStatePath('mobile-chrome') },
     },
     {
       name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
+      use: { ...devices['iPhone 12'], storageState: authStatePath('mobile-safari') },
     },
   ],
   
