@@ -28,6 +28,8 @@ RUN npm run build \
          cp -a /app/.next/standalone/. /app/runtime/; \
        elif [ -f /app/.next/standalone/frontend/server.js ]; then \
          cp -a /app/.next/standalone/frontend/. /app/runtime/; \
+       elif [ -f /app/.next/standalone/app/server.js ]; then \
+         cp -a /app/.next/standalone/app/. /app/runtime/; \
        else \
          echo "Next standalone server.js was not generated" >&2; \
          exit 1; \
