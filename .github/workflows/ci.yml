@@ -448,10 +448,25 @@ jobs:
             http://127.0.0.1:3000/api/auth/login)" = "401"
 
   e2e-tests:
-    name: E2E Tests
+    name: E2E Tests (${{ matrix.project }})
     needs: [backend-test, frontend-check]
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include:
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
+          - project: webkit
+            browser: webkit
+          - project: Mobile Chrome
+            browser: chromium
+          - project: Mobile Safari
+            browser: webkit
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     env:
       # CI-only credentials are shared by database seeding and Playwright.
       # Password is generated per run and never stored in version control.
@@ -538,16 +553,17 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: ./frontend
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps "${{ matrix.browser }}"
 
       - name: Map CI API hostname to the local backend
         run: echo "127.0.0.1 api.ci.invalid" | sudo tee -a /etc/hosts
 
       - name: Run Playwright tests
         working-directory: ./frontend
-        run: npm run test:e2e:prod
+        run: npm run test:e2e:prod -- --project="${{ matrix.project }}"
         env:
           CI: true
+          PLAYWRIGHT_PROJECT: "${{ matrix.project }}"
           BASE_URL: "http://localhost:3000"
           API_URL: "http://api.ci.invalid:8000"
           NEXT_PUBLIC_API_URL: "/api"
@@ -565,7 +581,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: frontend/playwright-report
           retention-days: 7
 

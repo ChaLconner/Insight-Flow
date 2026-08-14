@@ -20,6 +20,22 @@ const E2E_PASSWORD = process.env.E2E_USER_PASSWORD;
 const E2E_USER_ROLE = process.env.E2E_USER_ROLE ?? 'manager';
 const expectedRedirectPath = getPostLoginRedirect(E2E_USER_ROLE);
 
+function getSelectedProjects(config: FullConfig): FullProject[] {
+  const selectedProjectName = process.env.PLAYWRIGHT_PROJECT;
+  if (!selectedProjectName) {
+    return config.projects;
+  }
+
+  const selectedProject = config.projects.find(
+    (project) => project.name === selectedProjectName,
+  );
+  if (!selectedProject) {
+    throw new Error(`Unknown PLAYWRIGHT_PROJECT: ${selectedProjectName}`);
+  }
+
+  return [selectedProject];
+}
+
 function getAuthFile(project: FullProject) {
   const storageState = project.use.storageState;
   return typeof storageState === 'string'
@@ -98,6 +114,8 @@ async function createProjectAuthState(config: FullConfig, project: FullProject) 
 }
 
 async function globalSetup(config: FullConfig) {
+  const projects = getSelectedProjects(config);
+
   // Ensure auth directory exists
   const authDir = path.dirname(AUTH_FILE);
   if (!fs.existsSync(authDir)) {
@@ -114,7 +132,7 @@ async function globalSetup(config: FullConfig) {
     // Never reuse a previous authenticated state when credentials are absent.
     // Protected tests must skip instead of inheriting an unknown session.
     writeEmptyAuthState(AUTH_FILE);
-    for (const project of config.projects) {
+    for (const project of projects) {
       writeEmptyAuthState(getAuthFile(project));
     }
     console.log('No E2E credentials configured; protected tests must be skipped');
@@ -122,7 +140,7 @@ async function globalSetup(config: FullConfig) {
   }
 
   try {
-    for (const project of config.projects) {
+    for (const project of projects) {
       await createProjectAuthState(config, project);
     }
   } catch (error) {
