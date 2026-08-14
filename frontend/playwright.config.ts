@@ -5,7 +5,7 @@ const startBackend = process.env.PLAYWRIGHT_START_BACKEND === '1';
 const useProductionBuild = process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1';
 const frontendServer = {
   command: useProductionBuild
-    ? 'cross-env NEXT_PUBLIC_E2E=1 VERCEL=1 npm run build && cross-env NEXT_PUBLIC_E2E=1 npm run start'
+    ? 'cross-env NEXT_PUBLIC_E2E=1 VERCEL=1 npm run build && cross-env NEXT_PUBLIC_E2E=1 VERCEL=1 npm run start'
     : 'cross-env NEXT_PUBLIC_E2E=1 npm run dev',
   url: 'http://localhost:3000',
   reuseExistingServer,
