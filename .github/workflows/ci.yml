@@ -149,6 +149,7 @@ jobs:
 
       - name: Validate offline migration SQL generation
         env:
+          SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
         run: python -m alembic upgrade head --sql > /tmp/insight-flow-migrations.sql
 
