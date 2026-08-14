@@ -369,7 +369,7 @@ jobs:
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=insightflow_test \
             postgres:15-alpine@sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23 >/dev/null
-          docker run -d --name "$redis" --network "$network" redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2 >/dev/null
+          docker run -d --name "$redis" --network "$network" --network-alias redis redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2 >/dev/null
 
           for attempt in $(seq 1 60); do
             if docker exec "$db" pg_isready -U user -d insightflow_test >/dev/null 2>&1 \
