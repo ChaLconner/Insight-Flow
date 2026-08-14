@@ -42,6 +42,9 @@ RATE_LIMIT_CONFIG = {
     # ingestion budget below the generic API fallback in every rate-limit
     # backend, including the Redis path.
     "/api/v1/security/csp-report": (30, 60),
+    # Private file uploads perform disk I/O and must not inherit the broad
+    # generic API budget.
+    "/api/v1/files/upload": (10, 60),
     # Payment endpoints - moderate limits
     "/payment": (20, 60),  # 20 requests per minute
     "/api/v1/payment": (20, 60),

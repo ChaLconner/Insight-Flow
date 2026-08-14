@@ -4,6 +4,7 @@ Provides endpoints for Kubernetes liveness/readiness probes and general health m
 """
 
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -25,6 +26,11 @@ _readiness_cache: tuple[float, dict[str, Any]] | None = None
 
 def _settings():
     return get_settings()
+
+
+def _health_timeout(settings: Any) -> float:
+    """Return a bounded timeout for dependency probes."""
+    return max(0.1, float(getattr(settings, "health_check_timeout_seconds", 2.0)))
 
 
 def _require_metrics_enabled() -> Any:
@@ -99,12 +105,13 @@ async def readiness_check():
                 payload = _readiness_cache[1]
                 return JSONResponse(status_code=payload["status_code"], content=payload["body"])
 
-            probe = await _probe_database(settings)
+            timeout = _health_timeout(settings)
+            probe = await asyncio.wait_for(_probe_database(settings), timeout=timeout)
             cache_enabled = getattr(settings.cache, "enabled", True)
             redis_unavailable = (
                 cache_enabled
                 and settings.cache.redis_url
-                and not await cache_service.ensure_connected()
+                and not await asyncio.wait_for(cache_service.ensure_connected(), timeout=timeout)
             )
             if not probe["healthy"] or redis_unavailable:
                 payload = {
@@ -196,28 +203,60 @@ async def full_health_check():
         "components": {},
     }
 
-    # Check database. Detailed probes are briefly cached to avoid turning a
-    # monitoring scrape into a burst of remote database connections.
-    probe = await _probe_database(settings)
-    if probe["healthy"]:
+    # Database and cache probes are independent. Run them concurrently and
+    # bound each one so a degraded dependency cannot block the entire health
+    # response or consume an application worker indefinitely.
+    timeout = _health_timeout(settings)
+    results = await asyncio.gather(
+        asyncio.wait_for(_probe_database(settings), timeout=timeout),
+        asyncio.wait_for(cache_service.get_stats(), timeout=timeout),
+        return_exceptions=True,
+    )
+    raw_probe: Any = results[0]
+    raw_cache: Any = results[1]
+
+    if isinstance(raw_probe, BaseException):
+        probe: dict[str, Any] = {
+            "healthy": False,
+            "error": "Database health probe timed out"
+            if isinstance(raw_probe, TimeoutError)
+            else str(raw_probe),
+        }
+    elif isinstance(raw_probe, dict):
+        probe = raw_probe
+    else:
+        probe = {"healthy": False, "error": "Unknown database probe result"}
+
+    if probe.get("healthy"):
         health_status["components"]["database"] = {
             "status": "healthy",
-            "latency_ms": probe["latency_ms"],
-            "pool": probe["pool"],
-            "probe_cached": probe["cached"],
+            "latency_ms": probe.get("latency_ms"),
+            "pool": probe.get("pool"),
+            "probe_cached": probe.get("cached"),
         }
     else:
         health_status["status"] = "degraded"
         health_status["components"]["database"] = {
             "status": "unhealthy",
-            "error": probe["error"],
+            "error": probe.get("error"),
         }
 
     # Check cache
+    if isinstance(raw_cache, BaseException):
+        cache_stats: dict[str, Any] = {
+            "health": {"status": "unhealthy"},
+            "error": "Cache health probe timed out"
+            if isinstance(raw_cache, TimeoutError)
+            else str(raw_cache),
+        }
+    elif isinstance(raw_cache, dict):
+        cache_stats = raw_cache
+    else:
+        cache_stats = {"health": {"status": "unhealthy"}, "error": "Unknown cache probe result"}
+
     try:
-        cache_stats = await cache_service.get_stats()
         cache_health = cache_stats.get("health", {})
-        if cache_health.get("status") == "unhealthy":
+        if isinstance(cache_health, dict) and cache_health.get("status") == "unhealthy":
             return JSONResponse(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 content={"status": "unhealthy", "cache": cache_stats},
@@ -226,15 +265,14 @@ async def full_health_check():
     except Exception as e:
         health_status["components"]["cache"] = {"status": "unhealthy", "error": str(e)}
 
-    # System resources
+    # System resources are synchronous psutil calls; keep them off the event
+    # loop so monitoring cannot stall request handling.
     try:
-        health_status["components"]["system"] = {
-            "cpu_percent": psutil.cpu_percent(),
-            "memory_percent": psutil.virtual_memory().percent,
-            "disk_percent": psutil.disk_usage("/").percent
-            if hasattr(psutil.disk_usage("/"), "percent")
-            else 0,
-        }
+        system_metrics, process_metrics = await asyncio.to_thread(
+            _get_health_system_metrics, psutil
+        )
+        health_status["components"]["system"] = system_metrics
+        health_status["components"]["process"] = process_metrics
     except Exception:
         health_status["components"]["system"] = {"status": "unknown"}
 
@@ -244,6 +282,24 @@ async def full_health_check():
         else status.HTTP_503_SERVICE_UNAVAILABLE
     )
     return JSONResponse(status_code=response_status, content=health_status)
+
+
+def _get_health_system_metrics(psutil_module: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Collect synchronous process/system metrics outside the event loop."""
+    process = psutil_module.Process(os.getpid())
+    with process.oneshot():
+        disk_usage = psutil_module.disk_usage("/")
+        system_metrics = {
+            "cpu_percent": psutil_module.cpu_percent(),
+            "memory_percent": psutil_module.virtual_memory().percent,
+            "disk_percent": disk_usage.percent if hasattr(disk_usage, "percent") else 0,
+        }
+        process_metrics = {
+            "cpu_percent": process.cpu_percent(interval=None),
+            "memory_percent": process.memory_percent(),
+            "rss_bytes": process.memory_info().rss,
+        }
+    return system_metrics, process_metrics
 
 
 @router.get("/metrics")
@@ -407,19 +463,28 @@ async def _get_cache_metrics(cache_service: Any) -> list[str]:
 
 
 def _get_system_metrics() -> list[str]:
-    """Helper to get system metrics."""
+    """Return process-scoped resource metrics for this worker."""
     metrics = []
     try:
         import psutil
 
+        process = psutil.Process(os.getpid())
+        with process.oneshot():
+            cpu_percent = process.cpu_percent(interval=None)
+            memory_info = process.memory_info()
+            memory_percent = process.memory_percent()
+
         metrics.extend(
             [
-                "# HELP process_cpu_percent CPU usage percentage",
+                "# HELP process_cpu_percent CPU usage percentage for this worker",
                 "# TYPE process_cpu_percent gauge",
-                f"process_cpu_percent {psutil.cpu_percent()}",
-                "# HELP process_memory_percent Memory usage percentage",
+                f"process_cpu_percent {cpu_percent}",
+                "# HELP process_memory_percent Memory usage percentage for this worker",
                 "# TYPE process_memory_percent gauge",
-                f"process_memory_percent {psutil.virtual_memory().percent}",
+                f"process_memory_percent {memory_percent}",
+                "# HELP process_resident_memory_bytes Resident memory for this worker",
+                "# TYPE process_resident_memory_bytes gauge",
+                f"process_resident_memory_bytes {memory_info.rss}",
             ]
         )
     except ImportError:

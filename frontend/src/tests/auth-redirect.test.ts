@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { getAuthRedirectUrl } from "@/lib/auth-redirect";
+import {
+  getAuthRedirectUrl,
+  isSafeRelativeRedirect,
+} from "@/lib/auth-redirect";
 
 describe("auth-redirect", () => {
   it("uses safe relative callback redirects", () => {
@@ -20,6 +23,16 @@ describe("auth-redirect", () => {
       getAuthRedirectUrl({
         role: "admin",
         callbackUrl: "//evil.example/settings",
+      }),
+    ).toBe("/dashboard");
+  });
+
+  it("rejects backslash-based redirects", () => {
+    expect(isSafeRelativeRedirect("/\\\\evil.example")).toBe(false);
+    expect(
+      getAuthRedirectUrl({
+        role: "admin",
+        callbackUrl: "/\\\\evil.example",
       }),
     ).toBe("/dashboard");
   });

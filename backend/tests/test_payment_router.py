@@ -91,6 +91,17 @@ class TestPaymentMethodsEndpoints:
         assert "payment_methods" in data
         assert data["total"] == 0
 
+    def test_inactive_user_is_rejected(self, client):
+        inactive_user = MagicMock(spec=User)
+        inactive_user.id = uuid4()
+        inactive_user.email = "inactive@example.com"
+        inactive_user.is_active = False
+        app.dependency_overrides[get_current_user] = lambda: inactive_user
+
+        response = client.get("/api/v1/payment/methods")
+
+        assert response.status_code == 400
+
 
 # ============================================================================
 # Tests for Subscription Endpoints

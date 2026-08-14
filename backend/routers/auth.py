@@ -50,6 +50,7 @@ from utils.google_oauth import (
 )
 from utils.logger import mask_email, mask_token, setup_logger
 from utils.token_utils import (
+    ACCESS_TOKEN_EXPIRE_MINUTES,
     ACCESS_TOKEN_KEY,
     COOKIE_SECURE,
     REFRESH_TOKEN_KEY,
@@ -449,7 +450,8 @@ async def logout(
 ) -> Any:
     """
     Logout user, clear cookies, and blacklist the current access token.
-    Always returns success to ensure cookies are cleared on the client.
+    Cookies are cleared even when a token is invalid, but revocation failures
+    are reported so callers do not mistake a failed logout for a revoked one.
     """
     user_email = "unknown"
     try:
@@ -474,21 +476,26 @@ async def logout(
                 continue
             try:
                 payload = verify_token(token, expected_type=token_type)
-                user_email = payload.get("sub", "unknown")
-                token_jti = payload.get("jti")
-                token_expiration = get_token_expiration(token)
-                if token_jti and token_expiration:
-                    await TokenBlacklist.async_blacklist_token(db, token_jti, token_expiration)
-            except Exception:
+            except HTTPException as exc:
                 # Expired or invalid tokens need no further logout action.
-                pass
+                if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                    continue
+                raise
+
+            user_email = payload.get("sub", "unknown")
+            token_jti = payload.get("jti")
+            token_expiration = get_token_expiration(token)
+            if token_jti and token_expiration:
+                await TokenBlacklist.async_blacklist_token(db, token_jti, token_expiration)
 
         return {"message": "Successfully logged out"}
 
     except Exception as e:
         logger.exception(f"Error during logout for user {mask_email(user_email)}: {e}")
-        # Still return success even if blacklisting fails
-        return {"message": "Successfully logged out"}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Logout service temporarily unavailable",
+        ) from e
 
 
 @router.post("/refresh")
@@ -590,7 +597,10 @@ async def refresh_token(
         session_version=refresh_session_version,
     )
 
-    return {"message": "Token refreshed successfully", "expires_in": 1800}
+    return {
+        "message": "Token refreshed successfully",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
@@ -725,7 +735,10 @@ async def validate_reset_token(
 
     except Exception as e:
         logger.exception(f"Error validating reset token: {e}")
-        return ValidateResetTokenResponse(valid=False, message="Failed to validate reset token")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset service temporarily unavailable",
+        ) from e
 
 
 @router.post("/change-password")

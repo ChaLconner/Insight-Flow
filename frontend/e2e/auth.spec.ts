@@ -100,14 +100,13 @@ test.describe('Authentication Flow', () => {
       page.locator('[data-testid="google-login"]')
     );
     
-    // OAuth buttons are optional based on app configuration
-    const hasOAuth = await googleButton.isVisible().catch(() => false);
-    if (hasOAuth) {
-      await expect(googleButton).toBeVisible();
-    } else {
-      // Skip assertion if OAuth is not configured
-      test.info().annotations.push({ type: 'skip', description: 'OAuth not configured' });
-    }
+    // Default CI does not have real provider configuration. An explicitly
+    // enabled provider run must fail when its UI is absent.
+    test.skip(
+      process.env.E2E_REQUIRE_PROVIDER_UI !== '1',
+      'Provider UI checks require explicit provider-E2E configuration',
+    );
+    await expect(googleButton).toBeVisible();
   });
 
   test('should successfully login with valid credentials', async ({ page }) => {

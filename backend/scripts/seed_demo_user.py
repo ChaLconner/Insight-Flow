@@ -17,6 +17,8 @@ from sqlalchemy import select
 # Add the backend directory to sys.path to import modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from seed_security import require_seed_password
+
 from database import AsyncSessionLocal
 from models.user import User
 from utils.auth import get_password_hash
@@ -28,12 +30,10 @@ logger = setup_logger("seed_demo_user")
 
 async def seed_demo_user():
     """Create or update demo user for testing."""
+    password = require_seed_password()
     session = AsyncSessionLocal()
     try:
         email = "demo@insightflow.com"
-        password = os.getenv("DEMO_USER_PASSWORD")
-        if not password:
-            raise RuntimeError("DEMO_USER_PASSWORD must be set before seeding the demo user")
 
         logger.info(f"Checking for demo user: {email}")
         result = await session.execute(select(User).filter(User.email == email))
@@ -69,6 +69,7 @@ async def seed_demo_user():
     except Exception as e:
         logger.exception(f"Error seeding demo user: {e}", exc_info=True)
         await session.rollback()
+        raise
     finally:
         await session.close()
 

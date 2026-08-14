@@ -34,6 +34,8 @@ export function UserSearchSelect({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
+  const searchRequestIdRef = useRef(0);
+  const searchControllerRef = useRef<AbortController | null>(null);
   // Generate a unique ID if none provided to ensure accessibility compliance
   const generatedInputId = useId();
   const inputId = id ?? `user-search-${generatedInputId}`;
@@ -45,13 +47,28 @@ export function UserSearchSelect({
   const closeResults = useCallback(() => setIsOpen(false), []);
   useClickOutside(containerRef, closeResults);
 
+  useEffect(() => {
+    return () => {
+      searchRequestIdRef.current += 1;
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      searchControllerRef.current?.abort();
+    };
+  }, []);
+
   const handleSearch = (searchTerm: string) => {
+    const requestId = ++searchRequestIdRef.current;
     setQuery(searchTerm);
     onChange(searchTerm); // Update form value as user types
+
+    searchControllerRef.current?.abort();
+    searchControllerRef.current = null;
 
     if (searchTerm.length < 2) {
       setUsers([]);
       setIsOpen(false);
+      setIsLoading(false);
       return;
     }
 
@@ -62,15 +79,29 @@ export function UserSearchSelect({
       clearTimeout(debounceRef.current);
     }
 
+    const controller = new AbortController();
+    searchControllerRef.current = controller;
+
     debounceRef.current = setTimeout(async () => {
       try {
-        const results = await usersApi.searchUsers(searchTerm);
+        const results = await usersApi.searchUsers(searchTerm, 0, 20, undefined, undefined, controller.signal);
+        if (requestId !== searchRequestIdRef.current || controller.signal.aborted) {
+          return;
+        }
         setUsers(Array.isArray(results) ? results : []);
       } catch (error) {
+        if (requestId !== searchRequestIdRef.current || controller.signal.aborted) {
+          return;
+        }
         console.error("Search failed:", error);
         setUsers([]);
       } finally {
-        setIsLoading(false);
+        if (requestId === searchRequestIdRef.current) {
+          setIsLoading(false);
+          if (searchControllerRef.current === controller) {
+            searchControllerRef.current = null;
+          }
+        }
       }
     }, 300);
   };

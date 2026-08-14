@@ -38,6 +38,8 @@ const sessionStorageMock = (() => {
   };
 })();
 
+const clearAuthenticatedCachesMock = vi.fn();
+
 Object.defineProperty(window, "localStorage", { value: localStorageMock });
 Object.defineProperty(window, "sessionStorage", { value: sessionStorageMock });
 
@@ -67,9 +69,14 @@ vi.mock("@/lib/api-client", () => ({
   }),
 }));
 
+vi.mock("@/lib/auth-cache", () => ({
+  clearAuthenticatedCaches: clearAuthenticatedCachesMock,
+}));
+
 describe("auth-store", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    clearAuthenticatedCachesMock.mockResolvedValue(undefined);
     localStorageMock.clear();
     sessionStorageMock.clear();
     vi.useFakeTimers();
@@ -136,6 +143,24 @@ describe("auth-store", () => {
       expect(state.isAuthenticated).toBe(false);
     });
 
+    it("setUser should clear caches when account identity changes", async () => {
+      const { useAuthStore } = await import("@/stores/auth-store");
+      const firstUser = { id: "user-a", email: "a@example.com" } as User;
+      const secondUser = { id: "user-b", email: "b@example.com" } as User;
+
+      act(() => {
+        useAuthStore.getState().setUser(firstUser);
+      });
+      clearAuthenticatedCachesMock.mockClear();
+
+      act(() => {
+        useAuthStore.getState().setUser(secondUser);
+      });
+
+      expect(clearAuthenticatedCachesMock).toHaveBeenCalled();
+      expect(useAuthStore.getState().user).toEqual(secondUser);
+    });
+
     it("login should set full auth state", async () => {
       const { useAuthStore } = await import("@/stores/auth-store");
       const mockUser = { id: "1", email: "test@example.com" } as User;
@@ -148,6 +173,7 @@ describe("auth-store", () => {
       expect(state.user).toEqual(mockUser);
       expect(state.isAuthenticated).toBe(true);
       expect(state.isLoading).toBe(false);
+      expect(clearAuthenticatedCachesMock).toHaveBeenCalled();
       expect(state.isInitialized).toBe(true);
     });
 
@@ -200,6 +226,7 @@ describe("auth-store", () => {
       const state = useAuthStore.getState();
       expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
+      expect(clearAuthenticatedCachesMock).toHaveBeenCalled();
       expect(state.isLoading).toBe(false);
       expect(state.isInitialized).toBe(false);
       expect(state.lastActivity).toBe(0);

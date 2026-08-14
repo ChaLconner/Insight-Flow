@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
@@ -40,12 +38,14 @@ export function LandingNavbar() {
         <div className="flex items-center gap-4">
           <Link
             href="/auth/login"
+            prefetch={false}
             className="text-sm font-medium hover:text-indigo-400 transition-colors"
           >
             Log In
           </Link>
           <Link
             href="/auth/register"
+            prefetch={false}
             className="group px-5 py-2.5 bg-white text-black hover:bg-indigo-50 text-sm font-semibold rounded-full transition-all hover:shadow-[0_0_20px_-5px_rgba(255,255,255,0.5)] flex items-center gap-2"
           >
             Get Started

@@ -1,5 +1,6 @@
 import pytest
 
+from models.file import File as FileModel
 from models.project import MemberRole, Project, ProjectMember
 from models.user import User
 from services.async_usage_service import AsyncUsageService
@@ -18,6 +19,27 @@ async def test_get_user_usage_stats_empty(async_session, test_user):
     assert stats["projects_used"] == 0
     # Even with 0 projects, logic defaults seats to 1 (the user themselves) if count is 0
     assert stats["seats_used"] == 1
+    assert stats["storage_used_bytes"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_user_usage_stats_includes_private_file_bytes(async_session, test_user):
+    """Usage reports the same persisted bytes used by the upload quota."""
+    async_session.add(
+        FileModel(
+            user_id=test_user.id,
+            filename="usage.txt",
+            unique_filename="usage-test.txt",
+            url="/api/v1/files/download/usage-test.txt",
+            size_bytes=321,
+            mime_type="text/plain",
+        )
+    )
+    await async_session.commit()
+
+    stats = await AsyncUsageService(async_session).get_user_usage_stats(test_user)
+
+    assert stats["storage_used_bytes"] == 321
 
 
 @pytest.mark.asyncio

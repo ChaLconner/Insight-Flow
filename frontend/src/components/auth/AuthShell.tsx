@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
-import { GoogleAuthProvider } from "@/providers/google-auth-provider";
-import {
-  AnimatedBackground,
-  FloatingShapes,
-} from "@/components/ui/animated-background";
+import dynamic from "next/dynamic";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { isE2ERuntime } from "@/lib/runtime-flags";
+
+const AuthBackground = dynamic(
+  () =>
+    import("@/components/auth/AuthBackground").then(
+      (module) => module.AuthBackground,
+    ),
+  { ssr: false },
+);
 
 export function AuthShell({ children }: Readonly<{ children: React.ReactNode }>) {
+  const [showAnimatedBackground, setShowAnimatedBackground] = useState(false);
   const originalThemeRef = useRef<{
     className: string;
     colorScheme: string;
@@ -51,6 +57,18 @@ export function AuthShell({ children }: Readonly<{ children: React.ReactNode }>)
       window.removeEventListener("focus", handleFocus);
     };
    
+  }, []);
+
+  useEffect(() => {
+    if (isE2ERuntime()) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowAnimatedBackground(true);
+    }, 2000);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   // Use useLayoutEffect for immediate execution before paint
@@ -135,10 +153,11 @@ export function AuthShell({ children }: Readonly<{ children: React.ReactNode }>)
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-foreground selection:bg-primary/30">
       <div className="auth-particle-fallback" aria-hidden="true" />
-      <AnimatedBackground />
-      <FloatingShapes />
+      {showAnimatedBackground ? <AuthBackground /> : null}
       <div className="relative z-20 min-h-screen">
-        <GoogleAuthProvider>{children}</GoogleAuthProvider>
+        <main id="main-content" tabIndex={-1}>
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -66,13 +66,7 @@ describe("api endpoints coverage", () => {
       password: "secret123",
     });
     expect(apiClientMock.post).toHaveBeenCalledWith("/auth/refresh");
-    expect(apiClientMock.post).toHaveBeenCalledWith(
-      "/files/upload",
-      formData,
-      expect.objectContaining({
-        headers: { "Content-Type": "multipart/form-data" },
-      }),
-    );
+    expect(apiClientMock.post).toHaveBeenCalledWith("/files/upload", formData);
   });
 
   it("covers task and project endpoint calls", async () => {
@@ -159,6 +153,7 @@ describe("api endpoints coverage", () => {
     const avatarData = new FormData();
     avatarData.append("file", new Blob(["avatar"]), "avatar.png");
     await usersApi.uploadAvatar(avatarData);
+    expect(apiClientMock.post).toHaveBeenCalledWith("/users/me/avatar", avatarData);
     await usersApi.searchUserByEmail("user@example.com");
     await usersApi.searchUsers("jane", 5, 10, "admin", "active");
     await expect(usersApi.getSettings()).resolves.toEqual({ theme: "dark" });

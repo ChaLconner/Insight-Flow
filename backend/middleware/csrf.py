@@ -49,6 +49,21 @@ CSRF_EXEMPT_PATHS: set[str] = {
     # unauthenticated endpoint from becoming an ingestion sink.
     "/api/v1/security/csp-report",
     "/health",
+    "/health/ready",
+    "/health/db",
+    "/health/cache",
+    "/health/full",
+    "/metrics",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+}
+
+# These public, cacheable or documentation responses must not set a per-client
+# CSRF cookie. A shared cache could otherwise replay one client's token.
+CSRF_COOKIE_EXEMPT_PATHS: set[str] = {
+    "/health",
+    "/health/ready",
     "/health/db",
     "/health/cache",
     "/health/full",
@@ -132,6 +147,10 @@ class CSRFMiddleware:
         # Prefix exemptions must be explicit; auth endpoints are exact-match only.
         return any(path.startswith(exempt_prefix) for exempt_prefix in CSRF_EXEMPT_PREFIXES)
 
+    def is_cookie_exempt(self, request: Request) -> bool:
+        """Return whether a response path must not bootstrap a CSRF cookie."""
+        return request.url.path.rstrip("/") in CSRF_COOKIE_EXEMPT_PATHS
+
     async def _call_with_csrf_cookie(self, scope, receive, send, csrf_token: str) -> None:
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
@@ -178,7 +197,7 @@ class CSRFMiddleware:
         # Skip for safe methods
         if request.method in SAFE_METHODS:
             # Ensure CSRF cookie is set for subsequent requests
-            if not request.cookies.get(self.cookie_name):
+            if not request.cookies.get(self.cookie_name) and not self.is_cookie_exempt(request):
                 await self._call_with_csrf_cookie(scope, receive, send, generate_csrf_token())
             else:
                 await self.app(scope, receive, send)

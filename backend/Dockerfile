@@ -10,7 +10,7 @@
 # =============================================================================
 # Stage 1: Builder - Install dependencies and create wheels
 # =============================================================================
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:dd29372629eeba2dd003fd9e9d35a5b8236c44727875a0364254b5127af88e65 AS builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -35,7 +35,7 @@ RUN pip wheel --wheel-dir /wheels -r requirements.txt
 # =============================================================================
 # Stage 2: Production - Minimal runtime image
 # =============================================================================
-FROM python:3.12-slim AS production
+FROM python:3.12-slim@sha256:dd29372629eeba2dd003fd9e9d35a5b8236c44727875a0364254b5127af88e65 AS production
 
 # Labels for container metadata
 LABEL maintainer="Insight Flow Team" \

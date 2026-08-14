@@ -11,9 +11,10 @@ export function useFavoriteIds() {
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
+  const userId = user?.id ?? null;
 
   return useQuery({
-    queryKey: ["favorites"],
+    queryKey: ["favorites", userId],
     queryFn: async () => {
       const projectIds = await favoritesApi.getFavoriteIds();
       return new Set(projectIds);
@@ -30,6 +31,8 @@ export function useFavoriteIds() {
  */
 export function useToggleFavorite() {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const queryKey = ["favorites", userId] as const;
 
   return useMutation({
     mutationFn: async (projectId: string) => {
@@ -38,9 +41,9 @@ export function useToggleFavorite() {
     onMutate: async (projectId) => {
       // Optimistic update
       await queryClient.cancelQueries({ queryKey: ["favorites"] });
-      const previousFavorites = queryClient.getQueryData<Set<string>>(["favorites"]);
+      const previousFavorites = queryClient.getQueryData<Set<string>>(queryKey);
 
-      queryClient.setQueryData<Set<string>>(["favorites"], (old) => {
+      queryClient.setQueryData<Set<string>>(queryKey, (old) => {
         const newSet = new Set(old);
         if (newSet.has(projectId)) {
           newSet.delete(projectId);
@@ -54,7 +57,7 @@ export function useToggleFavorite() {
     },
     onError: (err, projectId, context) => {
       // Rollback on error
-      queryClient.setQueryData(["favorites"], context?.previousFavorites);
+      queryClient.setQueryData(queryKey, context?.previousFavorites);
       toast.error("Failed to update favorite", {
         description: getErrorMessage(err),
       });
@@ -105,6 +108,8 @@ export function useAddFavorite() {
  */
 export function useRemoveFavorite() {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const queryKey = ["favorites", userId] as const;
 
   return useMutation({
     mutationFn: async (projectId: string) => {
@@ -113,9 +118,9 @@ export function useRemoveFavorite() {
     },
     onMutate: async (projectId) => {
       await queryClient.cancelQueries({ queryKey: ["favorites"] });
-      const previousFavorites = queryClient.getQueryData<Set<string>>(["favorites"]);
+      const previousFavorites = queryClient.getQueryData<Set<string>>(queryKey);
 
-      queryClient.setQueryData<Set<string>>(["favorites"], (old) => {
+      queryClient.setQueryData<Set<string>>(queryKey, (old) => {
         const newSet = new Set(old);
         newSet.delete(projectId);
         return newSet;
@@ -124,7 +129,7 @@ export function useRemoveFavorite() {
       return { previousFavorites };
     },
     onError: (err, projectId, context) => {
-      queryClient.setQueryData(["favorites"], context?.previousFavorites);
+      queryClient.setQueryData(queryKey, context?.previousFavorites);
       toast.error("Failed to remove from favorites", {
         description: getErrorMessage(err),
       });

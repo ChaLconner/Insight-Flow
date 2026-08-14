@@ -11,7 +11,7 @@ WARNING: Always test migrations in a development environment before production!
 """
 import os
 import sys
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -30,11 +30,13 @@ from migration_helpers import (
     column_exists, table_exists, index_exists
 )
 
+_NOW_SQL = "now()"
+
 # revision identifiers, used by Alembic.
 revision: str = 'b82e1628d697'
-down_revision: Union[str, None] = 'v_token_expiry_001'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'v_token_expiry_001'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -57,11 +59,11 @@ def upgrade() -> None:
     op.alter_column('auth_audits', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('auth_audits', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.drop_index('ix_auth_audits_attempt_at', table_name='auth_audits')
     op.drop_index('ix_auth_audits_email', table_name='auth_audits')
     op.drop_index('ix_auth_audits_status', table_name='auth_audits')
@@ -71,49 +73,49 @@ def upgrade() -> None:
     op.alter_column('files', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('files', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('notifications', 'is_read',
                existing_type=sa.BOOLEAN(),
                nullable=False)
     op.alter_column('notifications', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('notifications', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('password_resets', 'used',
                existing_type=sa.BOOLEAN(),
                nullable=False)
     op.alter_column('password_resets', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('password_resets', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_history', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_history', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_methods', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_methods', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_analytics', 'total_tasks',
                existing_type=sa.INTEGER(),
                nullable=False)
@@ -141,23 +143,23 @@ def upgrade() -> None:
     op.alter_column('project_analytics', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_analytics', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_members', 'joined_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
-               server_default=sa.text('now()'),
+               server_default=sa.text(_NOW_SQL),
                existing_nullable=False)
     op.alter_column('project_members', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_members', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_milestones', 'is_completed',
                existing_type=sa.VARCHAR(length=20),
                nullable=False)
@@ -167,99 +169,99 @@ def upgrade() -> None:
     op.alter_column('project_milestones', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_milestones', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tag_associations', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tag_associations', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tags', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tags', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('projects', 'is_active',
                existing_type=sa.BOOLEAN(),
                nullable=False)
     op.alter_column('projects', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('projects', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('subscriptions', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('subscriptions', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_attachments', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_attachments', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_comments', 'is_edited',
                existing_type=sa.VARCHAR(length=10),
                nullable=False)
     op.alter_column('task_comments', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_comments', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_dependencies', 'dependency_type',
                existing_type=sa.VARCHAR(length=20),
                nullable=False)
     op.alter_column('task_dependencies', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_dependencies', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_history', 'timestamp',
                existing_type=postgresql.TIMESTAMP(timezone=True),
-               server_default=sa.text('now()'),
+               server_default=sa.text(_NOW_SQL),
                nullable=False)
     op.alter_column('task_history', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_history', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_time_tracking', 'is_active',
                existing_type=sa.VARCHAR(length=20),
                nullable=False)
     op.alter_column('task_time_tracking', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_time_tracking', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('tasks', 'status',
                existing_type=postgresql.ENUM('todo', 'in_progress', 'done', 'in_review', 'cancelled', name='task_status'),
                nullable=False)
@@ -272,27 +274,27 @@ def upgrade() -> None:
     op.alter_column('tasks', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('tasks', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('token_blacklist', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('token_blacklist', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_favorites', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_favorites', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_productivity', 'tasks_created',
                existing_type=sa.INTEGER(),
                nullable=False)
@@ -308,11 +310,11 @@ def upgrade() -> None:
     op.alter_column('user_productivity', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_productivity', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_settings', 'theme',
                existing_type=sa.VARCHAR(length=20),
                nullable=False)
@@ -331,11 +333,11 @@ def upgrade() -> None:
     op.alter_column('user_settings', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_settings', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     
     # Manually fill NULL values before setting NOT NULL
     op.execute("UPDATE users SET is_active = TRUE WHERE is_active IS NULL")
@@ -354,19 +356,19 @@ def upgrade() -> None:
     op.alter_column('users', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('users', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('webhook_event_logs', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('webhook_event_logs', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=False,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     # ### end Alembic commands ###
 
 
@@ -381,19 +383,19 @@ def downgrade() -> None:
     op.alter_column('webhook_event_logs', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('webhook_event_logs', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('users', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('users', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('users', 'failed_login_attempts',
                existing_type=sa.INTEGER(),
                nullable=True)
@@ -406,11 +408,11 @@ def downgrade() -> None:
     op.alter_column('user_settings', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_settings', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_settings', 'working_hours_end',
                existing_type=sa.VARCHAR(length=5),
                nullable=True)
@@ -429,11 +431,11 @@ def downgrade() -> None:
     op.alter_column('user_productivity', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_productivity', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_productivity', 'productivity_score',
                existing_type=sa.DOUBLE_PRECISION(precision=53),
                nullable=True)
@@ -449,27 +451,27 @@ def downgrade() -> None:
     op.alter_column('user_favorites', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('user_favorites', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('token_blacklist', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('token_blacklist', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('tasks', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('tasks', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('tasks', 'type',
                existing_type=postgresql.ENUM('feature', 'bug', 'improvement', 'documentation', 'research', 'other', name='task_type'),
                nullable=True)
@@ -482,22 +484,22 @@ def downgrade() -> None:
     op.alter_column('task_time_tracking', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_time_tracking', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_time_tracking', 'is_active',
                existing_type=sa.VARCHAR(length=20),
                nullable=True)
     op.alter_column('task_history', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_history', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_history', 'timestamp',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                server_default=sa.text("'2025-12-03 12:41:07.451037+00'::timestamp with time zone"),
@@ -505,76 +507,76 @@ def downgrade() -> None:
     op.alter_column('task_dependencies', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_dependencies', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_dependencies', 'dependency_type',
                existing_type=sa.VARCHAR(length=20),
                nullable=True)
     op.alter_column('task_comments', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_comments', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_comments', 'is_edited',
                existing_type=sa.VARCHAR(length=10),
                nullable=True)
     op.alter_column('task_attachments', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('task_attachments', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('subscriptions', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('subscriptions', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('projects', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('projects', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('projects', 'is_active',
                existing_type=sa.BOOLEAN(),
                nullable=True)
     op.alter_column('project_tags', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tags', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tag_associations', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_tag_associations', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_milestones', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_milestones', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_milestones', 'progress_percentage',
                existing_type=sa.INTEGER(),
                nullable=True)
@@ -584,11 +586,11 @@ def downgrade() -> None:
     op.alter_column('project_members', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_members', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_members', 'joined_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                server_default=None,
@@ -596,11 +598,11 @@ def downgrade() -> None:
     op.alter_column('project_analytics', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_analytics', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('project_analytics', 'total_activities',
                existing_type=sa.INTEGER(),
                nullable=True)
@@ -628,49 +630,49 @@ def downgrade() -> None:
     op.alter_column('payment_methods', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_methods', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_history', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('payment_history', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('password_resets', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('password_resets', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('password_resets', 'used',
                existing_type=sa.BOOLEAN(),
                nullable=True)
     op.alter_column('notifications', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('notifications', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('notifications', 'is_read',
                existing_type=sa.BOOLEAN(),
                nullable=True)
     op.alter_column('files', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('files', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.drop_constraint(None, 'auth_audits', type_='foreignkey')
     op.create_foreign_key('auth_audits_user_id_fkey', 'auth_audits', 'users', ['user_id'], ['id'], ondelete='SET NULL')
     op.create_index('ix_auth_audits_user_id', 'auth_audits', ['user_id'], unique=False)
@@ -680,15 +682,15 @@ def downgrade() -> None:
     op.alter_column('auth_audits', 'updated_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.alter_column('auth_audits', 'created_at',
                existing_type=postgresql.TIMESTAMP(timezone=True),
                nullable=True,
-               existing_server_default=sa.text('now()'))
+               existing_server_default=sa.text(_NOW_SQL))
     op.create_table('security_logs',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), autoincrement=False, nullable=False),
     sa.Column('event_type', sa.VARCHAR(length=50), autoincrement=False, nullable=False),
-    sa.Column('timestamp', postgresql.TIMESTAMP(timezone=True), server_default=sa.text('now()'), autoincrement=False, nullable=False),
+    sa.Column('timestamp', postgresql.TIMESTAMP(timezone=True), server_default=sa.text(_NOW_SQL), autoincrement=False, nullable=False),
     sa.Column('severity', sa.VARCHAR(length=20), autoincrement=False, nullable=False),
     sa.Column('user_id', sa.UUID(), autoincrement=False, nullable=True),
     sa.Column('ip_address', sa.VARCHAR(length=45), autoincrement=False, nullable=True),

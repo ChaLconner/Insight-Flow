@@ -14,7 +14,7 @@ export function getPostLoginRedirect(role: UserRole, fallback = "/dashboard") {
   }
 }
 
-function isSafeRelativeRedirect(redirectUrl: string) {
+export function isSafeRelativeRedirect(redirectUrl: string) {
   return (
     redirectUrl.startsWith("/") &&
     !redirectUrl.startsWith("//") &&

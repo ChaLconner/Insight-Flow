@@ -5,7 +5,10 @@
 // ===========================================
 
 import { API_CONFIG, ERROR_MESSAGES } from "@/lib/constants";
-import { clearAuthenticatedCaches } from "@/lib/auth-cache";
+import {
+  clearAuthenticatedCaches,
+  registerAuthenticatedCacheClearer,
+} from "@/lib/auth-cache";
 import { toast } from "sonner";
 
 // ===========================================
@@ -114,6 +117,10 @@ export interface AxiosLikeResponse<T = unknown> {
 
 let isLoggingOut = false;
 
+// Every authenticated request shares this signal so an account transition can
+// cancel work that was started under the previous cookie session.
+let authenticatedRequestController = new AbortController();
+
 export const setLoggingOut = (status: boolean) => {
   isLoggingOut = status;
 };
@@ -192,14 +199,20 @@ function buildRequestUrl(endpoint: string, config: FetchRequestConfig): string {
 }
 
 function buildRequestHeaders(config: FetchRequestConfig): Record<string, string> {
-  const headers: Record<string, string> = {
-    ...(config.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-    ...(config.headers as Record<string, string>),
-  };
+  const requestHeaders = new Headers(config.headers);
+  const hasFormDataBody = typeof FormData !== "undefined" && config.body instanceof FormData;
+  if (!hasFormDataBody && !requestHeaders.has("Content-Type")) {
+    requestHeaders.set("Content-Type", "application/json");
+  }
   const csrfToken = getCSRFToken();
   if (csrfToken) {
-    headers["X-CSRF-Token"] = csrfToken;
+    requestHeaders.set("X-CSRF-Token", csrfToken);
   }
+
+  const headers: Record<string, string> = {};
+  requestHeaders.forEach((value, key) => {
+    headers[key] = value;
+  });
   return headers;
 }
 
@@ -212,13 +225,40 @@ function buildFetchOptions(
   delete requestConfig.skipAuthRefresh;
   delete requestConfig.skipLogoutGuard;
   delete requestConfig.authRetry;
+  delete requestConfig.baseURL;
+  delete requestConfig.params;
+  delete requestConfig.timeout;
+  delete requestConfig.responseType;
+  delete requestConfig.withCredentials;
 
   return {
     ...requestConfig,
     headers,
     signal,
+    // API responses are user-sensitive because authentication uses cookies.
+    // Do not let the browser HTTP cache share one account's response with
+    // another account during a same-document auth transition.
+    cache: "no-store",
     credentials: config.withCredentials !== false ? "include" : "same-origin",
   };
+}
+
+function forwardAbortSignal(
+  externalSignal: AbortSignal | null | undefined,
+  controller: AbortController,
+): () => void {
+  if (!externalSignal) {
+    return () => undefined;
+  }
+
+  const abortRequest = () => controller.abort();
+  if (externalSignal.aborted) {
+    abortRequest();
+    return () => undefined;
+  }
+
+  externalSignal.addEventListener("abort", abortRequest, { once: true });
+  return () => externalSignal.removeEventListener("abort", abortRequest);
 }
 
 function getResponseHeaders(response: Response): Record<string, string> {
@@ -265,7 +305,22 @@ function createResponseError(
 }
 
 function isAuthEndpoint(endpoint: string): boolean {
-  return AUTH_ENDPOINTS.some((path) => endpoint.includes(path));
+  let pathname = endpoint;
+  try {
+    pathname = new URL(endpoint, "http://localhost").pathname;
+  } catch {
+    pathname = endpoint.split(/[?#]/, 1)[0] ?? endpoint;
+  }
+
+  const authPathStart = pathname.lastIndexOf("/auth/");
+  if (authPathStart < 0) {
+    return false;
+  }
+
+  const authPath = pathname.slice(authPathStart);
+  return AUTH_ENDPOINTS.some(
+    (path) => authPath === path || authPath.startsWith(`${path}/`),
+  );
 }
 
 async function retryAfterTokenRefresh<T>(
@@ -332,14 +387,23 @@ async function executeFetch<T = any>(
 
   const timeoutMs = config.timeout ?? API_CONFIG.TIMEOUT;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const authenticatedRequestSignal = authenticatedRequestController.signal;
+  const removeExternalAbortListener = forwardAbortSignal(config.signal, controller);
+  const removeAuthAbortListener = forwardAbortSignal(authenticatedRequestSignal, controller);
+  let didTimeout = false;
+  const timeoutId = setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
   const fetchOptions = buildFetchOptions(config, headers, controller.signal);
 
   try {
     const res = await fetch(url, fetchOptions);
-    clearTimeout(timeoutId);
     const resHeaders = getResponseHeaders(res);
     const data = await parseResponseData(res, config.responseType);
+    clearTimeout(timeoutId);
+    removeExternalAbortListener();
+    removeAuthAbortListener();
 
     if (!res.ok) {
       const retryResponse = await retryUnauthorized<T>(endpoint, config, res.status);
@@ -359,15 +423,26 @@ async function executeFetch<T = any>(
     };
   } catch (err: any) {
     clearTimeout(timeoutId);
+    removeExternalAbortListener();
+    removeAuthAbortListener();
     if (err instanceof ApiError) {
       throw err;
     }
-    const isTimeout = err.name === "AbortError";
+    const isAbort = err?.name === "AbortError";
+    const wasCancelled =
+      isAbort &&
+      !didTimeout &&
+      (config.signal?.aborted === true || authenticatedRequestSignal.aborted);
+    const isTimeout = isAbort && !wasCancelled;
     throw new ApiError(
-      isTimeout ? "Request timeout. Please try again." : err.message ?? ERROR_MESSAGES.NETWORK_ERROR,
+      isTimeout
+        ? "Request timeout. Please try again."
+        : wasCancelled
+          ? "Request cancelled."
+          : err.message ?? ERROR_MESSAGES.NETWORK_ERROR,
       undefined,
       { url, method: config.method },
-      isTimeout ? "ECONNABORTED" : undefined
+      isTimeout ? "ECONNABORTED" : wasCancelled ? "ERR_CANCELED" : undefined,
     );
   }
 }
@@ -554,11 +629,15 @@ export function createDeduplicatedRequest<T = unknown>(
 
   const promise = requestFn()
     .then((result) => {
-      inFlightRequests.delete(cacheKey);
+      if (inFlightRequests.get(cacheKey) === promise) {
+        inFlightRequests.delete(cacheKey);
+      }
       return result;
     })
     .catch((error) => {
-      inFlightRequests.delete(cacheKey);
+      if (inFlightRequests.get(cacheKey) === promise) {
+        inFlightRequests.delete(cacheKey);
+      }
       throw error;
     });
 
@@ -569,6 +648,14 @@ export function createDeduplicatedRequest<T = unknown>(
 export function clearDeduplicatedRequests(): void {
   inFlightRequests.clear();
 }
+
+function cancelAuthenticatedRequests(): void {
+  authenticatedRequestController.abort();
+  authenticatedRequestController = new AbortController();
+}
+
+registerAuthenticatedCacheClearer(cancelAuthenticatedRequests);
+registerAuthenticatedCacheClearer(clearDeduplicatedRequests);
 
 async function clearClientSideCaches(): Promise<void> {
   await clearAuthenticatedCaches();

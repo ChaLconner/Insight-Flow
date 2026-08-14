@@ -208,7 +208,7 @@ export default function UsersPage() {
         right arrow keys to navigate pages. Press Escape to leave search field.
       </div>
 
-      <main className="space-y-8">
+      <div className="space-y-8">
         {/* Header */}
         <UsersPageHeader
           onRefresh={refresh}
@@ -296,7 +296,7 @@ export default function UsersPage() {
             <RoleDistribution stats={stats} />
           </section>
         )}
-      </main>
+      </div>
 
       {/* Invite User Modal */}
       <InviteUserModal

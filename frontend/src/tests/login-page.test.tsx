@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LoginPage from "@/app/auth/login/page";
 import { apiClient } from "@/lib/api-client";
@@ -13,6 +14,9 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@react-oauth/google", () => ({
+  GoogleOAuthProvider: ({ children }: { children: ReactNode }) => (
+    <>{children}</>
+  ),
   useGoogleLogin: () => vi.fn(),
 }));
 

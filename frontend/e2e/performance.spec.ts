@@ -5,6 +5,7 @@
 import { test, expect } from '@playwright/test';
 
 const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
+const isProductionE2E = process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1';
 
 test.describe('Performance Tests', () => {
   test.describe('Page Load Performance', () => {
@@ -92,6 +93,59 @@ test.describe('Performance Tests', () => {
   });
 
   test.describe('Resource Loading', () => {
+    test('should defer the Google SDK until sign-in intent', async ({ page, browserName }) => {
+      // This test is intentionally limited to Chromium because Firefox and WebKit do not provide
+      // deterministic Google OAuth popup request timing.
+      test.skip(
+        browserName !== 'chromium',
+        'Google OAuth popup request timing is only deterministic in Chromium',
+      );
+
+      const googleSdkRequests: string[] = [];
+
+      page.on('request', (request) => {
+        if (request.url().includes('accounts.google.com/gsi/client')) {
+          googleSdkRequests.push(request.url());
+        }
+      });
+
+      await page.goto('/auth/login');
+      await page.waitForLoadState('domcontentloaded');
+
+      const googleButton = page.getByRole('button', {
+        name: /continue with google/i,
+      });
+      await expect(googleButton).toBeVisible();
+
+      expect(googleSdkRequests).toHaveLength(0);
+
+      if (await googleButton.isDisabled()) {
+        return;
+      }
+
+      const sdkRequest = page.waitForRequest(
+        (request) => request.url().includes('accounts.google.com/gsi/client'),
+        { timeout: 5000 },
+      );
+      await googleButton.click();
+      await sdkRequest;
+    });
+
+    test('should not verify auth on the public landing page', async ({ page }) => {
+      const authVerificationRequests: string[] = [];
+
+      page.on('request', (request) => {
+        if (request.url().includes('/api/auth/me')) {
+          authVerificationRequests.push(request.url());
+        }
+      });
+
+      await page.goto('/');
+      await page.waitForLoadState('networkidle');
+
+      expect(authVerificationRequests).toHaveLength(0);
+    });
+
     test('should load critical resources first', async ({ page, browserName }) => {
       // Skip on Firefox where resource timing can be unreliable
       test.skip(browserName === 'firefox', 'Firefox resource timing unreliable in test environments');
@@ -113,6 +167,10 @@ test.describe('Performance Tests', () => {
     });
 
     test('should not have render-blocking resources', async ({ page }) => {
+      // Next dev serves the application stylesheet as a render-blocking link;
+      // this assertion is meaningful only against the production build.
+      test.skip(!isProductionE2E, 'Render-blocking resource timing requires a production build');
+
       await page.goto('/auth/login');
       
       const perfData = await page.evaluate(() => {

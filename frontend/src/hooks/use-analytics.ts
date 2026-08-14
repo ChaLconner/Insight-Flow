@@ -7,13 +7,16 @@ import type {
   TeamWorkloadPaginatedResponse,
   TeamWorkloadParams,
 } from "@/app/analytics/types";
+import { useAuthStore } from "@/stores/auth-store";
 
 export function useAnalytics(
   period: AnalyticsPeriod,
   options: { enabled?: boolean } = {},
 ) {
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+
   return useQuery<AnalyticsResponse>({
-    queryKey: ["analytics", period],
+    queryKey: ["analytics", userId, period],
     queryFn: () => analyticsApi.getAnalytics(period),
     enabled: options.enabled ?? true,
     refetchInterval: 300000, // 5 minutes
@@ -26,8 +29,10 @@ export function useTeamWorkload(
   params: TeamWorkloadParams,
   options: { enabled?: boolean } = {},
 ) {
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+
   return useQuery<TeamWorkloadPaginatedResponse>({
-    queryKey: ["teamWorkload", params],
+    queryKey: ["teamWorkload", userId, params],
     queryFn: () => analyticsApi.getTeamWorkload(params),
     enabled: options.enabled ?? true,
     staleTime: 3 * 60 * 1000, // 3 minutes — workload data doesn't change often

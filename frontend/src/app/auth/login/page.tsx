@@ -1,5 +1,5 @@
 "use client";
-import { useGoogleLogin } from "@react-oauth/google";
+import type { NonOAuthError, TokenResponse } from "@react-oauth/google";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -12,14 +12,14 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginSchema } from "@/lib/validations/auth";
 import { apiClient } from "@/lib/api-client";
-import { GoogleIcon } from "@/components/auth/GoogleIcon";
+import { DeferredGoogleAuthButton } from "@/components/auth/DeferredGoogleAuthButton";
+import { GitHubIcon } from "@/components/auth/GitHubIcon";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getAuthRedirectUrl } from "@/lib/auth-redirect";
 
 import {
   Mail,
   Lock,
-  GitBranch,
   ArrowLeft,
   ArrowRight,
   Loader2,
@@ -124,8 +124,7 @@ function LoginForm() {
     }
   };
 
-  const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
+  const handleGoogleLoginSuccess = async (tokenResponse: TokenResponse) => {
       try {
         setIsLoading(true);
 
@@ -154,28 +153,28 @@ function LoginForm() {
       } finally {
         setIsLoading(false);
       }
-    },
-    onError: () => {
-      toast.error("Google login failed");
-      setIsLoading(false);
-    },
-    onNonOAuthError: (error) => {
-      console.warn("Google login popup error:", error.type);
-      setIsLoading(false);
+  };
 
-      if (error.type === "popup_closed") {
-        return;
-      }
+  const handleGoogleLoginError = () => {
+    toast.error("Google login failed");
+    setIsLoading(false);
+  };
 
-      toast.error("Google login failed", {
-        description:
-          error.type === "popup_failed_to_open"
-            ? "Google popup was blocked. Please allow popups and try again."
-            : "Google login could not be completed. Please try again.",
-      });
-    },
-    flow: "implicit",
-  });
+  const handleGoogleNonOAuthError = (error: NonOAuthError) => {
+    console.warn("Google login popup error:", error.type);
+    setIsLoading(false);
+
+    if (error.type === "popup_closed") {
+      return;
+    }
+
+    toast.error("Google login failed", {
+      description:
+        error.type === "popup_failed_to_open"
+          ? "Google popup was blocked. Please allow popups and try again."
+          : "Google login could not be completed. Please try again.",
+    });
+  };
 
 
 
@@ -210,20 +209,18 @@ function LoginForm() {
         <CardContent className="space-y-6">
           {/* Social Login */}
           <div className="space-y-3">
-            <Button
-              variant="outline"
-              className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
-              onClick={() => handleGoogleLogin()}
+            <DeferredGoogleAuthButton
+              onSuccess={handleGoogleLoginSuccess}
+              onError={handleGoogleLoginError}
+              onNonOAuthError={handleGoogleNonOAuthError}
               disabled={isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID}
               title={
                 !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
                   ? "Google Client ID is missing"
                   : "Sign in with Google"
               }
-            >
-              <GoogleIcon />
-              Continue with Google
-            </Button>
+              label="Continue with Google"
+            />
             <Button
               variant="outline"
               className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
@@ -231,7 +228,7 @@ function LoginForm() {
               disabled={isLoading}
               title="Sign in with GitHub"
             >
-              <GitBranch className="h-4 w-4 mr-3" />
+              <GitHubIcon />
               Continue with GitHub
             </Button>
           </div>
@@ -352,12 +349,12 @@ function LoginForm() {
       {/* Footer */}
       <p className="text-center text-sm text-white mt-6">
         Don't have an account?{" "}
-        <Link
+        <a
           href="/auth/register"
           className="text-white hover:text-gray-200 font-medium transition-colors underline"
         >
           Sign up
-        </Link>
+        </a>
       </p>
     </div>
   );

@@ -17,6 +17,7 @@ export interface AnalyticsProject {
 }
 
 export interface AnalyticsTeamMember {
+  id?: string;
   name: string;
   avatar?: string;
   tasks: number;

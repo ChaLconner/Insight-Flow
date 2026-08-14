@@ -1,9 +1,58 @@
 import { cookies, headers } from "next/headers";
-import type { Task } from "@/types";
+import type { Task, TaskListResponse } from "@/types";
 import { transformProjectData } from "@/lib/project-utils";
 
-// Use backend directly for server-side fetching to avoid loopback overhead and URL issues
-const SERVER_BASE_URL = (process.env.API_URL ?? "http://127.0.0.1:8000") + "/api/v1";
+const LOCAL_API_BASE_URL = "http://127.0.0.1:8000/api/v1";
+
+function isLoopbackHost(hostname: string): boolean {
+  return ["localhost", "127.0.0.1", "::1"].includes(
+    hostname.replace(/^\[|\]$/g, "").toLowerCase(),
+  );
+}
+
+export function resolveServerApiBaseUrl(
+  configuredApiUrl = process.env.API_URL,
+  environment = process.env.NODE_ENV,
+): string {
+  const apiUrl = configuredApiUrl?.trim();
+  if (!apiUrl) {
+    if (environment === "production") {
+      throw new Error(
+        "API_URL must be configured for production server-side API requests.",
+      );
+    }
+    return LOCAL_API_BASE_URL;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(apiUrl);
+  } catch {
+    throw new Error("API_URL must be an absolute http(s) URL.");
+  }
+
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error("API_URL must use the http or https protocol.");
+  }
+  if (parsedUrl.search || parsedUrl.hash) {
+    throw new Error("API_URL must not include a query string or fragment.");
+  }
+  if (environment === "production" && isLoopbackHost(parsedUrl.hostname)) {
+    throw new Error(
+      "API_URL must not point to localhost or another loopback host in production.",
+    );
+  }
+
+  const pathName = parsedUrl.pathname.replace(/\/+$/, "");
+  if (pathName !== "" && pathName !== "/api" && pathName !== "/api/v1") {
+    throw new Error("API_URL must point to the API origin, not an API route.");
+  }
+  parsedUrl.pathname = "/api/v1";
+  return parsedUrl.toString().replace(/\/$/, "");
+}
+
+// Use backend directly for server-side fetching to avoid proxy loopback overhead.
+const SERVER_BASE_URL = resolveServerApiBaseUrl();
 
 export function buildServerRequestHeaders(
   incomingHeaders: Headers,
@@ -88,6 +137,6 @@ export const serverApi = {
     return transformProjectData(data);
   },
   getProjectTasks: (projectId: string) =>
-    fetchServer<Task[]>(`/projects/${projectId}/tasks?limit=50`),
+    fetchServer<TaskListResponse>(`/projects/${projectId}/tasks?limit=50`),
   getTask: (id: string) => fetchServer<Task>(`/tasks/${id}`),
 };

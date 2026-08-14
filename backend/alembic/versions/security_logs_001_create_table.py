@@ -12,7 +12,7 @@ Migration Description:
 """
 import os
 import sys
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -31,9 +31,9 @@ from migration_helpers import (
 
 # revision identifiers, used by Alembic.
 revision: str = 'security_logs_001'
-down_revision: Union[str, Sequence[str], None] = 'h9c8g0d2e2b0'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'h9c8g0d2e2b0'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -4,7 +4,7 @@ Refactored for Async operations with proper Dependency Injection.
 """
 
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -51,7 +51,7 @@ from rate_limiter import RateLimits, limiter
 class RoleUpdate(BaseModel):
     """Schema for role update requests."""
 
-    role: str
+    role: Literal["admin", "member"]
 
 
 @router.post("/projects", response_model=ProjectResponse, responses=PROJECT_ERROR_RESPONSES)

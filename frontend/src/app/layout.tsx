@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { QueryProvider } from "@/providers/query-provider";
-import { Toaster } from "sonner";
 import WebVitalsReporter from "@/components/analytics/web-vitals-reporter";
 import ServiceWorkerRegistration from "@/components/providers/service-worker-registration";
-import { AuthInitializer } from "@/components/providers/auth-initializer";
+import { RouteProviders } from "@/components/providers/route-providers";
+import { SkipLink } from "@/components/layout/SkipLink";
 import { resolveAppUrl } from "@/lib/app-url";
 
 const inter = Inter({
@@ -118,17 +116,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
-        {/* Preload critical fonts only */}
-        <link
-          rel="preconnect"
-          href="https://fonts.googleapis.com"
-        />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-
         {/* JSON-LD Structured Data */}
         <script
           type="application/ld+json"
@@ -203,43 +190,12 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
-        <a
-          href="#main-content"
-          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground focus:top-0 focus:left-0 transition-all"
-        >
-          Skip to content
-        </a>
-        <QueryProvider>
-          {/* HydrationWrapper removed to prevent flash */}
-          <ThemeProvider>
-            <ErrorBoundary>
-              {children}
-              <Toaster
-                position="bottom-right"
-                richColors
-                theme="system"
-                className="font-sans"
-                toastOptions={{
-                  classNames: {
-                    title: "text-sm font-semibold",
-                    description: "text-xs text-muted-foreground",
-                    actionButton: "bg-primary text-primary-foreground",
-                    cancelButton: "bg-muted text-muted-foreground",
-                  },
-                  style: {
-                    background: "rgba(23, 23, 23, 0.8)", // Glassmorphism base
-                    backdropFilter: "blur(12px)",
-                    border: "1px solid rgba(255, 255, 255, 0.1)",
-                    color: "white",
-                  },
-                }}
-              />
-              <AuthInitializer />
-              <WebVitalsReporter />
-              <ServiceWorkerRegistration />
-            </ErrorBoundary>
-          </ThemeProvider>
-        </QueryProvider>
+        <SkipLink />
+        <ErrorBoundary>
+          <RouteProviders>{children}</RouteProviders>
+          <WebVitalsReporter />
+          <ServiceWorkerRegistration />
+        </ErrorBoundary>
       </body>
     </html>
   );

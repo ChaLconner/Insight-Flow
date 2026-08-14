@@ -110,6 +110,7 @@ export function Header({ onMenuClick }: Readonly<HeaderProps>) {
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Open navigation menu"
           className="lg:hidden text-muted-foreground hover:text-foreground"
           onClick={onMenuClick}
         >

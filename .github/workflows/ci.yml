@@ -28,34 +28,84 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-load.txt
+
+      - name: Verify immutable CI and container dependencies
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          workflow_files = list(Path(".github/workflows").glob("*.yml"))
+          mutable = []
+          for path in workflow_files:
+              for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  if re.match(r"^\s*uses:\s+\S+@\S+", line):
+                      reference = line.split("@", 1)[1].split()[0]
+                      if not re.fullmatch(r"[0-9a-f]{40}", reference, re.IGNORECASE):
+                          mutable.append(f"{path}:{line_number}: action {reference}")
+                  if re.match(r"^\s*python -m pip install --upgrade pip(?:\s|$)", line):
+                      mutable.append(f"{path}:{line_number}: pip bootstrap is not version-pinned")
+                  if re.match(r"^\s*pip install (?:pip-audit|bandit)(?:\s|$)", line):
+                      mutable.append(f"{path}:{line_number}: security-tool install is not version-pinned")
+                  if (
+                      (
+                          re.match(r"^\s*image:\s+\S+", line)
+                          and ("postgres:" in line or "redis:" in line)
+                      )
+                      or (
+                          re.match(r"^\s*docker run\b.*(?:postgres|redis):\S+", line)
+                          and ("postgres:" in line or "redis:" in line)
+                      )
+                  ) and "@sha256:" not in line:
+                      mutable.append(f"{path}:{line_number}: workflow image is not digest-pinned")
+
+          for path in [Path("backend/Dockerfile"), Path("frontend/Dockerfile"), Path("docker-compose.yml")]:
+              for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                  stripped = line.strip()
+                  if stripped.startswith("FROM ") and ("python:" in stripped or "node:" in stripped):
+                      if "@sha256:" not in stripped:
+                          mutable.append(f"{path}:{line_number}: base image is not digest-pinned")
+                  if stripped.startswith("image: ") and ("postgres:" in stripped or "redis:" in stripped):
+                      if "@sha256:" not in stripped:
+                          mutable.append(f"{path}:{line_number}: service image is not digest-pinned")
+
+          if mutable:
+              raise SystemExit("Mutable CI/container dependency references:\n" + "\n".join(mutable))
+          print("All CI actions and declared container images are digest-pinned.")
+          PY
 
       - name: Install backend dependencies and audit tools
         working-directory: ./backend
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pip-audit bandit
+          python -m pip install --upgrade pip==26.1.1
+          pip install -r requirements-load.txt
+          pip install pip-audit==2.10.0 bandit==1.9.4
 
       - name: Run pip-audit (Python dependencies)
         working-directory: ./backend
         run: |
-          pip-audit -r requirements.txt --format=json --output=pip-audit-report.json
+          pip-audit -r requirements-load.txt --format=json --output=pip-audit-report.json
 
       - name: Run bandit security linter
         working-directory: ./backend
         env:
           PYTHONIOENCODING: utf-8
         run: |
-          bandit -r . -ll -ii -x ./tests,./scripts,./.venv --format json -o bandit-report.json
+          bandit -r . -ll -ii -x ./tests,./.venv --format json -o bandit-report.json
 
       - name: Upload security scan results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: security-scan-results
@@ -73,10 +123,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
@@ -84,7 +134,7 @@ jobs:
 
       - name: Install dependencies and quality tools
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==26.1.1
           pip install -r requirements.txt
           pip install ruff==0.15.12 mypy==1.19.1
 
@@ -118,7 +168,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15@sha256:0dda651c259bfe50e2bcc28ca23d1fcca772fa90b0210803aa7b97379ccf4e85
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -132,7 +182,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
         ports:
           - 6379:6379
         options: >-
@@ -143,10 +193,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
@@ -154,7 +204,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==26.1.1
           pip install -r requirements.txt
 
       - name: Wait for Postgres to be available
@@ -206,7 +256,7 @@ jobs:
           python -m pytest --cov=. --cov-report=term-missing --cov-report=xml --cov-fail-under=85 -W ignore::RuntimeWarning
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: backend-coverage
@@ -224,10 +274,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -236,8 +286,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Cache Next.js build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: frontend/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('frontend/package-lock.json') }}-${{ hashFiles('frontend/src/**/*.js', 'frontend/src/**/*.jsx', 'frontend/src/**/*.ts', 'frontend/src/**/*.tsx', 'frontend/src/**/*.css', 'frontend/next.config.mjs', 'frontend/postcss.config.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('frontend/package-lock.json') }}-
+
       - name: Run npm audit
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=moderate
 
       - name: Lint
         run: npm run lint:check
@@ -253,12 +311,14 @@ jobs:
       - name: Build
         env:
           CI: true
-          API_URL: "http://127.0.0.1:8000"
-          NEXT_PUBLIC_API_URL: "http://127.0.0.1:8000"
+          # Build-time rewrites must use a non-loopback origin. E2E supplies
+          # the local backend URL separately at runtime below.
+          API_URL: "https://api.ci.invalid"
+          NEXT_PUBLIC_API_URL: "/api"
         run: npm run build
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: frontend-build
           path: frontend/.next
@@ -272,22 +332,133 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build backend image
-        run: docker build --tag insight-flow-backend:ci ./backend
+        run: docker build --pull --tag insight-flow-backend:ci ./backend
 
       - name: Build frontend image
-        run: docker build --build-arg API_URL=http://backend:8000 --tag insight-flow-frontend:ci ./frontend
+        run: docker build --pull --build-arg API_URL=http://backend:8000 --tag insight-flow-frontend:ci ./frontend
+
+      - name: Verify image users are non-root
+        run: |
+          test "$(docker inspect --format '{{.Config.User}}' insight-flow-backend:ci)" = "appuser"
+          test "$(docker inspect --format '{{.Config.User}}' insight-flow-frontend:ci)" = "nextjs"
+
+      - name: Run production container smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          network="insight-flow-ci"
+          db="insight-flow-ci-db"
+          redis="insight-flow-ci-redis"
+          backend="insight-flow-ci-backend"
+          frontend="insight-flow-ci-frontend"
+
+          cleanup() {
+            docker rm -f "$frontend" "$backend" "$redis" "$db" >/dev/null 2>&1 || true
+            docker network rm "$network" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "$network"
+          docker run -d --name "$db" --network "$network" \
+            -e POSTGRES_USER=user \
+            -e POSTGRES_PASSWORD=password \
+            -e POSTGRES_DB=insightflow_test \
+            postgres:15-alpine@sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23 >/dev/null
+          docker run -d --name "$redis" --network "$network" redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2 >/dev/null
+
+          for attempt in $(seq 1 60); do
+            if docker exec "$db" pg_isready -U user -d insightflow_test >/dev/null 2>&1 \
+              && docker exec "$redis" redis-cli ping >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" = "60" ]; then
+              echo "Container dependencies did not become ready"
+              docker logs "$db" || true
+              docker logs "$redis" || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          docker run --rm --network "$network" \
+            -e SECRET_KEY="test_secret_key_for_ci_pipeline_only" \
+            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test" \
+            -e REDIS_URL="redis://redis:6379/0" \
+            -e GOOGLE_CLIENT_ID="mock-google-client-id" \
+            -e GOOGLE_CLIENT_SECRET="mock-google-client-secret" \
+            -e LEGACY_SCHEMA_BOOTSTRAP=true \
+            insight-flow-backend:ci python scripts/init_db_for_ci.py
+
+          docker run -d --name "$backend" --network "$network" --network-alias backend -p 8000:8000 \
+            -e ENVIRONMENT=production \
+            -e TESTING=false \
+            -e SECRET_KEY="test_secret_key_for_ci_pipeline_only" \
+            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test" \
+            -e REDIS_URL="redis://redis:6379/0" \
+            -e GOOGLE_CLIENT_ID="mock-google-client-id" \
+            -e GOOGLE_CLIENT_SECRET="mock-google-client-secret" \
+            -e ALLOWED_HOSTS="localhost,127.0.0.1,0.0.0.0,testserver,backend" \
+            -e ENABLE_DOCS=false \
+            -e ENABLE_METRICS=false \
+            -e ENABLE_DETAILED_HEALTH=false \
+            -e SCHEDULER_ENABLED=false \
+            insight-flow-backend:ci >/dev/null
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8000/health/ready >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = "60" ]; then
+              echo "Backend container did not become ready"
+              docker logs "$backend" || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/health)" = "200"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/docs)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/metrics)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/health/full)" = "404"
+
+          docker run -d --name "$frontend" --network "$network" -p 3000:3000 insight-flow-frontend:ci >/dev/null
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3000/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = "60" ]; then
+              echo "Frontend container did not become ready"
+              docker logs "$frontend" || true
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:3000/auth/login >/dev/null
+          # Exercise the production Next.js rewrite, not only static HTML.
+          # The backend intentionally returns 401 here; any 404/502 indicates
+          # a broken frontend-to-API route or an incorrectly built API origin.
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"smoke@example.com","password":"invalid"}' \
+            http://127.0.0.1:3000/api/auth/login)" = "401"
 
   e2e-tests:
     name: E2E Tests
     needs: [backend-test, frontend-check]
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # CI-only credentials are shared by database seeding and Playwright.
+      # Password is generated per run and never stored in version control.
+      E2E_USER_EMAIL: "demo@insightflow.com"
+      E2E_USER_ROLE: "manager"
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15@sha256:0dda651c259bfe50e2bcc28ca23d1fcca772fa90b0210803aa7b97379ccf4e85
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -301,7 +472,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
         ports:
           - 6379:6379
         options: >-
@@ -312,17 +483,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
 
       - name: Set up Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
@@ -335,14 +506,19 @@ jobs:
       - name: Install backend dependencies
         working-directory: ./backend
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip==26.1.1
           pip install -r requirements.txt
+
+      - name: Generate ephemeral E2E password
+        run: python -c "import secrets; print('E2E_USER_PASSWORD=' + secrets.token_urlsafe(24))" >> "$GITHUB_ENV"
 
       - name: Initialize E2E database
         working-directory: ./backend
         env:
           SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+          GOOGLE_CLIENT_ID: "mock-google-client-id"
+          GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
           LEGACY_SCHEMA_BOOTSTRAP: "true"
         run: python scripts/init_db_for_ci.py
 
@@ -360,28 +536,179 @@ jobs:
         working-directory: ./frontend
         run: npx playwright install --with-deps
 
+      - name: Map CI API hostname to the local backend
+        run: echo "127.0.0.1 api.ci.invalid" | sudo tee -a /etc/hosts
+
       - name: Run Playwright tests
         working-directory: ./frontend
-        run: npm run test:e2e
+        run: npm run test:e2e:prod
         env:
           CI: true
           BASE_URL: "http://localhost:3000"
-          API_URL: "http://127.0.0.1:8000"
+          API_URL: "http://api.ci.invalid:8000"
+          NEXT_PUBLIC_API_URL: "/api"
+          PLAYWRIGHT_PRODUCTION_BUILD: "1"
           PLAYWRIGHT_START_BACKEND: "1"
-          E2E_USER_EMAIL: "demo@insightflow.com"
-          E2E_USER_PASSWORD: "demo1234"
-          E2E_USER_ROLE: "manager"
           SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
           DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
           REDIS_URL: "redis://localhost:6379/0"
+          ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0,testserver,api.ci.invalid"
           GOOGLE_REDIRECT_URI: "http://localhost:8000/auth/callback/google"
           GOOGLE_CLIENT_ID: "mock-google-client-id"
           GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: playwright-report
           path: frontend/playwright-report
+          retention-days: 7
+
+  api-performance:
+    name: API Performance Gate
+    needs: backend-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: "test_secret_key_for_ci_pipeline_only"
+      DATABASE_URL: "postgresql+asyncpg://user:password@localhost:5432/insightflow_test"
+      REDIS_URL: "redis://localhost:6379/0"
+      GOOGLE_CLIENT_ID: "mock-google-client-id"
+      GOOGLE_CLIENT_SECRET: "mock-google-client-secret"
+      GOOGLE_REDIRECT_URI: "http://localhost:3000/auth/callback"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      REFRESH_TOKEN_EXPIRE_DAYS: "7"
+      ENVIRONMENT: "production"
+      TESTING: "false"
+      E2E_USER_EMAIL: "demo@insightflow.com"
+      LOAD_TEST_ENVIRONMENT: "ci"
+      LOAD_TEST_MAX_FAILURE_RATE: "1.0"
+      LOAD_TEST_MAX_P95_MS: "3000"
+      LOAD_TEST_MIN_REQUESTS: "100"
+      LOAD_TEST_MIN_RPS: "1"
+      LOAD_TEST_RUN_PUBLIC_SCENARIO: "true"
+      LOAD_TEST_ALLOW_PRODUCTION: "true"
+      LOAD_TEST_ALLOW_MUTATIONS: "false"
+      LOAD_TEST_EXPECT_METRICS_STATUS: "404"
+      LOAD_TEST_EXPECT_DETAILED_HEALTH_STATUS: "404"
+      LOAD_TEST_EMAIL: "demo@insightflow.com"
+      ENABLE_DOCS: "false"
+      ENABLE_METRICS: "false"
+      ENABLE_DETAILED_HEALTH: "false"
+    services:
+      postgres:
+        image: postgres:15@sha256:0dda651c259bfe50e2bcc28ca23d1fcca772fa90b0210803aa7b97379ccf4e85
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: insightflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-load.txt
+
+      - name: Install backend and load-test dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip==26.1.1
+          pip install -r requirements-load.txt
+
+      - name: Generate ephemeral load-test password
+        run: python -c "import secrets; print('E2E_USER_PASSWORD=' + secrets.token_urlsafe(24))" >> "$GITHUB_ENV"
+
+      - name: Initialize load-test database
+        working-directory: ./backend
+        env:
+          LEGACY_SCHEMA_BOOTSTRAP: "true"
+        run: python scripts/init_db_for_ci.py
+
+      - name: Seed load-test user
+        working-directory: ./backend
+        run: python scripts/seed_demo_user.py
+
+      - name: Start multi-worker backend
+        working-directory: ./backend
+        run: |
+          gunicorn main:app \
+            --worker-class uvicorn.workers.UvicornWorker \
+            --workers 4 \
+            --bind 127.0.0.1:8000 \
+            --timeout 120 \
+            --access-logfile - \
+            --error-logfile /tmp/insight-flow-backend.log \
+            > /tmp/insight-flow-backend-access.log 2>&1 &
+          echo $! > /tmp/insight-flow-backend.pid
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:8000/health/ready > /dev/null; then
+              echo "Backend is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "Backend failed readiness check"
+          cat /tmp/insight-flow-backend.log || true
+          cat /tmp/insight-flow-backend-access.log || true
+          exit 1
+
+      - name: Verify production endpoint exposure
+        run: |
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/health)" = "200"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/health/ready)" = "200"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/docs)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/metrics)" = "404"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/health/full)" = "404"
+
+      - name: Run authenticated API load gate
+        working-directory: ./backend
+        run: |
+          mkdir -p load-test-results
+          export LOAD_TEST_PASSWORD="$E2E_USER_PASSWORD"
+          locust -f scripts/load_test.py \
+            --host=http://127.0.0.1:8000 \
+            --headless \
+            --users 8 \
+            --spawn-rate 2 \
+            --run-time 30s \
+            --csv=load-test-results/ci \
+            --only-summary
+          unset LOAD_TEST_PASSWORD
+
+      - name: Upload API performance results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: api-performance-results
+          path: |
+            backend/load-test-results
+            /tmp/insight-flow-backend-access.log
+            /tmp/insight-flow-backend.log
           retention-days: 7

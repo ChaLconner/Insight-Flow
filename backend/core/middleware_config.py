@@ -30,6 +30,7 @@ def setup_cors_middleware(app: FastAPI) -> None:
             "X-RateLimit-Reset",
             "X-Request-ID",
             "X-Response-Time",
+            "ETag",
         ],
     )
 

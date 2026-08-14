@@ -4,6 +4,57 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const LOCAL_API_URL = "http://127.0.0.1:8000";
+
+function isLoopbackHost(hostname) {
+  return ["localhost", "127.0.0.1", "::1"].includes(hostname.toLowerCase());
+}
+
+function resolveApiUrl() {
+  // NEXT_PUBLIC_API_URL is the browser's same-origin /api base in this app;
+  // only API_URL identifies the backend for server-side rewrites.
+  const configuredApiUrl = process.env.API_URL?.trim();
+
+  if (!configuredApiUrl) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "API_URL must be configured for production builds; refusing to proxy production traffic to localhost.",
+      );
+    }
+    return LOCAL_API_URL;
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(configuredApiUrl);
+  } catch {
+    throw new Error("API_URL must be an absolute http(s) URL.");
+  }
+
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error("API_URL must use the http or https protocol.");
+  }
+
+  if (parsedUrl.search || parsedUrl.hash) {
+    throw new Error("API_URL must not include a query string or fragment.");
+  }
+
+  const pathName = parsedUrl.pathname.replace(/\/+$/, "");
+  if (pathName === "/api" || pathName === "/api/v1") {
+    parsedUrl.pathname = "";
+  } else if (pathName !== "") {
+    throw new Error("API_URL must point to the API origin, not an API route.");
+  }
+
+  if (process.env.NODE_ENV === "production" && isLoopbackHost(parsedUrl.hostname)) {
+    throw new Error(
+      "API_URL must not point to localhost or another loopback host in production.",
+    );
+  }
+
+  return parsedUrl.toString().replace(/\/$/, "");
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Required by the production Dockerfile's minimal runtime image.
@@ -178,7 +229,7 @@ const nextConfig = {
 
   // API Proxy Rewrites
   async rewrites() {
-    const apiUrl = process.env.API_URL || "http://127.0.0.1:8000";
+    const apiUrl = resolveApiUrl();
     return [
       // Root level endpoints that should NOT go to /api/v1
       {

@@ -284,6 +284,14 @@ class AppSettings(BaseSettings):
     health_check_cache_ttl_seconds: float = Field(
         default=1.0, alias="HEALTH_CHECK_CACHE_TTL_SECONDS", ge=0
     )
+    health_check_timeout_seconds: float = Field(
+        default=2.0, alias="HEALTH_CHECK_TIMEOUT_SECONDS", gt=0
+    )
+    # Bound aggregate per-user private-file storage. Individual uploads are
+    # separately capped in utils.file_security.py.
+    file_upload_quota_bytes: int = Field(
+        default=100 * 1024 * 1024, alias="FILE_UPLOAD_QUOTA_BYTES", gt=0
+    )
     # The API must not create an in-process scheduler. Run one dedicated
     # scheduler owner through scripts/worker.py instead.
     scheduler_enabled: bool = Field(default=False, alias="SCHEDULER_ENABLED")

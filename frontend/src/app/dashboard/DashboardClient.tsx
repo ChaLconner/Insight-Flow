@@ -202,7 +202,7 @@ export default function DashboardClient() {
           Press R to refresh dashboard.
         </div>
 
-        <main id="main-content" className="space-y-8">
+        <div className="space-y-8">
           {/* Welcome Section with Refresh and Quick Actions */}
           <DashboardHeader />
 
@@ -238,7 +238,7 @@ export default function DashboardClient() {
               </div>
             </div>
           </section>
-        </main>
+        </div>
       </ErrorBoundary>
     </ProtectedLayout>
   );

@@ -37,11 +37,17 @@ export default defineConfig({
     },
     // Performance optimizations
     pool: "threads",
+    // Keep CI and local runs deterministic on constrained runners. The suite
+    // contains a few module-reset and async setup boundaries that become
+    // flaky when every test file competes for an uncapped worker.
+    maxWorkers: 2,
     reporters: ["verbose"],
     // Watch mode optimizations
     watch: false,
-    // Timeout settings
-    testTimeout: 10000,
+    // The serial coverage gate can spend several seconds loading a heavily
+    // instrumented React module on constrained Windows runners. Keep a finite
+    // bound while avoiding false negatives from the 10-second default.
+    testTimeout: 30000,
     hookTimeout: 10000,
   },
 });

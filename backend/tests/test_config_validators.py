@@ -108,6 +108,21 @@ class TestConfigValidators:
         assert settings.docs_enabled is True
         assert settings.metrics_enabled is True
 
+    def test_file_upload_quota_has_safe_default_and_can_be_configured(self):
+        """Aggregate private-file storage is bounded and configurable."""
+        assert AppSettings(ENVIRONMENT="development").file_upload_quota_bytes == 100 * 1024 * 1024
+        assert (
+            AppSettings(
+                ENVIRONMENT="development", FILE_UPLOAD_QUOTA_BYTES=2048
+            ).file_upload_quota_bytes
+            == 2048
+        )
+
+    def test_file_upload_quota_rejects_non_positive_values(self):
+        """A disabled or negative quota must fail configuration validation."""
+        with pytest.raises(ValidationError):
+            AppSettings(ENVIRONMENT="development", FILE_UPLOAD_QUOTA_BYTES=0)
+
     def test_scheduler_and_slow_request_defaults(self, monkeypatch):
         """The API owns no scheduler and logs requests slower than 500 ms by default."""
         monkeypatch.delenv("SCHEDULER_ENABLED", raising=False)

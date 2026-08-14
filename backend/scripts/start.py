@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Startup script for the FastAPI backend with proper host binding.
-This ensures the server is accessible from the frontend.
+This provides a local development server for the frontend.
 """
 
 import os
@@ -27,7 +27,7 @@ app_logger.info("STARTING FASTAPI BACKEND SERVER")
 app_logger.info("=" * 50)
 
 # Get configuration from environment or use defaults
-host = os.getenv("HOST", "0.0.0.0")  # Default to 0.0.0.0 for accessibility
+host = os.getenv("HOST", "127.0.0.1")  # Bind locally unless explicitly configured.
 port = int(os.getenv("PORT", "8000"))
 reload = os.getenv("RELOAD", "true").lower() == "true"
 

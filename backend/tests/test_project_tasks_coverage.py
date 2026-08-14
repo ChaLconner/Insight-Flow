@@ -170,6 +170,7 @@ def test_get_project_tasks_exception(client, mock_project, mock_task_service):
 
     assert response.status_code == 500
     assert "Failed to fetch project tasks" in response.json()["message"]
+    assert "DB Error" not in response.text
 
 
 def test_create_task_success(client, mock_project, mock_task_service, mock_task_factory):

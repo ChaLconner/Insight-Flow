@@ -136,6 +136,7 @@ export function HeroSection() {
         <div className="flex flex-wrap items-center gap-4 pt-2">
           <Link
             href={mounted && isAuthenticated ? "/dashboard" : "/auth/register"}
+            prefetch={false}
             className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-full transition-all hover:scale-105 active:scale-95 shadow-lg shadow-indigo-600/25"
           >
             Start for free

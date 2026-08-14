@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import stripe
@@ -116,3 +116,28 @@ async def test_resume_subscription_stripe_error(
 
     with pytest.raises(ValueError, match="Failed to resume subscription with payment provider"):
         await payment_service.resume_subscription(async_session, test_user.id)
+
+
+@pytest.mark.asyncio
+async def test_resume_subscription_unknown_stripe_status_fails_closed(
+    payment_service, async_session, test_user
+):
+    sub = Subscription(
+        user_id=test_user.id,
+        plan=SubscriptionPlan.PRO,
+        stripe_subscription_id="sub_test",
+        status=SubscriptionStatus.ACTIVE,
+        cancel_at_period_end=True,
+    )
+    async_session.add(sub)
+    await async_session.commit()
+
+    stripe_sub = MagicMock(status="future_provider_status")
+    with patch.object(payment_service, "_run_stripe_cmd", new_callable=AsyncMock) as run_stripe:
+        run_stripe.return_value = stripe_sub
+
+        result = await payment_service.resume_subscription(async_session, test_user.id)
+
+    assert result is not None
+    assert result.cancel_at_period_end is False
+    assert result.status == SubscriptionStatus.INCOMPLETE

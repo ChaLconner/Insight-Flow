@@ -103,6 +103,25 @@ describe("task and filter component branches", () => {
     expect(screen.getByText("No team data available")).toBeInTheDocument();
   });
 
+  it("keeps team rows uniquely keyed when names and avatars repeat", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <TeamList
+        team={[
+          { name: "Test User", tasks: 2, completed: 1, efficiency: 50 },
+          { name: "Test User", tasks: 1, completed: 1, efficiency: 100 },
+        ]}
+      />,
+    );
+
+    const duplicateKeyWarnings = consoleError.mock.calls.filter(([message]) =>
+      String(message).includes("Encountered two children with the same key"),
+    );
+    expect(duplicateKeyWarnings).toHaveLength(0);
+    consoleError.mockRestore();
+  });
+
   it("renders idle, clear, and searching user-filter indicators", () => {
     const onSearchChange = vi.fn();
     const commonProps = {

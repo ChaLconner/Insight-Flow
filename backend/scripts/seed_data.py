@@ -5,27 +5,24 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from secrets import SystemRandom
 
-from passlib.context import CryptContext
 from sqlalchemy import select
 
 # Add the backend directory to sys.path to import modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from seed_security import require_seed_password
 
 from database import AsyncSessionLocal
 from models.project import MemberRole, Project, ProjectMember
 from models.task import Task, TaskPriority, TaskStatus
 from models.task_history import ActivityType, TaskHistory
 from models.user import User
+from utils.auth import get_password_hash
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 secure_random = SystemRandom()
 
 
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-
-async def _seed_users(session, users_data):
+async def _seed_users(session, users_data, seed_password: str):
     created_users = []
     for user_data in users_data:
         result = await session.execute(select(User).filter(User.email == user_data["email"]))
@@ -41,7 +38,7 @@ async def _seed_users(session, users_data):
             email=user_data["email"],
             name=user_data["name"],
             username=user_data["email"].split("@")[0],
-            hashed_password=get_password_hash("password123"),
+            hashed_password=get_password_hash(seed_password),
             is_active=True,
             is_verified=True,
             role=user_data["role"],
@@ -220,6 +217,7 @@ async def _seed_tasks(session, created_projects):
 
 
 async def seed_data():
+    seed_password = require_seed_password()
     session = AsyncSessionLocal()
     try:
         print("Seeding data...")
@@ -231,7 +229,7 @@ async def seed_data():
             {"email": "charlie@example.com", "name": "Charlie Brown", "role": "user"},
             {"email": "diana@example.com", "name": "Diana Prince", "role": "user"},
         ]
-        created_users = await _seed_users(session, users_data)
+        created_users = await _seed_users(session, users_data, seed_password)
         users_map = {u.email: u for u in created_users}
 
         projects_data = [
@@ -261,6 +259,7 @@ async def seed_data():
     except Exception as e:
         print(f"Error seeding data: {e}")
         await session.rollback()
+        raise
     finally:
         await session.close()
 

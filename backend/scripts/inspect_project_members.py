@@ -1,23 +1,25 @@
+import asyncio
 import os
 import sys
 
 # Add parent directory to path to allow imports from backend root
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from database import SessionLocal
+from database import AsyncSessionLocal
 from models.project import ProjectMember
 
 
-def inspect_project_members():
-    db = SessionLocal()
-    try:
-        members = (
-            db.query(ProjectMember)
-            .options(joinedload(ProjectMember.user), joinedload(ProjectMember.project))
-            .all()
+async def inspect_project_members():
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ProjectMember).options(
+                joinedload(ProjectMember.user), joinedload(ProjectMember.project)
+            )
         )
+        members = result.unique().scalars().all()
 
         print("\n=== Project Members Inspection ===")
         print(f"Total Memberships: {len(members)}")
@@ -49,9 +51,6 @@ def inspect_project_members():
             for m in members_list:
                 print(f"{m['user']:<20} | {m['email']:<25} | {m['role']:<10}")
 
-    finally:
-        db.close()
-
 
 if __name__ == "__main__":
-    inspect_project_members()
+    asyncio.run(inspect_project_members())

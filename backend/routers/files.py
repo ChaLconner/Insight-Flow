@@ -11,11 +11,12 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config import get_settings
 from database import get_async_db
 from models.file import File as FileModel
 from models.user import User
@@ -41,6 +42,7 @@ FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {"description": "Invalid file request"},
     403: {"description": "The authenticated user does not own the file"},
     404: {"description": "File not found"},
+    413: {"description": "The user's file storage quota is exceeded"},
     500: {"description": "File operation failed"},
 }
 
@@ -87,6 +89,30 @@ def _cleanup_upload(path: str | None, file_committed: bool, error_type: str) -> 
         logger.warning(f"Failed to remove {error_type} upload: {cleanup_error}")
 
 
+async def _ensure_upload_quota(
+    db: AsyncSession,
+    user_id: Any,
+    incoming_size: int,
+) -> None:
+    """Reject aggregate storage growth beyond the configured per-user quota."""
+    quota_bytes = get_settings().file_upload_quota_bytes
+    # Serialize the sum-and-insert sequence across concurrent workers.
+    await db.scalar(select(User.id).where(User.id == user_id).with_for_update())
+    used_bytes = int(
+        await db.scalar(
+            select(func.coalesce(func.sum(FileModel.size_bytes), 0)).where(
+                FileModel.user_id == user_id
+            )
+        )
+        or 0
+    )
+    if used_bytes + incoming_size > quota_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File storage quota exceeded",
+        )
+
+
 @router.post("/upload", responses=FILE_ERROR_RESPONSES)
 async def upload_file(
     file: UploadFile = File(...),
@@ -110,6 +136,7 @@ async def upload_file(
         # Stream to a bounded temporary file so concurrent uploads do not
         # multiply near-limit request bodies in process memory.
         staged_path, file_extension, file_size = await _read_and_validate_upload(file, current_user)
+        await _ensure_upload_quota(db, current_user.id, file_size)
 
         # Generate unique filename with validated extension
         unique_name = f"{uuid.uuid4()}{file_extension}"

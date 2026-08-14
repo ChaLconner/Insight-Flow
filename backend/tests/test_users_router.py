@@ -324,7 +324,7 @@ def test_upload_avatar_local_success(client, mock_user_service, mock_current_use
         patch("routers.users.os.makedirs"),
         patch("routers.users.os.remove") as mock_remove,
         patch("routers.users.os.path.exists", return_value=True),
-        patch("builtins.open", mock_open()) as mock_file,
+        patch("builtins.open", mock_open(read_data=VALID_PNG_BYTES)) as mock_file,
     ):
         mock_user_service.update_user.return_value = {
             "id": mock_current_user.id,
@@ -378,7 +378,7 @@ def test_upload_avatar_cloudinary_fail_fallback(client, mock_user_service, mock_
     with (
         patch("routers.users.is_cloudinary_configured", return_value=True),
         patch("routers.users.cloudinary_upload_avatar", return_value=None),
-        patch("builtins.open", mock_open()),
+        patch("builtins.open", mock_open(read_data=VALID_PNG_BYTES)),
     ):
         mock_user_service.update_user.return_value = {
             "id": mock_current_user.id,

@@ -6,7 +6,7 @@ Focuses on missing paths in login/logout.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from routers.auth import login, logout
 
@@ -88,3 +88,22 @@ class TestAuthRouterGaps:
                     assert result["message"] == "Successfully logged out"
                     mock_clear.assert_called_once()
                     mock_bl.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_logout_reports_blacklist_failure(self, mock_db, mock_response, mock_request):
+        """Logout must not claim revocation succeeded when storage is down."""
+        mock_request.cookies = {"access_token": "valid.token.here"}
+
+        with (
+            patch("utils.auth.verify_token", return_value={"jti": "unique_id", "sub": "user"}),
+            patch("routers.auth.get_token_expiration", return_value=1000),
+            patch(
+                "routers.auth.TokenBlacklist.async_blacklist_token",
+                side_effect=RuntimeError("DB offline"),
+            ),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await logout(mock_request, mock_response, db=mock_db)
+
+        assert exc_info.value.status_code == 503
+        assert "DB offline" not in str(exc_info.value.detail)

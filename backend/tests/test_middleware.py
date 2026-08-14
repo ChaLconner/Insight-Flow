@@ -6,6 +6,7 @@ Tests middleware functionality in isolation.
 
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
@@ -150,8 +151,8 @@ class TestResponseCacheMiddleware:
 
         assert ResponseCacheMiddleware is not None
 
-    def test_cache_middleware_matches_versioned_dashboard_path(self):
-        """Test API v1 dashboard paths get intended private cache header."""
+    def test_cache_middleware_does_not_cache_versioned_dashboard_path(self):
+        """Test account-scoped dashboard responses remain browser no-store."""
         from middleware.response_cache import ResponseCacheMiddleware
 
         app = FastAPI()
@@ -164,9 +165,7 @@ class TestResponseCacheMiddleware:
         with TestClient(app) as client:
             response = client.get("/api/v1/dashboard/overview")
 
-        assert (
-            response.headers["Cache-Control"] == "private, max-age=60, stale-while-revalidate=120"
-        )
+        assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
 
     def test_cache_middleware_does_not_cache_versioned_notifications(self):
         """Test API v1 notification paths remain no-store."""
@@ -183,6 +182,65 @@ class TestResponseCacheMiddleware:
             response = client.get("/api/v1/notifications/")
 
         assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+
+    def test_public_health_response_supports_weak_etag_and_not_modified(self):
+        """Public health representations can revalidate without a body transfer."""
+        from middleware.response_cache import ResponseCacheMiddleware
+
+        app = FastAPI()
+        app.add_middleware(ResponseCacheMiddleware)
+
+        @app.get("/health")
+        async def health_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            first_response = client.get("/health")
+            etag = first_response.headers["ETag"]
+            second_response = client.get("/health", headers={"If-None-Match": etag})
+
+        assert first_response.status_code == 200
+        assert etag.startswith('W/"')
+        assert second_response.status_code == 304
+        assert second_response.headers["ETag"] == etag
+        assert second_response.content == b""
+
+    def test_account_scoped_dashboard_response_stays_no_store_without_etag(self):
+        """Private responses must not gain validators that browsers can reuse."""
+        from middleware.response_cache import ResponseCacheMiddleware
+
+        app = FastAPI()
+        app.add_middleware(ResponseCacheMiddleware)
+
+        @app.get("/api/v1/dashboard/overview")
+        async def dashboard_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.get("/api/v1/dashboard/overview")
+
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+        assert "ETag" not in response.headers
+
+    @pytest.mark.parametrize("path", ["/health/full", "/health/db", "/health/cache"])
+    def test_detailed_health_responses_are_not_shared_cacheable(self, path):
+        """Detailed health can expose topology and must not receive validators."""
+        from middleware.response_cache import ResponseCacheMiddleware
+
+        app = FastAPI()
+        app.add_middleware(ResponseCacheMiddleware)
+
+        @app.get(path)
+        async def detailed_health_endpoint():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            response = client.get(path)
+
+        assert response.status_code == 200
+        assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate"
+        assert "ETag" not in response.headers
 
 
 class TestCSRFMiddleware:

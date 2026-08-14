@@ -1,8 +1,6 @@
-"use client";
-
 import Image from "next/image";
 import { Layout, GitBranch, BarChart3, Users } from "lucide-react";
-import { useMemo } from "react";
+import { ScrollReveal } from "@/components/landing/scroll-reveal";
 
 interface FeatureData {
   title: string;
@@ -71,14 +69,7 @@ const FeatureCard = ({
   );
 };
 
-import { useElementOnScreen } from "@/hooks/use-element-on-screen";
-
-// ... feature data interface and FeatureCard component ...
-
-export function FeaturesSection() {
-  const [ref, isVisible] = useElementOnScreen({ threshold: 0.1 });
-  
-  const features = useMemo(() => [
+const features: FeatureData[] = [
     {
       title: "Centralized Dashboard",
       description:
@@ -167,28 +158,26 @@ export function FeaturesSection() {
         </div>
       ),
     },
-  ], []);
+];
 
-  const carouselFeatures = useMemo(
-    () => [
-      ...features.map((feature) => ({
-        feature,
-        key: `primary-${feature.title}`,
-      })),
-      ...features.map((feature) => ({
-        feature,
-        key: `duplicate-${feature.title}`,
-      })),
-    ],
-    [features],
-  );
+const carouselFeatures = [
+  ...features.map((feature) => ({
+    feature,
+    key: `primary-${feature.title}`,
+  })),
+  ...features.map((feature) => ({
+    feature,
+    key: `duplicate-${feature.title}`,
+  })),
+];
+
+export function FeaturesSection() {
 
   return (
     <div
       id="features"
       className="scroll-mt-20 py-20 overflow-hidden relative"
       style={{ contain: 'layout style' }}
-      ref={ref}
     >
       {/* Aura Background Glow - Hidden on mobile */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden hidden md:block">
@@ -196,7 +185,7 @@ export function FeaturesSection() {
         <div className="absolute top-1/3 right-1/4 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[60px]" />
       </div>
       
-      <div className={`max-w-7xl mx-auto px-6 text-center mb-12 duration-700 transition-all ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+      <ScrollReveal className="max-w-7xl mx-auto px-6 text-center mb-12">
         <h2 className="text-3xl md:text-5xl font-bold mb-6">
           Built for high-performance teams
         </h2>
@@ -204,7 +193,7 @@ export function FeaturesSection() {
           We've obsessed over every detail. Swipe to explore how we
           supercharge your workflow.
         </p>
-      </div>
+      </ScrollReveal>
 
       <div className="relative w-full overflow-hidden mask-gradient-x">
          {/* Gradient Masks for smooth fade edges */}

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stripe import SignatureVerificationError
 
 from database import get_async_db
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_active_user
 from models import User
 from rate_limiter import RateLimits, limiter
 from schemas.payment import (
@@ -60,7 +60,7 @@ async def get_available_plans():
 async def check_downgrade_eligibility(
     target_plan: str,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Check if user can downgrade to a specific plan without exceeding limits.
@@ -167,7 +167,7 @@ async def check_downgrade_eligibility(
 async def create_setup_intent(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -207,7 +207,7 @@ async def create_setup_intent(
 @router.get("/methods", response_model=PaymentMethodListResponse)
 async def list_payment_methods(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -226,7 +226,7 @@ async def add_payment_method(
     request: Request,
     data: PaymentMethodCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -265,7 +265,7 @@ async def add_payment_method(
 async def set_default_payment_method(
     method_id: UUID,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -292,7 +292,7 @@ async def delete_payment_method(
     request: Request,
     method_id: UUID,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -329,7 +329,7 @@ async def list_payment_history(
     start_date: str | None = None,  # Filter by start date (ISO format: YYYY-MM-DD)
     end_date: str | None = None,  # Filter by end date (ISO format: YYYY-MM-DD)
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -384,7 +384,7 @@ async def list_payment_history(
 @router.get("/history/stats", response_model=PaymentHistoryStatsResponse)
 async def get_payment_history_stats(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -404,7 +404,7 @@ async def get_payment_history_stats(
 @router.get("/subscription", response_model=SubscriptionResponse)
 async def get_subscription(
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -425,7 +425,7 @@ async def create_subscription(
     request: Request,
     data: SubscriptionCreate,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -463,7 +463,7 @@ async def cancel_subscription(
     request: Request,
     cancel_immediately: bool = False,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """
@@ -485,7 +485,7 @@ async def cancel_subscription(
 async def resume_subscription(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     service: PaymentService = Depends(get_service),
 ):
     """

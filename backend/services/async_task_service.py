@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import asc, delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from models.analytics import TaskAttachment, TaskComment, TaskDependency, TaskTimeTracking
 from models.project import MemberRole, Project, ProjectMember
@@ -97,7 +97,14 @@ class AsyncTaskService:
                 ProjectMember.project_id == project_id, ProjectMember.user_id == user_id
             )
         )
-        return member_result.scalars().first() is not None
+        if member_result.scalars().first() is not None:
+            return True
+
+        # Keep global administrators consistent with router-level task
+        # authorization even when they are not explicit project members.
+        user_result = await self.db.execute(select(User).filter(User.id == user_id))
+        user = user_result.scalars().first()
+        return bool(user and user.role == "admin")
 
     async def _ensure_project_member(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Reject task links to users outside the project membership boundary."""
@@ -120,7 +127,12 @@ class AsyncTaskService:
                 ProjectMember.role.in_([MemberRole.ADMIN.value, MemberRole.OWNER.value]),
             )
         )
-        return member_result.scalars().first() is not None
+        if member_result.scalars().first() is not None:
+            return True
+
+        user_result = await self.db.execute(select(User).filter(User.id == user_id))
+        user = user_result.scalars().first()
+        return bool(user and user.role == "admin")
 
     async def create_task(
         self, task_data: TaskCreate, created_by: uuid.UUID, *, commit: bool = True
@@ -244,9 +256,7 @@ class AsyncTaskService:
     ) -> tuple[Any, list[Any]]:
         query = (
             select(Task)
-            .options(
-                selectinload(Task.assignee), selectinload(Task.creator), selectinload(Task.project)
-            )
+            .options(joinedload(Task.assignee), joinedload(Task.creator), joinedload(Task.project))
             .filter(*filters)
         )
 

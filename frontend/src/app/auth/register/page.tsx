@@ -1,6 +1,6 @@
 "use client";
 
-import { useGoogleLogin } from "@react-oauth/google";
+import type { NonOAuthError, TokenResponse } from "@react-oauth/google";
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -15,15 +15,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, type RegisterSchema } from "@/lib/validations/auth";
 import { getErrorMessage } from "@/lib/error-utils";
 import { random } from "@/lib/utils";
-import { GoogleIcon } from "@/components/auth/GoogleIcon";
+import { DeferredGoogleAuthButton } from "@/components/auth/DeferredGoogleAuthButton";
 import { PasswordVisibilityButton } from "@/components/auth/PasswordVisibilityButton";
 import { getSocialSignupRedirect } from "@/lib/auth-redirect";
+import { GitHubIcon } from "@/components/auth/GitHubIcon";
 
 import {
   Mail,
   Lock,
-
-  GitBranch,
   ArrowRight,
   Loader2,
   Layers,
@@ -132,8 +131,7 @@ function RegisterPageContent() {
     }
   };
 
-  const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
+  const handleGoogleLoginSuccess = async (tokenResponse: TokenResponse) => {
       try {
         setIsLoading(true);
         setApiError("");
@@ -162,33 +160,33 @@ function RegisterPageContent() {
       } finally {
         setIsLoading(false);
       }
-    },
-    onError: () => {
-      console.error("❌ Google login failed");
-      setApiError("Google login failed. Please try again.");
-      setIsLoading(false);
-      toast.error("Google login failed");
-    },
-    onNonOAuthError: (error) => {
-      console.warn("Google login popup error:", error.type);
-      setIsLoading(false);
+  };
 
-      if (error.type === "popup_closed") {
-        return;
-      }
+  const handleGoogleLoginError = () => {
+    console.error("❌ Google login failed");
+    setApiError("Google login failed. Please try again.");
+    setIsLoading(false);
+    toast.error("Google login failed");
+  };
 
-      const description =
-        error.type === "popup_failed_to_open"
-          ? "Google popup was blocked. Please allow popups and try again."
-          : "Google login could not be completed. Please try again.";
+  const handleGoogleNonOAuthError = (error: NonOAuthError) => {
+    console.warn("Google login popup error:", error.type);
+    setIsLoading(false);
 
-      setApiError(description);
-      toast.error("Google login failed", {
-        description,
-      });
-    },
-    flow: "implicit",
-  });
+    if (error.type === "popup_closed") {
+      return;
+    }
+
+    const description =
+      error.type === "popup_failed_to_open"
+        ? "Google popup was blocked. Please allow popups and try again."
+        : "Google login could not be completed. Please try again.";
+
+    setApiError(description);
+    toast.error("Google login failed", {
+      description,
+    });
+  };
 
 
 
@@ -224,10 +222,10 @@ function RegisterPageContent() {
 
             {/* Social Login */}
             <div className="space-y-3">
-              <Button
-                variant="outline"
-                className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
-                onClick={() => handleGoogleLogin()}
+              <DeferredGoogleAuthButton
+                onSuccess={handleGoogleLoginSuccess}
+                onError={handleGoogleLoginError}
+                onNonOAuthError={handleGoogleNonOAuthError}
                 disabled={
                   isLoading || !process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
                 }
@@ -236,10 +234,8 @@ function RegisterPageContent() {
                     ? "Google Client ID is missing"
                     : "Sign up with Google"
                 }
-              >
-                <GoogleIcon />
-                Continue with Google
-              </Button>
+                label="Continue with Google"
+              />
               <Button
                 variant="outline"
                 className="w-full bg-slate-900 hover:bg-slate-800 border-slate-700 text-white transition-all hover:scale-[1.02]"
@@ -247,7 +243,7 @@ function RegisterPageContent() {
                 disabled={isLoading}
                 title="Sign up with GitHub"
               >
-                <GitBranch className="h-4 w-4 mr-3" />
+                <GitHubIcon />
                 Continue with GitHub
               </Button>
             </div>
@@ -434,12 +430,12 @@ function RegisterPageContent() {
         {/* Footer */}
         <p className="text-center text-sm text-muted-foreground mt-6">
           Already have an account?{" "}
-          <Link
+          <a
             href="/auth/login"
             className="text-white hover:text-gray-200 font-medium transition-colors underline"
           >
             Sign in
-          </Link>
+          </a>
         </p>
       </div>
     </div>

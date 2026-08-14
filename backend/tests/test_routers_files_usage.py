@@ -8,12 +8,43 @@ import os
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from fastapi import HTTPException
+
 from database import get_async_db
 from main import app
+from models.file import File as FileModel
+from routers.files import _ensure_upload_quota
 
 
 class TestFilesRouter:
     """Tests for the files router endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_upload_quota_rejects_when_persisted_bytes_would_exceed_limit(
+        self, async_session, test_user, monkeypatch
+    ):
+        """Quota checks use persisted bytes and return an explicit 413."""
+        async_session.add(
+            FileModel(
+                user_id=test_user.id,
+                filename="existing.txt",
+                unique_filename="quota-existing.txt",
+                url="/api/v1/files/download/quota-existing.txt",
+                size_bytes=100,
+                mime_type="text/plain",
+            )
+        )
+        await async_session.commit()
+        monkeypatch.setattr(
+            "routers.files.get_settings",
+            lambda: type("Settings", (), {"file_upload_quota_bytes": 150})(),
+        )
+
+        with pytest.raises(HTTPException) as error:
+            await _ensure_upload_quota(async_session, test_user.id, 51)
+
+        assert getattr(error.value, "status_code", None) == 413
 
     def test_upload_file_requires_auth(self, unauthenticated_client):
         """Test that file upload requires authentication."""
@@ -371,7 +402,7 @@ class TestUsageRouterExtended:
         )
 
         # If code uses `db.scalar(...)`, we mock scalar directly
-        mock_session.scalar = AsyncMock(side_effect=[5, 10])
+        mock_session.scalar = AsyncMock(side_effect=[5, 10, 1234])
 
         app.dependency_overrides[get_async_db] = lambda: mock_session
 
@@ -381,5 +412,6 @@ class TestUsageRouterExtended:
 
         assert data["projects_used"] == 5
         assert data["seats_used"] == 10
+        assert data["storage_used_bytes"] == 1234
 
         del app.dependency_overrides[get_async_db]

@@ -147,9 +147,7 @@ export const authApi = {
 export const fileApi = {
   // Upload file
   uploadFile: async (formData: FormData): Promise<unknown> => {
-    const { data } = await apiClient.post("/files/upload", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const { data } = await apiClient.post("/files/upload", formData);
     return data;
   },
 
@@ -493,9 +491,7 @@ export const usersApi = {
 
   // Upload user avatar
   uploadAvatar: async (formData: FormData): Promise<User> => {
-    const { data } = await apiClient.post("/users/me/avatar", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const { data } = await apiClient.post("/users/me/avatar", formData);
     return data;
   },
 
@@ -515,9 +511,10 @@ export const usersApi = {
     limit = 20,
     role?: string,
     status?: string,
+    signal?: AbortSignal,
   ): Promise<User[]> => {
     const cacheKey = `users-searchUsers-${query}-${skip}-${limit}-${role}-${status}`;
-    return createDeduplicatedRequest(async () => {
+    const request = async () => {
       const params: Record<string, unknown> = { q: query, skip, limit };
       if (role && role !== "all") {
         params.role = role;
@@ -526,9 +523,14 @@ export const usersApi = {
         params.status = status;
       }
 
-      const { data } = await apiClient.get("/users/search", { params });
+      const { data } = await apiClient.get("/users/search", { params, signal });
       return data;
-    }, cacheKey);
+    };
+
+    // Abortable searches must not share a promise with a previous query that
+    // may already have been cancelled. Keep deduplication for non-interactive
+    // callers, where sharing an in-flight request remains safe.
+    return signal ? request() : createDeduplicatedRequest(request, cacheKey);
   },
 
   // Get user settings

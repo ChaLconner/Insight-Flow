@@ -158,6 +158,9 @@ export function NotificationsPopover() {
         size="icon"
         className="relative h-10 w-10 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground transition-none"
         onClick={() => setIsOpen(!isOpen)}
+        aria-label={isOpen ? "Close notifications" : "Open notifications"}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (

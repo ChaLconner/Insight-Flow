@@ -30,7 +30,7 @@ export function DashboardLayout({ children }: Readonly<DashboardLayoutProps>) {
         )}
       >
         <Header onMenuClick={() => setIsSidebarOpen(true)} />
-        <main className="p-4 md:p-8">
+        <main id="main-content" tabIndex={-1} className="p-4 md:p-8">
           <div className="mx-auto max-w-7xl animate-in fade-in slide-in-from-bottom-4 duration-700">
             {children}
           </div>

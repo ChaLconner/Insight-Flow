@@ -97,6 +97,7 @@ const PricingCard = ({ plan, index, isVisible }: { plan: PlanData; index: number
 
       <Link
         href={getHref()}
+        prefetch={false}
         className={`w-full inline-flex justify-center items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 ${ctaClass}`}
       >
         {plan.cta}

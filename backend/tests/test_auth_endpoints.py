@@ -210,6 +210,19 @@ class TestPasswordReset:
         assert response.status_code == 200
         assert response.json()["valid"] is False
 
+    def test_validate_reset_token_reports_service_failure(
+        self, unauthenticated_client, mock_password_reset_service
+    ):
+        """Backend outages must not be reported as invalid user tokens."""
+        mock_password_reset_service.validate_reset_token.side_effect = RuntimeError("DB offline")
+
+        response = unauthenticated_client.post(
+            "/api/v1/auth/validate-reset-token", json={"token": "validtoken123"}
+        )
+
+        assert response.status_code == 503
+        assert "DB offline" not in response.text
+
 
 # ============================================================================
 # Tests for Email Verification

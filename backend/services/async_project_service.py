@@ -95,8 +95,21 @@ class AsyncProjectService:
 
         return limits.get(plan_enum, limits[SubscriptionPlanEnum.FREE])  # type: ignore
 
+    async def _lock_quota_owner(self, owner_id: uuid.UUID) -> None:
+        """Serialize quota check-and-write operations for one account.
+
+        Project and membership limits are enforced by counting rows before the
+        caller writes them. A row-level lock on the stable user row makes that
+        check part of the same transaction boundary on PostgreSQL, preventing
+        concurrent requests from both observing the same remaining capacity.
+        """
+        result = await self.db.execute(select(User.id).where(User.id == owner_id).with_for_update())
+        if result.scalar_one_or_none() is None:
+            raise ValueError("User not found")
+
     async def _check_project_limit(self, user_id: uuid.UUID) -> bool:
         """Check if user can create more projects."""
+        await self._lock_quota_owner(user_id)
         limits = await self._get_user_plan_limits(user_id)
         max_projects = limits["projects"]
 
@@ -114,6 +127,7 @@ class AsyncProjectService:
         Check if project can have this many members.
         Note: The limit is enforced based on the OWNER'S plan.
         """
+        await self._lock_quota_owner(owner_id)
         limits = await self._get_user_plan_limits(owner_id)
         max_members = limits["members"]
 
@@ -869,6 +883,9 @@ class AsyncProjectService:
         self, project_id: uuid.UUID, member_user_id: uuid.UUID, new_role: str, user_id: uuid.UUID
     ) -> ProjectMember:
         """Update a member's role."""
+        if new_role not in {MemberRole.ADMIN.value, MemberRole.MEMBER.value}:
+            raise ValueError("Invalid member role. Must be one of: admin, member")
+
         project = await self.get_project_by_id(project_id)
         if not project:
             raise ValueError(PROJECT_NOT_FOUND_ERROR)
@@ -894,15 +911,7 @@ class AsyncProjectService:
             user = user_res.scalars().first()
             member_name = user.name if user else UNKNOWN_USER_NAME
 
-            role_value = new_role
-            if role_value == "admin":
-                role_value = MemberRole.ADMIN.value
-            elif role_value == "member":
-                role_value = MemberRole.MEMBER.value
-            elif role_value == "owner":
-                role_value = MemberRole.OWNER.value
-
-            member.role = role_value
+            member.role = new_role
             cache_user_ids = await get_project_cache_user_ids(
                 self.db, project_id, (user_id, member_user_id)
             )

@@ -5,17 +5,19 @@ Revises: c8d9e0f1a2b3, a1b2c3d4e5f6
 Create Date: 2026-08-08
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+_NOW_SQL = "now()"
+
 # revision identifiers, used by Alembic.
 revision: str = "d4e5f6a7b8c9"
-down_revision: Union[str, Sequence[str], None] = ("c8d9e0f1a2b3", "a1b2c3d4e5f6")
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = ("c8d9e0f1a2b3", "a1b2c3d4e5f6")
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -26,17 +28,17 @@ def upgrade() -> None:
         "background_jobs",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=False
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=False
         ),
         sa.Column("job_type", sa.String(length=100), nullable=False),
         sa.Column("payload", sa.JSON(), nullable=False),
         sa.Column("status", sa.String(length=20), nullable=False, server_default="pending"),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
-            "available_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+            "available_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text(_NOW_SQL)
         ),
         sa.Column("locked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("locked_by", sa.String(length=100), nullable=True),

@@ -41,9 +41,10 @@ export function useProjects(options: UseProjectsOptions = {}) {
   const search = trimmedSearch === "" ? undefined : trimmedSearch;
   const status = options.status && options.status !== "all" ? options.status : undefined;
   const sortBy = options.sortBy ?? "newest";
+  const userId = user?.id ?? null;
 
   return useQuery({
-    queryKey: ["projects", { skip, pageSize, search, status, sortBy }],
+    queryKey: ["projects", userId, { skip, pageSize, search, status, sortBy }],
     queryFn: async () => {
       const data = await projectsApi.getProjects(
         skip,
@@ -70,6 +71,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
 export function useCreateProject() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const userId = user?.id ?? null;
 
   return useMutation({
     mutationFn: async (data: CreateProjectRequest) => {
@@ -88,10 +90,11 @@ export function useCreateProject() {
       return transformProjectData(response, user ?? undefined);
     },
     onSuccess: (newProject) => {
-      queryClient.setQueryData(["projects"], (old: Project[] | undefined) => {
-        return old ? [...old, newProject] : [newProject];
-      });
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.setQueriesData<Project[]>(
+        { queryKey: ["projects", userId] },
+        (old) => (old ? [...old, newProject] : old),
+      );
+      queryClient.invalidateQueries({ queryKey: ["projects", userId] });
       toast.success("Project created", {
         description: `Project "${newProject.name}" has been created successfully.`,
       });
@@ -107,6 +110,7 @@ export function useCreateProject() {
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
+  const userId = user?.id ?? null;
 
   return useMutation({
     mutationFn: async ({
@@ -138,7 +142,7 @@ export function useUpdateProject() {
     },
     onSuccess: () => {
       // Removed unused vars
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", userId] });
 
       toast.success("Project updated", {
         description: "Project has been updated successfully.",
@@ -154,6 +158,7 @@ export function useUpdateProject() {
 
 export function useArchiveProject() {
   const queryClient = useQueryClient();
+  const userId = useAuthStore((state) => state.user?.id ?? null);
 
   return useMutation({
     mutationFn: async (project: Project) => {
@@ -163,31 +168,32 @@ export function useArchiveProject() {
     },
     onMutate: async (project) => {
       // Optimistic update
-      await queryClient.cancelQueries({ queryKey: ["projects"] });
-      const previousProjects = queryClient.getQueryData<Project[]>([
-        "projects",
-      ]);
-
-      queryClient.setQueryData(["projects"], (old: Project[] | undefined) => {
-        return old
-          ? old.map((p) =>
-              p.id === project.id
-                ? { ...p, status: ProjectStatus.ARCHIVED }
-                : p,
-            )
-          : [];
+      const projectsQueryKey = ["projects", userId] as const;
+      await queryClient.cancelQueries({ queryKey: projectsQueryKey });
+      const previousProjects = queryClient.getQueriesData<Project[]>({
+        queryKey: projectsQueryKey,
       });
+
+      queryClient.setQueriesData<Project[]>(
+        { queryKey: projectsQueryKey },
+        (old) =>
+          old?.map((p) =>
+            p.id === project.id ? { ...p, status: ProjectStatus.ARCHIVED } : p,
+          ),
+      );
 
       return { previousProjects };
     },
     onError: (err, newProject, context) => {
-      queryClient.setQueryData(["projects"], context?.previousProjects);
+      for (const [queryKey, data] of context?.previousProjects ?? []) {
+        queryClient.setQueryData(queryKey, data);
+      }
       toast.error("Failed to archive project", {
         description: getErrorMessage(err),
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects", userId] });
     },
     onSuccess: (data, variables) => {
       toast.success("Project archived", {

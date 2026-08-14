@@ -82,12 +82,42 @@ class TestCSRFProtection:
 
         # Health endpoints should be exempt
         assert "/health" in CSRF_EXEMPT_PATHS
+        assert "/health/ready" in CSRF_EXEMPT_PATHS
 
         # Browser-generated CSP reports and Stripe webhooks cannot send the
         # application's double-submit header; each has endpoint-specific
         # authentication/limits instead.
         assert "/api/v1/security/csp-report" in CSRF_EXEMPT_PATHS
         assert "/api/v1/payment/webhook" in CSRF_EXEMPT_PATHS
+
+    def test_public_probe_paths_do_not_bootstrap_csrf_cookies(self):
+        """Public cacheable probes must not expose a replayable CSRF cookie."""
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from middleware.csrf import CSRFMiddleware
+
+        app = FastAPI()
+        app.add_middleware(CSRFMiddleware, cookie_secure=False)
+
+        @app.get("/health")
+        @app.get("/health/ready")
+        @app.get("/metrics")
+        async def public_probe():
+            return {"status": "ok"}
+
+        @app.get("/application")
+        async def application_get():
+            return {"status": "ok"}
+
+        with TestClient(app) as client:
+            for path in ("/health", "/health/ready", "/metrics"):
+                response = client.get(path)
+                assert "set-cookie" not in response.headers
+
+            application_response = client.get("/application")
+
+        assert "csrf_token=" in application_response.headers["set-cookie"]
 
     def test_safe_methods(self):
         """Test safe HTTP methods are defined."""

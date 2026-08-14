@@ -22,6 +22,8 @@ from sqlalchemy import select
 # Add current directory to path to allow imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from seed_security import require_seed_password
+
 from database import AsyncSessionLocal, init_database
 from models.project import MemberRole, Project, ProjectMember
 from models.task import Task, TaskPriority, TaskStatus
@@ -35,7 +37,7 @@ logger = setup_logger("seed_analytics")
 secure_random = SystemRandom()
 
 
-async def _get_or_create_team_member(db, name: str) -> User:
+async def _get_or_create_team_member(db, name: str, seed_password: str) -> User:
     """Return the demo team member for a stable email address."""
     email = f"{name.lower().replace(' ', '.')}@example.com"
     result = await db.execute(select(User).filter(User.email == email))
@@ -47,7 +49,7 @@ async def _get_or_create_team_member(db, name: str) -> User:
         id=uuid.uuid4(),
         email=email,
         name=name,
-        hashed_password=get_password_hash("password123"),
+        hashed_password=get_password_hash(seed_password),
         role="member",
         is_active=True,
         avatar_url=f"https://api.dicebear.com/7.x/avataaars/svg?seed={name.replace(' ', '')}",
@@ -161,6 +163,7 @@ def _seed_project_tasks(
 async def seed_analytics_data():
     """Seed the database with analytics test data."""
     logger.info("Starting analytics data seeding...")
+    seed_password = require_seed_password()
 
     # Initialize database
     await init_database()
@@ -181,7 +184,7 @@ async def seed_analytics_data():
         ]
 
         for name in member_names:
-            team_members.append(await _get_or_create_team_member(db, name))
+            team_members.append(await _get_or_create_team_member(db, name, seed_password))
 
         # Get admin user
         result = await db.execute(select(User).filter(User.email == "admin@example.com"))
@@ -226,6 +229,7 @@ async def seed_analytics_data():
         # Use proper logging for errors instead of traceback.print_exc()
         logger.exception(f"An error occurred during seeding: {e}", exc_info=True)
         await db.rollback()
+        raise
     finally:
         await db.close()
 

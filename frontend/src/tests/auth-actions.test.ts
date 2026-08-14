@@ -122,7 +122,9 @@ describe("auth actions", () => {
     await authActions.logout();
 
     expect(setLoadingMock).toHaveBeenCalledWith(true);
-    expect(apiClientMock.post).toHaveBeenCalledWith("/auth/logout");
+    expect(apiClientMock.post).toHaveBeenCalledWith("/auth/logout", undefined, {
+      timeout: 5000,
+    });
     expect(setLoggingOutMock).toHaveBeenCalledWith(true);
     expect(clearServiceWorkerCacheMock).toHaveBeenCalled();
     expect(logoutMock).toHaveBeenCalled();

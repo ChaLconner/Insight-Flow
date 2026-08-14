@@ -33,8 +33,8 @@ class TestGitHubOAuthConfiguration:
 
             assert result == "https://insight-flow-iota.vercel.app/auth/callback/github"
 
-    def test_resolve_github_redirect_uri_prefers_explicit_value(self):
-        """Test explicit redirect URI wins over environment fallback."""
+    def test_resolve_github_redirect_uri_ignores_untrusted_explicit_value(self):
+        """Test client input cannot override the configured redirect URI."""
         with patch.dict(
             "os.environ",
             {"FRONTEND_URL": "https://insight-flow-iota.vercel.app"},
@@ -44,7 +44,22 @@ class TestGitHubOAuthConfiguration:
 
             result = resolve_github_redirect_uri("https://custom.example.com/auth/callback/github")
 
-            assert result == "https://custom.example.com/auth/callback/github"
+            assert result == "https://insight-flow-iota.vercel.app/auth/callback/github"
+
+    def test_resolve_github_redirect_uri_accepts_configured_value(self):
+        """Test the configured frontend callback remains usable."""
+        with patch.dict(
+            "os.environ",
+            {"FRONTEND_URL": "https://insight-flow-iota.vercel.app"},
+            clear=True,
+        ):
+            from utils.github_oauth import resolve_github_redirect_uri
+
+            result = resolve_github_redirect_uri(
+                "https://insight-flow-iota.vercel.app/auth/callback/github"
+            )
+
+            assert result == "https://insight-flow-iota.vercel.app/auth/callback/github"
 
 
 class TestExchangeCodeForToken:

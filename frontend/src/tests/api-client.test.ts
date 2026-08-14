@@ -6,6 +6,7 @@ import {
   apiClient,
   createFormData,
   createDeduplicatedRequest,
+  clearDeduplicatedRequests,
   createCustomApiClient,
   checkBackendHealth,
   waitForBackend,
@@ -15,6 +16,7 @@ import {
   ApiError,
   setLoggingOut,
 } from '@/lib/api-client';
+import { clearAuthenticatedCaches } from '@/lib/auth-cache';
 
 describe('API Client Configuration', () => {
   beforeEach(() => {
@@ -40,6 +42,29 @@ describe('API Client Configuration', () => {
     const res = await apiClient.get('/test');
     expect(res.status).toBe(200);
     expect(res.data).toEqual(mockData);
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/test'),
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('should preserve HeadersInit values without adding a duplicate JSON content type', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    await apiClient.get('/text', {
+      headers: new Headers({ 'Content-Type': 'text/plain', 'X-Trace': 'test' }),
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        headers: {
+          'content-type': 'text/plain',
+          'x-trace': 'test',
+        },
+      }),
+    );
   });
 
   it('should handle POST, PUT, PATCH, DELETE requests with data and query params', async () => {
@@ -224,6 +249,40 @@ describe('API Client Configuration', () => {
     await expect(apiClient.get('/timeout')).rejects.toThrow('Request timeout. Please try again.');
   });
 
+  it('should report caller cancellation separately from a client timeout', async () => {
+    const abortErr = new Error('The operation was aborted');
+    abortErr.name = 'AbortError';
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(abortErr);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(apiClient.get('/cancelled', { signal: controller.signal })).rejects.toMatchObject({
+      message: 'Request cancelled.',
+      code: 'ERR_CANCELED',
+    });
+  });
+
+  it('should cancel in-flight authenticated requests when the auth cache is cleared', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const abortError = new Error('The operation was aborted');
+          abortError.name = 'AbortError';
+          reject(abortError);
+        });
+      });
+    });
+
+    const request = apiClient.get('/protected');
+    await clearAuthenticatedCaches();
+
+    await expect(request).rejects.toMatchObject({
+      message: 'Request cancelled.',
+      code: 'ERR_CANCELED',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('should identify ApiError with isAxiosError helper for backward compatibility', () => {
     const err = new ApiError('Test error', {
       data: {},
@@ -282,6 +341,27 @@ describe('API Client Configuration', () => {
     await expect(createDeduplicatedRequest(requestFn, 'retry-key')).rejects.toThrow('fail');
     await expect(createDeduplicatedRequest(requestFn, 'retry-key')).resolves.toBe('recovered');
     expect(requestFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('should not let an older request delete a newer request after cache clearing', async () => {
+    let resolveFirst!: (value: string) => void;
+    const first = createDeduplicatedRequest(
+      () => new Promise<string>((resolve) => { resolveFirst = resolve; }),
+      'account-switch-race',
+    );
+
+    clearDeduplicatedRequests();
+    let resolveSecond!: (value: string) => void;
+    const secondRequest = vi.fn().mockImplementation(
+      () => new Promise<string>((resolve) => { resolveSecond = resolve; }),
+    );
+    const second = createDeduplicatedRequest(secondRequest, 'account-switch-race');
+
+    resolveFirst('first');
+    await expect(first).resolves.toBe('first');
+    expect(createDeduplicatedRequest(secondRequest, 'account-switch-race')).toBe(second);
+    resolveSecond('second');
+    await expect(second).resolves.toBe('second');
   });
 
   it('should create custom API clients', async () => {

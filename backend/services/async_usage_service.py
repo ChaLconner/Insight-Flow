@@ -6,6 +6,7 @@ Separates usage metrics logic from the router.
 from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.file import File as FileModel
 from models.project import Project, ProjectMember
 from models.user import User
 
@@ -24,7 +25,7 @@ class AsyncUsageService:
             dict containing:
             - projects_used: Number of projects owned or member of
             - seats_used: Number of unique members in projects owned by the user (including self)
-            - storage_used_bytes: Total file storage used (placeholder for now)
+            - storage_used_bytes: Total private-file storage used
         """
         # 1. Projects Count (Owned + Member)
         projects_count = (
@@ -59,8 +60,17 @@ class AsyncUsageService:
         if team_members_count == 0:
             team_members_count = 1
 
+        storage_used_bytes = int(
+            await self.db.scalar(
+                select(func.coalesce(func.sum(FileModel.size_bytes), 0)).where(
+                    FileModel.user_id == user.id
+                )
+            )
+            or 0
+        )
+
         return {
             "projects_used": projects_count,
             "seats_used": team_members_count,
-            "storage_used_bytes": 0,  # Placeholder for future file storage logic
+            "storage_used_bytes": storage_used_bytes,
         }

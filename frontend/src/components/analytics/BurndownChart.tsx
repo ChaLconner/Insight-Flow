@@ -64,7 +64,7 @@ const BurndownChartComponent: React.FC<BurndownChartProps> = ({
       </CardHeader>
       <CardContent className="flex-1 min-w-0 overflow-hidden">
         <div className="h-[300px] w-full min-w-0">
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={300} minWidth={0}>
             <AreaChart
               data={data}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}

@@ -73,7 +73,14 @@ describe("UserSearchSelect", () => {
       await new Promise((resolve) => setTimeout(resolve, 350));
     });
 
-    expect(searchUsersMock).toHaveBeenCalledWith("ja");
+    expect(searchUsersMock).toHaveBeenCalledWith(
+      "ja",
+      0,
+      20,
+      undefined,
+      undefined,
+      expect.any(AbortSignal),
+    );
     await waitFor(() => expect(screen.getByText("jane@example.com")).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /jane doe/i }));

@@ -2,6 +2,8 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import or_
+from sqlalchemy.dialects import postgresql
 
 from models.project import Project, ProjectMember
 from models.task import Task, TaskPriority, TaskStatus, TaskType
@@ -88,6 +90,21 @@ async def test_is_project_member_regular(task_service, user_id, project_id, mock
 
     is_member = await task_service._is_project_member(project_id, user_id)
     assert is_member is True
+
+
+@pytest.mark.asyncio
+async def test_global_admin_is_project_admin(task_service, user_id, project_id, mock_db_session):
+    project_result = MagicMock()
+    project_result.scalars.return_value.first.return_value = Project(
+        id=project_id, owner_id=uuid.uuid4()
+    )
+    member_result = MagicMock()
+    member_result.scalars.return_value.first.return_value = None
+    admin_result = MagicMock()
+    admin_result.scalars.return_value.first.return_value = User(id=user_id, role="admin")
+    mock_db_session.execute.side_effect = [project_result, member_result, admin_result]
+
+    assert await task_service._is_project_admin(project_id, user_id) is True
 
 
 @pytest.mark.asyncio
@@ -249,6 +266,17 @@ async def test_get_user_tasks(task_service, user_id, mock_db_session):
 
     assert count == 5
     assert len(tasks) == 1
+
+
+def test_task_list_eager_loads_many_to_one_relations(task_service, user_id):
+    """Keep the paginated task list on one joined query for pooled databases."""
+    query, _ = task_service._build_task_list_query(
+        [or_(Task.assignee_id == user_id, Task.created_by == user_id)]
+    )
+
+    compiled_sql = str(query.compile(dialect=postgresql.dialect()))
+
+    assert compiled_sql.count("LEFT OUTER JOIN") == 3
 
 
 @pytest.mark.asyncio

@@ -18,18 +18,20 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 def resolve_github_redirect_uri(redirect_uri: str | None = None) -> str:
     explicit_redirect = (redirect_uri or "").strip()
-    if explicit_redirect:
-        return explicit_redirect
-
     configured_redirect = os.getenv("GITHUB_REDIRECT_URI", "").strip()
     if configured_redirect:
         return configured_redirect
 
     frontend_url = os.getenv("FRONTEND_URL", "").strip()
     if frontend_url:
-        return f"{frontend_url.rstrip('/')}/auth/callback/github"
+        allowed_redirect = f"{frontend_url.rstrip('/')}/auth/callback/github"
+    else:
+        allowed_redirect = "http://localhost:3000/auth/callback/github"
 
-    return "http://localhost:3000/auth/callback/github"
+    if explicit_redirect and explicit_redirect != allowed_redirect:
+        logger.warning("Ignoring untrusted GitHub OAuth redirect URI")
+
+    return allowed_redirect
 
 
 def _extract_access_token(data: dict) -> str | None:

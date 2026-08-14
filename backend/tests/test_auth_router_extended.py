@@ -243,6 +243,9 @@ class TestRefreshTokenEdgeCases:
             result = await refresh_token(mock_request, mock_response, mock_db, mock_user_service)
 
         assert result["message"] == "Token refreshed successfully"
+        from utils.token_utils import ACCESS_TOKEN_EXPIRE_MINUTES
+
+        assert result["expires_in"] == ACCESS_TOKEN_EXPIRE_MINUTES * 60
         mock_fingerprint.assert_awaited_once_with(
             mock_request, mock_verify.return_value, str(user_id), mock_db
         )

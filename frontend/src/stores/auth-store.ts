@@ -3,6 +3,7 @@
 // ===========================================
 
 import { isAxiosError, registerLogoutHandler } from "@/lib/api-client";
+import { clearAuthenticatedCaches } from "@/lib/auth-cache";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { authJsonStorage } from "./browser-storage";
@@ -217,6 +218,14 @@ export const useAuthStore = create<AuthState>()(
 
       // Actions
       setUser: (user) => {
+        const previousUser = get().user;
+        const accountChanged = previousUser?.id !== user?.id;
+        if (accountChanged && typeof window !== "undefined") {
+          // Auth hydration, expiry, and legacy callers can bypass login/logout.
+          // Treat an identity change as a full authenticated-cache boundary.
+          void clearAuthenticatedCaches();
+        }
+
         set((state) => ({
           user,
           isAuthenticated: !!user,
@@ -254,6 +263,12 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: (user, options = {}) => {
+        if (typeof window !== "undefined") {
+          // Keep direct store consumers safe too; authActions also clears the
+          // same registries before the normal login flow commits new state.
+          void clearAuthenticatedCaches();
+        }
+
         set({
           user,
           isAuthenticated: true,
@@ -267,6 +282,13 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        if (typeof window !== "undefined") {
+          // Session expiry and legacy callers can reach the store directly,
+          // bypassing authActions. Clear all authenticated caches before the
+          // account state changes so the next account cannot inherit them.
+          void clearAuthenticatedCaches();
+        }
+
         // Clear in-memory state and remove persisted/legacy auth storage.
         set({
           user: null,

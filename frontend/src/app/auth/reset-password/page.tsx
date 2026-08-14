@@ -34,7 +34,6 @@ function ResetPasswordForm() {
     const tokenFromUrl = searchParams.get("token");
 
     if (!tokenFromUrl) {
-      console.error("No token found in URL");
       setTokenError("Invalid reset link. Please request a new password reset.");
     } else {
       setToken(tokenFromUrl);

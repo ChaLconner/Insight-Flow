@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
@@ -199,7 +200,44 @@ API requests are rate-limited. Please contact support for higher limits.
     app.include_router(security_logs.router, prefix=api_v1_prefix, tags=["security"])
     app.include_router(health.router)
 
+    _add_auth_error_responses(app)
+
     return app
+
+
+def _add_auth_error_responses(app: FastAPI) -> None:
+    """Document authentication failures for routes with auth dependencies."""
+    from dependencies.auth import get_current_active_user, get_current_user
+
+    auth_dependencies = {get_current_active_user, get_current_user}
+
+    def iter_api_routes(routes):
+        for route in routes:
+            if isinstance(route, APIRoute):
+                yield route
+                continue
+
+            original_router = getattr(route, "original_router", None)
+            if original_router is not None:
+                yield from iter_api_routes(original_router.routes)
+            else:
+                nested_routes = getattr(route, "routes", None)
+                if nested_routes is not None:
+                    yield from iter_api_routes(nested_routes)
+
+    def requires_auth(dependant) -> bool:
+        if dependant.call in auth_dependencies:
+            return True
+        return any(requires_auth(child) for child in dependant.dependencies)
+
+    for route in iter_api_routes(app.routes):
+        if not requires_auth(route.dependant):
+            continue
+
+        route.responses.setdefault(
+            401, {"description": "Authentication is required or the token is invalid"}
+        )
+        route.responses.setdefault(403, {"description": "The authenticated user lacks permission"})
 
 
 app = create_app()

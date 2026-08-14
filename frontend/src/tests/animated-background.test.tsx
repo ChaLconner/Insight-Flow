@@ -40,9 +40,7 @@ describe("AnimatedBackground", () => {
   it("keeps canvas animation scheduled when leaving for bfcache", () => {
     render(<AnimatedBackground />);
 
-    expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalledWith("2d", {
-      willReadFrequently: true,
-    });
+    expect(HTMLCanvasElement.prototype.getContext).toHaveBeenCalledWith("2d");
     expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
 
     act(() => {
@@ -82,5 +80,24 @@ describe("AnimatedBackground", () => {
     expect(canvasContext.getImageData).not.toHaveBeenCalled();
     expect(window.cancelAnimationFrame).not.toHaveBeenCalled();
     expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a static frame without scheduling animation for reduced motion", () => {
+    canvasContext.clearRect.mockClear();
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(<AnimatedBackground />);
+
+    expect(canvasContext.clearRect).toHaveBeenCalled();
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
   });
 });

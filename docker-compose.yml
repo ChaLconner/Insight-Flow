@@ -110,7 +110,7 @@ services:
         ipv4_address: 172.30.0.4
 
   db:
-    image: postgres:15-alpine
+    image: postgres:15-alpine@sha256:4006528dcbdd9be8c1aaa50389caea4e93c46d6f54c3533bcd3253725e526e23
     restart: always
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-insightflow}
@@ -158,7 +158,7 @@ services:
         ipv4_address: 172.30.0.6
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     restart: always
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD using --env-file .env.docker}

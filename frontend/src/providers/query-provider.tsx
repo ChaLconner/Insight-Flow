@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense, useState } from "react";
+import { registerAuthenticatedCacheClearer } from "@/lib/auth-cache";
 import { shouldEnableDevelopmentDiagnostics } from "@/lib/runtime-flags";
 
 const ReactQueryDevtools = lazy(async () => {
@@ -41,6 +42,8 @@ export function getQueryClient(): QueryClient {
 export function clearQueryCache(): void {
   getQueryClient().clear();
 }
+
+registerAuthenticatedCacheClearer(clearQueryCache);
 
 export function shouldRenderQueryDevtools(): boolean {
   return shouldEnableDevelopmentDiagnostics();

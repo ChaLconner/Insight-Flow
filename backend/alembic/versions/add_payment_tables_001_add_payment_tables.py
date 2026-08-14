@@ -5,17 +5,21 @@ Revises: add_github_id_001
 Create Date: 2025-12-25
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+_NOW_SQL = "now()"
+_USERS_ID = "users.id"
+_SET_NULL = "SET NULL"
+
 # revision identifiers, used by Alembic.
 revision: str = 'add_payment_tables_001'
-down_revision: Union[str, None] = 'add_github_id_001'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = 'add_github_id_001'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -47,8 +51,8 @@ def upgrade() -> None:
     op.create_table(
         'payment_methods',
         sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=True),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=True),
         sa.Column('user_id', sa.UUID(), nullable=False),
         sa.Column('stripe_payment_method_id', sa.String(255), nullable=False),
         sa.Column('stripe_customer_id', sa.String(255), nullable=False),
@@ -61,7 +65,7 @@ def upgrade() -> None:
         sa.Column('is_active', sa.Boolean(), nullable=False, default=True),
         sa.Column('billing_name', sa.String(255), nullable=True),
         sa.Column('billing_email', sa.String(255), nullable=True),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['user_id'], [_USERS_ID], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_payment_methods_user_id', 'payment_methods', ['user_id'])
@@ -72,8 +76,8 @@ def upgrade() -> None:
     op.create_table(
         'subscriptions',
         sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=True),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=True),
         sa.Column('user_id', sa.UUID(), nullable=False),
         sa.Column('stripe_subscription_id', sa.String(255), nullable=True),
         sa.Column('stripe_customer_id', sa.String(255), nullable=True),
@@ -85,8 +89,8 @@ def upgrade() -> None:
         sa.Column('default_payment_method_id', sa.UUID(), nullable=True),
         sa.Column('price_amount', sa.Numeric(10, 2), nullable=True),
         sa.Column('price_currency', sa.String(3), default='usd', nullable=True),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['default_payment_method_id'], ['payment_methods.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['user_id'], [_USERS_ID], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['default_payment_method_id'], ['payment_methods.id'], ondelete=_SET_NULL),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('user_id')
     )
@@ -98,8 +102,8 @@ def upgrade() -> None:
     op.create_table(
         'payment_history',
         sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=True),
+        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text(_NOW_SQL), nullable=True),
         sa.Column('user_id', sa.UUID(), nullable=False),
         sa.Column('subscription_id', sa.UUID(), nullable=True),
         sa.Column('payment_method_id', sa.UUID(), nullable=True),
@@ -114,9 +118,9 @@ def upgrade() -> None:
         sa.Column('receipt_url', sa.String(500), nullable=True),
         sa.Column('failure_code', sa.String(100), nullable=True),
         sa.Column('failure_message', sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['subscription_id'], ['subscriptions.id'], ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['payment_method_id'], ['payment_methods.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['user_id'], [_USERS_ID], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['subscription_id'], ['subscriptions.id'], ondelete=_SET_NULL),
+        sa.ForeignKeyConstraint(['payment_method_id'], ['payment_methods.id'], ondelete=_SET_NULL),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index('ix_payment_history_user_id', 'payment_history', ['user_id'])

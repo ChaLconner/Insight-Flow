@@ -106,7 +106,7 @@ async def get_project_tasks(
         logger.exception(f"Exception in get_project_tasks: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch project tasks: {e!s}",
+            detail="Failed to fetch project tasks",
         )
 
 
@@ -164,7 +164,9 @@ async def read_project_task(
     project_uuid = validate_uuid(project_id, INVALID_PROJECT_ID_DETAIL)
     task_uuid = validate_uuid(task_id, INVALID_TASK_ID_DETAIL)
 
-    if not await project_service.is_project_member(project_uuid, current_user.id):
+    if current_user.role != "admin" and not await project_service.is_project_member(
+        project_uuid, current_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this project"
         )
@@ -344,7 +346,9 @@ async def assign_project_task(
     assignee_uuid = validate_uuid(assignee_id, "Invalid assignee ID format")
     task_assign = TaskAssign(assignee_id=assignee_uuid)
 
-    if not await project_service.is_project_member(project_uuid, current_user.id):
+    if current_user.role != "admin" and not await project_service.is_project_member(
+        project_uuid, current_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this project"
         )

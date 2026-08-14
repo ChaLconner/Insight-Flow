@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { useAppStore, appActions, appSelectors } from "@/stores/app-store";
 
 // Mock sonner before importing store
 vi.mock("sonner", () => ({
@@ -17,34 +18,22 @@ vi.mock("sonner", () => ({
 }));
 
 describe("AppStore", () => {
-  // Import inside tests to ensure mocks are set up
-  const getStore = async () => {
-    const { useAppStore, appActions, appSelectors } = await import(
-      "@/stores/app-store"
-    );
-    return { useAppStore, appActions, appSelectors };
-  };
-
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    // Reset store state
-    const { useAppStore } = await getStore();
     act(() => {
       useAppStore.getState().resetAppState();
     });
   });
 
   describe("Initial State", () => {
-    it("should have default UI state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should have default UI state", () => {
       const { result } = renderHook(() => useAppStore());
 
       expect(appSelectors.isSidebarCollapsed(result.current)).toBe(false);
       expect(appSelectors.getCurrentPage(result.current)).toBe("/dashboard");
     });
 
-    it("should have empty form state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should have empty form state", () => {
       const { result } = renderHook(() => useAppStore());
 
       expect(appSelectors.getActiveForm(result.current)).toBeNull();
@@ -53,8 +42,7 @@ describe("AppStore", () => {
   });
 
   describe("Sidebar Actions", () => {
-    it("should toggle sidebar collapsed state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should toggle sidebar collapsed state", () => {
       const { result } = renderHook(() => useAppStore());
 
       expect(appSelectors.isSidebarCollapsed(result.current)).toBe(false);
@@ -66,8 +54,7 @@ describe("AppStore", () => {
       expect(appSelectors.isSidebarCollapsed(result.current)).toBe(true);
     });
 
-    it("should toggle sidebar", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should toggle sidebar", () => {
       const { result } = renderHook(() => useAppStore());
 
       const initialState = appSelectors.isSidebarCollapsed(result.current);
@@ -76,15 +63,12 @@ describe("AppStore", () => {
         result.current.toggleSidebar();
       });
 
-      expect(appSelectors.isSidebarCollapsed(result.current)).toBe(
-        !initialState
-      );
+      expect(appSelectors.isSidebarCollapsed(result.current)).toBe(!initialState);
     });
   });
 
   describe("Page Navigation", () => {
-    it("should set current page", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set current page", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -94,8 +78,7 @@ describe("AppStore", () => {
       expect(appSelectors.getCurrentPage(result.current)).toBe("/dashboard");
     });
 
-    it("should set breadcrumbs", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set breadcrumbs", () => {
       const { result } = renderHook(() => useAppStore());
 
       const breadcrumbs = [
@@ -113,8 +96,7 @@ describe("AppStore", () => {
   });
 
   describe("Modal State", () => {
-    it("should open and close modal", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should open and close modal", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -131,8 +113,7 @@ describe("AppStore", () => {
       expect(appSelectors.getActiveModal(result.current)).toBeNull();
     });
 
-    it("should check if modal is open", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should check if modal is open", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -146,8 +127,7 @@ describe("AppStore", () => {
   });
 
   describe("Loading State", () => {
-    it("should set global loading state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set global loading state", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -163,8 +143,7 @@ describe("AppStore", () => {
       expect(appSelectors.isGlobalLoading(result.current)).toBe(false);
     });
 
-    it("should set page-specific loading state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set page-specific loading state", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -178,8 +157,7 @@ describe("AppStore", () => {
   });
 
   describe("Form State", () => {
-    it("should open form modal", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should open form modal", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -189,8 +167,7 @@ describe("AppStore", () => {
       expect(appSelectors.getActiveForm(result.current)).toBe("create-project");
     });
 
-    it("should close form modal", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should close form modal", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -206,8 +183,7 @@ describe("AppStore", () => {
       expect(appSelectors.getActiveForm(result.current)).toBeNull();
     });
 
-    it("should set form errors", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set form errors", () => {
       const { result } = renderHook(() => useAppStore());
 
       const errors = { name: "Name is required", email: "Invalid email" };
@@ -221,8 +197,7 @@ describe("AppStore", () => {
   });
 
   describe("Alert Management", () => {
-    it("should add and get alerts", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should add and get alerts", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -237,8 +212,7 @@ describe("AppStore", () => {
       expect(alerts.length).toBeGreaterThan(0);
     });
 
-    it("should remove alert by id", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should remove alert by id", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -249,7 +223,6 @@ describe("AppStore", () => {
         });
       });
 
-      // Get the alert that was just added
       const alerts = appSelectors.getAlerts(result.current);
       const alertToRemove = alerts[0];
 
@@ -259,14 +232,11 @@ describe("AppStore", () => {
         });
 
         const finalAlerts = appSelectors.getAlerts(result.current);
-        expect(
-          finalAlerts.find((a) => a.id === alertToRemove.id)
-        ).toBeUndefined();
+        expect(finalAlerts.find((a) => a.id === alertToRemove.id)).toBeUndefined();
       }
     });
 
-    it("should clear all alerts", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should clear all alerts", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -291,8 +261,7 @@ describe("AppStore", () => {
   });
 
   describe("Search State", () => {
-    it("should set global search query", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set global search query", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -303,8 +272,7 @@ describe("AppStore", () => {
       expect(globalSearch.query).toBe("test query");
     });
 
-    it("should set search state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set search state", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -323,21 +291,17 @@ describe("AppStore", () => {
   });
 
   describe("User Preferences", () => {
-    it("should set current project id", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should set current project id", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
         result.current.setCurrentProjectId("project-123");
       });
 
-      expect(appSelectors.getCurrentProjectId(result.current)).toBe(
-        "project-123"
-      );
+      expect(appSelectors.getCurrentProjectId(result.current)).toBe("project-123");
     });
 
-    it("should update user preferences", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should update user preferences", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -356,8 +320,7 @@ describe("AppStore", () => {
   });
 
   describe("UI State", () => {
-    it("should toggle fullscreen", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should toggle fullscreen", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {
@@ -375,9 +338,7 @@ describe("AppStore", () => {
   });
 
   describe("App Actions", () => {
-    it("should generate unique ids", async () => {
-      const { appActions } = await getStore();
-
+    it("should generate unique ids", () => {
       const id1 = appActions.generateId();
       const id2 = appActions.generateId();
 
@@ -385,9 +346,7 @@ describe("AppStore", () => {
       expect(id1.startsWith("id-")).toBe(true);
     });
 
-    it("should navigate to page with breadcrumbs", async () => {
-      const { useAppStore, appActions, appSelectors } = await getStore();
-
+    it("should navigate to page with breadcrumbs", () => {
       const breadcrumbs = [{ label: "Home", href: "/" }, { label: "Settings" }];
 
       act(() => {
@@ -401,31 +360,26 @@ describe("AppStore", () => {
   });
 
   describe("Reset State", () => {
-    it("should reset app state", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should reset app state", () => {
       const { result } = renderHook(() => useAppStore());
 
-      // Modify state
       act(() => {
         result.current.setCurrentPage("/modified");
         result.current.setSidebarCollapsed(true);
         result.current.setCurrentProjectId("project-xyz");
       });
 
-      // Reset
       act(() => {
         result.current.resetAppState();
       });
 
-      // Check reset values
       expect(appSelectors.getActiveForm(result.current)).toBeNull();
       expect(appSelectors.getCurrentProjectId(result.current)).toBeNull();
     });
   });
 
   describe("Selectors", () => {
-    it("should filter alerts by type", async () => {
-      const { useAppStore, appSelectors } = await getStore();
+    it("should filter alerts by type", () => {
       const { result } = renderHook(() => useAppStore());
 
       act(() => {

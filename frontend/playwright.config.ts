@@ -2,8 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === '1';
 const startBackend = process.env.PLAYWRIGHT_START_BACKEND === '1';
+const useProductionBuild = process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1';
 const frontendServer = {
-  command: 'cross-env NEXT_PUBLIC_E2E=1 npm run dev',
+  command: useProductionBuild
+    ? 'cross-env NEXT_PUBLIC_E2E=1 npm run build && cross-env NEXT_PUBLIC_E2E=1 npm run start'
+    : 'cross-env NEXT_PUBLIC_E2E=1 npm run dev',
   url: 'http://localhost:3000',
   reuseExistingServer,
   timeout: 120000,

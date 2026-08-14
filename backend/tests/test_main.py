@@ -22,6 +22,17 @@ def test_minimal_test():
     assert response.json() == {"status": "success", "message": "Minimal test working"}
 
 
+def test_openapi_documents_authentication_errors_for_protected_routes():
+    schema = app.openapi()
+
+    task_list = schema["paths"]["/api/v1/tasks/"]["get"]
+    public_plans = schema["paths"]["/api/v1/payment/plans"]["get"]
+
+    assert "401" in task_list["responses"]
+    assert "403" in task_list["responses"]
+    assert "401" not in public_plans["responses"]
+
+
 def test_create_app_disables_docs_when_configured():
     settings = SimpleNamespace(
         app_name="Insight-Flow",

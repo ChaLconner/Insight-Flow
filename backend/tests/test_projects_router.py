@@ -253,3 +253,14 @@ def test_update_member_role(client, mock_project_service, mock_project):
 
     assert response.status_code == 200
     mock_project_service.update_member_role.assert_called_once()
+
+
+def test_update_member_role_rejects_owner_role(client, mock_project_service, mock_project):
+    uid = uuid.uuid4()
+
+    response = client.put(
+        f"/api/v1/projects/{mock_project.id}/members/{uid}/role", json={"role": "owner"}
+    )
+
+    assert response.status_code == 422
+    mock_project_service.update_member_role.assert_not_called()

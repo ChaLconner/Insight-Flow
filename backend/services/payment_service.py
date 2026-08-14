@@ -1192,7 +1192,12 @@ class PaymentService:
 
             # Update local
             subscription.cancel_at_period_end = False
-            subscription.status = SubscriptionStatus(stripe_sub.status)
+            # Provider statuses can gain new values.  Map unknown values to a
+            # non-entitled state instead of turning a successful resume into a
+            # 500 or failing open to an active subscription.
+            subscription.status = self._subscription_status_from_stripe(
+                stripe_sub, default=SubscriptionStatus.INCOMPLETE
+            )
 
             await db.commit()
             await db.refresh(subscription)

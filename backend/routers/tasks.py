@@ -151,7 +151,7 @@ async def get_all_tasks(
     task_service: AsyncTaskService = Depends(get_task_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
-    """Get all tasks the user has access to with optional filtering."""
+    """Get tasks created by or assigned to the user with optional filtering."""
     tasks, total = await task_service.get_user_tasks(
         current_user.id, skip=skip, limit=limit, search=search, status=status
     )

@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import AuthLayout from "@/app/auth/layout";
 
@@ -21,6 +21,17 @@ vi.mock("@/components/ui/animated-background", () => ({
 }));
 
 describe("AuthLayout theme isolation", () => {
+  it("provides the root skip-link target for auth pages", () => {
+    render(
+      <AuthLayout>
+        <div>Auth page</div>
+      </AuthLayout>,
+    );
+
+    expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
+    expect(screen.getByRole("main")).toHaveAttribute("tabindex", "-1");
+  });
+
   it("restores the previous root theme state when leaving auth routes", () => {
     const root = document.documentElement;
     root.className = "light custom-root";

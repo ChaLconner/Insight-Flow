@@ -37,7 +37,7 @@ const TeamListComponent: React.FC<TeamListProps> = ({ team }) => {
       <CardContent className="flex-1 min-h-0">
         {team.length > 0 ? (
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {team.map((member: AnalyticsTeamMember) => {
+            {team.map((member: AnalyticsTeamMember, index) => {
               let EfficiencyIcon = AlertTriangle;
               let efficiencyColor = "text-red-400";
               if (member.efficiency >= 85) {
@@ -50,7 +50,7 @@ const TeamListComponent: React.FC<TeamListProps> = ({ team }) => {
 
               return (
                 <div
-                key={`${member.name}-${member.avatar ?? ""}`}
+                key={member.id ?? `${member.name}-${member.avatar ?? ""}-${index}`}
                 className="flex items-center justify-between p-4 rounded-lg bg-muted hover:bg-accent/50 transition-colors"
                 >
                 <div className="flex items-center gap-3">

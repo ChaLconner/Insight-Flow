@@ -13,6 +13,7 @@ from typing import Any, Literal, cast
 
 from fastapi import Request, Response
 
+from config import is_production as config_is_production
 from utils.auth import create_access_token
 from utils.logger import setup_logger
 
@@ -38,8 +39,15 @@ REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS = int(
 ACCESS_TOKEN_KEY = "access_token"
 REFRESH_TOKEN_KEY = "refresh_token"
 
-# Set secure=True in production, False in development
-COOKIE_SECURE = os.getenv("ENVIRONMENT") == "production"
+# Use the canonical normalized environment check so values such as
+# ``ENVIRONMENT=Production`` cannot silently weaken authentication cookies.
+COOKIE_SECURE = config_is_production()
+
+
+def _cookie_security_flags() -> tuple[bool, SameSite]:
+    """Return authentication-cookie flags from application configuration."""
+    is_production = config_is_production()
+    return is_production, _as_same_site("none" if is_production else "lax")
 
 
 def create_auth_tokens(
@@ -109,22 +117,19 @@ def set_auth_cookies(
     # and Secure must be True. If not in production (local dev), we can use
     # 'lax' but 'none' is fine if secure is False.
     # To be safe and compatible with deployed environments:
-    is_production = os.getenv("ENVIRONMENT", "development") == "production"
-
     # Critical: Cross-site cookies require Secure=True and SameSite=None
     # But on localhost (http), Secure=True will fail.
     # Logic: If Production -> Secure=True, SameSite=None
     #        If Local -> Secure=False, SameSite=Lax (Standard)
 
-    secure_flag = is_production
-    samesite_flag = "none" if is_production else "lax"
+    secure_flag, samesite_flag = _cookie_security_flags()
 
     response.set_cookie(
         key=ACCESS_TOKEN_KEY,
         value=access_token,
         httponly=True,
         secure=secure_flag,
-        samesite=_as_same_site(samesite_flag),
+        samesite=samesite_flag,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
     )
@@ -135,7 +140,7 @@ def set_auth_cookies(
             value=refresh_token,
             httponly=True,
             secure=secure_flag,
-            samesite=_as_same_site(samesite_flag),
+            samesite=samesite_flag,
             path="/",
         )
     else:
@@ -144,14 +149,18 @@ def set_auth_cookies(
             value=refresh_token,
             httponly=True,
             secure=secure_flag,
-            samesite=_as_same_site(samesite_flag),
+            samesite=samesite_flag,
             max_age=refresh_expire_days * 24 * 60 * 60,
             path="/",
         )
 
     if log_user_info:
         logger.info(f"Auth cookies set for user {log_user_info}")
-    logger.debug(f"Cookie settings: secure={COOKIE_SECURE}, samesite='lax', httponly=True")
+    logger.debug(
+        "Cookie settings: secure=%s, samesite='%s', httponly=True",
+        secure_flag,
+        samesite_flag,
+    )
 
 
 def clear_auth_cookies(response: Response) -> None:
@@ -159,16 +168,14 @@ def clear_auth_cookies(response: Response) -> None:
     Clear authentication cookies from the response.
     Uses aggressive clearing (Max-Age=0) with matching flags.
     """
-    is_production = os.getenv("ENVIRONMENT", "development") == "production"
-    secure_flag = is_production
-    samesite_flag = "none" if is_production else "lax"
+    secure_flag, samesite_flag = _cookie_security_flags()
 
     for key in [ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY]:
         response.delete_cookie(
             key=key,
             path="/",
             secure=secure_flag,
-            samesite=_as_same_site(samesite_flag),
+            samesite=samesite_flag,
             httponly=True,  # Important to match the set attributes
         )
         # Backup: explicit overwrite (just in case delete_cookie is finicky)
@@ -178,7 +185,7 @@ def clear_auth_cookies(response: Response) -> None:
             max_age=0,
             path="/",
             secure=secure_flag,
-            samesite=_as_same_site(samesite_flag),
+            samesite=samesite_flag,
             httponly=True,
         )
     logger.debug("Auth cookies cleared aggressive")

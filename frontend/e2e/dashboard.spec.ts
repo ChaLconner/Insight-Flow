@@ -2,9 +2,14 @@
  * E2E Tests for Dashboard functionality
  * Tests dashboard widgets, statistics, and navigation
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
+
+async function openLoginPage(page: Page) {
+  await page.goto('/auth/login');
+  await expect(page.getByRole('textbox', { name: /email/i })).toBeVisible();
+}
 
 test.describe('Dashboard Page', () => {
   // These authenticated E2E cases run when the CI environment supplies credentials.
@@ -100,16 +105,16 @@ test.describe('Navigation', () => {
   });
 
   test('should navigate between pages', async ({ page }) => {
-    await page.goto('/auth/login');
+    await openLoginPage(page);
     
     // Try to find and click register link
     const registerLink = page.getByRole('link', { name: /register|sign up/i });
-    
-    if (await registerLink.isVisible()) {
-      await registerLink.click();
-      await page.waitForURL(/register/);
-      expect(page.url()).toContain('register');
-    }
+
+    await expect(registerLink).toBeVisible();
+    await registerLink.scrollIntoViewIfNeeded();
+    await registerLink.click();
+    await expect(page).toHaveURL(/register/);
+    expect(page.url()).toContain('register');
   });
 });
 
@@ -155,27 +160,24 @@ test.describe('Responsive Design', () => {
 
 test.describe('Accessibility', () => {
   test('should have proper page structure', async ({ page }) => {
-    await page.goto('/auth/login');
+    await openLoginPage(page);
     
     // Check for proper heading hierarchy
     const h1 = page.locator('h1');
     const h1Count = await h1.count();
     expect(h1Count).toBeGreaterThanOrEqual(0);
     
-    // Check for form labels
-    const labels = page.locator('label');
-    expect(await labels.count()).toBeGreaterThan(0);
+    // Check the actual accessible form-label contract after the client page is ready.
+    await expect(page.getByLabel('Email', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
   });
 
   test('should have focusable elements', async ({ page }) => {
-    await page.goto('/auth/login');
-    
-    // Tab through the page
-    await page.keyboard.press('Tab');
-    
-    // Something should be focused
-    const focusedElement = page.locator(':focus');
-    expect(await focusedElement.count()).toBeGreaterThan(0);
+    await openLoginPage(page);
+
+    const emailInput = page.getByRole('textbox', { name: /email/i });
+    await emailInput.focus();
+    await expect(emailInput).toBeFocused();
   });
 
   test('should handle keyboard navigation', async ({ page }) => {

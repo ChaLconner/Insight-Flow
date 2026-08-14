@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveAppUrl } from "@/lib/app-url";
+import { isSafeRelativeRedirect } from "@/lib/auth-redirect";
 
 const GITHUB_OAUTH_STATE_KEY = "github_oauth_state";
 const GITHUB_OAUTH_REDIRECT_KEY = "github_oauth_redirect";
@@ -16,11 +17,7 @@ function getAppBaseUrl(request: NextRequest): string {
 }
 
 function getSafeRedirect(value: string | null): string | null {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return null;
-  }
-
-  return value;
+  return value && isSafeRelativeRedirect(value) ? value : null;
 }
 
 export function GET(request: NextRequest) {

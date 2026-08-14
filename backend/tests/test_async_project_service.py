@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from sqlalchemy import select
 
@@ -49,6 +51,23 @@ async def test_create_project_limit_check(
     third_project = ProjectCreate(name="P3")
     with pytest.raises(ValueError, match="Project limit reached"):
         await async_project_service.create_project(third_project, test_user.id)
+
+
+@pytest.mark.asyncio
+async def test_quota_checks_lock_owner_row(async_project_service, test_user, async_session):
+    executed_statements = []
+    original_execute = async_session.execute
+
+    async def capture_execute(statement, *args, **kwargs):
+        executed_statements.append(statement)
+        return await original_execute(statement, *args, **kwargs)
+
+    async_session.execute = capture_execute
+
+    await async_project_service._lock_quota_owner(test_user.id)
+
+    assert executed_statements
+    assert executed_statements[0]._for_update_arg is not None
 
 
 @pytest.mark.asyncio
@@ -457,3 +476,15 @@ async def test_update_member_role(async_project_service, test_user, project_data
         project.id, u.id, "admin", test_user.id
     )
     assert updated.role == MemberRole.ADMIN.value
+
+
+@pytest.mark.asyncio
+async def test_update_member_role_rejects_owner_role(
+    async_project_service, test_user, project_data
+):
+    project = await async_project_service.create_project(project_data, test_user.id)
+
+    with pytest.raises(ValueError, match="Invalid member role"):
+        await async_project_service.update_member_role(
+            project.id, uuid.uuid4(), "owner", test_user.id
+        )

@@ -36,6 +36,32 @@ class TestTokenConstants:
 class TestCookieFunctions:
     """Tests for cookie handling functions."""
 
+    def test_production_cookie_flags_use_normalized_environment(self, monkeypatch):
+        """Production middleware and auth cookies must share one environment check."""
+        import importlib
+
+        import config
+        import utils.token_utils as token_utils
+
+        try:
+            with monkeypatch.context() as env:
+                env.setenv("ENVIRONMENT", "Production")
+                config.get_settings.cache_clear()
+
+                response = Response()
+                token_utils.set_auth_cookies(response, "access", "refresh")
+
+                access_cookie = next(
+                    cookie
+                    for cookie in response.headers.getlist("set-cookie")
+                    if cookie.startswith("access_token=")
+                )
+                assert "Secure" in access_cookie
+                assert "SameSite=none" in access_cookie
+        finally:
+            config.get_settings.cache_clear()
+            importlib.reload(token_utils)
+
     def test_create_and_set_auth_cookies_import(self):
         """Test create_and_set_auth_cookies can be imported."""
         from utils.token_utils import create_and_set_auth_cookies
@@ -113,11 +139,20 @@ class TestCookieFunctions:
 class TestTokenExpiration:
     """Tests for token expiration handling."""
 
-    def test_access_token_expiration_default(self):
-        """Test default access token expiration."""
-        from utils.token_utils import ACCESS_TOKEN_EXPIRE_MINUTES
+    def test_access_token_expiration_default(self, monkeypatch):
+        """Test the documented fallback independently of local .env settings."""
+        import importlib
 
-        assert ACCESS_TOKEN_EXPIRE_MINUTES == 30
+        import utils.token_utils as token_utils
+
+        configured_value = token_utils.ACCESS_TOKEN_EXPIRE_MINUTES
+        with monkeypatch.context() as env:
+            env.delenv("ACCESS_TOKEN_EXPIRE_MINUTES", raising=False)
+            importlib.reload(token_utils)
+            assert token_utils.ACCESS_TOKEN_EXPIRE_MINUTES == 30
+
+        importlib.reload(token_utils)
+        assert configured_value == token_utils.ACCESS_TOKEN_EXPIRE_MINUTES
 
     def test_refresh_token_expiration_default(self):
         """Test default refresh token expiration."""

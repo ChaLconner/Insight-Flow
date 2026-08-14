@@ -1,5 +1,3 @@
-import os
-
 from starlette.datastructures import MutableHeaders
 
 from config import get_settings
@@ -46,10 +44,11 @@ class SecurityHeadersMiddleware:
                 headers["Cross-Origin-Opener-Policy"] = "unsafe-none"
                 headers["Cross-Origin-Resource-Policy"] = "same-origin"
 
-                # HSTS (Strict-Transport-Security) - Enable in production
-                # Only set when running in production/HTTPS environment
-                environment = os.getenv("ENVIRONMENT", "development")
-                if environment == "production":
+                # HSTS (Strict-Transport-Security) - Enable in production.
+                # Use the canonical normalized settings predicate so auth,
+                # middleware, and transport policy cannot disagree on the
+                # environment when operators use values such as Production.
+                if settings.is_production:
                     headers["Strict-Transport-Security"] = (
                         "max-age=31536000; includeSubDomains; preload"
                     )

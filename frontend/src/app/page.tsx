@@ -1,5 +1,3 @@
-"use client";
-
 import dynamic from "next/dynamic";
 import { LandingNavbar } from "@/components/landing/landing-navbar";
 import { HeroSection } from "@/components/landing/hero-section";
@@ -35,7 +33,11 @@ export default function LandingPage() {
 
         <LandingNavbar />
 
-        <main className="pt-32 pb-16 px-6">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="pt-32 pb-16 px-6"
+        >
           <HeroSection />
           <FeaturesSection />
           <PricingSection />

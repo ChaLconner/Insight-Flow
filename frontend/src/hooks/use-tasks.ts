@@ -24,9 +24,11 @@ export const useTasks = ({
 }: UseTasksOptions = {}) => {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
 
   const queryKey = [
     "tasks",
+    userId,
     projectId ?? "my",
     page,
     pageSize,

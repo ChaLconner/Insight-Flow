@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from dependencies.auth import get_current_user
+from dependencies.auth import get_current_active_user
 from dependencies.services import get_usage_service
 from models import User
 from services.async_usage_service import AsyncUsageService
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/usage", tags=["usage"])
 
 @router.get("/stats")
 async def get_usage_stats(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
     usage_service: Annotated[AsyncUsageService, Depends(get_usage_service)],
 ):
     """

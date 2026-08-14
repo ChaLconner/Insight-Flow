@@ -6,12 +6,15 @@ import { useAuthStore } from "./auth-store";
 import { AuthResponse } from "@/types";
 import { toast } from "sonner";
 
+const AUTH_LOGOUT_TIMEOUT_MS = 5_000;
+
 // Track initialization state to prevent duplicate calls
 // (Moved to auth-store.ts)
 
 // Auth actions that depend on the store but don't create circular imports
 export const authActions = {
-  // Login function that stores data in localStorage and updates store
+  // Login function that updates the client user state. Authentication tokens
+  // remain in HttpOnly cookies managed by the backend.
   loginSuccess: async (
     response: AuthResponse,
     options: { rememberMe?: boolean } = {},
@@ -41,7 +44,7 @@ export const authActions = {
       );
     }
 
-    // Update store (store tokens as well for compatibility)
+    // Update user state only; access and refresh tokens remain HttpOnly.
     login(user, { rememberMe: options.rememberMe === true });
 
     // Get display name with fallbacks
@@ -78,7 +81,12 @@ export const authActions = {
         
         // First, call the logout API (CSRF token is auto-attached by apiClient)
         // Do NOT set loggingOut flag before this, or the request will be aborted
-        await apiClient.post("/auth/logout");
+        // Logout must not leave the user-facing session stuck behind a slow
+        // revocation/database request. If the bounded request times out,
+        // the catch block still clears client state and redirects the user.
+        await apiClient.post("/auth/logout", undefined, {
+          timeout: AUTH_LOGOUT_TIMEOUT_MS,
+        });
         
         // After successful logout API call, prevent any further API requests
         setLoggingOut(true);
@@ -159,7 +167,7 @@ async function clearClientCaches(): Promise<void> {
     const { TokenManager } = await import("@/utils/token-manager");
     TokenManager.clearTokens();
   } catch (error) {
-    console.warn("Failed to clear stored tokens.", error);
+    console.warn("Failed to clear legacy auth storage.", error);
     // Cache clearing is best-effort; logout must continue.
   }
 }

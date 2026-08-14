@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 from starlette.testclient import TestClient
 
 # Add backend to sys.path to allow imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Set testing environment BEFORE importing app
 os.environ["TESTING"] = "true"
@@ -211,10 +211,11 @@ def async_session(db_session) -> MockAsyncSession:
 
 # Mock init_database globally for all tests to prevent actual DB connection during lifespan
 @pytest.fixture(autouse=True)
-def mock_app_dependencies(db_session):
-    """Automatically mock startup dependencies for all tests."""
+def mock_app_dependencies(db_session, monkeypatch):
+    """Automatically mock startup and external health dependencies for tests."""
     from database import get_async_db
     from main import app
+    from routers import health
 
     # Global override for tests that don't use 'client' fixture
     mock_session_global = MockAsyncSession(db_session)
@@ -222,7 +223,19 @@ def mock_app_dependencies(db_session):
     async def override_get_async_db_global():
         yield mock_session_global
 
+    async def mock_database_probe(_settings):
+        """Keep unit tests from reaching the developer's remote database."""
+        return {
+            "healthy": True,
+            "latency_ms": 0.0,
+            "pool": {},
+            "cached": True,
+        }
+
     app.dependency_overrides[get_async_db] = override_get_async_db_global
+    monkeypatch.setattr(health, "_probe_database", mock_database_probe)
+    health._db_probe_cache = None
+    health._readiness_cache = None
 
     with (
         patch("database.init_database", new_callable=AsyncMock),
@@ -234,6 +247,8 @@ def mock_app_dependencies(db_session):
 
     # Cleanup if not already cleared
     app.dependency_overrides.pop(get_async_db, None)
+    health._db_probe_cache = None
+    health._readiness_cache = None
 
 
 @pytest.fixture(scope="function")
