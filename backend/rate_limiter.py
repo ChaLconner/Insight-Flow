@@ -25,6 +25,7 @@ from services.cache_service import cache_service
 from utils.request_security import get_client_ip
 
 logger = logging.getLogger(__name__)
+AUTH_RATE_LIMIT_KEY_PREFIX = "auth_rate_limit"
 
 
 def get_remote_address(request: Request) -> str:
@@ -213,6 +214,11 @@ class AuthRateLimiter:
         self.window = window
         self.cache_service = cache_service
 
+    def _get_key(self, request: Request) -> str:
+        """Build a counter key isolated from the global sorted-set limiter."""
+        client_ip = get_client_ip(request)
+        return f"{AUTH_RATE_LIMIT_KEY_PREFIX}:{client_ip}:{request.url.path}"
+
     async def __call__(self, request: Request):
         """
         Check rate limit for the request.
@@ -231,10 +237,7 @@ class AuthRateLimiter:
                 detail="Rate limiting service unavailable. Please retry shortly.",
             )
 
-        client_ip = get_client_ip(request)
-        path = request.url.path
-
-        key = f"rate_limit:{client_ip}:{path}"
+        key = self._get_key(request)
         try:
             count = await self.cache_service.increment_with_window(
                 key,

@@ -22,6 +22,8 @@ APP_CACHE_PREFIXES = (
     "dashboard:",
     "analytics:",
     "rate_limit:",
+    "global_rate_limit:",
+    "auth_rate_limit:",
     "GET:",
 )
 

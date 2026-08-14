@@ -209,6 +209,18 @@ class TestAuthRateLimiter:
         # Assert
         assert limiter.cache_service is not None
 
+    def test_auth_rate_limiter_uses_isolated_key_namespace(self):
+        """Auth counters must not share keys with the global Redis sorted sets."""
+        from rate_limiter import AuthRateLimiter
+
+        request = MagicMock(spec=Request)
+        request.url.path = "/api/v1/auth/login"
+
+        with patch("rate_limiter.get_client_ip", return_value="198.51.100.1"):
+            assert AuthRateLimiter()._get_key(request) == (
+                "auth_rate_limit:198.51.100.1:/api/v1/auth/login"
+            )
+
 
 class TestLimiterInstance:
     """Tests for the global limiter instance."""

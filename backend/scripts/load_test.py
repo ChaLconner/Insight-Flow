@@ -13,6 +13,7 @@ import json
 import os
 import string
 from http.cookies import SimpleCookie
+from itertools import count
 from secrets import SystemRandom
 
 from locust import HttpUser, between, events, task
@@ -33,6 +34,7 @@ RUN_PUBLIC_SCENARIO = os.getenv("LOAD_TEST_RUN_PUBLIC_SCENARIO", "false").lower(
 RUN_STRESS_SCENARIO = os.getenv("LOAD_TEST_RUN_STRESS_SCENARIO", "false").lower() == "true"
 EXPECTED_METRICS_STATUS = int(os.getenv("LOAD_TEST_EXPECT_METRICS_STATUS", "200"))
 EXPECTED_DETAILED_HEALTH_STATUS = int(os.getenv("LOAD_TEST_EXPECT_DETAILED_HEALTH_STATUS", "200"))
+_LOAD_TEST_CLIENT_IPS = count(1)
 
 
 def load_credentials() -> list[tuple[str, str]]:
@@ -144,6 +146,12 @@ class InsightFlowUser(HttpUser):
         self.project_ids = []
         self.task_ids = []
         self.email, self.password = secure_random.choice(LOAD_TEST_CREDENTIALS)
+        # The CI server is loopback and therefore a trusted proxy. Give each
+        # Locust user a distinct documentation-range client IP so per-client
+        # authentication limits model separate callers instead of one shared
+        # 127.0.0.1 address.
+        client_ip = next(_LOAD_TEST_CLIENT_IPS) % 254 + 1
+        self.client.headers.update({"X-Forwarded-For": f"198.51.100.{client_ip}"})
         if not self.login():
             raise StopUser
 

@@ -54,6 +54,13 @@ async def test_redis_rate_limit_exemptions_are_path_segment_aware(path, should_c
     app.assert_awaited_once()
 
 
+def test_redis_rate_limiter_uses_global_key_namespace():
+    """Global sorted-set counters must not share auth counter keys."""
+    middleware = RedisRateLimitMiddleware(AsyncMock(), redis_client=AsyncMock())
+
+    assert middleware.key_prefix == "global_rate_limit"
+
+
 @pytest.mark.asyncio
 async def test_in_memory_rate_limit_uses_same_proxy_aware_ip_for_block_check_and_key():
     app = AsyncMock()

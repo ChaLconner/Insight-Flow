@@ -18,6 +18,7 @@ from utils.logger import setup_logger
 from utils.request_security import get_client_ip
 
 logger = setup_logger("redis_rate_limit")
+GLOBAL_RATE_LIMIT_KEY_PREFIX = "global_rate_limit"
 
 
 class RedisRateLimitMiddleware:
@@ -38,7 +39,7 @@ class RedisRateLimitMiddleware:
         redis_client,
         calls: int = 100,
         period: int = 60,
-        key_prefix: str = "rate_limit",
+        key_prefix: str = GLOBAL_RATE_LIMIT_KEY_PREFIX,
         skip_paths: list | None = None,
         fail_closed: bool = False,
     ):
@@ -227,7 +228,7 @@ class RedisRateLimiter:
     Can be used in route handlers for custom rate limiting.
     """
 
-    def __init__(self, redis_client, key_prefix: str = "rate_limit"):
+    def __init__(self, redis_client, key_prefix: str = GLOBAL_RATE_LIMIT_KEY_PREFIX):
         self.redis_client = redis_client
         self.key_prefix = key_prefix
 
