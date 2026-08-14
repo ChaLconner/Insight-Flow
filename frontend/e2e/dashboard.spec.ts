@@ -3,6 +3,7 @@
  * Tests dashboard widgets, statistics, and navigation
  */
 import { test, expect, type Page } from '@playwright/test';
+import { resetAuthState } from './auth-state';
 
 const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
 
@@ -92,6 +93,10 @@ test.describe('Settings Page', () => {
 });
 
 test.describe('Navigation', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should have working navigation links', async ({ page }) => {
     await page.goto('/');
     
@@ -119,6 +124,10 @@ test.describe('Navigation', () => {
 });
 
 test.describe('Responsive Design', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should display correctly on mobile', async ({ page }) => {
     // Set mobile viewport
     await page.setViewportSize({ width: 375, height: 667 });
@@ -159,6 +168,10 @@ test.describe('Responsive Design', () => {
 });
 
 test.describe('Accessibility', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should have proper page structure', async ({ page }) => {
     await openLoginPage(page);
     
@@ -198,6 +211,10 @@ test.describe('Accessibility', () => {
 });
 
 test.describe('Error Handling', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should handle 404 gracefully', async ({ page }) => {
     await page.goto('/nonexistent-page-12345');
     
@@ -228,6 +245,10 @@ test.describe('Error Handling', () => {
 });
 
 test.describe('Performance', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should load login page quickly', async ({ page }) => {
     const startTime = Date.now();
     

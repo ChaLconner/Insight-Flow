@@ -1,5 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { resetAuthState } from "./auth-state";
 
 const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
 
@@ -78,6 +79,10 @@ test.describe("Visual Regression Tests", () => {
   });
 
   test.describe("Authentication Pages", () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test("login page visual regression", async ({ page }) => {
       await page.goto("/auth/login");
       await page.waitForLoadState("networkidle");
@@ -142,6 +147,10 @@ test.describe("Accessibility Tests", () => {
   }
 
   test.describe("Public Pages", () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     for (const { name, path, requiresAuth } of testPages.filter(
       (p) => !p.requiresAuth
     )) {
@@ -178,6 +187,7 @@ test.describe("Accessibility Tests", () => {
 
   test.describe("Keyboard Navigation", () => {
     test("login form should be navigable with keyboard", async ({ page }) => {
+      await resetAuthState(page);
       await page.goto("/auth/login");
       await page.waitForLoadState("networkidle");
 
@@ -233,6 +243,10 @@ test.describe("Accessibility Tests", () => {
   });
 
   test.describe("Color Contrast", () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test("text should have sufficient color contrast", async ({ page }) => {
       await page.goto("/auth/login");
       await page.waitForLoadState("networkidle");
@@ -267,6 +281,7 @@ test.describe("Accessibility Tests", () => {
     test("interactive elements should have accessible names", async ({
       page,
     }) => {
+      await resetAuthState(page);
       await page.goto("/auth/login");
       await page.waitForLoadState("networkidle");
 
@@ -281,6 +296,7 @@ test.describe("Accessibility Tests", () => {
     });
 
     test("form inputs should have associated labels", async ({ page }) => {
+      await resetAuthState(page);
       await page.goto("/auth/register");
       await page.waitForLoadState("networkidle");
 
@@ -317,6 +333,10 @@ test.describe("Accessibility Tests", () => {
 // =============================================================================
 
 test.describe("Component Visual Tests", () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test("button states", async ({ page }) => {
     await page.goto("/auth/login");
     await page.waitForLoadState("networkidle");

@@ -3,12 +3,17 @@
  * Tests Core Web Vitals and page load performance
  */
 import { test, expect } from '@playwright/test';
+import { resetAuthState } from './auth-state';
 
 const hasE2EAuth = Boolean(process.env.E2E_USER_EMAIL && process.env.E2E_USER_PASSWORD);
 const isProductionE2E = process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1';
 
 test.describe('Performance Tests', () => {
   test.describe('Page Load Performance', () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test('login page should load within 3 seconds', async ({ page }) => {
       // Page load times vary significantly in test environments
       test.slow();
@@ -93,6 +98,10 @@ test.describe('Performance Tests', () => {
   });
 
   test.describe('Resource Loading', () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test('should defer the Google SDK until sign-in intent', async ({ page, browserName }) => {
       // This test is intentionally limited to Chromium because Firefox and WebKit do not provide
       // deterministic Google OAuth popup request timing.
@@ -278,6 +287,10 @@ test.describe('Performance Tests', () => {
   });
 
   test.describe('JavaScript Performance', () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test('should not have long tasks blocking main thread', async ({ page }) => {
       const longTasks: number[] = [];
       
@@ -345,6 +358,10 @@ test.describe('Performance Tests', () => {
   });
 
   test.describe('Memory Usage', () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test('should not have memory leaks on navigation', async ({ page, browserName }) => {
       // Get initial memory baseline (if available)
       const getMemoryUsage = async () => {
@@ -406,6 +423,10 @@ test.describe('Performance Tests', () => {
   });
 
   test.describe('Network Efficiency', () => {
+    test.beforeEach(async ({ page }) => {
+      await resetAuthState(page);
+    });
+
     test('should minimize number of requests', async ({ page, browserName }) => {
       // Firefox can make more requests due to additional browser features
       test.skip(browserName === 'firefox', 'Firefox request count varies in test environments');
@@ -464,6 +485,10 @@ test.describe('Performance Tests', () => {
 });
 
 test.describe('Accessibility Performance', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should be navigable with keyboard', async ({ page, browserName }) => {
     // Keyboard navigation can behave differently across browsers
     test.slow();
@@ -516,6 +541,10 @@ test.describe('Accessibility Performance', () => {
 });
 
 test.describe('SEO Performance', () => {
+  test.beforeEach(async ({ page }) => {
+    await resetAuthState(page);
+  });
+
   test('should have proper meta tags', async ({ page }) => {
     await page.goto('/auth/login');
     

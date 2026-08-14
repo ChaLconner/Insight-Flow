@@ -4,6 +4,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { getPostLoginRedirect } from '../src/lib/auth-redirect';
+import { resetAuthState } from './auth-state';
 
 const E2E_EMAIL = process.env.E2E_USER_EMAIL;
 const E2E_PASSWORD = process.env.E2E_USER_PASSWORD;
@@ -11,6 +12,10 @@ const E2E_USER_ROLE = process.env.E2E_USER_ROLE ?? 'manager';
 const expectedRedirectPath = getPostLoginRedirect(E2E_USER_ROLE);
 const baseURL = process.env.BASE_URL ?? 'http://localhost:3000';
 const hasE2EAuth = Boolean(E2E_EMAIL && E2E_PASSWORD);
+
+test.beforeEach(async ({ page }) => {
+  await resetAuthState(page);
+});
 
 async function loginWithE2ECredentials(page: Page) {
   await page.goto('/auth/login');
@@ -27,11 +32,6 @@ async function loginWithE2ECredentials(page: Page) {
 }
 
 test.describe('Authentication Flow', () => {
-  test.beforeEach(async ({ page }) => {
-    // Clear any existing auth state
-    await page.context().clearCookies();
-  });
-
   test('should display login page', async ({ page }) => {
     await page.goto('/auth/login');
     
