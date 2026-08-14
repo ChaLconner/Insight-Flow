@@ -387,7 +387,7 @@ jobs:
 
           docker run --rm --network "$network" \
             -e SECRET_KEY="test_secret_key_for_ci_pipeline_only" \
-            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test?sslmode=disable" \
+            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test" \
             -e REDIS_URL="redis://redis:6379/0" \
             -e GOOGLE_CLIENT_ID="mock-google-client-id" \
             -e GOOGLE_CLIENT_SECRET="mock-google-client-secret" \
