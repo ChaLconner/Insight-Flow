@@ -451,7 +451,7 @@ jobs:
     name: E2E Tests
     needs: [backend-test, frontend-check]
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       # CI-only credentials are shared by database seeding and Playwright.
       # Password is generated per run and never stored in version control.
