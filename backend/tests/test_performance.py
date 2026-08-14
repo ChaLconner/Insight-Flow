@@ -11,6 +11,7 @@ import sys
 import time
 from dataclasses import dataclass
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -137,9 +138,21 @@ class TestEndpointPerformance:
         assert result.requests_per_second > 20  # >20 RPS
 
     @pytest.mark.asyncio
-    async def test_full_health_endpoint_performance(self):
+    async def test_full_health_endpoint_performance(self, monkeypatch):
         """Test /health/full endpoint performance."""
         from main import app
+        from services.cache_service import cache_service
+
+        monkeypatch.setattr(
+            cache_service,
+            "get_stats",
+            AsyncMock(
+                return_value={
+                    "backend": "test",
+                    "health": {"status": "healthy"},
+                }
+            ),
+        )
 
         tester = PerformanceTester()
         result = await tester.benchmark_endpoint(app, "/health/full", num_requests=50, concurrent=5)
