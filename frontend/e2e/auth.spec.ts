@@ -126,6 +126,11 @@ test.describe('Authentication Flow', () => {
     
     // Wait for page to load
     await page.waitForLoadState('networkidle');
+
+    const openMenuButton = page.getByRole('button', { name: 'Open navigation menu' });
+    if (await openMenuButton.isVisible()) {
+      await openMenuButton.click();
+    }
     
     // Look for logout button
     const logoutButton = page.getByRole('button', { name: /logout|sign out/i }).or(
@@ -133,6 +138,7 @@ test.describe('Authentication Flow', () => {
     );
     
     await expect(logoutButton).toBeVisible();
+    await logoutButton.scrollIntoViewIfNeeded();
     await logoutButton.click();
 
     await expect(page).toHaveURL(/login/);
