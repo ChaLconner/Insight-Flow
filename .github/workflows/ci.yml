@@ -364,7 +364,7 @@ jobs:
           trap cleanup EXIT
 
           docker network create "$network"
-          docker run -d --name "$db" --network "$network" \
+          docker run -d --name "$db" --network "$network" --network-alias db \
             -e POSTGRES_USER=user \
             -e POSTGRES_PASSWORD=password \
             -e POSTGRES_DB=insightflow_test \
