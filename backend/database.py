@@ -5,7 +5,7 @@ Configured for comprehensive Async I/O using SQLAlchemy 2.0+ and asyncpg.
 
 import logging
 from collections.abc import AsyncGenerator
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import HTTPException
 from sqlalchemy import text
@@ -20,6 +20,22 @@ from config import get_settings
 from models import Base
 
 ASYNC_DATABASE_SCHEME = "postgresql+asyncpg://"
+
+
+def _get_ssl_setting(database_url: str) -> str | bool | None:
+    """Resolve asyncpg TLS behavior from explicit URL settings or safe defaults."""
+    parsed_url = urlparse(database_url)
+    requested_sslmode = parse_qs(parsed_url.query).get("sslmode", [None])[0]
+    if requested_sslmode == "disable":
+        return False
+    if requested_sslmode:
+        return requested_sslmode
+
+    database_host = (parsed_url.hostname or "").lower()
+    if database_host in {"localhost", "127.0.0.1", "::1"}:
+        return None
+    return "require"
+
 
 # Load settings
 settings = get_settings()
@@ -60,17 +76,18 @@ db_logger.info("=" * 50)
 
 # Async connection args - asyncpg uses 'ssl' parameter instead of 'sslmode'
 # For Neon and other cloud PostgreSQL providers, we need SSL
-# Disable SSL for localhost to avoid connection issues in local development
-is_localhost = "localhost" in database_url or "127.0.0.1" in database_url
+# Honor explicit sslmode URL settings before removing query parameters for
+# asyncpg. Hosted databases default to TLS; local development remains plain.
 parsed_database_url = urlparse(database_url)
 database_host = parsed_database_url.hostname or ""
 is_external_pooler = "pooler" in database_host.lower()
+ssl_setting = _get_ssl_setting(database_url)
 if "pg8000" in database_url or "?" in database_url:
     # Clean potential leftovers if manual edits happened, though replaced above
     database_url = database_url.split("?")[0]
 
 async_connect_args = {
-    "ssl": "require" if not is_localhost else None,
+    "ssl": ssl_setting,
     "command_timeout": 30,  # Query timeout in seconds
 }
 

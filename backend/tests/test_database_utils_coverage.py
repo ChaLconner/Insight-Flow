@@ -13,6 +13,27 @@ import database
 class TestDatabaseUtils:
     """Tests for database utility functions in database.py."""
 
+    @pytest.mark.parametrize(
+        ("database_url", "expected_ssl"),
+        [
+            (
+                "postgresql+asyncpg://user:password@db:5432/app?sslmode=disable",
+                False,
+            ),
+            (
+                "postgresql+asyncpg://user:password@db.example.com:5432/app",
+                "require",
+            ),
+            (
+                "postgresql+asyncpg://user:password@localhost:5432/app",
+                None,
+            ),
+        ],
+    )
+    def test_ssl_setting_uses_explicit_mode_and_safe_defaults(self, database_url, expected_ssl):
+        """TLS is explicit for containers, required for hosted DBs, and off locally."""
+        assert database._get_ssl_setting(database_url) == expected_ssl
+
     def test_execute_sql_export(self):
         """Test execute_sql is defined."""
         from database import execute_sql

@@ -387,7 +387,7 @@ jobs:
 
           docker run --rm --network "$network" \
             -e SECRET_KEY="test_secret_key_for_ci_pipeline_only" \
-            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test" \
+            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test?sslmode=disable" \
             -e REDIS_URL="redis://redis:6379/0" \
             -e GOOGLE_CLIENT_ID="mock-google-client-id" \
             -e GOOGLE_CLIENT_SECRET="mock-google-client-secret" \
@@ -398,7 +398,7 @@ jobs:
             -e ENVIRONMENT=production \
             -e TESTING=false \
             -e SECRET_KEY="test_secret_key_for_ci_pipeline_only" \
-            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test" \
+            -e DATABASE_URL="postgresql+asyncpg://user:password@db:5432/insightflow_test?sslmode=disable" \
             -e REDIS_URL="redis://redis:6379/0" \
             -e GOOGLE_CLIENT_ID="mock-google-client-id" \
             -e GOOGLE_CLIENT_SECRET="mock-google-client-secret" \
@@ -511,7 +511,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Generate ephemeral E2E password
-        run: python -c "import secrets; print('E2E_USER_PASSWORD=' + secrets.token_urlsafe(24))" >> "$GITHUB_ENV"
+        run: |
+          password="$(python -c 'import secrets; print(secrets.token_urlsafe(24))')"
+          echo "::add-mask::$password"
+          echo "E2E_USER_PASSWORD=$password" >> "$GITHUB_ENV"
 
       - name: Initialize E2E database
         working-directory: ./backend
@@ -642,7 +645,10 @@ jobs:
           pip install -r requirements-load.txt
 
       - name: Generate ephemeral load-test password
-        run: python -c "import secrets; print('E2E_USER_PASSWORD=' + secrets.token_urlsafe(24))" >> "$GITHUB_ENV"
+        run: |
+          password="$(python -c 'import secrets; print(secrets.token_urlsafe(24))')"
+          echo "::add-mask::$password"
+          echo "E2E_USER_PASSWORD=$password" >> "$GITHUB_ENV"
 
       - name: Initialize load-test database
         working-directory: ./backend
@@ -652,6 +658,8 @@ jobs:
 
       - name: Seed load-test user
         working-directory: ./backend
+        env:
+          ENVIRONMENT: "ci"
         run: python scripts/seed_demo_user.py
 
       - name: Start multi-worker backend
