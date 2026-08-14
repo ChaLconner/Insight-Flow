@@ -61,7 +61,8 @@ function writeEmptyAuthState(authFile: string) {
 
 async function createProjectAuthState(config: FullConfig, project: FullProject) {
   const browserTypes = { chromium, firefox, webkit };
-  const browserType = browserTypes[project.use.browserName];
+  const browserName = project.use.browserName ?? project.use.defaultBrowserType;
+  const browserType = browserTypes[browserName];
   const browser = await browserType.launch({
     ...project.use.launchOptions,
     channel: project.use.channel,
