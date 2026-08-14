@@ -309,3 +309,7 @@ verify_*.py
 coverage_report.txt
 pip-audit-report.json
 coverage.xml
+
+# Local browser and security-scan artifacts
+.playwright-cli/
+backend/bandit-latest.json
