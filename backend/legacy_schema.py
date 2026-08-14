@@ -14,6 +14,9 @@ MIGRATION_OWNED_TABLES = frozenset(
 
 def bootstrap_legacy_schema(connection: Connection) -> None:
     """Create the legacy model-owned tables required by the old chain."""
+    if connection.dialect.name == "postgresql":
+        connection.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+
     tables = [
         table for table in Base.metadata.sorted_tables if table.name not in MIGRATION_OWNED_TABLES
     ]
