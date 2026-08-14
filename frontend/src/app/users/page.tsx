@@ -74,6 +74,8 @@ export default function UsersPage() {
     refresh,
     loadUsers,
   } = useUsers({ pageSize: 10, debounceMs: 300 });
+  const hasActiveFilters =
+    Boolean(debouncedSearchQuery) || roleFilter !== "all" || statusFilter !== "all";
   // Announce dynamic content changes to screen readers
   const announce = useCallback((message: string) => {
     if (announcerRef.current) {
@@ -86,7 +88,9 @@ export default function UsersPage() {
     if (!loading && dataFetched) {
       const message =
         users.length > 0
-          ? `Showing ${users.length} users. Page ${page} of ${Math.ceil(stats.total / pageSize) || 1}.`
+          ? hasActiveFilters
+            ? `Showing ${users.length} filtered users. Page ${page}.`
+            : `Showing ${users.length} users. Page ${page} of ${Math.ceil(stats.total / pageSize) || 1}.`
           : "No users found with current filters.";
       announce(message);
     }
@@ -97,6 +101,7 @@ export default function UsersPage() {
     page,
     stats.total,
     pageSize,
+    hasActiveFilters,
     announce,
   ]);
 
@@ -274,6 +279,7 @@ export default function UsersPage() {
                   currentCount={users.length}
                   hasMore={hasMore}
                   isLoading={loading}
+                  isFiltered={hasActiveFilters}
                   onPageChange={setPage}
                 />
               </CardContent>

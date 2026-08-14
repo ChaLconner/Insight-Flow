@@ -10,6 +10,7 @@ interface UserPaginationProps {
   currentCount: number;
   hasMore: boolean;
   isLoading: boolean;
+  isFiltered?: boolean;
   onPageChange: (page: number) => void;
 }
 
@@ -20,6 +21,7 @@ export function UserPagination({
   currentCount,
   hasMore,
   isLoading,
+  isFiltered = false,
   onPageChange,
 }: Readonly<UserPaginationProps>) {
   const startIndex = (page - 1) * pageSize + 1;
@@ -28,13 +30,21 @@ export function UserPagination({
   return (
     <div className="flex items-center justify-between p-4 border-t border-border">
       <div className="text-sm text-muted-foreground">
-        {totalUsers > 0 ? (
+        {totalUsers > 0 && !isFiltered ? (
           <>
             Showing{" "}
             <span className="font-medium text-foreground">
               {startIndex}-{endIndex}
             </span>{" "}
             of <span className="font-medium text-foreground">{totalUsers}</span>{" "}
+            users
+          </>
+        ) : currentCount > 0 ? (
+          <>
+            Showing{" "}
+            <span className="font-medium text-foreground">
+              {startIndex}-{endIndex}
+            </span>{" "}
             users
           </>
         ) : (
