@@ -1,6 +1,5 @@
 import uuid
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -55,20 +54,24 @@ async def test_authenticated_user_lookup_uses_snapshot_after_first_miss():
     await cache_service.clear()
     request = MagicMock()
     db = AsyncMock()
-    state_result = MagicMock()
-    state_result.one_or_none.return_value = SimpleNamespace(
-        session_version=4,
-        is_active=True,
-        is_verified=True,
-        role="manager",
+    full_result = MagicMock()
+    full_result.one_or_none.return_value = (user, None)
+    projection_result = MagicMock()
+    projection_result.one_or_none.return_value = (
+        user.id,
+        user.session_version,
+        user.is_active,
+        user.is_verified,
+        user.role,
+        None,
     )
-    db.execute = AsyncMock(return_value=state_result)
+    db.execute = AsyncMock(side_effect=[full_result, projection_result])
     user_service = AsyncMock()
     user_service.get_user_by_id.return_value = user
 
     with (
         patch(
-            "dependencies.auth.async_verify_token_with_blacklist",
+            "dependencies.auth._verify_access_token_signature_and_cached_revocation",
             new=AsyncMock(return_value={"sub": str(user.id), "sv": 4}),
         ),
         patch("dependencies.auth.verify_token_fingerprint", new=AsyncMock()),
@@ -90,10 +93,36 @@ async def test_authenticated_user_lookup_uses_snapshot_after_first_miss():
 
     assert first.id == user.id
     assert second.id == user.id
-    user_service.get_user_by_id.assert_awaited_once_with(str(user.id))
-    # The cache-miss path uses the full user row as authoritative state; only
-    # the cache-hit path needs the smaller revocation-state query.
-    assert db.execute.await_count == 1
+    user_service.get_user_by_id.assert_not_awaited()
+    # Cache misses use the full row; warm requests use the security projection.
+    assert db.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_warm_auth_projection_excludes_profile_and_password_columns():
+    from dependencies.auth import _get_authoritative_auth_state
+
+    user = _user()
+    result = MagicMock()
+    result.one_or_none.return_value = (
+        user.id,
+        user.session_version,
+        user.is_active,
+        user.is_verified,
+        user.role,
+        None,
+    )
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result)
+
+    state, is_revoked = await _get_authoritative_auth_state(db, str(user.id), "jti")
+
+    statement = str(db.execute.await_args.args[0]).lower()
+    assert state is not None
+    assert not is_revoked
+    assert "session_version" in statement
+    assert "hashed_password" not in statement
+    assert "bio" not in statement
 
 
 @pytest.mark.asyncio
@@ -102,18 +131,22 @@ async def test_stale_auth_snapshot_cannot_bypass_session_version_change():
     request = MagicMock()
     db = AsyncMock()
     state_result = MagicMock()
-    state_result.one_or_none.return_value = SimpleNamespace(
-        session_version=5,
-        is_active=True,
-        is_verified=True,
-        role="manager",
+    stale_user = _user()
+    stale_user.session_version = 5
+    state_result.one_or_none.return_value = (
+        stale_user.id,
+        stale_user.session_version,
+        stale_user.is_active,
+        stale_user.is_verified,
+        stale_user.role,
+        None,
     )
     db.execute = AsyncMock(return_value=state_result)
     user_service = AsyncMock()
 
     with (
         patch(
-            "dependencies.auth.async_verify_token_with_blacklist",
+            "dependencies.auth._verify_access_token_signature_and_cached_revocation",
             new=AsyncMock(return_value={"sub": str(user.id), "sv": 4}),
         ),
         patch("dependencies.auth.verify_token_fingerprint", new=AsyncMock()),

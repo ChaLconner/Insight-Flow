@@ -15,6 +15,31 @@ export { notificationSelectors } from "./notification-selectors";
 // Use the type from types/index.ts directly to ensure consistency
 export type CustomNotification = Notification;
 
+function countUnreadNotifications(notifications: CustomNotification[]): number {
+  return notifications.reduce((count, notification) => count + (notification.read ? 0 : 1), 0);
+}
+
+export function getSafeNotificationActionUrl(actionUrl: unknown): string | null {
+  if (
+    typeof window === "undefined" ||
+    typeof actionUrl !== "string" ||
+    !actionUrl.startsWith("/") ||
+    actionUrl.startsWith("//")
+  ) {
+    return null;
+  }
+
+  try {
+    const target = new URL(actionUrl, window.location.origin);
+    if (target.origin !== window.location.origin) {
+      return null;
+    }
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export interface NotificationFilters {
   type: string;
   priority: string;
@@ -109,10 +134,13 @@ export const useNotificationStore = create<NotificationState>()(
           updatedAt: now,
         };
 
-        set((state) => ({
-          notifications: [notification, ...state.notifications].slice(0, 100),
-          unreadCount: notificationData.read ? state.unreadCount : state.unreadCount + 1,
-        }));
+        set((state) => {
+          const notifications = [notification, ...state.notifications].slice(0, 100);
+          return {
+            notifications,
+            unreadCount: countUnreadNotifications(notifications),
+          };
+        });
 
         get().showBrowserNotification(notification);
 
@@ -126,7 +154,7 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       setNotifications: (notifications) => {
-        set({ notifications });
+        set({ notifications, unreadCount: countUnreadNotifications(notifications) });
       },
 
       setUnreadCount: (count) => {
@@ -138,12 +166,10 @@ export const useNotificationStore = create<NotificationState>()(
           const notification = state.notifications.find((n) => n.id === id);
           if (!notification || notification.read) {return state;}
 
-          return {
-            notifications: state.notifications.map((n) =>
+          const notifications = state.notifications.map((n) =>
               n.id === id ? { ...n, read: true, updatedAt: new Date().toISOString() } : n,
-            ),
-            unreadCount: Math.max(0, state.unreadCount - 1),
-          };
+            );
+          return { notifications, unreadCount: countUnreadNotifications(notifications) };
         });
       },
 
@@ -160,13 +186,8 @@ export const useNotificationStore = create<NotificationState>()(
 
       removeNotification: (id) => {
         set((state) => {
-          const notification = state.notifications.find((n) => n.id === id);
-          const wasUnread = notification && !notification.read;
-
-          return {
-            notifications: state.notifications.filter((n) => n.id !== id),
-            unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
-          };
+          const notifications = state.notifications.filter((n) => n.id !== id);
+          return { notifications, unreadCount: countUnreadNotifications(notifications) };
         });
       },
 
@@ -175,11 +196,12 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       updateNotification: (id, updates) => {
-        set((state) => ({
-          notifications: state.notifications.map((n) =>
+        set((state) => {
+          const notifications = state.notifications.map((n) =>
             n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n,
-          ),
-        }));
+          );
+          return { notifications, unreadCount: countUnreadNotifications(notifications) };
+        });
       },
 
       // Settings Actions
@@ -223,9 +245,10 @@ export const useNotificationStore = create<NotificationState>()(
       getRecentNotifications: (limit = 10) => get().notifications.slice(0, limit),
       hasNotification: (id) => get().notifications.some((n) => n.id === id),
       clearReadNotifications: () => {
-        set((state) => ({
-          notifications: state.notifications.filter((n) => !n.read),
-        }));
+        set((state) => {
+          const notifications = state.notifications.filter((n) => !n.read);
+          return { notifications, unreadCount: countUnreadNotifications(notifications) };
+        });
       },
       clearNotifications: () => get().clearAllNotifications(),
 
@@ -245,7 +268,10 @@ export const useNotificationStore = create<NotificationState>()(
           browserNotification.onclick = () => {
             window.focus();
             if (notification.actionUrl) {
-              window.location.href = notification.actionUrl;
+              const safeActionUrl = getSafeNotificationActionUrl(notification.actionUrl);
+              if (safeActionUrl) {
+                window.location.href = safeActionUrl;
+              }
             }
             get().markAsRead(notification.id);
             browserNotification.close();
@@ -284,6 +310,11 @@ export const useNotificationStore = create<NotificationState>()(
         vibrationEnabled: state.vibrationEnabled,
         pushEnabled: state.pushEnabled,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.setUnreadCount(countUnreadNotifications(state.notifications));
+        }
+      },
     },
   ),
 );

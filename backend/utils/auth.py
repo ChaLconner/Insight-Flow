@@ -230,18 +230,14 @@ async def async_verify_token_with_blacklist(
 
     # Check if token is blacklisted
     from models.token_blacklist import TokenBlacklist
-    from services.cache_service import cache_service
 
     token_jti = payload.get("jti")
 
     if token_jti:
-        cache_key = f"blacklist:jti:{token_jti}"
-        cached_status = await cache_service.get(cache_key)
-
         # Only a cached positive result is authoritative. A cached negative
         # result can outlive logout or refresh-token rotation and must be
         # rechecked against the database before accepting the token.
-        if cached_status is not None and cached_status.get("revoked"):
+        if await is_token_revoked_in_cache(token_jti):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=TOKEN_REVOKED_DETAIL,
@@ -250,7 +246,7 @@ async def async_verify_token_with_blacklist(
 
         is_revoked = await TokenBlacklist.async_is_token_blacklisted(db_session, token_jti)
         if is_revoked:
-            await cache_service.set(cache_key, {"revoked": True}, ttl=3600)
+            await cache_token_revocation(token_jti)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=TOKEN_REVOKED_DETAIL,
@@ -258,6 +254,26 @@ async def async_verify_token_with_blacklist(
             )
 
     return payload
+
+
+async def is_token_revoked_in_cache(token_jti: str) -> bool:
+    """Return only cached positive revocation decisions.
+
+    A cache miss and a cached ``{"revoked": False}`` value both return
+    ``False``. Callers must still consult the database before accepting a
+    token; negative decisions are intentionally never authoritative.
+    """
+    from services.cache_service import cache_service
+
+    cached_status = await cache_service.get(f"blacklist:jti:{token_jti}")
+    return bool(cached_status and cached_status.get("revoked") is True)
+
+
+async def cache_token_revocation(token_jti: str) -> None:
+    """Cache a positive revocation decision until shortly after token expiry."""
+    from services.cache_service import cache_service
+
+    await cache_service.set(f"blacklist:jti:{token_jti}", {"revoked": True}, ttl=3600)
 
 
 def get_token_expiration(token: str) -> datetime | None:

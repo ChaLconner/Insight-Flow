@@ -33,11 +33,15 @@ from services.async_user_service import AsyncUserService
 from utils.cloudinary_upload import init_cloudinary, is_cloudinary_configured
 from utils.cloudinary_upload import upload_avatar as cloudinary_upload_avatar
 from utils.file_security import (
+    AVATAR_ALLOWED_EXTENSIONS,
+    AVATAR_ALLOWED_MIME_TYPES,
     AVATAR_MAX_FILE_SIZE_BYTES,
     FileSecurityError,
-    read_upload_with_limit,
-    validate_avatar_upload,
+    stream_upload_to_tempfile,
+    validate_avatar_upload_path,
+    validate_extension,
     validate_file_path,
+    validate_mime_type,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,34 +74,44 @@ def _avatar_security_exception(error: FileSecurityError, user_id: Any) -> HTTPEx
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error.message)
 
 
-async def _read_and_validate_avatar(file: UploadFile, user_id: Any) -> tuple[bytes, str]:
+async def _read_and_validate_avatar(file: UploadFile, user_id: Any) -> tuple[str, str]:
     try:
-        file_content = await read_upload_with_limit(file, AVATAR_MAX_FILE_SIZE_BYTES)
-    except FileSecurityError as error:
-        raise _avatar_security_exception(error, user_id) from error
-
-    try:
-        file_extension, _file_size = validate_avatar_upload(
-            filename=file.filename,
-            content_type=file.content_type,
-            content=file_content,
+        # Validate the declared metadata before staging so Cloudinary receives
+        # a temporary path with the correct image suffix. Content signatures
+        # are still checked from disk below.
+        declared_extension = validate_extension(file.filename, AVATAR_ALLOWED_EXTENSIONS)
+        validate_mime_type(file.content_type, declared_extension, AVATAR_ALLOWED_MIME_TYPES)
+        staged_path, streamed_size = await stream_upload_to_tempfile(
+            file, AVATAR_MAX_FILE_SIZE_BYTES, suffix=declared_extension
         )
     except FileSecurityError as error:
         raise _avatar_security_exception(error, user_id) from error
 
-    return file_content, file_extension
+    try:
+        file_extension, _file_size = validate_avatar_upload_path(
+            filename=file.filename,
+            content_type=file.content_type,
+            file_path=staged_path,
+            file_size=streamed_size,
+        )
+    except FileSecurityError as error:
+        _cleanup_avatar_file(staged_path, "rejected temporary")
+        raise _avatar_security_exception(error, user_id) from error
+    except Exception:
+        _cleanup_avatar_file(staged_path, "validation failure temporary")
+        raise
+
+    return staged_path, file_extension
 
 
-async def _upload_avatar_to_cloudinary(
-    file_content: bytes, filename: str, user_id: Any
-) -> str | None:
+async def _upload_avatar_to_cloudinary(file_path: str, filename: str, user_id: Any) -> str | None:
     if not is_cloudinary_configured():
         return None
 
     logger.info(f"Uploading avatar to Cloudinary for user {user_id}")
     result = await asyncio.to_thread(
         cloudinary_upload_avatar,
-        file_content=file_content,
+        file_content=file_path,
         filename=filename,
         user_id=str(user_id),
     )
@@ -121,12 +135,12 @@ def _cleanup_avatar_file(path: str | None, description: str) -> None:
         logger.warning(f"Failed to remove {description} avatar: {cleanup_error}")
 
 
-async def _save_local_avatar(file_content: bytes, file_extension: str) -> tuple[str, str]:
+async def _save_local_avatar(staged_path: str, file_extension: str) -> tuple[str, str]:
     unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
-    validated_path = validate_file_path(UPLOAD_DIR, file_path)
+    destination_path = os.path.join(UPLOAD_DIR, unique_filename)
+    validated_path = validate_file_path(UPLOAD_DIR, destination_path)
     try:
-        await asyncio.to_thread(_write_binary_file, validated_path, file_content)
+        await asyncio.to_thread(os.replace, staged_path, validated_path)
     except Exception:
         _cleanup_avatar_file(validated_path, "incomplete")
         raise
@@ -380,19 +394,22 @@ async def upload_user_avatar(
     - Maximum file size: 5 MB
     - Path traversal protection
     """
+    staged_path: str | None = None
     new_local_path: str | None = None
     try:
-        file_content, file_extension = await _read_and_validate_avatar(file, current_user.id)
+        staged_path, file_extension = await _read_and_validate_avatar(file, current_user.id)
         old_avatar_url = current_user.avatar_url
         avatar_url = await _upload_avatar_to_cloudinary(
-            file_content,
+            staged_path,
             file.filename or "avatar.png",
             current_user.id,
         )
 
         if not avatar_url:
             logger.info("Using local storage for avatar upload")
-            avatar_url, new_local_path = await _save_local_avatar(file_content, file_extension)
+            avatar_url, new_local_path = await _save_local_avatar(staged_path, file_extension)
+        _cleanup_avatar_file(staged_path, "temporary")
+        staged_path = None
 
         # Update user in database - use model_construct to set avatar_url directly
         user_update = UserUpdate.model_construct(avatar_url=avatar_url)
@@ -409,9 +426,11 @@ async def upload_user_avatar(
         return updated_user  # type: ignore[return-value]
 
     except HTTPException:
+        _cleanup_avatar_file(staged_path, "rejected temporary")
         _cleanup_avatar_file(new_local_path, "rejected")
         raise
     except Exception as e:
+        _cleanup_avatar_file(staged_path, "incomplete temporary")
         _cleanup_avatar_file(new_local_path, "incomplete")
         logger.exception(f"Failed to upload avatar: {e!s}")
         raise HTTPException(

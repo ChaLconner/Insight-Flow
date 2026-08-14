@@ -50,12 +50,12 @@ def init_cloudinary():
     return True
 
 
-def upload_avatar(file_content: bytes, filename: str, user_id: str) -> dict[str, Any] | None:
+def upload_avatar(file_content: bytes | str, filename: str, user_id: str) -> dict[str, Any] | None:
     """
     Upload avatar image to Cloudinary with optimized settings.
 
     Args:
-        file_content: Binary content of the file
+        file_content: Binary content or a local path to the file
         filename: Original filename
         user_id: User ID for organizing uploads
 

@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import dynamic from "next/dynamic";
 import { ProtectedLayout } from "@/components/layout/ProtectedLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { InviteUserModal } from "@/components/modals/InviteUserModal";
+
+const InviteUserModal = dynamic(
+  () =>
+    import("@/components/modals/InviteUserModal").then(
+      (module) => module.InviteUserModal,
+    ),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
 
 // Local imports
 import {
@@ -159,8 +169,9 @@ export default function UsersPage() {
         >
           <div className="text-red-400 text-center">
             <p className="text-lg font-medium">{error}</p>
-            <button type="button"
-              onClick={() => loadUsers()}
+            <button
+              type="button"
+              onClick={() => loadUsers(true)}
               className="mt-4 px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-900"
               aria-label="Retry loading users"
             >
@@ -173,7 +184,7 @@ export default function UsersPage() {
   }
 
   return (
-    <DashboardLayout>
+    <ProtectedLayout>
       {/* Skip to main content link */}
       <a
         href="#users-list"
@@ -204,6 +215,23 @@ export default function UsersPage() {
           onInvite={handleInviteClick}
           isRefreshing={refreshing}
         />
+
+        {error && dataFetched && (
+          <div
+            className="flex items-center justify-between gap-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-200"
+            role="alert"
+            aria-live="assertive"
+          >
+            <span>{error}. Showing the last successful result.</span>
+            <button
+              type="button"
+              onClick={() => loadUsers(true)}
+              className="shrink-0 rounded-md border border-red-300/40 px-3 py-1 text-sm hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-400"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <section aria-label="User statistics">
@@ -276,6 +304,6 @@ export default function UsersPage() {
         onClose={handleInviteClose}
         onSuccess={handleInviteSuccess}
       />
-    </DashboardLayout>
+    </ProtectedLayout>
   );
 }

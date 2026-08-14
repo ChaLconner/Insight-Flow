@@ -53,6 +53,7 @@ class ProjectMetricResponse(BaseModel):
 
 
 class TeamMemberMetricResponse(BaseModel):
+    id: str | None = None
     name: str
     avatar: str | None = None
     tasks: int
@@ -92,7 +93,7 @@ class TeamWorkload(BaseModel):
 class TeamWorkloadPaginatedResponse(BaseModel):
     """Paginated team workload response for handling large user counts"""
 
-    items: list[TeamWorkload] = []
+    items: list[TeamWorkload] = Field(default_factory=list)
     total: int = Field(default=0, ge=0, description="Total number of team members")
     page: int = Field(default=1, ge=1, description="Current page number")
     page_size: int = Field(default=10, ge=1, le=100, description="Number of items per page")
@@ -130,13 +131,14 @@ class AnalyticsOverviewResponse(BaseModel):
     """Complete analytics overview response"""
 
     overview: AnalyticsOverviewMetrics
-    weeklyBurndown: list[BurndownDataPoint] = []
-    trends: list[AnalyticsTrend] = []
-    projects: list[ProjectMetricResponse] = []
-    team: list[TeamMemberMetricResponse] = []
-    statusDistribution: list[StatusDistribution] = []
-    priorityDistribution: list[PriorityDistribution] = []
-    teamWorkload: list[TeamWorkload] = []
-    dailyTrends: list[DailyTrend] = []
+    weeklyBurndown: list[BurndownDataPoint] = Field(default_factory=list)
+    trends: list[AnalyticsTrend] = Field(default_factory=list)
+    projects: list[ProjectMetricResponse] = Field(default_factory=list)
+    team: list[TeamMemberMetricResponse] = Field(default_factory=list)
+    statusDistribution: list[StatusDistribution] = Field(default_factory=list)
+    priorityDistribution: list[PriorityDistribution] = Field(default_factory=list)
+    teamWorkload: list[TeamWorkload] = Field(default_factory=list)
+    teamWorkloadTotal: int = Field(default=0, ge=0)
+    dailyTrends: list[DailyTrend] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

@@ -7,13 +7,14 @@ import json
 import uuid
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.task_history import ActivityType, TaskHistory
 from utils.logger import setup_logger
 
 logger = setup_logger("async_task_history_service")
+MAX_BATCH_ACTIVITY_ROWS = 1_000
 
 
 class AsyncTaskHistoryService:
@@ -91,22 +92,49 @@ class AsyncTaskHistoryService:
         project_ids: list[uuid.UUID],
         limit: int = 20,
         activity_types: list[ActivityType] | None = None,
+        per_project_limit: int | None = None,
     ) -> list[TaskHistory]:
         """
         Get recent activities for multiple projects.
-        Optimized for batch fetching to avoid N+1 queries.
+        Optimized for batch fetching to avoid N+1 queries. When
+        ``per_project_limit`` is supplied, use a window function so a large
+        project cannot consume the entire global result set.
         """
         if not project_ids:
             return []
 
-        query = select(TaskHistory).filter(TaskHistory.project_id.in_(project_ids))
+        if per_project_limit is not None:
+            ranked_history = select(
+                TaskHistory.id.label("history_id"),
+                func.row_number()
+                .over(
+                    partition_by=TaskHistory.project_id,
+                    order_by=(TaskHistory.timestamp.desc(), TaskHistory.id.desc()),
+                )
+                .label("project_row_number"),
+            ).filter(TaskHistory.project_id.in_(project_ids))
+            if activity_types:
+                ranked_history = ranked_history.filter(
+                    TaskHistory.activity_type.in_(activity_types)
+                )
 
-        if activity_types:
-            query = query.filter(TaskHistory.activity_type.in_(activity_types))
+            ranked_subquery = ranked_history.subquery()
+            query = (
+                select(TaskHistory)
+                .join(ranked_subquery, TaskHistory.id == ranked_subquery.c.history_id)
+                .filter(ranked_subquery.c.project_row_number <= per_project_limit)
+                .order_by(TaskHistory.timestamp.desc(), TaskHistory.id.desc())
+                .limit(min(per_project_limit * len(project_ids), MAX_BATCH_ACTIVITY_ROWS))
+            )
+        else:
+            query = select(TaskHistory).filter(TaskHistory.project_id.in_(project_ids))
 
-        result = await self.db.execute(
-            query.order_by(TaskHistory.timestamp.desc(), TaskHistory.id.desc()).limit(limit)
-        )
+            if activity_types:
+                query = query.filter(TaskHistory.activity_type.in_(activity_types))
+
+            query = query.order_by(TaskHistory.timestamp.desc(), TaskHistory.id.desc()).limit(limit)
+
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
     async def get_recent_activities_paginated(

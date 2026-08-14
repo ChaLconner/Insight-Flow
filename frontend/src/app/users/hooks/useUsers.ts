@@ -72,6 +72,7 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "active" | "inactive"
   >("all");
+  const filterKey = [debouncedSearchQuery, roleFilter, statusFilter].join("|");
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -79,10 +80,13 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
 
   // Refs
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  const isLoadingRef = useRef(false);
-  const lastLoadTime = useRef<number>(0);
+  const loadedQueryKeyRef = useRef<string | null>(null);
+  const previousFilterKeyRef = useRef(filterKey);
+  const activeRequestIdRef = useRef(0);
+  const usersRequestControllerRef = useRef<AbortController | null>(null);
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
   const isLoading = useAuthStore((state) => state.isLoading);
 
   // Fetch stats
@@ -102,21 +106,34 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
         return;
       }
 
-      const now = Date.now();
-      if (!forceRefresh && now - lastLoadTime.current < 500 && dataFetched) {
+      const queryKey = [
+        userId,
+        page,
+        pageSize,
+        debouncedSearchQuery,
+        roleFilter,
+        statusFilter,
+      ].join("|");
+
+      // The effect depends on loadUsers, whose dataFetched dependency changes
+      // after the first response. Skip re-running the same query deterministically
+      // instead of relying on a timing window.
+      if (!forceRefresh && loadedQueryKeyRef.current === queryKey) {
         return;
       }
 
-      if (isLoadingRef.current) {
-        return;
-      }
+      const requestId = activeRequestIdRef.current + 1;
+      activeRequestIdRef.current = requestId;
+      usersRequestControllerRef.current?.abort();
+      const controller = new AbortController();
+      usersRequestControllerRef.current = controller;
 
       try {
-        isLoadingRef.current = true;
-        lastLoadTime.current = now;
-
         if (forceRefresh) {
           setRefreshing(true);
+          if (!dataFetched) {
+            setLoading(true);
+          }
         } else {
           setLoading(true);
         }
@@ -132,35 +149,59 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
               pageSize,
               roleFilter === "all" ? undefined : roleFilter,
               statusFilter === "all" ? undefined : statusFilter,
+              controller.signal,
             ),
             forceRefresh || !dataFetched ? fetchStats() : Promise.resolve(),
           ]);
+
+          if (requestId !== activeRequestIdRef.current || controller.signal.aborted) {
+            return;
+          }
 
           const userList = Array.isArray(usersData)
             ? usersData
             : ((usersData as Record<string, unknown>).data as User[]) ?? [];
           setUsers(userList);
           setHasMore(userList.length === pageSize);
+          loadedQueryKeyRef.current = queryKey;
         } catch (apiError) {
+          if (requestId !== activeRequestIdRef.current || controller.signal.aborted) {
+            return;
+          }
           console.error("API issue:", apiError);
-          setUsers([]);
+          // Preserve the last successful list during refreshes. A failed
+          // request is not a successful empty result and must remain retryable.
+          loadedQueryKeyRef.current = null;
+          setError("Failed to load users");
+          toast.error("Failed to load users", {
+            description: getErrorMessage(apiError),
+          });
+          return;
         }
 
         setDataFetched(true);
       } catch (err) {
+        if (requestId !== activeRequestIdRef.current || controller.signal.aborted) {
+          return;
+        }
         console.error("Error loading users:", err);
         setError("Failed to load users");
         toast.error("Failed to load users", {
           description: getErrorMessage(err),
         });
       } finally {
-        isLoadingRef.current = false;
-        setLoading(false);
-        setRefreshing(false);
+        if (requestId === activeRequestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+          if (usersRequestControllerRef.current === controller) {
+            usersRequestControllerRef.current = null;
+          }
+        }
       }
     },
     [
       isAuthenticated,
+      userId,
       dataFetched,
       page,
       pageSize,
@@ -176,10 +217,42 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
     if (isLoading) {
       return;
     }
-    if (isAuthenticated) {
-      loadUsers();
+
+    if (!isAuthenticated) {
+      activeRequestIdRef.current += 1;
+      usersRequestControllerRef.current?.abort();
+      usersRequestControllerRef.current = null;
+      loadedQueryKeyRef.current = null;
+      previousFilterKeyRef.current = filterKey;
+      setUsers([]);
+      setStats(DEFAULT_USER_STATS);
+      setHasMore(false);
+      setDataFetched(false);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
+      setPage(1);
+      return;
     }
-  }, [isAuthenticated, isLoading, loadUsers]);
+
+    if (previousFilterKeyRef.current !== filterKey) {
+      previousFilterKeyRef.current = filterKey;
+      if (page !== 1) {
+        setPage(1);
+        return;
+      }
+    }
+
+    void loadUsers();
+  }, [filterKey, isAuthenticated, isLoading, loadUsers, page]);
+
+  useEffect(() => {
+    return () => {
+      activeRequestIdRef.current += 1;
+      usersRequestControllerRef.current?.abort();
+      usersRequestControllerRef.current = null;
+    };
+  }, []);
 
   // Debounce search
   useEffect(() => {
@@ -197,11 +270,6 @@ export function useUsers(options: UseUsersOptions = {}): UseUsersReturn {
       }
     };
   }, [searchQuery, debounceMs]);
-
-  // Reset page on filter change
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearchQuery, roleFilter, statusFilter]);
 
   const refresh = useCallback(() => {
     loadUsers(true);

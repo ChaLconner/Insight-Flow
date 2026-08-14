@@ -7,6 +7,8 @@ class FakeRedisClient:
     def __init__(self, keys: list[str | bytes]):
         self.keys = keys
         self.deleted: list[str | bytes] = []
+        self.lock_values: dict[str, str] = {}
+        self.lock_set_calls: list[tuple[str, str, int, bool]] = []
         self.flushdb_called = False
         self.keys_called = False
 
@@ -26,6 +28,19 @@ class FakeRedisClient:
     def delete(self, *keys: str | bytes) -> int:
         self.deleted.extend(keys)
         return len(keys)
+
+    def set(self, key: str, value: str, *, ex: int, nx: bool):
+        self.lock_set_calls.append((key, value, ex, nx))
+        if nx and key in self.lock_values:
+            return None
+        self.lock_values[key] = value
+        return True
+
+    def eval(self, _script: str, _numkeys: int, key: str, token: str) -> int:
+        if self.lock_values.get(key) == token:
+            del self.lock_values[key]
+            return 1
+        return 0
 
     def flushdb(self):
         self.flushdb_called = True
@@ -75,6 +90,15 @@ class TestCacheServiceConfiguration:
 
         assert await service.get("unavailable-redis") is None
         assert isinstance(service.backend, InMemoryCache)
+
+    @pytest.mark.asyncio
+    async def test_in_memory_cache_round_trip_excludes_cache_metadata(self):
+        cache = InMemoryCache()
+        await cache.clear()
+
+        await cache.set("payload", {"value": 42}, ttl=60)
+
+        assert await cache.get("payload") == {"value": 42}
 
 
 class TestCacheKeyPatterns:
@@ -177,4 +201,20 @@ class TestRedisCacheInvalidation:
         assert client.deleted == [
             "dashboard:overview:user-1",
             "dashboard:recent_projects:user-1:5",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_distributed_lock_is_exclusive_and_owner_checked(self):
+        cache = self._make_cache([])
+
+        assert await cache.try_acquire_lock("analytics:lock", "owner-1", 30) is True
+        assert await cache.try_acquire_lock("analytics:lock", "owner-2", 30) is False
+        assert await cache.release_lock("analytics:lock", "owner-2") is False
+        assert await cache.release_lock("analytics:lock", "owner-1") is True
+
+        client = cache.client
+        assert isinstance(client, FakeRedisClient)
+        assert client.lock_set_calls == [
+            ("analytics:lock", "owner-1", 30, True),
+            ("analytics:lock", "owner-2", 30, True),
         ]

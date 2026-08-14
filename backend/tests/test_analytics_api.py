@@ -130,5 +130,8 @@ async def test_batch_recent_activity_compat_endpoint(monkeypatch):
         data = response.json()
         assert data[0]["projectId"] == str(project_id)
         assert data[0]["activities"][0]["project_id"] == str(project_id)
+        mock_history_service.get_recent_activities_for_projects.assert_awaited_once_with(
+            [project_id], limit=5, per_project_limit=5
+        )
     finally:
         monkeypatch.setattr(app, "dependency_overrides", {})

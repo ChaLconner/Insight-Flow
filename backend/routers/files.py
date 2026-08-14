@@ -23,9 +23,9 @@ from routers.auth import get_current_active_user
 from utils.file_security import (
     MAX_FILE_SIZE_BYTES,
     FileSecurityError,
-    read_upload_with_limit,
+    stream_upload_to_tempfile,
     validate_file_path,
-    validate_general_upload,
+    validate_general_upload_path,
 )
 from utils.logger import mask_user_id, setup_logger
 
@@ -48,10 +48,10 @@ FILE_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
-async def _read_and_validate_upload(file: UploadFile, current_user: User) -> tuple[bytes, str, int]:
-    """Read an upload within limits and validate its declared and detected type."""
+async def _read_and_validate_upload(file: UploadFile, current_user: User) -> tuple[str, str, int]:
+    """Stage an upload on disk within limits and validate its detected type."""
     try:
-        content = await read_upload_with_limit(file, MAX_FILE_SIZE_BYTES)
+        staged_path, streamed_size = await stream_upload_to_tempfile(file, MAX_FILE_SIZE_BYTES)
     except FileSecurityError as e:
         logger.warning(
             f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
@@ -59,17 +59,22 @@ async def _read_and_validate_upload(file: UploadFile, current_user: User) -> tup
         raise HTTPException(status_code=400, detail=e.message) from e
 
     try:
-        file_extension, file_size = validate_general_upload(
+        file_extension, file_size = validate_general_upload_path(
             filename=file.filename,
             content_type=file.content_type,
-            content=content,
+            file_path=staged_path,
+            file_size=streamed_size,
         )
     except FileSecurityError as e:
+        _cleanup_upload(staged_path, False, "rejected")
         logger.warning(
             f"File upload security violation by user {mask_user_id(str(current_user.id))}: {e.message}"
         )
         raise HTTPException(status_code=400, detail=e.message) from e
-    return content, file_extension, file_size
+    except Exception:
+        _cleanup_upload(staged_path, False, "validation failure")
+        raise
+    return staged_path, file_extension, file_size
 
 
 def _cleanup_upload(path: str | None, file_committed: bool, error_type: str) -> None:
@@ -98,11 +103,13 @@ async def upload_file(
     - Path traversal protection
     - UUID-based filenames to prevent collisions
     """
+    staged_path: str | None = None
     validated_path: str | None = None
     file_committed = False
     try:
-        # Read in bounded chunks so the request body cannot exhaust process memory.
-        content, file_extension, file_size = await _read_and_validate_upload(file, current_user)
+        # Stream to a bounded temporary file so concurrent uploads do not
+        # multiply near-limit request bodies in process memory.
+        staged_path, file_extension, file_size = await _read_and_validate_upload(file, current_user)
 
         # Generate unique filename with validated extension
         unique_name = f"{uuid.uuid4()}{file_extension}"
@@ -115,8 +122,10 @@ async def upload_file(
             logger.warning(f"Path traversal attempt by user {mask_user_id(str(current_user.id))}")
             raise HTTPException(status_code=400, detail=INVALID_FILE_PATH_DETAIL)
 
-        # Save file
-        await asyncio.to_thread(_write_binary_file, validated_path, content)
+        # Atomically promote the validated staged file into the private upload
+        # directory. No request-sized bytes are retained in Python memory.
+        await asyncio.to_thread(os.replace, staged_path, validated_path)
+        staged_path = None
 
         url = f"{DOWNLOAD_URL_PREFIX}/{unique_name}"
 
@@ -137,10 +146,12 @@ async def upload_file(
         return {"url": url, "filename": unique_name, "id": str(db_file.id)}
 
     except HTTPException:
+        _cleanup_upload(staged_path, False, "rejected")
         _cleanup_upload(validated_path, file_committed, "rejected")
         raise
     except Exception as e:
         await db.rollback()
+        _cleanup_upload(staged_path, False, "incomplete")
         _cleanup_upload(validated_path, file_committed, "incomplete")
         logger.exception(f"File upload error: {e}")
         raise HTTPException(status_code=500, detail="File upload failed")

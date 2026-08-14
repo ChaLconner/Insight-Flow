@@ -5,6 +5,7 @@ Used by ``core/middleware_config.py`` as the fallback global rate limiter.
 For fine-grained per-route limits, see ``rate_limiter.py`` (SlowAPI-based).
 """
 
+import asyncio
 import logging
 import threading
 import time
@@ -76,6 +77,8 @@ class RateLimitMiddleware:
     MAX_TRACKED_IPS = 10000
     # Cleanup interval in seconds
     CLEANUP_INTERVAL = 300  # 5 minutes
+    MAX_BACKGROUND_TASKS = 1_000
+    MAX_RATE_LIMIT_LOG_KEYS = 10_000
 
     def __init__(self, app, calls: int = 100, period: int = 60):
         self.app = app
@@ -91,6 +94,7 @@ class RateLimitMiddleware:
         # Format: {ip: (is_blocked, blocked_until, cache_expire_time)}
         self._ip_block_cache: dict[str, tuple[bool, object, float]] = {}
         self._ip_block_cache_ttl = 30  # seconds
+        self._rate_limit_log_cache: dict[str, float] = {}
 
     def _get_rate_key(self, request: Request) -> str:
         """Get rate limiting key for the request."""
@@ -157,6 +161,47 @@ class RateLimitMiddleware:
                 )
         except Exception as e:
             logger.exception(f"Failed to log blocked access: {e}")
+
+    def _should_log_rate_limit_violation(
+        self, client_ip: str, path: str, period: int, now: float
+    ) -> bool:
+        """Sample one security-log write per IP/path/window without awaiting it."""
+        key = f"{client_ip}:{path}"
+        with self._lock:
+            last_logged = self._rate_limit_log_cache.get(key)
+            if last_logged is not None and now - last_logged < period:
+                return False
+
+            if len(self._rate_limit_log_cache) >= self.MAX_RATE_LIMIT_LOG_KEYS:
+                oldest_key = min(
+                    self._rate_limit_log_cache,
+                    key=lambda cache_key: self._rate_limit_log_cache[cache_key],
+                )
+                self._rate_limit_log_cache.pop(oldest_key, None)
+            self._rate_limit_log_cache[key] = now
+            return True
+
+    async def _log_rate_limit_violation(
+        self,
+        request: Request,
+        client_ip: str,
+        path: str,
+        calls: int,
+        period: int,
+    ) -> None:
+        """Persist sampled rate-limit telemetry outside the request path."""
+        try:
+            async with AsyncSessionLocal() as db:
+                await SecurityLogService.log_event(
+                    db=db,
+                    event_type="rate_limit_exceeded",
+                    severity="warning",
+                    details={"limit": calls, "period": period, "path": path},
+                    request=request,
+                    ip_address=client_ip,
+                )
+        except Exception as e:
+            logger.exception(f"Failed to log rate limit: {e}")
 
     async def _build_blocked_ip_response(
         self, request: Request, client_ip: str, blocked_until
@@ -245,6 +290,8 @@ class RateLimitMiddleware:
         # Periodic cleanup of old entries to prevent memory leak
         self._maybe_cleanup(now)
 
+        rate_limited = False
+        remaining = 0
         with self._lock:
             # Get history for this rate key
             history = self.request_history[rate_key]
@@ -255,14 +302,19 @@ class RateLimitMiddleware:
 
             # Check if limit exceeded
             if len(history) >= calls:
-                await self._send_rate_limit_exceeded(
-                    scope, receive, send, request, client_ip, path, calls, period
-                )
-                return
+                rate_limited = True
+            else:
+                # Add current timestamp
+                history.append(now)
+                remaining = calls - len(history)
 
-            # Add current timestamp
-            history.append(now)
-            remaining = calls - len(history)
+        # Do not await logging, database work, or response I/O while holding
+        # the synchronous lock used to protect the in-memory counters.
+        if rate_limited:
+            await self._send_rate_limit_exceeded(
+                scope, receive, send, request, client_ip, path, calls, period
+            )
+            return
 
         async def send_wrapper(message):
             if message["type"] == "http.response.start":
@@ -295,27 +347,27 @@ class RateLimitMiddleware:
 
             blocker = get_ip_blocker()
             # Use fire_and_forget to not block the response
-            import asyncio
-
-            task = asyncio.create_task(blocker.record_violation(client_ip, f"rate_limit:{path}"))
-            self.background_tasks.add(task)
-            task.add_done_callback(self.background_tasks.discard)
+            if len(self.background_tasks) < self.MAX_BACKGROUND_TASKS:
+                violation_task = asyncio.create_task(
+                    blocker.record_violation(client_ip, f"rate_limit:{path}")
+                )
+                self.background_tasks.add(violation_task)
+                violation_task.add_done_callback(self.background_tasks.discard)
         except Exception:
             pass
 
-        # Log rate limit violation
-        try:
-            async with AsyncSessionLocal() as db:
-                await SecurityLogService.log_event(
-                    db=db,
-                    event_type="rate_limit_exceeded",
-                    severity="warning",
-                    details={"limit": calls, "period": period, "path": path},
-                    request=request,
-                    ip_address=client_ip,
-                )
-        except Exception as e:
-            logger.exception(f"Failed to log rate limit: {e}")
+        # Security-log persistence is sampled, bounded, and detached from the
+        # 429 response so rejected traffic cannot consume a DB connection per
+        # request or increase response latency.
+        if (
+            self._should_log_rate_limit_violation(client_ip, path, period, time.time())
+            and len(self.background_tasks) < self.MAX_BACKGROUND_TASKS
+        ):
+            log_task = asyncio.create_task(
+                self._log_rate_limit_violation(request, client_ip, path, calls, period)
+            )
+            self.background_tasks.add(log_task)
+            log_task.add_done_callback(self.background_tasks.discard)
 
         response = JSONResponse(
             status_code=429,
@@ -375,3 +427,8 @@ class RateLimitMiddleware:
 
             self._cleanup_request_history(now, cutoff_time)
             self._cleanup_ip_block_cache(now)
+            self._rate_limit_log_cache = {
+                key: timestamp
+                for key, timestamp in self._rate_limit_log_cache.items()
+                if now - timestamp < self.CLEANUP_INTERVAL
+            }

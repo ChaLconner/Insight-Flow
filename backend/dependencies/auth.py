@@ -3,6 +3,7 @@ Authentication dependencies for Insight-Flow application.
 Moved from routers/auth.py to resolve circular dependencies.
 """
 
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -13,10 +14,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_async_db
 from dependencies.services import get_user_service
+from models.token_blacklist import TokenBlacklist
 from models.user import User
 from services.async_user_service import AsyncUserService
 from services.auth_cache import cache_auth_user, get_cached_auth_user
-from utils.auth import async_verify_token_with_blacklist
+from utils.auth import (
+    TOKEN_REVOKED_DETAIL,
+    cache_token_revocation,
+    is_token_revoked_in_cache,
+    verify_token,
+)
 from utils.logger import setup_logger
 from utils.request_security import is_trusted_proxy
 from utils.token_utils import ACCESS_TOKEN_KEY
@@ -32,7 +39,29 @@ USER_NOT_FOUND_DETAIL = "User not found"
 SESSION_INVALID_DETAIL = "Session invalid - please login again"
 
 
-def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
+@dataclass(frozen=True)
+class _AuthState:
+    """Authoritative fields required to validate an already-cached user."""
+
+    id: UUID
+    session_version: int | None
+    is_active: bool
+    is_verified: bool
+    role: Any
+
+
+def _normalize_auth_user_id(user_id: str) -> UUID:
+    try:
+        return UUID(user_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=INVALID_CREDENTIALS_DETAIL,
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+def _session_version_matches(payload: dict[str, Any], user: User | _AuthState) -> bool:
     """Reject tokens issued before the user's current session version."""
     try:
         token_version = int(payload.get("sv", 0))
@@ -42,58 +71,98 @@ def _session_version_matches(payload: dict[str, Any], user: User) -> bool:
     return token_version == current_version
 
 
+async def _get_authoritative_auth_user(
+    db: AsyncSession,
+    user_id: str,
+    token_jti: str | None,
+) -> tuple[User | None, bool]:
+    """Read user state and token revocation status in one database query."""
+    normalized_user_id = _normalize_auth_user_id(user_id)
+
+    # The outer join checks the exact JTI without accepting a cached negative
+    # decision. The same statement returns the full user row on a cache miss,
+    # preserving the previous user-service lookup while removing one round trip.
+    result = await db.execute(
+        select(User, TokenBlacklist.token_jti)
+        .outerjoin(TokenBlacklist, TokenBlacklist.token_jti == token_jti)
+        .where(User.id == normalized_user_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        return None, False
+
+    user, blacklisted_jti = row
+    return user, blacklisted_jti is not None
+
+
 async def _get_authoritative_auth_state(
     db: AsyncSession,
     user_id: str,
-    token_session_version: int,
-) -> Any:
-    """Read security-sensitive user state directly from the database."""
-    try:
-        normalized_user_id = UUID(user_id)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=INVALID_CREDENTIALS_DETAIL,
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
+    token_jti: str | None,
+) -> tuple[_AuthState | None, bool]:
+    """Read only security state and exact JTI revocation status.
 
+    Warm authentication requests do not need the user's password hash, profile
+    fields, or other application data. Keeping this projection separate from
+    the cache-miss query avoids transferring the full row on every request
+    while retaining database authority for revocation and session changes.
+    """
+    normalized_user_id = _normalize_auth_user_id(user_id)
     result = await db.execute(
-        select(User.session_version, User.is_active, User.is_verified, User.role).where(
-            User.id == normalized_user_id
+        select(
+            User.id,
+            User.session_version,
+            User.is_active,
+            User.is_verified,
+            User.role,
+            TokenBlacklist.token_jti,
         )
+        .outerjoin(TokenBlacklist, TokenBlacklist.token_jti == token_jti)
+        .where(User.id == normalized_user_id)
     )
-    state = result.one_or_none()
-    if state is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=USER_NOT_FOUND_DETAIL,
-        )
+    row = result.one_or_none()
+    if row is None:
+        return None, False
 
-    try:
-        current_session_version = int(state.session_version or 0)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=INVALID_CREDENTIALS_DETAIL,
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
-
-    if current_session_version != token_session_version:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=SESSION_INVALID_DETAIL,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    return state
+    user_id_value, session_version, is_active, is_verified, role, blacklisted_jti = row
+    return (
+        _AuthState(
+            id=user_id_value,
+            session_version=session_version,
+            is_active=is_active,
+            is_verified=is_verified,
+            role=role,
+        ),
+        blacklisted_jti is not None,
+    )
 
 
-def _apply_authoritative_auth_state(user: User, state: Any) -> None:
+def _apply_authoritative_auth_state(user: User, state: User | _AuthState) -> None:
     """Overlay security-sensitive fields on a cached user snapshot."""
     user.session_version = int(state.session_version or 0)
     user.is_active = state.is_active
     user.is_verified = state.is_verified
     user.role = state.role
+
+
+async def _verify_access_token_signature_and_cached_revocation(
+    token: str,
+) -> dict[str, Any]:
+    """Verify JWT claims and reject only positively cached revocations.
+
+    Database revocation is checked together with the authoritative user query
+    in ``_get_authoritative_auth_user``. Negative cache values remain
+    non-authoritative by design.
+    """
+    payload = verify_token(token, expected_type="access")
+    token_jti = payload.get("jti")
+    if token_jti and await is_token_revoked_in_cache(token_jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=TOKEN_REVOKED_DETAIL,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
 
 
 def get_token_from_cookie_or_header(
@@ -173,7 +242,7 @@ async def verify_token_fingerprint(request: Request, payload: dict, user_id: str
         logger.debug(f"Fingerprint verification skipped: {e}")
 
 
-async def get_current_user(
+async def get_current_user(  # noqa: PLR0912
     request: Request,
     db: AsyncSession = Depends(get_async_db),
     user_service: AsyncUserService = Depends(get_user_service),
@@ -185,15 +254,18 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Not authenticated - No token provided",
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Verify token with blacklist checking (Async)
-        payload = await async_verify_token_with_blacklist(token, db, expected_type="access")
+        # JWT verification and positive revocation-cache check happen before
+        # the combined user/revocation database query below.
+        payload = await _verify_access_token_signature_and_cached_revocation(token)
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=INVALID_CREDENTIALS_DETAIL,
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
         # A+ Security: Verify token fingerprint (device binding)
@@ -207,6 +279,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=INVALID_CREDENTIALS_DETAIL,
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     try:
@@ -218,49 +291,52 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # The cache contains no password hash or OAuth secrets. Session-version
-    # matching plus DB-authoritative security fields preserves revocation
-    # semantics even if cache invalidation fails.  On a cache miss, the full
-    # user query below is already authoritative, so avoid a duplicate state
-    # query and save one database round trip.
+    # The cache contains no password hash or OAuth secrets. Cache misses need
+    # the full user row for downstream dependencies; warm requests only need a
+    # security-state projection for session, account, role, and JTI checks.
     cached_user = await get_cached_auth_user(user_id, token_session_version)
-    if cached_user is not None:
-        try:
-            authoritative_state = await _get_authoritative_auth_state(
-                db, user_id, token_session_version
+    try:
+        authoritative_state: User | _AuthState | None
+        if cached_user is None:
+            authoritative_state, is_revoked = await _get_authoritative_auth_user(
+                db, user_id, payload.get("jti")
             )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception(f"Authoritative user state lookup failed: {exc}")
+        else:
+            authoritative_state, is_revoked = await _get_authoritative_auth_state(
+                db, user_id, payload.get("jti")
+            )
+        if is_revoked:
+            token_jti = payload.get("jti")
+            if token_jti:
+                await cache_token_revocation(token_jti)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=INVALID_CREDENTIALS_DETAIL,
+                detail=TOKEN_REVOKED_DETAIL,
                 headers={"WWW-Authenticate": "Bearer"},
-            ) from exc
-        _apply_authoritative_auth_state(cached_user, authoritative_state)
-        return cached_user
-
-    # Database lookup on a cache miss
-    try:
-        user = await user_service.get_user_by_id(user_id)
-        if user is None:
+            )
+        if authoritative_state is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=USER_NOT_FOUND_DETAIL,
+                headers={"WWW-Authenticate": "Bearer"},
             )
-        if not _session_version_matches(payload, user):
+        if not _session_version_matches(payload, authoritative_state):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=SESSION_INVALID_DETAIL,
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        await cache_auth_user(user)
-        return user
+        if cached_user is None:
+            assert isinstance(authoritative_state, User)
+            await cache_auth_user(authoritative_state)
+            return authoritative_state
+
+        _apply_authoritative_auth_state(cached_user, authoritative_state)
+        return cached_user
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Database user lookup failed: {e}")
+        logger.exception(f"Authoritative auth lookup failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=USER_NOT_FOUND_DETAIL,
@@ -278,8 +354,7 @@ async def get_current_user_optional(  # noqa: PLR0911
         return None
 
     try:
-        # Verify token with blacklist checking (Async)
-        payload = await async_verify_token_with_blacklist(token, db, expected_type="access")
+        payload = await _verify_access_token_signature_and_cached_revocation(token)
         user_id: str | None = payload.get("sub")
         if user_id is None:
             return None
@@ -292,24 +367,27 @@ async def get_current_user_optional(  # noqa: PLR0911
         return None
 
     cached_user = await get_cached_auth_user(user_id, token_session_version)
-    if cached_user is not None:
-        try:
-            authoritative_state = await _get_authoritative_auth_state(
-                db, user_id, token_session_version
+    try:
+        authoritative_state: User | _AuthState | None
+        if cached_user is None:
+            authoritative_state, is_revoked = await _get_authoritative_auth_user(
+                db, user_id, payload.get("jti")
             )
-        except Exception:
+        else:
+            authoritative_state, is_revoked = await _get_authoritative_auth_state(
+                db, user_id, payload.get("jti")
+            )
+        if is_revoked or authoritative_state is None:
             return None
+        if not _session_version_matches(payload, authoritative_state):
+            return None
+        if cached_user is None:
+            assert isinstance(authoritative_state, User)
+            await cache_auth_user(authoritative_state)
+            return authoritative_state
+
         _apply_authoritative_auth_state(cached_user, authoritative_state)
         return cached_user
-
-    # Database lookup on a cache miss
-    try:
-        user = await user_service.get_user_by_id(user_id)
-        if user is not None and not _session_version_matches(payload, user):
-            return None
-        if user is not None:
-            await cache_auth_user(user)
-        return user
     except Exception:
         return None
 

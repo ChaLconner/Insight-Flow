@@ -1,3 +1,5 @@
+import asyncio
+import time
 from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, patch
 
@@ -70,6 +72,37 @@ async def test_in_memory_rate_limit_uses_same_proxy_aware_ip_for_block_check_and
     middleware._check_ip_block.assert_awaited_once_with(ANY, "203.0.113.7")
     assert list(middleware.request_history) == ["203.0.113.7:default"]
     app.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_in_memory_rate_limit_does_not_hold_lock_during_rejection_io():
+    app = AsyncMock()
+    middleware = RateLimitMiddleware(app, calls=1, period=60)
+    middleware._check_ip_block = AsyncMock(return_value=None)
+    middleware.request_history["127.0.0.1:default"].append(time.time())
+
+    async def rejection(*_args):
+        acquired = await asyncio.to_thread(middleware._lock.acquire)
+        if acquired:
+            middleware._lock.release()
+
+    middleware._send_rate_limit_exceeded = rejection
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(_message):
+        return None
+
+    await asyncio.wait_for(middleware(_http_scope("/api/v1/projects"), receive, send), timeout=1)
+
+
+def test_in_memory_rate_limit_samples_rejection_logs_per_window():
+    middleware = RateLimitMiddleware(AsyncMock(), calls=1, period=60)
+
+    assert middleware._should_log_rate_limit_violation("203.0.113.7", "/login", 60, 100.0)
+    assert not middleware._should_log_rate_limit_violation("203.0.113.7", "/login", 60, 101.0)
+    assert middleware._should_log_rate_limit_violation("203.0.113.7", "/login", 60, 160.0)
 
 
 def test_prometheus_histogram_export_preserves_cumulative_buckets():

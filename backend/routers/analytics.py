@@ -5,7 +5,7 @@ import uuid
 from collections import defaultdict
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,10 @@ from schemas.analytics import (
     BatchActivityResponse,
     TeamWorkloadPaginatedResponse,
 )
-from services.async_analytics_service import AsyncAnalyticsService
+from services.async_analytics_service import (
+    AnalyticsRefreshInProgressError,
+    AsyncAnalyticsService,
+)
 from services.async_project_service import AsyncProjectService
 from services.async_task_history_service import AsyncTaskHistoryService
 from utils.logger import setup_logger
@@ -141,9 +144,10 @@ async def _populate_batch_activity_results(
     if not accessible_requested_uuids:
         return
 
-    total_limit = limit * len(accessible_requested_uuids) * 2
     activities = await task_history_service.get_recent_activities_for_projects(
-        accessible_requested_uuids, limit=total_limit
+        accessible_requested_uuids,
+        limit=limit,
+        per_project_limit=limit,
     )
     activities_by_project, user_ids_to_fetch = _group_batch_activities(activities, limit)
     user_map = await _get_user_map(db, user_ids_to_fetch)
@@ -166,13 +170,22 @@ async def _populate_batch_activity_results(
 async def get_analytics_overview(
     request: Request,
     period: str = Query(
-        "30d", pattern=r"^(7d|30d|90d|1y)$", description="Time period: 7d, 30d, 90d, 1y"
+        "30d",
+        pattern=r"^(7d|week|30d|month|90d|quarter|1y|year)$",
+        description="Time period: 7d/week, 30d/month, 90d/quarter, 1y/year",
     ),
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """Get global analytics overview for the current user across all projects."""
-    return await analytics_service.get_analytics_overview(current_user.id, period=period)
+    try:
+        return await analytics_service.get_analytics_overview(current_user.id, period=period)
+    except AnalyticsRefreshInProgressError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Analytics is being refreshed; retry shortly.",
+            headers={"Retry-After": "2"},
+        ) from exc
 
 
 @router.get("/team-workload", response_model=TeamWorkloadPaginatedResponse)
@@ -216,7 +229,11 @@ async def get_dashboard_metrics(
 async def get_productivity_data(
     request: Request,
     project_id: str,
-    period: str = Query("30d", pattern=r"^(7d|30d|90d|1y)$", description="Time period"),
+    period: str = Query(
+        "30d",
+        pattern=r"^(7d|week|30d|month|90d|quarter|1y|year)$",
+        description="Time period: 7d/week, 30d/month, 90d/quarter, 1y/year",
+    ),
     group_by: str = Query("week", pattern=r"^(day|week|month)$", description="Group by"),
     analytics_service: AsyncAnalyticsService = Depends(get_analytics_service),
     current_user: User = Depends(get_current_active_user),

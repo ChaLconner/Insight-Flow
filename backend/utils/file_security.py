@@ -3,9 +3,11 @@ File Upload Security Utilities.
 Centralized security validation for all file uploads.
 """
 
+import asyncio
 import io
 import os
 import re
+import tempfile
 import zipfile
 from typing import Any
 
@@ -82,6 +84,7 @@ ALLOWED_MIME_TYPES: dict[str, set[str]] = {
 }
 
 MAX_FILE_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+UPLOAD_STREAM_CHUNK_SIZE = 1024 * 1024
 
 # =============================================================================
 # Dangerous Patterns (for filename sanitization)
@@ -194,8 +197,12 @@ def validate_file_size(
     Raises:
         FileSecurityError: If file is too large or empty
     """
+    return validate_file_size_value(len(content), max_size)
+
+
+def validate_file_size_value(size: int, max_size: int | None = None) -> int:
+    """Validate a size without loading the file contents into memory."""
     max_allowed = max_size or MAX_FILE_SIZE_BYTES
-    size = len(content)
 
     if size == 0:
         raise FileSecurityError("Empty file not allowed", "EMPTY_FILE")
@@ -207,6 +214,41 @@ def validate_file_size(
         )
 
     return size
+
+
+async def stream_upload_to_tempfile(
+    upload_file: Any, max_size: int, suffix: str = ".tmp"
+) -> tuple[str, int]:
+    """Stream an upload to a private temporary file with a hard byte limit."""
+    if max_size <= 0:
+        raise ValueError("max_size must be positive")
+
+    file_descriptor, temp_path = tempfile.mkstemp(prefix="insight-flow-upload-", suffix=suffix)
+    os.close(file_descriptor)
+    total_size = 0
+
+    try:
+        with open(temp_path, "wb") as target:
+            while True:
+                chunk = await upload_file.read(min(UPLOAD_STREAM_CHUNK_SIZE, max_size + 1))
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+                if total_size > max_size:
+                    max_mb = max_size / (1024 * 1024)
+                    raise FileSecurityError(
+                        f"File too large. Maximum size is {max_mb:.1f} MB", "FILE_TOO_LARGE"
+                    )
+                await asyncio.to_thread(target.write, chunk)
+
+        return temp_path, validate_file_size_value(total_size, max_size)
+    except (Exception, asyncio.CancelledError):
+        try:
+            os.remove(temp_path)
+        except OSError:
+            logger.warning("Failed to remove rejected temporary upload: %s", temp_path)
+        raise
 
 
 async def read_upload_with_limit(upload_file: Any, max_size: int) -> bytes:
@@ -332,6 +374,31 @@ def _validate_office_container(content: bytes, extension: str) -> None:
         raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER") from exc
 
 
+def _validate_office_container_path(file_path: str, extension: str) -> None:
+    try:
+        with zipfile.ZipFile(file_path) as archive:
+            names = set(archive.namelist())
+            if "[Content_Types].xml" not in names:
+                raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER")
+            required_prefix = {
+                DOCX_EXTENSION: "word/",
+                XLSX_EXTENSION: "xl/",
+                PPTX_EXTENSION: "ppt/",
+            }[extension]
+            if not any(name.startswith(required_prefix) for name in names):
+                raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER")
+            if len(names) > 2_000:
+                raise FileSecurityError(
+                    "Office container has too many entries", "INVALID_CONTAINER"
+                )
+            if sum(info.file_size for info in archive.infolist()) > MAX_FILE_SIZE_BYTES * 20:
+                raise FileSecurityError(
+                    "Office container is too large when expanded", "INVALID_CONTAINER"
+                )
+    except zipfile.BadZipFile as exc:
+        raise FileSecurityError(INVALID_OFFICE_CONTAINER_ERROR, "INVALID_CONTAINER") from exc
+
+
 def validate_file_magic_bytes(content: bytes, extension: str) -> None:
     extension = extension.lower()
     expected_headers = MAGIC_BYTES_MAP.get(extension.lower())
@@ -353,6 +420,36 @@ def validate_file_magic_bytes(content: bytes, extension: str) -> None:
 
     if extension in {".txt", ".csv", ".md"} and b"\x00" in content:
         raise FileSecurityError("Text file contains binary data", "INVALID_CONTENT")
+
+
+def validate_file_magic_bytes_path(file_path: str, extension: str) -> None:
+    """Validate file signatures and containers without buffering the file."""
+    extension = extension.lower()
+    expected_headers = MAGIC_BYTES_MAP.get(extension)
+    with open(file_path, "rb") as source:
+        prefix = source.read(12)
+        if (
+            expected_headers
+            and prefix
+            and not any(prefix.startswith(header) for header in expected_headers)
+        ):
+            raise FileSecurityError(
+                f"File content magic bytes do not match extension '{extension}'",
+                "MAGIC_BYTES_MISMATCH",
+            )
+
+        if extension == WEBP_EXTENSION and (len(prefix) < 12 or prefix[8:12] != b"WEBP"):
+            raise FileSecurityError("Invalid WebP container", "INVALID_CONTAINER")
+
+        if extension in {".txt", ".csv", ".md"}:
+            if b"\x00" in prefix:
+                raise FileSecurityError("Text file contains binary data", "INVALID_CONTENT")
+            while chunk := source.read(UPLOAD_STREAM_CHUNK_SIZE):
+                if b"\x00" in chunk:
+                    raise FileSecurityError("Text file contains binary data", "INVALID_CONTENT")
+
+    if extension in {DOCX_EXTENSION, XLSX_EXTENSION, PPTX_EXTENSION}:
+        _validate_office_container_path(file_path, extension)
 
 
 def validate_avatar_upload(
@@ -391,6 +488,21 @@ def validate_avatar_upload(
     return extension, file_size
 
 
+def validate_avatar_upload_path(
+    filename: str | None,
+    content_type: str | None,
+    file_path: str,
+    file_size: int,
+) -> tuple[str, int]:
+    """Validate an avatar already staged on disk."""
+    extension = validate_extension(filename, AVATAR_ALLOWED_EXTENSIONS)
+    validate_mime_type(content_type, extension, AVATAR_ALLOWED_MIME_TYPES)
+    validate_file_magic_bytes_path(file_path, extension)
+    validated_size = validate_file_size_value(file_size, AVATAR_MAX_FILE_SIZE_BYTES)
+    logger.debug(f"Avatar upload validated: extension={extension}, size={validated_size}")
+    return extension, validated_size
+
+
 def validate_general_upload(
     filename: str | None,
     content_type: str | None,
@@ -425,3 +537,18 @@ def validate_general_upload(
     logger.debug(f"File upload validated: extension={extension}, size={file_size}")
 
     return extension, file_size
+
+
+def validate_general_upload_path(
+    filename: str | None,
+    content_type: str | None,
+    file_path: str,
+    file_size: int,
+) -> tuple[str, int]:
+    """Validate a general upload already staged on disk."""
+    extension = validate_extension(filename)
+    validate_mime_type(content_type, extension)
+    validate_file_magic_bytes_path(file_path, extension)
+    validated_size = validate_file_size_value(file_size, MAX_FILE_SIZE_BYTES)
+    logger.debug(f"File upload validated: extension={extension}, size={validated_size}")
+    return extension, validated_size

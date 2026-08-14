@@ -124,7 +124,7 @@ class InMemoryCache(CacheBackend):
                     self.stats["hits"] += 1
                     # Move to end for LRU
                     self.cache[key] = self.cache.pop(key)
-                    return cached_data
+                    return cast("dict[str, Any]", cached_data["content"])
                 else:
                     del self.cache[key]
 
@@ -143,7 +143,7 @@ class InMemoryCache(CacheBackend):
                     break
 
             self.cache[key] = {
-                **value,
+                "content": value,
                 "timestamp": time.time(),
                 "timeout": ttl if ttl is not None else self.default_timeout,
             }
@@ -330,6 +330,34 @@ class RedisCache(CacheBackend):
         if result is None:
             raise ConnectionError("Redis counter operation failed")
         return int(result)
+
+    async def try_acquire_lock(self, key: str, token: str, ttl: int) -> bool:
+        """Acquire a short-lived distributed lock without overwriting an owner."""
+        if ttl <= 0:
+            raise ValueError("Distributed lock timeout must be greater than zero")
+        result = await self._execute_with_retry(
+            self.client.set,
+            key,
+            token,
+            ex=ttl,
+            nx=True,
+        )
+        if result is None and not getattr(self, "_connected", True):
+            raise ConnectionError("Redis distributed lock operation failed")
+        return bool(result)
+
+    async def release_lock(self, key: str, token: str) -> bool:
+        """Release lock only when caller still owns it."""
+        script = """
+        if redis.call('GET', KEYS[1]) == ARGV[1] then
+            return redis.call('DEL', KEYS[1])
+        end
+        return 0
+        """
+        result = await self._execute_with_retry(self.client.eval, script, 1, key, token)
+        if result is None and not getattr(self, "_connected", True):
+            raise ConnectionError("Redis distributed lock release failed")
+        return bool(result)
 
     async def delete(self, key: str) -> bool:
         try:
@@ -560,6 +588,42 @@ class CacheService:
                 self.backend = self.memory_backend
                 logger.warning("Cache counter unavailable; using in-memory rate-limit counter")
             return await self.memory_backend.increment_with_window(key, window_seconds)
+
+    async def try_acquire_distributed_lock(self, key: str, token: str, ttl: int) -> bool | None:
+        """Acquire Redis lock, or return None when only local cache is available.
+
+        ``None`` lets callers keep local single-flight behavior without waiting
+        for a lock that cannot coordinate across worker processes.
+        """
+        if self.redis_backend is None:
+            return None
+
+        backend = await self._get_backend()
+        if not isinstance(backend, RedisCache):
+            return None
+
+        try:
+            return await backend.try_acquire_lock(key, token, ttl)
+        except Exception as exc:
+            logger.warning(f"Distributed cache lock unavailable: {exc}")
+            return None
+
+    async def release_distributed_lock(self, key: str, token: str) -> bool:
+        """Release Redis lock when this process still owns it."""
+        if self.redis_backend is None:
+            return False
+
+        backend = await self._get_backend()
+        if not isinstance(backend, RedisCache):
+            return False
+
+        try:
+            return await backend.release_lock(key, token)
+        except Exception as exc:
+            # Lock has a TTL, so a transient release failure cannot leave an
+            # unbounded lock behind.
+            logger.warning(f"Distributed cache lock release failed: {exc}")
+            return False
 
     async def delete(self, key: str) -> bool:
         backend = await self._get_backend()

@@ -36,6 +36,22 @@ describe("NotificationStore", () => {
   });
 
   describe("Initial State", () => {
+    it("only permits same-origin notification navigation", async () => {
+      const { getSafeNotificationActionUrl } = await import(
+        "@/stores/notification-store"
+      );
+
+      expect(getSafeNotificationActionUrl("/tasks/123?from=notification")).toBe(
+        "/tasks/123?from=notification",
+      );
+      expect(getSafeNotificationActionUrl("https://attacker.example/phish")).toBe(
+        null,
+      );
+      expect(getSafeNotificationActionUrl("//attacker.example/phish")).toBe(null);
+      expect(getSafeNotificationActionUrl("javascript:alert(1)")).toBe(null);
+      expect(getSafeNotificationActionUrl(42)).toBe(null);
+    });
+
     it("should have empty notifications initially", async () => {
       const store = await getStore();
       const { result } = renderHook(() => store());
@@ -637,5 +653,60 @@ describe("NotificationStore", () => {
         mockState.filters.readStatus = "unread";
         expect(notificationSelectors.getFilteredNotifications(mockState)).toHaveLength(1);
     });
+  });
+
+  it("keeps unreadCount synchronized when read notifications are cleared", async () => {
+    const store = await getStore();
+    const { result } = renderHook(() => store());
+
+    act(() => {
+      result.current.addNotification({
+        title: "Unread",
+        message: "Test",
+        type: NotificationType.SYSTEM,
+        priority: NotificationPriority.LOW,
+        read: false,
+        userId: "user-123",
+      });
+      result.current.addNotification({
+        title: "Read",
+        message: "Test",
+        type: NotificationType.SYSTEM,
+        priority: NotificationPriority.LOW,
+        read: true,
+        userId: "user-123",
+      });
+      result.current.clearReadNotifications();
+    });
+
+    expect(result.current.notifications).toHaveLength(1);
+    expect(result.current.unreadCount).toBe(1);
+  });
+
+  it("recalculates unreadCount when a notification read state changes", async () => {
+    const store = await getStore();
+    const { result } = renderHook(() => store());
+
+    act(() => {
+      result.current.addNotification({
+        title: "Unread",
+        message: "Test",
+        type: NotificationType.SYSTEM,
+        priority: NotificationPriority.LOW,
+        read: false,
+        userId: "user-123",
+      });
+    });
+
+    const notificationId = result.current.notifications[0]?.id;
+    expect(notificationId).toBeDefined();
+    if (!notificationId) {
+      throw new Error("Expected a generated notification id");
+    }
+    act(() => {
+      result.current.updateNotification(notificationId, { read: true });
+    });
+
+    expect(result.current.unreadCount).toBe(0);
   });
 });

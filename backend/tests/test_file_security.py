@@ -1,13 +1,18 @@
+import asyncio
+import os
+
 import pytest
 
 from utils.file_security import (
     FileSecurityError,
     read_upload_with_limit,
     sanitize_filename,
+    stream_upload_to_tempfile,
     validate_extension,
     validate_file_path,
     validate_file_size,
     validate_general_upload,
+    validate_general_upload_path,
     validate_mime_type,
 )
 
@@ -147,3 +152,47 @@ class TestFileSecurity:
 
         assert await read_upload_with_limit(upload, max_size=5) == b"abc"
         assert upload.requested_sizes == [6, 6]
+
+    @pytest.mark.asyncio
+    async def test_stream_upload_to_tempfile_bounds_and_preserves_content(self):
+        upload = _ChunkedUpload([b"abc", b"def", b""])
+
+        path, size = await stream_upload_to_tempfile(upload, max_size=10)
+        try:
+            assert size == 6
+            with open(path, "rb") as staged:
+                assert staged.read() == b"abcdef"
+        finally:
+            os.remove(path)
+
+    @pytest.mark.asyncio
+    async def test_stream_upload_to_tempfile_cleans_up_when_cancelled(self, tmp_path, monkeypatch):
+        staged_path = tmp_path / "cancelled-upload.tmp"
+        file_descriptor = os.open(staged_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        monkeypatch.setattr(
+            "utils.file_security.tempfile.mkstemp",
+            lambda **_kwargs: (file_descriptor, str(staged_path)),
+        )
+
+        class _CancelledUpload:
+            async def read(self, _size: int) -> bytes:
+                raise asyncio.CancelledError
+
+        with pytest.raises(asyncio.CancelledError):
+            await stream_upload_to_tempfile(_CancelledUpload(), max_size=10)
+
+        assert not staged_path.exists()
+
+    def test_path_validation_reads_metadata_without_loading_content(self, tmp_path):
+        file_path = tmp_path / "notes.txt"
+        file_path.write_bytes(b"abc")
+
+        extension, size = validate_general_upload_path(
+            "notes.txt",
+            "text/plain",
+            str(file_path),
+            file_path.stat().st_size,
+        )
+
+        assert extension == ".txt"
+        assert size == 3

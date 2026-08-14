@@ -4,13 +4,27 @@ Refactored for SQLAlchemy 2.0+ Async operations.
 Uses centralized CacheService for caching.
 """
 
+import asyncio
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import String, and_, case, cast, distinct, func, or_, select, true
+from sqlalchemy import (
+    String,
+    and_,
+    case,
+    cast,
+    distinct,
+    func,
+    literal,
+    or_,
+    select,
+    true,
+    union_all,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from models.project import Project, ProjectMember
 from models.task import Task, TaskStatus
@@ -24,6 +38,24 @@ logger = setup_logger(__name__)
 # Cache TTL in seconds
 ANALYTICS_CACHE_TTL = 600  # 10 minutes — analytics data is not real-time critical
 ANALYTICS_WORKLOAD_PREVIEW_LIMIT = 10
+ANALYTICS_DISTRIBUTED_LOCK_TTL = 30
+ANALYTICS_DISTRIBUTED_LOCK_WAIT_ATTEMPTS = 20
+ANALYTICS_DISTRIBUTED_LOCK_WAIT_SECONDS = 0.1
+
+
+class AnalyticsRefreshInProgressError(RuntimeError):
+    """Raised when another worker owns a cold-cache analytics refresh."""
+
+
+class _AnalyticsFlight:
+    """Coordinate one cold analytics computation per process and cache key."""
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.waiters = 0
+
+
+_ANALYTICS_FLIGHTS: dict[str, _AnalyticsFlight] = {}
 
 
 class AsyncAnalyticsService:
@@ -44,20 +76,90 @@ class AsyncAnalyticsService:
             .distinct()
         )
 
-    async def get_analytics_overview(
+    async def get_analytics_overview(  # noqa: PLR0912
         self, user_id: uuid.UUID, period: str = "30d"
     ) -> dict[str, Any]:
         """
         Get analytics overview for the current user.
         Optimized for async operations with centralized caching.
         """
-        # Check cache using CacheService
         cache_key = f"analytics:overview:{user_id}:{period}"
         cached = await cache_service.get(cache_key)
         if cached:
             logger.debug(f"Serving analytics from cache for user {user_id}")
             return cached
 
+        flight = _ANALYTICS_FLIGHTS.get(cache_key)
+        if flight is None:
+            flight = _AnalyticsFlight()
+            _ANALYTICS_FLIGHTS[cache_key] = flight
+        flight.waiters += 1
+
+        try:
+            async with flight.lock:
+                # Another request may have populated the cache while this
+                # request was waiting for the single-flight lock.
+                cached = await cache_service.get(cache_key)
+                if cached:
+                    logger.debug(f"Serving coalesced analytics cache for user {user_id}")
+                    return cached
+
+                # Local flight coordination does not span Gunicorn workers.
+                # Redis lock prevents duplicate cold computations when shared
+                # cache is configured; local-only deployments keep availability
+                # and use the process-local lock above.
+                lock_key = f"analytics:flight:{cache_key}"
+                lock_token = uuid.uuid4().hex
+                distributed_lock = await cache_service.try_acquire_distributed_lock(
+                    lock_key,
+                    lock_token,
+                    ANALYTICS_DISTRIBUTED_LOCK_TTL,
+                )
+
+                if distributed_lock is False:
+                    for _ in range(ANALYTICS_DISTRIBUTED_LOCK_WAIT_ATTEMPTS):
+                        await asyncio.sleep(ANALYTICS_DISTRIBUTED_LOCK_WAIT_SECONDS)
+                        cached = await cache_service.get(cache_key)
+                        if cached:
+                            logger.debug(
+                                f"Serving analytics populated by another worker for user {user_id}"
+                            )
+                            return cached
+
+                    # Lock owner may have crashed or exceeded the wait window.
+                    # Rechecking allows a just-completed refresh to win without
+                    # starting a duplicate expensive build.
+                    distributed_lock = await cache_service.try_acquire_distributed_lock(
+                        lock_key,
+                        lock_token,
+                        ANALYTICS_DISTRIBUTED_LOCK_TTL,
+                    )
+
+                    if distributed_lock is False:
+                        cached = await cache_service.get(cache_key)
+                        if cached:
+                            return cached
+                        raise AnalyticsRefreshInProgressError(
+                            "Analytics is being refreshed; retry shortly."
+                        )
+
+                try:
+                    cached = await cache_service.get(cache_key)
+                    if cached:
+                        return cached
+                    return await self._build_analytics_overview(user_id, period, cache_key)
+                finally:
+                    if distributed_lock:
+                        await cache_service.release_distributed_lock(lock_key, lock_token)
+        finally:
+            flight.waiters -= 1
+            if flight.waiters == 0 and not flight.lock.locked():
+                _ANALYTICS_FLIGHTS.pop(cache_key, None)
+
+    async def _build_analytics_overview(
+        self, user_id: uuid.UUID, period: str, cache_key: str
+    ) -> dict[str, Any]:
+        """Build and cache an overview after the per-key flight is acquired."""
         try:
             # Get accessible project IDs
             accessible_projects_subq = self._get_accessible_projects_subquery(user_id)
@@ -72,7 +174,7 @@ class AsyncAnalyticsService:
                 return result
 
             # Run DB work sequentially on the shared AsyncSession. AsyncSession is not
-            # concurrency-safe; cache keeps the warm path fast.
+            # concurrency-safe; the single-flight lock prevents duplicate cold work.
             overview = await self._get_overview_metrics(
                 accessible_projects_subq, user_id, total_projects=total_projects
             )
@@ -248,6 +350,7 @@ class AsyncAnalyticsService:
                     case((cast(Task.status, String) == TaskStatus.DONE.value, 1), else_=0)
                 ).label("completed"),
             )
+            .options(load_only(User.id, User.name, User.username, User.email, User.avatar_url))
             .join(Task, Task.assignee_id == User.id)
             .filter(Task.project_id.in_(project_ids))
             .group_by(User.id)
@@ -264,7 +367,8 @@ class AsyncAnalyticsService:
 
             team_data.append(
                 {
-                    "name": user.name,
+                    "id": str(user.id),
+                    "name": user.name or user.username or user.email,
                     "avatar": user.avatar_url,
                     "tasks": total,
                     "completed": completed,
@@ -407,36 +511,47 @@ class AsyncAnalyticsService:
         self, project_ids: Any, workload_limit: int | None = None
     ) -> dict[str, Any]:
         """Get status, priority, and workload distributions."""
-        # Status distribution
-        status_result = await self.db.execute(
-            select(cast(Task.status, String).label("status"), func.count(Task.id).label("count"))
-            .filter(Task.project_id.in_(project_ids))
-            .group_by(cast(Task.status, String))
-        )
-        status_counts = status_result.all()
-        status_dist = [{"name": s[0], "value": s[1]} for s in status_counts]
-
-        # Priority distribution
-        priority_result = await self.db.execute(
+        # These three independent aggregates used to require three database
+        # round trips. A UNION keeps the response shape while allowing the
+        # database/network connection to be reused for one request.
+        status_value = cast(Task.status, String)
+        priority_value = cast(Task.priority, String)
+        distribution_query = union_all(
             select(
-                cast(Task.priority, String).label("priority"), func.count(Task.id).label("count")
+                literal("status").label("distribution"),
+                status_value.label("name"),
+                func.count(Task.id).label("value"),
             )
             .filter(Task.project_id.in_(project_ids))
-            .group_by(cast(Task.priority, String))
-        )
-        priority_counts = priority_result.all()
-        priority_dist = [{"name": p[0], "value": p[1]} for p in priority_counts]
-
-        # Workload distribution
-        workload_total_result = await self.db.execute(
-            select(func.count(distinct(Task.assignee_id))).filter(
-                Task.project_id.in_(project_ids), Task.assignee_id.isnot(None)
+            .group_by(status_value),
+            select(
+                literal("priority").label("distribution"),
+                priority_value.label("name"),
+                func.count(Task.id).label("value"),
             )
+            .filter(Task.project_id.in_(project_ids))
+            .group_by(priority_value),
+            select(
+                literal("workload_total").label("distribution"),
+                literal(None, type_=String).label("name"),
+                func.count(distinct(Task.assignee_id)).label("value"),
+            ).filter(Task.project_id.in_(project_ids), Task.assignee_id.isnot(None)),
         )
-        workload_total = workload_total_result.scalar() or 0
+        distribution_result = await self.db.execute(distribution_query)
+        status_dist: list[dict[str, Any]] = []
+        priority_dist: list[dict[str, Any]] = []
+        workload_total = 0
+        for distribution, name, value in distribution_result.all():
+            if distribution == "status":
+                status_dist.append({"name": name, "value": value})
+            elif distribution == "priority":
+                priority_dist.append({"name": name, "value": value})
+            else:
+                workload_total = value or 0
 
         workload_query = (
             select(User, func.count(Task.id).label("count"))
+            .options(load_only(User.id, User.name, User.username, User.email, User.avatar_url))
             .join(Task, Task.assignee_id == User.id)
             .filter(Task.project_id.in_(project_ids))
             .group_by(User.id)
@@ -453,7 +568,7 @@ class AsyncAnalyticsService:
         for user, count in workload_rows:
             workload_dist.append(
                 {
-                    "name": user.name or user.username,
+                    "name": user.name or user.username or user.email,
                     "avatar": user.avatar_url,
                     "tasks": count,
                 }
@@ -757,7 +872,7 @@ class AsyncAnalyticsService:
             contributors.append(
                 {
                     "id": str(user.id),
-                    "name": user.name,
+                    "name": user.name or user.username or user.email,
                     "avatar": user.avatar_url,
                     "tasks": task_total,
                     "completed": completed,
