@@ -48,7 +48,7 @@ test.describe('Projects Page', () => {
     await page.waitForLoadState('networkidle');
     
     await expect(page).toHaveURL(/projects/);
-    const createButton = page.getByRole('button', { name: /create|new|add/i });
+    const createButton = page.getByRole('button', { name: 'New Project', exact: true });
     await expect(createButton).toBeVisible();
     await expect(createButton).toBeEnabled();
   });
