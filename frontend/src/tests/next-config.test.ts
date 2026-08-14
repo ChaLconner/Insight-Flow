@@ -9,7 +9,8 @@ type NextConfig = {
   rewrites: () => Promise<Rewrite[]>;
 };
 
-const nextConfig = import("../../next.config.mjs").then(
+const nextConfigModule = import("../../next.config.mjs");
+const nextConfig = nextConfigModule.then(
   ({ default: config }) => config as NextConfig,
 );
 
@@ -18,6 +19,13 @@ afterEach(() => {
 });
 
 describe("Next.js API proxy configuration", () => {
+  it("uses Vercel's default output while preserving standalone self-hosting", async () => {
+    const { resolveBuildOutput } = await nextConfigModule;
+
+    expect(resolveBuildOutput(true)).toBeUndefined();
+    expect(resolveBuildOutput(false)).toBe("standalone");
+  });
+
   it("keeps localhost fallback for development", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("API_URL", "");

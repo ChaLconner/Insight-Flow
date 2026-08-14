@@ -55,10 +55,14 @@ function resolveApiUrl() {
   return parsedUrl.toString().replace(/\/$/, "");
 }
 
+export function resolveBuildOutput(isVercel = process.env.VERCEL === "1") {
+  return isVercel ? undefined : "standalone";
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Required by the production Dockerfile's minimal runtime image.
-  output: "standalone",
+  // Vercel packages the default output itself; standalone is for self-hosting.
+  output: resolveBuildOutput(),
 
   // Monorepo configuration - trace dependencies from the root directory
   outputFileTracingRoot: path.join(__dirname, "../"),
